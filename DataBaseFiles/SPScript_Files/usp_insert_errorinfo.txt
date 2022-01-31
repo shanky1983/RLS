@@ -1,0 +1,15 @@
+CREATE procedure [dbo].[usp_insert_errorinfo]
+(@EMsg nvarchar(4000),
+@ELine int,
+@Eproc nvarchar(128),
+@Eseverity int,
+@sptrace varchar(8000))
+as
+Begin
+Set nocount on
+Insert into CustomErrorInfo(EMsg,ELine,Eproc,ESEVERITY,Createdat,sptrace)
+select @EMsg,@ELine,@Eproc,@Eseverity,getdate(),@sptrace
+Set nocount off
+End
+
+

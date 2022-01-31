@@ -1,0 +1,468 @@
+
+create PROCEDURE pGetPhleboBookingDetails_LIMSAPI
+(
+@pBookingID BIGINT,
+  @pUserID BIGINT,
+ -- @pDateRange DATETIME,
+  @pOrgCode NVARCHAR(100)
+)
+AS
+BEGIN
+	--exec pGetNewBookingDetails_LIMSAPI '197512','20200824','limsapi'
+
+	 DECLARE @pLocationID INT, @RateCount INT
+	 DECLARE @pFdate DATETIME, @pTdate DATETIME
+	 DECLARE @pOrgID INT = NULL, @pOrgAddrID INT = NULL;
+	 DECLARE @CodeTypeID INT, @chkFeeType nvarchar(20), @pFeeType nvarchar(20), @pFeeID INT
+
+--	 SELECT @pFdate=CONVERt(DATE,@pDateRange), @pTdate=DATEADD(ss,-1,DATEADD(dd,1,@pFdate))
+
+	 IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+	    BEGIN
+		   SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID
+		   FROM Integrationtypemaster ITM WITH(NOLOCK) 
+					INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+					INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+	  	   WHERE ITM.IntegrationTypeName = @pOrgCode
+		END
+
+	 IF @pUserID = 0 OR @pUserID = -1
+		SET @pUserID = ''
+
+	CREATE TABLE #Inventorycount ( 
+	    BookingID BIGINT,
+	    Invcount INT )
+ 
+	CREATE TABLE #TempBookings (
+		BookingID BIGINT,
+		Salutation NVARCHAR(10),
+		Name NVARCHAR(150),
+		Gender NVARCHAR(10),
+		Age NVARCHAR(30),
+		DateofBirth DATETIME,
+		Address NVARCHAR(500),
+		City NVARCHAR(75),
+		State NVARCHAR(150),
+		Country NVARCHAR(150),
+		PostalCode NVARCHAR(10),
+		MobileNumber NVARCHAR(30),
+		Email NVARCHAR(100),
+		SampleCollectionTime DATETIME,
+		DispatchType NVARCHAR(100),
+		TotalGrossAmount DECIMAL(18,2),
+		DueAmount DECIMAL(18,2),
+		PaymentStatus NVARCHAR(50),
+		Status NVARCHAR(50),
+		SampleCode INT, 
+		SampleContainerID INT, 
+		TestCode NVARCHAR(100),
+		InventoryCount INT,
+		UserID NVARCHAR(15),
+		ClientCode NVARCHAR(25),
+		DiscountAmount DECIMAL(18,2),
+		DiscountID BIGINT	 )
+
+
+	DECLARE @Type      NVARCHAR(20) = NULL,  
+			@ID        BIGINT = NULL ,
+			@BookingId BIGINT=NULL
+
+	CREATE TABLE #Testinfo (  
+	    	SNO       SMALLINT IDENTITY(1, 1),  
+		    ID        BIGINT,  
+			Type      NVARCHAR(20),
+			BookingId BIGINT )
+
+    DECLARE @Loop  INT = 1, @Count INT = 0  
+      
+	CREATE TABLE #TempResult (  
+		sno                    INT IDENTITY(1, 1),  
+		BookingId              BIGINT,
+		Investigationid        BIGINT,  
+		[TYPE]                 NVARCHAR(20),  
+		InvestigationName      NVARCHAR(250),  
+		SampleContainerID      INT,  
+		SampleContainerName    NVARCHAR(200),
+		SampleCode             INT,  
+		SampleDescription      NVARCHAR(200),  
+		[SampleContainerColor] NVARCHAR(100) ,
+		Price                  Decimal(18,2),
+		TestCode               NVARCHAR(25)	)  
+  
+    CREATE TABLE #tblRates (
+        ID                BIGINT,
+        [FeeType]         NVARCHAR(20),
+        [Amount]          DECIMAL(18, 2),
+        RateRefID         BIGINT,
+        ParentRateRefID   BIGINT,
+        RateID            BIGINT,
+		BookingId         BIGINT,
+		TestCode          NVARCHAR(25) )
+
+   
+    INSERT #Testinfo  
+            (ID,    Type,	 BookingId )  
+    SELECT   PO.ID, PO.TYPE, BI.BookingId
+    FROM  Bookings BI
+    INNER JOIN PreOrderedInvestigations PO  ON PO.QuotationId = Bi.BookingID  
+    WHERE (BI.CollectionTime >= @pFdate AND BI.CreatedAt < @pTdate ) AND
+           Bi.SourceType ='Home Collection' and  (UserID=@pUserID or @pUserID='')
+
+
+    SELECT @Count = Count(1)  
+    FROM   #Testinfo  
+  
+      WHILE @loop <= @Count  
+        BEGIN  
+            SELECT @ID = NULL,  
+                   @TYPE = NULL 
+  
+            SELECT @ID = ID,	
+                   @Type = Type,
+				   @BookingId=BookingId
+            FROM   #Testinfo  
+            WHERE  Sno = @Loop  
+
+			---------------------------- Get Price logic start -----------------------
+			SET @pFeeType = @Type
+			SET @pFeeID = @ID
+	        SET @chkFeeType=(case when(@pFeeType='INV') then 'investigations' else @pFeeType end)
+
+		    SELECT @CodeTypeID = Max(CSM.CodeTypeID)
+		    FROM   CodingSchemeMaster CSM WITH(NOLOCK)
+				 INNER JOIN CodingSchemeOrgMapping CSOM WITH(NOLOCK)
+						 ON CSOM.CodeTypeID = CSM.CodeTypeID
+			WHERE VersionNo = 1
+				 AND IsPrimary = 'Y'
+				 AND OrgID = @pOrgID
+
+			INSERT #tblRates  
+			          (ID,          FeeType,   ParentRateRefID,  RateRefID,   RateID,   BookingID,  TestCode )
+			SELECT POI.ID, POI.Type,  R.ParentID,       R.RateRefID, R.RateID, B.BookingID, (SELECT TOP 1 Cm.CodeName
+               FROM   CodeMaster Cm WITH(NOLOCK)
+                     INNER JOIN CodeMapper Cmap WITH(NOLOCK)
+                             ON Cm.CodeMasterID = Cmap.CodeMasterID
+                                AND Cmap.IdentifyingID = @pFeeID
+                                AND Cm.CodeType = Cmap.IdentifyingType
+               WHERE  CMAP.IdentifyingType = @chkFeeType
+                AND Cm.CodeSchemeID = @CodeTypeID
+			UNION
+			 SELECT TOP 1 Cm.CodeName
+               FROM   CodeMaster Cm WITH(NOLOCK)
+                     INNER JOIN CodeMapper Cmap WITH(NOLOCK)
+                             ON Cm.CodeMasterID = Cmap.CodeMasterID
+				     INNER JOIN InvOrgGroup IOG  WITH(NOLOCK)
+						ON Cmap.IdentifyingID=IOG.OrgGroupID AND IOG.OrgID=@pOrgID
+						INNER JOIN InvGroupMaster IGM WITH(NOLOCK) ON
+						IOG.AttGroupID=IGM.GroupID AND IGM.Type=@chkFeeType
+              WHERE IGM.GroupID=@pFeeID AND CMAP.IdentifyingType = @chkFeeType
+                     AND Cm.CodeSchemeID = @CodeTypeID AND IOG.OrgID=@pOrgID)
+	          FROM  Bookings B WITH(Nolock) 
+			  INNER JOIN preorderedInvestigations POI 
+			         ON B.BookingID = POI.QuotationID 
+					    AND B.OrgID = POI.OrgID
+		      INNER JOIN InvClientMaster ICM WITH(NOLOCK) 
+			         ON B.ClientID = ICM.ClientID 
+			            AND B.OrgID = ICM.OrgID
+              INNER JOIN RateRefOrgMapping R WITH(NOLOCK)
+                     ON R.RateID = ICM.RateID
+                        AND ICM.OrgID = @pOrgID
+              INNER JOIN RateMaster RM WITH(NOLOCK)
+                     ON RM.RateId = ICM.RateId
+                        AND ICM.OrgID = RM.orgid
+              WHERE R.OrgID = @pOrgID AND B.BookingID = @BookingId
+            
+			SELECT @RateCount = Count(1)  
+            FROM   #tblRates
+
+			---------------------------- Get Price logic end -----------------------
+  
+            IF @Type = 'PKG'  
+              BEGIN 
+			   ;WITH Pkgdet  
+                       AS (SELECT Cast(grp.Attgroupid AS BIGINT) AS Parentattgroupid,  
+                                  Cast(grp.orggroupid AS BIGINT) AS Parentorggroupid,  
+                                  PM.ID                          AS childgroupid,
+								  Grp.TestCode 
+                           FROM   invorggroup Grp (nolock)  
+                                  LEFT JOIN Invpackagemapping PM (nolock)  
+                                         ON GRP.Orggroupid = PM.Packageid  
+                           AND PM.Type = 'GRP'
+                                            AND Isnull(PM.Active, 'A') IN( 'A', 'Y' )  
+						   WHERE  grp.Attgroupid = @ID  
+                               AND grp.Orgid = @pOrgid  
+                           UNION ALL  
+                           SELECT Pkgdet.Parentorggroupid              AS Parentattgroupid,  
+                                  pkgdet.Parentorggroupid              AS Parentorggroupid,  
+                                  Cast(gdet.Investigationid AS BIGINT) AS Childgroupid,
+								  Cast(TestCode AS NVARCHAR(30)) As TestCode
+                           FROM   pkgdet  
+                                  INNER JOIN invgroupmapmaster gdet (nolock)  
+                                          ON pkgdet.childgroupid = gdet.GroupID  
+                                             AND gdet.parent = 'Y'  
+                                             AND Isnull(gdet.active, 'Y') = 'Y')  
+               INSERT #TempResult  
+                  (Investigationid,  
+                          TYPE,  
+                      InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+                          SampleCode,  
+                          SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)  
+              SELECT DISTINCT g.attgroupid                    AS Investigationid,  
+                                  'Pkg'                           AS TestType,  
+                                  g.Displaytext                   AS InvestigationName,  
+                                  con.SampleContainerID,  
+								  Isnull(con.ContainerName, '') as ContainerName ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId,
+								  g.TestCode
+              FROM   pkgdet  
+                         INNER JOIN invorggroup g (nolock)  
+                                 ON pkgdet.Parentorggroupid = g.orggroupid  
+                         INNER JOIN invgroupmapmaster Gm (nolock)  
+                                 ON pkgdet.childgroupid = gm.GroupID  
+                                    AND gm.Parent = 'N'  
+                                    AND gm.active = 'Y'  
+                         INNER JOIN investigationorgmapping Invmap (nolock)  
+                                 ON gm.Investigationid = invmap.investigationid  
+                                    AND invmap.Orgid = @pOrgID  
+                         INNER JOIN InvSampleMaster Sam (nolock)  
+                                 ON invmap.SampleCode = sam.SampleCode  
+                                    AND sam.orgid = @pOrgID  
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                                 ON Invmap.SampleContainerID = Con.SampleContainerID  
+                                    AND con.OrgID = @pOrgID  
+
+				---------------- PKG Price update start -----------------------
+				  IF(@RateCount > 0)
+				    BEGIN	
+						UPDATE T SET T.Amount = IRM.Rate
+						FROM   #tblRates T
+						   INNER JOIN InvOrgGroup IOG WITH(NOLOCK)
+								   ON IOG.AttGroupID = T.ID
+						   INNER JOIN InvRateMaster IRM WITH(NOLOCK)
+								   ON IOG.OrgGroupID = IRM.ID
+									  AND T.ParentRateRefID = IRM.RateRefID
+									  AND T.RateID = IRM.RateID
+						WHERE  IRM.Type = @Type
+						   AND IOG.OrgID = @pOrgID
+						   AND IRM.RATE IS NOT NULL
+                    END
+				---------------- PKG Price update End -----------------------
+              END  
+  
+            IF @Type = 'GRP'  
+              BEGIN 
+			     ;WITH grpdet  
+                       AS (SELECT Cast(grp.Attgroupid AS BIGINT)     AS Parentattgroupid,  
+                                  Cast(grp.orggroupid AS BIGINT)     AS Parentorggroupid,  
+                                  Cast(GM.Investigationid AS BIGINT) AS childgroupid,
+								  Grp.TestCode 
+                           FROM   invorggroup Grp (nolock)  
+                                  LEFT JOIN invgroupmapmaster GM (nolock)  
+                                         ON GRP.Orggroupid = GM.groupid  
+                                            AND GM.parent = 'Y'  
+                                            AND GM.active = 'Y'  
+                           WHERE  grp.attgroupid = @ID  
+                                  AND grp.Orgid = @pOrgid  
+                       UNION ALL  
+                           SELECT grpdet.Parentorggroupid              AS Parentattgroupid,  
+                                  grpdet.Parentorggroupid             AS Parentorggroupid,  
+                                  Cast(gdet.Investigationid AS BIGINT) AS Childgroupid,
+								  Cast(TestCode AS NVARCHAR(30)) As TestCode  
+                                  FROM   grpdet  
+                           INNER JOIN invgroupmapmaster gdet (nolock)  
+             ON grpdet.childgroupid = gdet.GroupID  
+                                             AND gdet.parent = 'Y'  
+                                             AND gdet.active = 'Y'
+											 WHERE Parentattgroupid < 500) --maximum recursion level 
+                 INSERT #TempResult  
+                          (Investigationid,  
+                          TYPE,  
+                          InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+                          SampleCode,  
+                          SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)   
+                  SELECT DISTINCT g.attgroupid                             AS Investigationid,  
+                                  'GRP'                                    AS TestType,  
+                                  g.Displaytext                            AS InvestigationName,  
+                                 con.SampleContainerID,  
+								  Isnull(con.ContainerName, '') ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId,
+								  g.TestCode
+                  FROM   (SELECT Parentorggroupid,  
+                                 childgroupid  
+                          FROM   grpdet  
+                          WHERE  childgroupid IS NOT NULL  
+                          UNION  
+                          SELECT Parentorggroupid,  
+                                 Parentorggroupid AS childgroupid  
+                          FROM   grpdet) tp  
+                          INNER JOIN invorggroup g (nolock)  
+                                 ON tp.Parentorggroupid = g.orggroupid  
+                         INNER JOIN invgroupmapmaster Gm (nolock)  
+                                 ON tp.childgroupid = gm.GroupID  
+                                    AND gm.Parent = 'N'  
+                                    AND gm.active = 'Y'  
+                         INNER JOIN investigationorgmapping Invmap (nolock)  
+                                 ON gm.investigationid = invmap.investigationid  
+                                    AND invmap.Orgid = @pOrgID  
+                         INNER JOIN InvSampleMaster Sam (nolock)  
+                                 ON invmap.SampleCode = sam.SampleCode  AND ISNULL(Sam.LangCode,'en-GB') ='en-GB' 
+                                    AND sam.orgid = @pOrgID  
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                                 ON Invmap.SampleContainerID = Con.SampleContainerID  and ISNULL(Con.LangCode,'en-GB') ='en-GB'
+                                    AND con.OrgID = @pOrgID  
+									OPTION (MAXRECURSION 0) --- maximum recursion level
+
+					---------------- GRP Price update start -----------------------
+						IF(@RateCount > 0)
+				          BEGIN	
+							UPDATE T SET T.Amount = IRM.Rate
+							FROM   #tblRates T
+							   INNER JOIN InvOrgGroup IOG WITH(NOLOCK)
+									   ON IOG.AttGroupID = T.ID
+							   INNER JOIN InvRateMaster IRM WITH(NOLOCK)
+									   ON IOG.OrgGroupID = IRM.ID
+										  AND T.ParentRateRefID = IRM.RateRefID
+										  AND T.RateID = IRM.RateID
+							WHERE  IRM.Type = @Type
+							   AND IOG.OrgID = @pOrgID
+							   AND IRM.RATE IS NOT NULL
+                          END
+					---------------- GRP Price update End -----------------------
+              END  
+  
+            IF @Type = 'INV'  
+              BEGIN  
+                 INSERT #TempResult  
+                          (Investigationid,  
+                          TYPE,  
+                          InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+ SampleCode,  
+              SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)  
+                  SELECT DISTINCT invmap.Investigationid,  
+                         'INV'                                    AS TestType,  
+                         invmap.Displaytext   AS InvestigationName,  
+                         con.SampleContainerID,  
+								  Isnull(con.ContainerName, '') ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId ,
+								  Invmap.TestCode
+                  FROM   investigationorgmapping Invmap (nolock)  
+                   INNER JOIN InvSampleMaster Sam (nolock)  
+                    ON invmap.SampleCode = sam.SampleCode  
+                                    AND sam.orgid = @pOrgID AND ISNULL(Sam.LangCode,'en-GB') ='en-GB' 
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                      ON Invmap.SampleContainerID = Con.SampleContainerID  
+                                    AND con.OrgID = @pOrgID AND ISNULL(Con.LangCode,'en-GB') ='en-GB'
+                  WHERE  invmap.Orgid = @pOrgID  
+                         AND invmap.Investigationid =@ID  
+                
+			    ---------------- Inv Price update start -----------------------
+                   IF(@RateCount > 0)
+				     BEGIN	
+						UPDATE T SET T.Amount = R.Rate
+						FROM  #tblRates T
+						INNER JOIN InvRateMaster R WITH(NOLOCK)
+							   ON T.ParentRateRefID = R.RateRefID
+								  AND T.RateID = R.RateID
+								  AND t.ID = R.ID
+								  AND R.Type = @Type
+						WHERE  R.ID = @ID
+						AND R.RATE IS NOT NULL
+
+						UPDATE T SET  T.Amount = R.Rate
+						FROM   #tblRates T
+						INNER JOIN InvRateMaster R WITH(NOLOCK)
+							   ON T.RateRefID = R.RateRefID
+								  AND T.RateID = R.RateID
+								  AND T.ID = R.ID
+								  AND R.Type = @Type
+						WHERE  R.ID = @ID
+						AND R.RATE IS NOT NULL
+                     END    
+				----------------- Inv Price update end -----------------------
+              END  
+
+            SELECT @Loop = @Loop + 1  
+        END  
+
+	    INSERT INTO #TempBookings 
+		   (	BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalGrossAmount,  DueAmount, PaymentStatus, 
+				Status, UserID, ClientCode, DiscountAmount, DiscountID
+				)
+		SELECT DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State, Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, ISNULL(B.NetAmount,0) as NetAmount, 0.00 as DueAmount, 'Not Paid' as PaymentStatus, 
+				B.BookingStatus as Status, U.LoginID as UserID, case when ISNULL(B.ClientCode,'') = '' then 'GENERAL' else B.ClientCode end as ClientCode,
+				B.Discount, B.DiscountID
+		FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode= 'en-GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)                
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+		WHERE B.OrgID = @pOrgID --AND (B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+		and (B.UserId=@pUserID or @pUserID='')
+		and (B.BookingID=@pBookingID or @pBookingID='')
+
+
+		INSERT INTO #Inventorycount (BookingID, Invcount) 
+		SELECT tgr.BookingId, count(tgr.SampleCode)
+			FROM #TempResult tgr
+		GROUP BY tgr.BookingId 
+
+        UPDATE T SET T.InventoryCount = S.Invcount 
+		FROM #Inventorycount S
+		INNER JOIN #TempBookings T ON S.BookingID = T.BookingID
+		
+		UPDATE T SET  T.Price = S.Amount
+		FROM #tblRates S
+		INNER JOIN #TempResult T 
+		   ON S.TestCode = T.TestCode 
+		       AND S.ID = T.Investigationid 
+			   AND S.FeeType = T.[Type]
+
+		SELECT BookingID, Salutation, Name, Gender, Age, DateofBirth, Address, City, State, Country, PostalCode,	
+		       MobileNumber, Email, SampleCollectionTime, DispatchType, TotalGrossAmount, DueAmount, PaymentStatus, Status, 
+			   InventoryCount, UserID, @pOrgID as OrgID, @pOrgAddrID as LocationID, ClientCode, DiscountAmount, DiscountID
+		FROM #TempBookings
+
+		SELECT BookingId as BookingID,  SampleCode as SampleID, SampleDescription as SampleName, SampleContainerID as ContainerID, 
+		       SampleContainerName as ContainerName,  ISNULL([SampleContainerColor],'') as SampleContainerColour, 
+			   ISNULL(TestCode,'') as TestCode, ISNULL(Price,0.00) as Price
+		FROM #TempResult
+
+		drop table #Inventorycount
+		drop table #TempBookings
+		drop table #TempResult
+		drop table #tblRates
+END
+
+
+

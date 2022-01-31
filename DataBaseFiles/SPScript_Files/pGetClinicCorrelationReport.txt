@@ -1,0 +1,364 @@
+CREATE  PROC pGetClinicCorrelationReport (      
+ @Fdate       DATETIME,       
+ @Tdate       DATETIME,    
+ @ClientID    INT,    
+ @VisitType   INT,   
+ @ContextInfo  [dbo].[UDT_CONTEXT]  readonly    
+)       
+AS       
+BEGIN       
+    IF ( @ClientID = 0       
+        OR @ClientID = -1 )       
+    SET @ClientID=NULL       
+      
+    DECLARE @OrgID INT       
+      
+    SELECT @OrgID = orgid       
+    FROM   @ContextInfo       
+      
+    --Set @Tdate= @Tdate +' 23:59:59'                       
+    DECLARE @Datediff INT       
+      
+    SET @Datediff = Datediff(day, @Fdate, @Tdate)       
+      
+    CREATE TABLE  #Temp      
+    (       
+        patientvisitid  BIGINT,       
+        patientnumber   NVARCHAR(255),       
+        patientname     VARCHAR(255),       
+        visitnumber     VARCHAR(100),       
+        age             VARCHAR(20),       
+        gender          VARCHAR(20),       
+        visittype       VARCHAR(5),       
+        location        VARCHAR(100),       
+        clientname      VARCHAR(255),       
+        registereddate  DATETIME,       
+        testtype        VARCHAR(10),       
+        testid          BIGINT,       
+  TestName NVARCHAR(250),       
+        TechnicalRemarks          VARCHAR(3000),       
+        accessionnumber BIGINT,       
+        groupname       VARCHAR(255),       
+        --Createdby BIGINT,      
+  ModifiedBy BIGINT,    
+        username        VARCHAR(150),       
+        actiondatetime  DATETIME,      
+     ResultValue NVARCHAR(MAX),      
+     MedicalRemarks VARCHAR(3000),      
+          
+     OrgId INT,      
+     GroupId INT,      
+     PackageId INT,      
+     HistoryRemarks VARCHAR(3000),      
+     DetailHistory VARCHAR(3000),      
+     PackageName VARCHAR(3000),    
+     Statustype VARCHAR(10)  ,    
+     InvestigationID BIGINT    
+    )       
+      
+      
+ CREATE TABLE #TempBriefCaseHistory      
+ (      
+ PatientVisitId BIGINT,      
+ OrgId INT,      
+ DetailHistory varchar(3000),      
+ HistoryRemarks VARCHAR(3000),      
+ CreatedBy BIGINT,      
+ CreatedAt datetime      
+       
+      
+ )      
+      
+      
+      
+IF( @Datediff <= 31 )       
+BEGIN       
+IF( @VisitType = -1 )       
+    BEGIN       
+           
+INSERT INTO #Temp(patientvisitid,testid,TechnicalRemarks,accessionnumber,actiondatetime,MedicalRemarks,ModifiedBy--,Createdby    
+,OrgId,GroupName,GroupId,PackageId,TestName,      
+PackageName,Statustype,InvestigationID)      
+SELECT distinct PIV.patientvisitid,       
+    PIV.investigationid,       
+    Isnull(PIV.reason, ''),       
+    PIV.accessionnumber,       
+    PIV.CreatedAt,      
+ PIV.MedicalRemarks,      
+ --PIV.CreatedBy,    
+ PIV.ModifiedBy,      
+ PIV.OrgId,      
+ PIV.GroupName,      
+ PIV.GroupId,      
+ PIV.PackageId,      
+ InvestigationName,      
+ PIV.PackageName,    
+ PIV.Statustype,    
+ PIV.InvestigationID---,      
+--IV.Value      
+             
+             
+FROM   PatientInvestigation PIV WITH(nolock)       
+WHERE    PIV.CreatedAt BETWEEN @Fdate AND @Tdate       
+AND  (PIV.Reason IS NOT NULL      
+OR PIV.MedicalRemarks IS NOT NULL)      
+AND PIV.orgid = @OrgID       
+      
+      
+INSERT INTO #TempBriefCaseHistory(PatientVisitId,OrgId,DetailHistory,HistoryRemarks,CreatedBy,CreatedAt)      
+SELECT DISTINCT E.PatientVisitId,E.OrgId,--E.DetailHistory,E.Remarks,  
+(Select distinct stuff((Select ',' + isnull(p.DetailHistory,'') from PatientHistoryExt p where p.patientvisitid=pv.patientvisitid and isnull(p.DetailHistory,'')!='' for xml path('')),1,1,'')) as DetailHistory,  
+(Select distinct stuff((Select ',' + isnull(ph.Remarks,'') from PatientHistoryExt ph where ph.patientvisitid=pv.patientvisitid and isnull(ph.Remarks,'')!='' for xml path('')),1,1,'')) as Remarks,  
+E.CreatedBy,E.CreatedAt        
+FROM PatientHistoryExt E WITH(NOLOCK)       
+INNER JOIN PatientVisit PV ON PV.PatientVisitId=E.PatientVisitId      
+and PV.OrgID=E.OrgID      
+WHERE PV.CreatedAt BETWEEN  @Fdate AND @Tdate      
+and  (remarks IS NOT NULL OR DetailHistory IS NOT NULL)       
+and  (remarks <> '' AND DetailHistory <> '')       
+      
+      
+       
+DELETE #TempBriefCaseHistory WHERE isnull(HistoryRemarks,'')='' AND  Isnull(DetailHistory,'')=''   
+            
+DELETE #Temp WHERE isnull(MedicalRemarks,'')='' AND  Isnull(TechnicalRemarks,'')=''      
+      
+      
+INSERT INTO #Temp(patientvisitid,      
+--testid,TechnicalRemarks,accessionnumber,      
+actiondatetime,      
+--MedicalRemarks ,Createdby    
+ModifiedBy, OrgId,    
+--GroupName,GroupId,PackageId, TestName,      
+HistoryRemarks,DetailHistory      
+)      
+SELECT TB.Patientvisitid,      
+    tb.CreatedAt,      
+ TB.CreatedBy,      
+ TB.OrgId,      
+ TB.HistoryRemarks,      
+ TB.DetailHistory      
+FROM #TempBriefCaseHistory  TB      
+      
+LEFT JOIN #Temp T ON T.patientvisitid=TB.PatientVisitId      
+AND TB.OrgId=T.OrgId      
+--left JOIN  PatientInvestigation PIV WITH(nolock)  ON TB.PatientVisitId=PIV.PatientVisitId      
+--AND TB.OrgId=PIV.OrgId      
+WHERE  T.PatientVisitId IS NULL      
+      
+      
+                         
+END       
+ELSE      
+BEGIN      
+     
+INSERT INTO #TempBriefCaseHistory(PatientVisitId,OrgId,DetailHistory,HistoryRemarks,CreatedBy,CreatedAt)      
+SELECT distinct E.PatientVisitId,E.OrgId,--E.DetailHistory,E.Remarks  
+(Select distinct stuff((Select ',' + isnull(p.DetailHistory,'') from PatientHistoryExt p where p.patientvisitid=pv.patientvisitid and isnull(p.DetailHistory,'')!='' for xml path('')),1,1,'')) as DetailHistory,  
+(Select distinct stuff((Select ',' + isnull(ph.Remarks,'') from PatientHistoryExt ph where ph.patientvisitid=pv.patientvisitid and isnull(ph.Remarks,'')!='' for xml path('')),1,1,'')) as Remarks,  
+ E.CreatedBy,E.CreatedAt  FROM PatientHistoryExt E WITH(NOLOCK)       
+INNER JOIN PatientVisit PV ON PV.PatientVisitId=E.PatientVisitId      
+and PV.OrgID=E.OrgID      
+WHERE PV.CreatedAt BETWEEN  @Fdate AND @Tdate      
+and  (remarks IS NOT NULL OR DetailHistory IS NOT NULL)       
+    AND PV.VisitType=@VisitType      
+       
+DELETE #TempBriefCaseHistory WHERE isnull(HistoryRemarks,'')='' AND  Isnull(DetailHistory,'')=''      
+    
+   -- Select * from #TempBriefCaseHistory    
+       
+      
+      
+INSERT INTO #Temp(patientvisitid,testid,TechnicalRemarks,accessionnumber,actiondatetime,MedicalRemarks,ModifiedBy--Createdby    
+,OrgId,GroupName,GroupId,PackageId,      
+TestName,PackageName,Statustype,InvestigationID)      
+SELECT distinct PIV.patientvisitid,       
+    PIV.investigationid,       
+    PIV.reason,       
+    PIV.accessionnumber,       
+    PIV.CreatedAt,      
+ PIV.MedicalRemarks,      
+ --PIV.CreatedBy,     
+ PIV.ModifiedBy,     
+ PIV.OrgId,      
+ GroupName,      
+ GroupId,      
+ PackageId,      
+ InvestigationName,      
+ PackageName,    
+ PIV.statustype AS Statustype,    
+ PIV.InvestigationID     
+             
+FROM   PatientInvestigation PIV WITH(nolock)       
+INNER JOIN Patientvisit PV on PV.Patientvisitid=PIV.PatientVisitID      
+and PV.Orgid=PIV.OrgID      
+WHERE    PIV.CreatedAt BETWEEN @Fdate AND @Tdate       
+AND  (PIV.Reason IS NOT NULL  OR PIV.MedicalRemarks IS NOT NULL)      
+AND PIV.orgid = @OrgID       
+   AND PV.VisitType=@VisitType --And PV.PatientVisitID=345169-- And Isnull(Piv.statustype,'')<>('RR')     
+    
+   Update T set T.TechnicalRemarks=TT.TechnicalRemarks from #Temp T inner join #Temp TT on t.patientvisitid=TT.patientvisitid and t.InvestigationID=TT.InvestigationID    
+   And TT.Statustype='RR'     
+   Delete from #Temp where Statustype='RR'     
+   --Select * from #Temp return    
+DELETE #Temp WHERE isnull(MedicalRemarks,'')='' AND  Isnull(TechnicalRemarks,'')=''      
+      
+INSERT INTO #Temp(patientvisitid,      
+--testid,TechnicalRemarks,accessionnumber,      
+actiondatetime,      
+--MedicalRemarks,  Createdby    
+ModifiedBy, OrgId,--GroupName,GroupId,PackageId, TestName,      
+HistoryRemarks,DetailHistory      
+)      
+SELECT distinct TB.Patientvisitid,      
+--                  PIV.investigationid,       
+--                  Isnull(PIV.reason, ''),       
+--                  PIV.accessionnumber,       
+tb.CreatedAt,      
+--PIV.MedicalRemarks,      
+TB.CreatedBy As ModifiedBy,       
+TB.OrgId,      
+--PIV.GroupName,      
+--PIV.GroupId,      
+--PIV.PackageId,      
+--InvestigationName,      
+TB.HistoryRemarks,      
+TB.DetailHistory      
+FROM #TempBriefCaseHistory  TB      
+      
+--LEFT JOIN #Temp T ON T.patientvisitid=TB.PatientVisitId      
+--AND TB.OrgId=T.OrgId      
+--left JOIN  PatientInvestigation PIV WITH(nolock)  ON TB.PatientVisitId=PIV.PatientVisitId      
+--AND TB.OrgId=PIV.OrgId      
+WHERE  TB.PatientVisitId NOT IN (SELECT PatientVisitId from #Temp)      
+--T.PatientVisitId IS NULL      
+            
+            
+            
+---------------------      
+      
+      
+      
+END       
+        
+                         
+  --Select * from #Temp     
+  --drop table #Temp ,#TempBriefCaseHistory return    
+      
+UPDATE #Temp SET TestType='INV'      
+WHERE GroupId=0 and PackageId=0      
+      
+      
+UPDATE #Temp SET TestType='GRP'      
+WHERE GroupId>0 and PackageId=0      
+  --Select * from #Temp     
+    
+UPDATE  PIV SET patientnumber=PV.externalvisitid,       
+  patientname=PA.NAME,       
+  visitnumber=PV.visitnumber,       
+  age=PA.age,       
+  gender=PA.sex,       
+  visittype=CASE       
+  WHEN PV.labvisittype = 0 THEN 'OP'       
+  WHEN PV.labvisittype = 1 THEN 'IP'       
+  ELSE 'OP/IP'       
+  END,       
+ location=OA.location,       
+  clientname=CM.clientname,       
+  registereddate=PV.visitdate,      
+  username=US.NAME      
+from #Temp PIV      
+INNER JOIN patientvisit PV WITH(nolock)       
+        ON PV.patientvisitid = PIV.patientvisitid       
+INNER JOIN patient PA WITH(nolock)       
+        ON PA.orgid = PV.orgid       
+        AND PA.patientid = PV.patientid       
+INNER JOIN organizationaddress OA WITH(nolock)       
+        ON OA.addressid = PV.orgaddressid       
+INNER JOIN users US WITH(nolock)       
+        ON US.loginid = PIV.ModifiedBy--Createdby       
+    AND US.orgid = PIV.orgid       
+INNER JOIN visitclientmapping VCM WITH(nolock)       
+        ON VCM.visitid = PIV.patientvisitid       
+            AND VCM.orgid = PIV.OrgId       
+INNER JOIN clientmaster CM WITH(nolock)       
+        ON CM.clientid = VCM.clientid       
+            AND CM.orgid = VCM.orgid       
+      
+  --Select * from #Temp return    
+----PatientHistoryExt      
+      
+UPDATE  PIV SET DetailHistory=PV.DetailHistory,      
+HistoryRemarks=PV.HistoryRemarks      
+from #Temp PIV      
+INNER JOIN #TempBriefCaseHistory PV WITH(nolock)       
+        ON PV.patientvisitid = PIV.patientvisitid       
+                  
+      
+      
+            
+           
+ DELETE #Temp WHERE (ISNULL(TechnicalRemarks,'') = ''      
+  AND ISNULL(MedicalRemarks,'') = ''  AND ISNULL(HistoryRemarks,'')='' AND ISNULL(DetailHistory,'')='')      
+      
+      
+      
+       
+UPDATE  PIV SET ResultValue=IV.Value      
+        
+from #Temp PIV      
+INNER JOIN Investigationvalues(NOLOCK) IV       
+        ON IV.patientvisitid = PIV.patientvisitid        
+  and PIV.Testid=iv.InvestigationId       
+       
+--UPDATE  PIV SET ResultValue=IV.Value      
+        
+--  from #Temp PIV      
+--   INNER JOIN Investigationvalues(NOLOCK) IV       
+--                    ON IV.patientvisitid = PIV.patientvisitid        
+--     and PIV.Testid=iv.InvestigationId        
+                          
+      
+SELECT DISTINCT ROW_NUMBER()OVER (ORDER BY RegisteredDate) AS SNO,T.patientnumber       
+                        AS       
+                        'RequestNo',       
+                        T.PatientName,       
+                        T.VisitNumber,       
+                        T.Age,       
+                        T.Gender,       
+                        T.VisitType,       
+                        T.Location,       
+                        ( CONVERT(VARCHAR, T.registereddate, 103) +       
+                            ' '       
+                            + CONVERT(VARCHAR, T.registereddate, 8) )       
+                        AS       
+                        'RegisteredDate'       
+                                ,       
+                        T.ClientName,       
+                        isnull(T.groupname,'') as GroupName,      
+      ISNULL(t.PackageName,'') as [Package Name],      
+                   T.TestNAME,       
+      replace(replace(replace(replace(replace(T.ResultValue,char(10),''),char(13),''),'&nbsp;',''),'</p>','  '),'<p>','  ')ResultValue,      
+            
+      replace(replace(replace(replace(replace(T.TechnicalRemarks,char(10),''),char(13),''),'&nbsp;',''),'</p>','  '),'<p>','  ')TechnicalRemarks,      
+      replace(replace(replace(replace(replace(T.MedicalRemarks,char(10),''),char(13),''),'&nbsp;',''),'</p>','  '),'<p>','  ')MedicalRemarks,      
+      replace(replace(replace(replace(replace(T.HistoryRemarks,char(10),''),char(13),''),'&nbsp;',''),'</p>','  '),'<p>','  ')BriefCaseRemarks,      
+                       replace(replace(replace(replace(replace(T.DetailHistory,char(10),''),char(13),''),'&nbsp;',''),'</p>','  '),'<p>','  ')BriefCaseHistory,      
+       T.username as [User Name],       
+       (Convert(VARCHAR,actiondatetime,103) +' '+Convert(VARCHAR,actiondatetime,8))       
+                                     
+                        AS       
+                                'Event Date and Time'       
+        FROM   #Temp T   Where T.visitnumber is not null    
+                        
+                                
+      
+DROP TABLE #Temp       
+      
+drop table #TempBriefCaseHistory      
+      
+-- DROP TABLE #totalcount       
+      
+--DROP TABLE #afterapproval       
+END       
+END

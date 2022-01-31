@@ -1,0 +1,173 @@
+/****** Object:  StoredProcedure [dbo].[pGetInvestigatonResultsCaptureUnHoldTaskDetails]    Script Date: 3/1/2019 8:13:52 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+--exec 
+CREATE PROCEDURE [dbo].[pGetInvestigatonResultsCaptureUnHoldTaskDetails]
+                      @startRowIndex        [INT],
+                      @pageSize             [INT],
+					  @totalRows            [INT] OUTPUT,
+					  @LoginDetail [dbo].[LoginDetail] READONLY,  
+					  @ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER  AS 
+BEGIN
+BEGIN TRY
+      DECLARE @CreatedAt DATETIME=GETDATE(),@LanguageCode nvarchar(5), @CreatedBy BIGINT    
+
+	  DECLARE  @VID [bigint],
+	           @OrgID [int],
+			   @RoleID [bigint],
+			   @pGUID [nvarchar](255),
+			   @DeptID [bigint],
+			   @pInvID NVARCHAR(max),
+			   @pLocationID [int],
+			   @TaskID [bigint],
+			   @IsTrustedDetails [nvarchar](3),                
+               @Status nvarchar(50) ='Approve'              
+
+      SELECT @CreatedBy = LoginID,@LanguageCode=LanguageCode,@OrgID=OrgID,@RoleID=RoleID,@pLocationID=LocationID
+      FROM   @ContextInfo 
+
+	  --SELECT @VID = PatientVisitId FROM Patientvisit PV WITH(NOLOCK) WHERE OrgID=@OrgID AND VisitNumber=@pVisitNumber
+	  
+	  --SELECT top 1 @pGUID=  UID FROM OrDeredinvestigations WITH(NOLOCK) WHERE VisitID=@VID and OrgID=@OrgID
+
+	  --select top 1 @TaskID=  TaskID  FROM tasks WHERE  taskactionid=62 and patientvisitid=@VID and TaskStatusID=1 and Orgid=@OrgID
+
+
+BEGIN 
+
+--select @VID
+
+/*Dec Part Like 'TaskDetails' */
+ DECLARE @LastTemp AS TABLE
+            (
+			--RID int,
+               Rowid             INT IDENTITY(1, 1),
+               taskid            BIGINT,
+               taskactionid      INT,
+               taskdescription   NVARCHAR(1000),
+               taskdate          DATETIME,
+               patientid         BIGINT,
+               patientvisitid    BIGINT,
+               assignedto        BIGINT,
+               highlightcolor    NVARCHAR(100),
+               category          NVARCHAR(500),
+               redirecturl       NVARCHAR(500),
+               actionname        NVARCHAR(500),
+               specialityid      INT,
+               roleid            BIGINT,
+               rolename          NVARCHAR(500),
+               location          NVARCHAR(500),
+               patientnumber     NVARCHAR(500),
+               NAME              NVARCHAR(500),
+               orgid             INT,
+               orgname           NVARCHAR(500),
+               labno             NVARCHAR(500),
+               investigationname NVARCHAR(500),
+               RefernceID        NVARCHAR(250),
+               createdname       NVARCHAR(500),
+               isshowedtime      NVARCHAR(10),
+               stat              DATETIME,
+               colour            NVARCHAR(500),
+               reporttatdate     DATETIME
+            )
+
+/*Commented by sabari At :10_04_2019*/
+--INSERT INTO @LastTemp
+--SELECT DISTINCT T.TaskID,T.TaskActionID,T.TaskDescription,T.TaskDate,T.PatientID,T.PatientVisitID,T.AssignedTo,                                                                                                        
+--Case WHEN T.TaskStatusID=5 THEN ISNULL((SELECT top 1 Name FROM Users  WHERE LoginID=T.ModifiedBy), '') ELSE ''                                                   
+--END AS HighlightColor,TA.Category,T.RedirectURL,TA.ActionName,T.SpecialityID,T.RoleID,'' RoleName ,'0' Location,CONVERT(nvarchar(30),T.PatientID),                                                                    
+--'' AS NAME ,T.orgID as OrgID,'' as OrgName,'','' InvestigationName,T.RefernceID,''
+--,'Y' AS isshowedtime ,'' as Stat,HighlightColor as  Colour,'' AS reporttatdate                         
+--FROM TASKS T              
+--INNER JOIN TaskActions TA  
+--ON T.TaskActionID = TA.TaskActionID  and isnull(TA.LanguageCode,'en-GB')='en-GB'
+--INNER JOIN PatientInvestigation PV WITH(NOLOCK) ON PV.PatientVisitID=T.PatientVisitID 
+--WHERE T.OrgID in (@OrgID )   
+--and isnull(TA.LanguageCode,'en-GB') = 'en-GB' 
+--AND ((T.TaskStatusID =1) OR (T.TaskStatusID=5 )) 
+----AND T.PatientVisitID=@VID 
+--AND T.RoleID = @RoleID 
+--AND ISNULL(PV.IsReportable,0)=1
+
+--update t set 
+--t.RedirectURL=replace(RedirectURL,'InvestigationApprovel','InvestigationApprovelOrHoldNew') from
+--@LastTemp T
+/*Commented by sabari At :10_04_2019*/
+
+INSERT INTO @LastTemp
+SELECT DISTINCT 0,TA.TaskActionID,REPLACE(REPLACE(REPLACE(TA.DisplayTextTemplate,'{PatientName}',P.Name),'{PatientNumber}',P.PatientNumber),'{VisitNumber}',PV.VisitNumber) AS TaskDescription
+,GETDATE() AS TaskDate,PV.PatientID,PV.PatientVisitID,0 AS AssignedTo,                                                                                                        
+'' AS HighlightColor,TA.Category,REPLACE(REPLACE(REPLACE(REPLACE(TA.RedirectURL,'{PatientID}',PV.PatientID),'{PatientVisitID}',PV.PatientVisitId),'{UID}',PIV.UID),'{TaskID}',-1) AS RedirectURL ,TA.ActionName,0 AS SpecialityID,@RoleID AS RoleID,'' RoleName ,'0' Location,CONVERT(nvarchar(30),PV.PatientID),                                                                    
+'' AS NAME ,PIV.orgID as OrgID,'' as OrgName,'','' InvestigationName,OI.LabNo as RefernceID ,''
+,'Y' AS isshowedtime ,'' as Stat,'' as  Colour,'' AS reporttatdate                         
+FROM PatientInvestigation PIV WITH(NOLOCK) 
+INNER JOIN OrderedInvestigations OI WITH(NOLOCK)  ON OI.AccessionNumber=PIV.AccessionNumber
+INNER JOIN PatientVisit PV WITH(NOLOCK) ON PV.PatientVisitID=PIV.PatientVisitID
+INNER JOIN Patient P WITH(NOLOCK) ON P.PatientID=PV.PatientID AND P.OrgID=PV.OrgID
+INNER JOIN TaskActions TA WITH(NOLOCK) ON TA.ActionName='UnHold' AND TA.Category='UnHold'AND  isnull(TA.LanguageCode,'en-GB')='en-GB'
+WHERE PIV.OrgID= 224  
+AND ISNULL(PIV.IsReportable,0)=1 AND PV.CreatedAt>GETDATE()-30
+
+
+--select  * from @LastTemp 
+SELECT DISTINCT @totalRows = Count(1)
+FROM   @LastTemp
+DECLARE @first_id INT
+SET @startRowIndex = ( @startRowIndex - 1 ) * @pageSize
+IF @startRowIndex = 0
+SET @startRowIndex = 1
+SET ROWCOUNT @startRowIndex
+IF @startRowIndex < @pageSize
+SELECT @first_id = @startRowIndex;
+ELSE
+SELECT @first_id = @startRowIndex + 1;
+SET ROWCOUNT @pageSize
+
+
+SELECT TaskID,
+                 TaskActionID,
+                 TaskDescription,
+                 TaskDate,
+                 PatientID,
+                 PatientVisitID,
+                 AssignedTo,
+                 HighlightColor,
+                 Category,
+                 RedirectURL,
+                 ActionName,
+                 SpecialityID,
+                 RoleID,
+                 RoleName,
+                 Location,
+                 PatientNumber,
+                 NAME,
+                 OrgID,
+                 OrgName,
+                 LabNo,
+                 InvestigationName,
+                 RefernceID,
+                 CreatedName,
+                 IsShowedTime AS ShowedTime,
+                 stat         ReportTatDate
+          FROM   @LastTemp AS t 
+		  WHERE  Rowid >= @first_id
+
+
+END
+END TRY
+BEGIN CATCH
+END CATCH
+END
+
+
+
+GO
+
+

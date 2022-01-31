@@ -1,0 +1,443 @@
+CREATE PROCEDURE [dbo].[PgetpatientinvestigationforvisitNumber] @pVisitID    [BIGINT],
+                                                          @pOrgid      [INT],
+                                                         
+                                                          @pGUID       [VARCHAR](255),
+                                                          @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      SET NOCOUNT ON
+
+      DECLARE @TempInvStatus TABLE
+        (
+           status      VARCHAR(100),
+           DisplayText           VARCHAR(255),
+           DisplayTextForNonPath VARCHAR(255)
+        )
+      IF NOT EXISTS(SELECT 1
+                    FROM   InvestigationStatus WITH (NOLOCK)
+                    WHERE  Orgid = @pOrgid)
+        BEGIN
+            INSERT INTO @TempInvStatus
+                        (status,
+                         DisplayText,
+                         DisplayTextForNonPath)
+            SELECT DISTINCT Invsts.Status,
+                            invsts.DisplayText,
+                            '' DisplayTextForNonPath
+            FROM   InvestigationStatus Invsts WITH (NOLOCK)
+            WHERE  Invsts.Orgid IS NULL
+        END
+      ELSE
+        BEGIN
+            INSERT INTO @TempInvStatus
+                        (status,
+                         DisplayText,
+                         DisplayTextForNonPath)
+            SELECT DISTINCT Invsts.Status,
+                            invsts.DisplayText,
+                            '' DisplayTextForNonPath
+            FROM   InvestigationStatus Invsts WITH (NOLOCK)
+            WHERE  Invsts.Orgid = @pOrgid
+        END
+
+
+		--ReportSnapshot Ready Check
+		 DECLARE @TempReportSnapshot TABLE
+        (
+          R_VisitID             BIGINT,
+		  R_AccessionNumber     BIGINT
+        )
+
+		IF EXISTS(SELECT 1 FROM ReportSnapshot RS WITH(NOLOCK) WHERE VisitID=@pVisitID AND Status='Ready' and Type='Pdf')
+		BEGIN
+	    INSERT INTO @TempReportSnapshot(R_VisitID,R_AccessionNumber)
+        SELECT RS.VisitID,f.item as AccessionNumber
+        FROM   ReportSnapshot RS with(nolock)
+		INNER JOIN Notifications N with(nolock) on RS.NotificationID=N.NotificationID and RS.VisitID=N.IdentityID and RS.OrgID=N.OrgID and RS.Type=N.ActionType
+             CROSS apply Fnsplit(RS.AccessionNumber, ',')f
+			 where RS.VisitID=@pVisitID and RS.Status='Ready' and RS.Type='Pdf'
+			 and N.Category='Report' and  N.Status='Completed'  
+	    END
+
+
+      DECLARE @tmpTable AS TABLE
+        (
+           InvestigationName   VARCHAR(255),
+           Type                VARCHAR(20),
+           InvestigationID     BIGINT,
+           VisitID             BIGINT,
+           OrgID               INT,
+           Status              VARCHAR(50),
+           PerformingPhysicain VARCHAR(500),
+           CreatedAt           DATETIME,
+           AccessionNumber     BIGINT,
+           UID                 VARCHAR(255),
+           DisplayStatus       VARCHAR(50),
+           ReferredType        VARCHAR(50),
+           ID                  INT,
+           IsAutoAuthorize     VARCHAR(1),
+           PkgId               BIGINT,
+           IsCopublish         VARCHAR(3),
+           IsConfidentialTest  VARCHAR(3),
+           ResCaptureLoc       INT,
+           ReferralID          BIGINT,
+	   /*BEGIN | DefectID [218] | Arjun Kumar K | Datein 20161114 | M | VID Lock Exclusion */
+           Excludetime         BIGINT,
+           ExcludeVIDlockID    int,
+           /*END | DefectID [218] | Arjun Kumar K | Datein 20161114 */
+           ExcludeVIDlock      CHAR (1),
+		   VisitSampleStatus          VARCHAR(50),
+		   RefPhyName VARCHAR(255),
+		   DueStatus Varchar(10)
+        )
+
+      IF( @pGUID = NULL
+           OR Ltrim(Rtrim(@pGUID)) = '' )
+        SET @pGUID=NULL
+
+      INSERT INTO @tmpTable
+      SELECT DISTINCT OI.Name                                  AS InvestigationName,
+                      Type,
+OI.ID                                 AS InvestigationID,
+                      VisitID,
+                      OI.OrgID,
+                      OI.Status        AS Status,
+                      PerformingPhysicain,
+                      OI.CreatedAt,
+                      OI.AccessionNumber,
+                      OI.[UID],
+                      CASE
+                        WHEN Oi.IsNonPath = 1 THEN InvSts.DisplayTextForNonPath
+                        ELSE Isnull(InvSts.DisplayText, OI.Status)
+                      END              AS DisplayStatus,
+                      ReferredType,
+                      0 as  ID, --IDM.DeptID                            AS ID,
+                      CASE
+                        WHEN PI.IsAutoAuthorize = '' THEN 'N'
+                        WHEN PI.IsAutoAuthorize IS NULL THEN 'N'
+                        ELSE PI.IsAutoAuthorize
+                      END                                   AS IsAutoAuthorize,
+                      Isnull(Oi.PkgID, 0),
+                      '',
+                      IOM.IsConfidentialTest,
+                      OI.RescaptureLoc                      AS RescaptureLoc,
+                      OI.ReferralID,
+					   Abs(Round(Datediff(hh, OI.ReportDateTime, pv.VisitDate), 0)) as Excludetime,
+                      0                AS ExcludeVIDlockID,
+                      'Y'              AS ExcludeVIDlock,
+                      --CASE
+                      --  WHEN Isnull(Abs(Datediff(hh, OI.ReportDateTime, Getdate())), 0) <= @VIDExcluValue THEN 'N'
+                      --  ELSE 'Y'
+                      --END              ExcludeVIDlock,
+					  PI.STATUS        AS VisitSampleStatus,
+                      U.Name           AS RefPhyName,
+					  'Completed'     AS DueStatus
+      FROM   OrderedInvestigations OI WITH (NOLOCK)
+             INNER JOIN PatientVisit PV WITH (NOLOCK)
+                     ON PV.PatientVisitId = OI.VisitID
+             INNER JOIN patientinvestigation (Nolock) PI
+                     ON PI.PatientVisitID = OI.VisitID
+                        AND PI.AccessionNumber = OI.AccessionNumber
+                        AND PI.OrgID = @pOrgid
+             INNER JOIN InvestigationOrgMapping (Nolock) IOM
+                     ON IOM.InvestigationID = PI.InvestigationID
+                        AND IOM.OrgID = @pOrgid
+             --INNER JOIN InvDeptMaster (Nolock) IDM
+             --        ON IDM.DeptID = IOM.DeptID
+             --           AND IDM.OrgID = @pOrgid
+             INNER JOIN @TempInvStatus InvSts
+                     ON InvSts.Status = OI.Status
+					 
+					  left join SortedOrderTest SOT WITH(NOLOCK)
+					 ON OI.OrgID=SOT.OrgID and OI.AccessionNumber=SOT.AccessionNumber
+					                       and SOT.Status='Y'
+					   left JOIN users AS U WITH(NOLOCK)
+                     ON SOT.LoginID = U.loginID
+					
+					
+      WHERE  VisitID = @pVisitID
+             AND OI.OrgID = @pOrgid
+             AND ( OI.[UID] = Isnull(@pGUID, OI.[UID])
+                    OR ReferredAccessionNo IN (SELECT AccessionNumber
+                                               FROM   OrderedInvestigations o WITH (NOLOCK)
+                                               WHERE  o.UID = Isnull(@pGUID, [UID])) )
+             AND OI.AccessionNumber NOT IN (SELECT Isnull(ReferredAccessionNo, 0)
+                                            FROM   OrderedInvestigations WITH (NOLOCK)
+                                            WHERE  VisitId = @pVisitID
+                                                   AND ReferredAccessionNo IS NOT NULL
+                                                   AND ReferredAccessionNo > 0
+                                                   AND ReferredType NOT IN ( 'ReflexTest' ))
+             AND oi.PkgName IS NULL
+      UNION
+      SELECT OI.Name + '(' + OI.PkgName + ')'         AS InvestigationName,
+             Type,
+             OI.ID                                 AS InvestigationID,
+             VisitID,
+     OI.OrgID,
+             CASE
+               WHEN Oi.IsNonPath = 1 THEN 'Validate'
+               ELSE OI.Status
+             END                           AS Status,
+             PerformingPhysicain,
+             OI.CreatedAt,
+             OI.AccessionNumber,
+             OI.[UID],
+             CASE
+               WHEN Oi.IsNonPath = 1 THEN InvSts.DisplayTextForNonPath
+               ELSE Isnull(InvSts.DisplayText, OI.Status)
+             END                           AS DisplayStatus,
+             ReferredType,
+             0 as ID ,--IDM.DeptID                            AS ID,
+             CASE
+               WHEN PI.IsAutoAuthorize = '' THEN 'N'
+               WHEN PI.IsAutoAuthorize IS NULL THEN 'N'
+               ELSE PI.IsAutoAuthorize
+             END                                   AS IsAutoAuthorize,
+             Isnull(Oi.PkgID, 0)                   AS PkgID,
+             (SELECT DISTINCT IsCoPublish
+              FROM   InvOrgGroup
+              WHERE  AttGroupId = Oi.pkgId
+                     AND OrgId = @pOrgid),
+             IOM.IsConfidentialTest,
+             OI.RescaptureLoc                      AS RescaptureLoc,
+             OI.ReferralID,
+					   Abs(Round(Datediff(hh, OI.ReportDateTime, pv.VisitDate), 0)) as Excludetime,
+             0                                AS ExcludeVIDlockID,
+             'Y'                              AS ExcludeVIDlock,
+             --CASE
+             --  WHEN Isnull(Abs(Datediff(hh, OI.ReportDateTime, Getdate())), 0) <= @VIDExcluValue THEN 'N'
+             --  ELSE 'Y'
+             --END                           ExcludeVIDlock, 
+			 PI.STATUS                        AS VisitSampleStatus,
+             U.Name                           AS RefPhyName,
+			 'Completed'     AS DueStatus
+      FROM   OrderedInvestigations OI WITH (NOLOCK)
+             INNER JOIN PatientVisit PV WITH (NOLOCK)
+                     ON PV.PatientVisitId = OI.VisitID
+             INNER JOIN patientinvestigation (Nolock) PI
+                     ON PI.PatientVisitID = OI.VisitID
+                        AND PI.AccessionNumber = OI.AccessionNumber
+                        AND PI.OrgID = @pOrgid
+             INNER JOIN InvestigationOrgMapping (Nolock) IOM
+                     ON IOM.InvestigationID = PI.InvestigationID
+                        AND IOM.OrgID = @pOrgid
+             --INNER JOIN InvDeptMaster (Nolock) IDM
+             --        ON IDM.DeptID = IOM.DeptID
+             --           AND IDM.OrgID = @pOrgid
+             INNER JOIN @TempInvStatus InvSts
+                     ON InvSts.Status = OI.Status
+
+				 left join SortedOrderTest SOT WITH(NOLOCK)
+					 ON OI.OrgID=SOT.OrgID and OI.AccessionNumber=SOT.AccessionNumber
+					                       and SOT.Status='Y'
+					   left JOIN users AS U WITH(NOLOCK)
+                     ON SOT.LoginID = U.loginID
+
+      WHERE  VisitID = @pVisitID
+             AND OI.OrgID = @pOrgid
+             AND ( OI.[UID] = Isnull(@pGUID, OI.[UID])
+                    OR ReferredAccessionNo IN (SELECT AccessionNumber
+                                               FROM   OrderedInvestigations o WITH (NOLOCK)
+                                               WHERE  o.UID = Isnull(@pGUID, [UID])) )
+             AND OI.AccessionNumber NOT IN (SELECT Isnull(ReferredAccessionNo, 0)
+                                            FROM   OrderedInvestigations WITH (NOLOCK)
+                                            WHERE  VisitId = @pVisitID
+                                                   AND ReferredAccessionNo IS NOT NULL
+                                                   AND ReferredAccessionNo > 0
+                                                   AND ReferredType NOT IN ( 'ReflexTest' ))
+             AND oi.PkgName IS NOT NULL
+/*BEGIN | DefectID [218] | Arjun Kumar K | Datein 20161114 | M | VID Lock Exclusion */
+      IF EXISTS (SELECT  top 1 1
+                 FROM TATVIDLockExclude (NOLOCK)
+                 WHERE  OrgID = @pOrgid
+                        AND Isactive = 1)
+        BEGIN
+            UPDATE t
+            SET    t.ExcludeVIDlock = 'N'
+            FROM   @tmpTable t
+            WHERE  t.status = 'Validate'
+
+            UPDATE T
+            SET    ExcludeVIDlockID = TVLE.ID
+            FROM   @tmpTable T
+                   INNER JOIN TATVIDLockExclude TVLE (NOLOCK)
+                           ON TVLE.OrgID = @pOrgid
+                              AND TVLE.Isactive = 1
+            WHERE Excludetime BETWEEN TVLE.StartValue AND TVLE.EndValue
+ 
+            UPDATE T
+            SET    ExcludeVIDlock = 'Y'
+            FROM   @tmpTable T
+            WHERE  T.ExcludeVIDlockID IN (SELECT ExcludeVIDlockID
+                                          FROM   @tmpTable
+                                          WHERE  Status IN( 'Completed', 'Pending', 'SampleReceived', 'OutSource', 'PartiallyCompleted' )
+                                                 AND ExcludeVIDlockID <> 0)
+
+            UPDATE T
+            SET    ExcludeVIDlock = 'Y'
+            FROM   @tmpTable T
+            WHERE  ( EXISTS (SELECT ExcludeVIDlockID
+                             FROM   @tmpTable
+                             WHERE  Status IN( 'Completed', 'Pending', 'SampleReceived', 'OutSource' )) )
+                   AND ExcludeVIDlockID = 0
+			IF NOT EXISTS(SELECT TOP 1 1
+                          FROM   @tmpTable t
+                          WHERE  ExcludeVIDlock = 'N')
+              BEGIN
+                  UPDATE t
+                  SET    t.ExcludeVIDlock = 'N'
+                  FROM   @tmpTable t
+              END 
+            
+        END
+      ELSE
+        BEGIN
+            UPDATE t
+            SET    t.ExcludeVIDlock = 'N'
+            FROM   @tmpTable t
+        END
+/*END | DefectID [218] | Arjun Kumar K | Datein 20161114 */
+      UPDATE T
+      SET    T.ReferredType = CASE
+                                WHEN PI.statustype = 'RC' THEN 'Recheck'
+                                ELSE 'Retest'
+                              END
+      FROM   @tmpTable T
+             INNER JOIN PatientInvestigation (NOLOCK) PI
+                     ON PI.PatientVisitID = T.VisitID
+                        AND PI.AccessionNumber = T.AccessionNumber
+                        AND PI.PatientVisitID = @pVisitID
+                        AND Isnull(PI.statustype, '') IN ( 'RC', 'RR' )
+
+      UPDATE T
+      SET    T.IsAutoAuthorize = 'N'
+      FROM   @tmpTable T
+             INNER JOIN PatientInvestigation (NOLOCK) PI
+                     ON PI.PatientVisitID = T.VisitID
+                        AND PI.AccessionNumber = T.AccessionNumber
+                        AND PI.PatientVisitID = @pVisitID
+                        AND Isnull(PI.IsAutoAuthorize, 'N') = 'N'
+
+      DECLARE @RoleName VARCHAR(25)
+
+      SELECT @RoleName = (SELECT RoleName
+                          FROM   @ContextInfo)
+
+      --IF ( @RoleName != 'Radiographer'
+      --     AND @RoleName != 'Radiologist' )
+	  IF EXISTS( select count(1) from @tmpTable T  INNER JOIN OrderedInvestigations oi WITH (NOLOCK)
+              ON oi.AccessionNumber = T.AccessionNumber WHERE  Oi.IsNonPath = 1)
+        BEGIN
+            UPDATE T
+            SET    T.ExcludeVIDlock = 'Y',
+                   T.Status = CASE
+                                WHEN T.Status = 'Validate' THEN 'Validate'
+                                ELSE T.Status
+                              END
+            FROM   @tmpTable T
+                   INNER JOIN OrderedInvestigations oi WITH (NOLOCK)
+                           ON oi.AccessionNumber = T.AccessionNumber
+            WHERE  Oi.IsNonPath = 1
+        END
+
+      --select @RoleName
+      --IF( @RoleName = 'Radiographer'
+      --     OR @RoleName = 'Radiologist' )
+	  IF EXISTS( select count(1) From @tmpTable T
+                   INNER JOIN OrderedInvestigations oi WITH (NOLOCK)
+             ON oi.AccessionNumber = T.AccessionNumber
+  WHERE  Oi.IsNonPath = 0 )
+        BEGIN
+            UPDATE T
+            SET    T.ExcludeVIDlock = 'Y'
+            FROM   @tmpTable T
+                   INNER JOIN OrderedInvestigations oi WITH (NOLOCK)
+                           ON oi.AccessionNumber = T.AccessionNumber
+            WHERE  Oi.IsNonPath = 0
+        END
+
+      /****/
+      UPDATE @tmpTable
+      SET    ExcludeVIDlock = 'Y'
+      FROM   @tmpTable TM
+             INNER JOIN OrganizationAddress OA (NOLOCK)
+                     ON TM.RescaptureLoc = OA.AddressId
+                        AND OA.OrgID <> @pOrgid
+
+      UPDATE @tmpTable
+      SET    ExcludeVIDlock = 'Y'
+      FROM   @tmpTable TM
+      WHERE  TM.ReferralID <> -1
+             AND TM.Status  IN ( 'SampleReceived','OutSource' )
+
+      UPDATE @tmpTable
+      SET    PerformingPhysicain = OA.Location
+      FROM   @tmpTable TM
+             INNER JOIN OrganizationAddress OA (NOLOCK)
+                     ON TM.RescaptureLoc = OA.AddressId
+	  UPDATE @tmpTable SET DueStatus=PDD.Status
+	   FROM @tmpTable T
+	   INNER JOIN FinalBill FB WITH (NOLOCK) ON FB.VisitID=T.VisitID AND FB.OrgID=T.OrgID
+	   INNER JOIN PatientDueDetails PDD WITH (NOLOCK) ON PDD.PaidFinalbillID=FB.FinalBillID AND PDD.OrgID=FB.OrgID
+      SELECT DISTINCT InvestigationName,
+                      Type,
+                      InvestigationID,
+                      VisitID,
+                      OrgID,
+                      Status,
+                      PerformingPhysicain,
+                      CreatedAt,
+                      AccessionNumber,
+                      UID,
+                      --DisplayStatus,
+					  --case when DisplayStatus='Approve' then 'Report Ready' else 'Report Not Ready' end as DisplayStatus,
+					  case when TRS.R_AccessionNumber IS NOT NULL AND DisplayStatus IN ('Approve','PartiallyApproved') then 'Report Ready' else 'Report Not Ready' end as DisplayStatus,
+                      ReferredType,
+                      ID,
+                      IsAutoAuthorize,
+                      PkgId,
+                      IsCopublish,
+                      IsConfidentialTest,
+                      ResCaptureLoc,
+                      ReferralID,
+                      ExcludeVIDlock,
+					  VisitSampleStatus,
+					   stuff((Select ','+tt.RefPhyName From @tmpTable tt WHERE tt.AccessionNumber=TB.AccessionNumber
+					
+						    for XML path('')),1,1,'') as RefPhyName,
+					 CASE WHEN DueStatus='Closed' THEN 'Completed' ELSE DueStatus END AS DueStatus
+      FROM   @tmpTable TB
+      LEFT JOIN @TempReportSnapshot TRS ON   TB.AccessionNumber=TRS.R_AccessionNumber
+     -- duplicate row
+	  WHERE   VisitSampleStatus !='Recheck'
+        --For Paid Status Samples
+	 UNION ALL
+	 Select Name as InvestigationName,
+                      Type,
+                      ID as InvestigationID,
+                      VisitID,
+                      OrgID,
+                      OI.Status,
+                      PerformingPhysicain,
+                      CreatedAt,
+                      AccessionNumber,
+                      UID,
+                      'Report Not Ready'  as DisplayStatus,
+                      ReferredType,
+                      0 as ID,
+                      '' AS IsAutoAuthorize,
+                      PkgId,
+                      IsCopublish,
+                      '' AS IsConfidentialTest,
+                      ResCaptureLoc,
+                      ReferralID,
+                      '' AS ExcludeVIDlock,
+					  VisitSampleStatus,
+					  '' as RefPhyName,
+					  'Completed' AS DueStatus
+					  from OrderedInvestigations OI With(nolock) where VisitID=@pVisitID and Status='Paid'
+		--	--For Paid Status Samples
+
+
+  END

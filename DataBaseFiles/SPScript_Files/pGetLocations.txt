@@ -1,0 +1,8 @@
+
+CREATE procedure pGetLocations
+(@OrgID bigint)
+as
+Begin
+Set nocount on;
+Select Location as LocationName,AddressID as LocationID from OrganizationAddress OA where OA.OrgID=@OrgID
+End

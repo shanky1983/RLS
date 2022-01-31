@@ -1,0 +1,216 @@
+CREATE Procedure [dbo].[pInsertSampleDetails]            
+ @ppatientInvSample [dbo].[PATIENTINVSAMPLECOLLECTED] READONLY,             
+ @pSampleMapping    [dbo].[PATIENTINVSAMPLEMAPPING] READONLY,            
+ @pPatientVisitID [BIGINT],             
+ @ContextInfo       [UDT_CONTEXT] READONLY              
+            
+WITH EXECUTE AS OWNER              
+AS             
+BEGIN            
+ SET NOCOUNT ON            
+            
+ DECLARE @pCreatedAt DATETIME             
+ DECLARE @RecOrgID INT ,@recSampleLocId  [INT]            
+            
+ --SET @pCreatedAt = (SELECT dbo.Fn_getserverdate(@ContextInfo))            
+ SELECT @RecOrgID = OrgID, @pCreatedAt=Cast(CreatedAt as Datetime)              
+ FROM   PatientVisit WITH (NOLOCK)              
+ WHERE  PatientVisitID = @pPatientVisitID            
+  
+ SET @recSampleLocId = (SELECT OrgAddressID              
+ FROM   PatientVisit WITH (NOLOCK)              
+ WHERE  PatientVisitID = @pPatientVisitID)  
+             
+   Declare @Barcodenumber varchar(250)  
+ if exists (select 1 from @ppatientInvSample where BarcodeNumber='')  
+ Begin    
+    EXEC Pgetnextid  @RecOrgID    
+     ,'BCODE'    
+     ,@Barcodenumber OUT    
+     ,@recSampleLocId  
+ END   
+              
+ Create Table #PATIENTINVSAMPLEMAPPING               
+ (              
+  RowID int identity(1,1),              
+  [VisitID] [bigint] NULL,              
+  [OrgID] [int] NULL,              
+  [SampleID] [int] NULL,              
+  [ID] [bigint] NULL,              
+  [Type] [nvarchar](10) NULL,              
+  [Barcode] [nvarchar](250) NULL,              
+  [UniqueID] [nvarchar](255) NULL,              
+  [ExternalBarcode] [nvarchar](250) NULL,              
+  PISMAccessionNumber int              
+ )             
+            
+ INSERT INTO PatientInvSample              
+ (PatientVisitID,              
+ BarcodeNumber,              
+ SampleCode,              
+ OrgId,              
+ CreatedBy,              
+ CreatedAt,              
+ SampleContainerID,              
+ UID,              
+ recSampleLocID,              
+ CollectedLocID,              
+ RecOrgID,              
+ SampleRelationshipID,              
+ CollectedDateTime,              
+ VmValue,              
+ VmUnitID,              
+ SampleConditionID,              
+ ConsignmentNo,              
+ ExternalBarcode,              
+ BarcodeCount)             
+            
+ SELECT DISTINCT tmp.PatientVisitID,              
+ case when tmp.BarcodeNumber='' then @Barcodenumber else tmp.BarcodeNumber end,              
+ tmp.SampleCode,              
+ tmp.OrgID,              
+ tmp.CreatedBy,              
+ @pCreatedAt,              
+ tmp.SampleContainerID,              
+ tmp.UID,              
+ @recSampleLocId,              
+ tmp.CollectedLocID,              
+ @RecOrgID,              
+ Isnull(tmp.SampleRelationshipID, 0),              
+ tmp.CollectedDateTime,              
+ tmp.VmValue,              
+ tmp.VmUnitID,              
+ tmp.SampleConditionID,              
+ tmp.ConsignmentNo,              
+ tmp.ExternalBarcode,              
+ tmp.BarcodeCount              
+ FROM   @ppatientInvSample tmp              
+ LEFT JOIN PatientInvSample PIS WITH(NOLOCK)              
+ ON tmp.PatientVisitID = PIS.PatientVisitID              
+ AND tmp.SampleCode = PIS.SampleCode              
+ AND tmp.SampleContainerID = PIS.SampleContainerID             
+ AND tmp.OrgID = PIS.OrgID              
+ AND PIS.BarcodeNumber = tmp.BarCodeNumber              
+ WHERE  PIS.SampleCode IS NULL              
+            
+ DECLARE @ServerDate DATETIME              
+ SELECT @ServerDate = dbo.Fn_getserverdate(@ContextInfo)              
+            
+ IF NOT EXISTS(SELECT 1               
+ FROM   dbo.SampleTracker st WITH(NOLOCK)              
+ INNER JOIN @ppatientInvSample tmp              
+ ON tmp.PatientVisitID = st.PatientVisitID              
+ AND tmp.OrgID = st.OrgID              
+ AND tmp.InvSampleStatusID = st.InvSampleStatusID              
+ AND tmp.CollectedLocID = st.CollectedIn               
+ INNER JOIN dbo.PatientInvSample pis WITH(NOLOCK)              
+ ON pis.SampleID = st.SampleID              
+ AND pis.OrgID = tmp.OrgID              
+ AND pis.SampleCode = tmp.SampleCode )              
+ BEGIN              
+ INSERT INTO SampleTracker              
+ (PatientVisitID,              
+ SampleID,              
+ InvSampleStatusID,              
+ DeptID,              
+ Reason,              
+ CreatedBy,              
+ CreatedAt,              
+ OrgID,              
+ CollectedIn)              
+              
+ SELECT DISTINCT tmp.PatientVisitID,              
+ PIS.SampleID,              
+ tmp.InvSampleStatusID,              
+ 0,      
+ tmp.Reason,              
+ tmp.CreatedBy,              
+ @pCreatedAt,              
+ tmp.OrgID,              
+ --tmp.RecSampleLocID                
+ tmp.CollectedLocID              
+ FROM   @ppatientInvSample tmp              
+ INNER JOIN PatientInvSample PIS WITH(NOLOCK)              
+ ON   
+ PIs.BarcodeNumber =case when tmp.BarcodeNumber='' then @Barcodenumber else tmp.BarcodeNumber end -- tmp.BarcodeNumber  
+  and  
+   PIS.PatientVisitID = tmp.PatientVisitID              
+ AND PIS.OrgID = tmp.OrgID              
+ AND PIS.SampleCode = tmp.SampleCode              
+ WHERE ISNULL(tmp.BarcodeNumber,'0')<>'0'             
+ END         
+            
+ IF EXISTS(SELECT '1'              
+ FROM   @pSampleMapping)              
+ BEGIN              
+ insert into #PATIENTINVSAMPLEMAPPING(VisitID,OrgID,SampleID,ID,Type,Barcode,UniqueID,ExternalBarcode,PISMAccessionNumber)              
+ select P.VisitID,P.OrgID,P.SampleID,P.ID,P.Type,P.Barcode,P.UniqueID,P.ExternalBarcode,ISNULL(OI.AccessionNumber,0) from @pSampleMapping P              
+ inner join OrderedInvestigations OI on OI.VisitID=p.VisitID and OI.ID=p.ID and OI.Type=p.Type              
+ INSERT INTO PatientInvSampleMapping              
+ (VisitID,              
+ OrgID,              
+ SampleID,              
+ ID,              
+ Type,              
+ DeptID,              
+ UID,       
+ Barcode,              
+ [SID],              
+ CreatedAt,              
+ ExternalBarcode,Accessionnumber)              
+ SELECT DISTINCT SM.VisitID,              
+ SM.OrgID,              
+ SM.SampleID,              
+ SM.ID,              
+ SM.Type,              
+ 0,              
+ SM.UniqueID,              
+ --SM.Barcode,  
+     case when SM.Barcode='' then @Barcodenumber else SM.Barcode end,               
+ (SELECT TOP 1 SampleID              
+ FROM   PatientInvSample WITH (NOLOCK)              
+ WHERE  SampleCode = SM.SampleID              
+ AND Orgid = SM.OrgID              
+ AND PatientVisitID = SM.VisitID              
+ --AND UID = SM.UniqueID              
+ --AND BarcodeNumber =case when SM.Barcode='' then @Barcodenumber else SM.Barcode end-- SM.Barcode  
+ ),              
+ @pCreatedAt,              
+ ExternalBarcode,              
+ SM.PISMAccessionNumber              
+ FROM   #PATIENTINVSAMPLEMAPPING SM              
+ END        
+    
+ /* Labcode Generation -- Start */  
+  
+ DECLARE @LabcodeConfig CHAR(1);  
+ SELECT @LabcodeConfig = COM.ConfigValue  
+ FROM ConfigOrgMaster COM  
+ INNER JOIN ConfigKeyMaster CKM ON COM.ConfigKeyID = CKM.ConfigKeyID  
+ AND CKM.ConfigKey = 'NeedLabCodeforTest'  
+ AND COM.OrgID = @RecOrgID  
+  
+if(@LabcodeConfig = 'Y')  
+BEGIN  
+IF EXISTS(Select  1 from #PATIENTINVSAMPLEMAPPING PISM   
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=PISM.ID and LCP.Type=PISM.Type and LCP.OrgID=PISM.ORgID  
+Inner JOIN ORderedInvestigations OI (Nolock) on OI.ID=PISM.ID and OI.Type=PISM.Type   
+and OI.AccessionNumber=PISM.PISMAccessionNumber  
+where OI.Status='SampleReceived')  
+BEGIN  
+DECLARE @LabcodeGeneration UDTLabCodeForTest  
+  
+Insert into @LabcodeGeneration (ID,Type,Accessionnumber)  
+Select  distinct PISM.ID,PISM.Type,PISM.PISMAccessionNumber from #PATIENTINVSAMPLEMAPPING PISM   
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=PISM.ID and LCP.Type=PISM.Type and LCP.OrgID=PISM.ORgID  
+Inner JOIN ORderedInvestigations OI on OI.ID=PISM.ID and OI.Type=PISM.Type and OI.AccessionNumber=PISM.PISMAccessionNumber  
+where OI.Status='SampleReceived'  
+  
+exec pGetLabCodeforTests @LabcodeGeneration,@RecOrgID  
+  
+END  
+END  
+Update  OI set OI.RescaptureLoc=@recSampleLocId from OrderedInvestigations OI 
+where OI.VisitID=@pPatientVisitID and OI.OrgID=@RecOrgID and OI.RescaptureLoc is null
+ /* Labcode Generation -- End */  
+END

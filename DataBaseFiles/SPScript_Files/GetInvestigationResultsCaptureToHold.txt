@@ -1,0 +1,81 @@
+CREATE PROCEDURE [dbo].[GetInvestigationResultsCaptureToHold]                    
+ @VID [bigint],                    
+ @OrgID [int],                    
+ @RoleID [bigint],                    
+ @pGUID [nvarchar](255),                
+ @DeptID [bigint],                  
+ @pInvID NVARCHAR(max),        
+ @pLocationID [int],                  
+ @TaskID [bigint],                
+ @LoginDetail [dbo].[LoginDetail] READONLY,                    
+ @ContextInfo [UDT_Context] READONLY,                
+ @IsTrustedDetails [nvarchar](3),                
+ @Status nvarchar(50)                  
+                   
+--WITH RECOMPILE                        
+AS
+BEGIN                                              
+  SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED  
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON;
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+ --IF @pInvID =''                                      
+ -- EXEC pGetInvestigationResultsCaptureFormat @VID,@OrgID,@RoleID,@pGUID  , @pLocationID ,@LoginDetail                                      
+ -- ELSE                                      
+  --EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@pGUID,@pInvID,@pLocationID ,@LoginDetail                  
+  if(@TaskID=0 and @Status='Approve')                          
+  Begin                                  
+ EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@DeptID,@pGUID,@pInvID,@LoginDetail,@IsTrustedDetails,0,@ContextInfo                                                
+  END      
+  ELSE IF(@TaskID=0 and @Status<>'Approve')              
+  Begin                
+    EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@DeptID,@pGUID,'',@LoginDetail,@IsTrustedDetails,0,@ContextInfo                            
+  END              
+  ELSE                
+  BEGIN
+/**********************modify by Arivalagan k****************************/    
+  IF(@pInvID!='')
+ BEGIN        
+ EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@DeptID,@pGUID,@pInvID,@LoginDetail,@IsTrustedDetails,@TaskID,@ContextInfo                            
+ END
+ ELSE
+ BEGIN
+ 
+ --EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@DeptID,@pGUID,'',@LoginDetail,@IsTrustedDetails,@TaskID,@ContextInfo
+ /*Sabari added for Hold*/
+ EXEC pGetInvestigationResultsCaptureFormatWithInvIDToHold @VID,@OrgID,@RoleID,@DeptID,@pGUID,'',@LoginDetail,@IsTrustedDetails,@TaskID,@ContextInfo                            
+ END
+/**********************End  modify by Arivalagan k***********************/    
+  END                                                
+   IF NOT EXISTS(SELECT 1 FROM InvestigationStatus  WHERE Orgid=@OrgID)              
+    begin                  
+   select Invsts.Status,invsts.DisplayText from InvestigationStatus Invsts  where Invsts.Orgid is null                      
+    end              
+   Else              
+       begin                  
+   select Invsts.Status,invsts.DisplayText from InvestigationStatus Invsts  where Invsts.Orgid = @OrgID                      
+    end              
+                                                       
+ 
+  IF NOT EXISTS (
+  SELECT 1 FROM LoginDeptMap LDM                            
+  INNER JOIN RoleDeptMap  RDM   ON  RDM.RoleDetpID=LDM.RoleDetpID                          
+  INNER JOIN @LoginDetail LD ON LD.RoleID= rdm.RoleID AND LDM.loginID=LD.LoginID)                              
+BEGIN                    
+    SELECT RoleID,DeptID FROM RoleDeptMap  WHERE RoleID=@RoleID                                
+END                          
+ELSE                          
+BEGIN                          
+ SELECT RDM.RoleID,RDM.DeptID FROM RoleDeptMap  RDM                          
+  INNER JOIN  LoginDeptMap  LDM   ON LDM.RoleDetpID=RDM.RoleDetpID                        
+  INNER JOIN @LoginDetail LD ON LD.loginID=LD.LoginID AND  RDM.RoleID=LD.RoleID                            
+                                 
+END
+END TRY
+BEGIN CATCH                                
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetInvestigationResultsCaptureToHold @VID = '+CAST(@VID AS VARCHAR) +   '@OrgID = '+CAST(@OrgID AS VARCHAR) +'@pGUID = '+CAST(@pGUID AS VARCHAR) + '@pInvID = '+@pInvID                    
+ 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;
+END CATCH                                
+END

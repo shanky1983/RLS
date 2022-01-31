@@ -1,0 +1,136 @@
+--exec PCalculateFormulatest 204163,202,364,9807,'212','max550'
+CREATE procedure [dbo].[PCalculateFormulatest] 
+@Groupid bigint  ,
+@Orgid   bigint,     
+@Pvisitid bigint ,
+@Investiationid bigint,
+@Value varchar(200),
+@DeviceId nvarchar(200)                                                                                             
+as                                                                                                
+begin   
+
+DECLARE @TEmp AS TABLE   
+(   
+ID       INT IDENTITY(1, 1),   
+[values] VARCHAR(max)   
+)    
+BEGIN   
+INSERT @TEmp   
+SELECT *   
+FROM   [dbo].[fnSplit] (@Value, '~') 
+End
+Declare @ResValue varchar(200)
+Declare @AcrFlar varchar(20)
+select @ResValue = [values] from @TEmp where ID=1
+select @AcrFlar = [values] from @TEmp where ID=2
+
+ Declare @AccNo bigint 
+    select top 1 @AccNo=AccessionNumber from PatientInvestigation where PatientVisitID=@PVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC')
+
+	Update Orderedinvestigations set updatestauts=@AcrFlar where AccessionNumber=@AccNo
+     
+insert into InvestigationValues(Name,Value,InvestigationID,GroupID,PatientVisitID,UOMID,UOMCode,Status,CreatedBy,Createdat                                                                                                      
+      ,GroupName,Orgid,UID,DeviceID,DeviceValue,DeviceActualValue,PatientInvID,PackageID,PackageName,SequenceNo,Dilution,Precision,ConvValue,ConvUOMCode)                                                                                      
+   select PI.InvestigationName,@ResValue,PI.InvestigationID,PI.GroupID,Pi.PatientVisitID,IOM.UOMID,IOM.UOMCode,'Pending',0,GETDATE()                                                                                                      
+       ,PI.GroupName,PI.OrgID,PI.UID,@DeviceId,@ResValue,@ResValue,PI.Patientinvid,PI.PackageID,PI.PackageName,0,null,null,null,null from PatientInvestigation PI (nolock)  
+	   Inner Join Investigationorgmapping IOM (nolock) on IOM.Investigationid=PI.Investigationid and IOM.orgid=PI.orgid 
+   left join Investigationvalues IV (nolock) on IV.PatientVisitID=PI.PatientVisitid and IV.InvestigationID=PI.InvestigationID and PI.GroupID=IV.GroupID and isnull(IV.statustype,'') not in ('RR','RC')                                                        
+
+
+where isnull(PI.statustype,'') not in ('RR','RC') and PI.PatientVisitID=@Pvisitid and PI.InvestigationID=@Investiationid and PI.GroupID=@Groupid and
+PI.orgid=@Orgid and IV.investigationid is null 
+
+	  exec PUpdateCalculateFormulaTestDepend  @Groupid, @Orgid,@Pvisitid  
+	  
+	  create table #temp_DevValueforcal(Value decimal(18,2),InvestigationID bigint,GroupID int,PatientVisitID bigint,Orgid Bigint,  
+AccessionNumber Bigint,FormulaInvId int)                                                  
+insert into #temp_DevValueforcal                                                                                                
+select distinct Convert(Decimal(18,2),Rtrim(Ltrim(Replace(Replace(nullif(value,''),'<',''),'>','')))),                                                              
+IV.InvestigationID,IV.GroupID,IV.PatientVisitID,IV.Orgid,OI.AccessionNumber,GDT.InvestigationID as FormulaInvId from Investigationvalues IV (nolock)                                                                                 
+Inner join PatientInvestigation PI (Nolock) on PI.PatientVisitID =IV.PatientVisitID and PI.OrgID=IV.Orgid and PI.InvestigationID =IV.InvestigationID --and PI.PatientInvID=IV.PatientInvID                                                                    
+
+
+
+
+
+
+
+
+
+
+inner join OrderedInvestigations OI (nolock) on OI.VisitID =PI.PatientVisitID and OI.AccessionNumber =PI.AccessionNumber and OI.OrgID=PI.OrgID and OI.Type='GRP'                                                              
+inner join Groupdepndtest GDT (nolock) on GDT.GroupID=IV.GroupID and IV.InvestigationID in (ISNULL(GDT.Depndtest1,0)   
+,ISNULL(Depndtest2,0),ISNULL(Depndtest3,0))                                               
+where IV.status in ('Approve','Completed','Pending') and IV.GroupID =@groupid  -- and PI.CreatedAt >GETDATE()-3   
+and iv.Orgid=@orgid  and OI.Status!='Approve'   
+ and isnumeric(Rtrim(Ltrim(Replace(Replace(nullif(value,''),'<',''),'>',''))))=1             
+ --and PI.RefAccessionNo is null   
+ and ISNULL(PI.StatusType,'')not in ('RR','RC')  and  ISNULL(IV.StatusType,'')not in ('RR','RC')  and PI.GroupID=@Groupid and PI.PatientVisitID=@Pvisitid 
+
+select distinct PatientVisitID,GroupID,FormulaInvId,Orgid,COUNT(1)as Testcount into #tempfinal from #temp_DevValueforcal                               
+group by GroupID,PatientVisitID,FormulaInvId ,Orgid                                                                                    
+  
+  Declare @count int
+  select @count=Count(1)+1 from #tempfinal T
+  Inner Join Groupdepndtest GDT (nolock) on T.GroupID=GDT.GroupID and T.Orgid=GDT.Orgid and T.FormulaInvId=GDT.InvestigationID 
+  where T.Testcount!=GDT.DepndCount
+
+  DECLARE @Counter INT 
+SET @Counter=1
+WHILE ( @Counter <= @count)
+BEGIN
+    exec PUpdateCalculateFormulaTest  @Groupid, @Orgid,@Pvisitid  
+    SET @Counter  = @Counter  + 1
+END
+
+drop table #temp_DevValueforcal
+drop table #tempfinal
+  
+  declare @attgroupid bigint
+  select @attgroupid=attgroupid from invorggroup where orggroupid=@Groupid
+  declare @IsTechnicianVerificationNeeded bit =0;
+  if exists(select 1 from invautocertifyvalidation where orgid=@Orgid and IsTechnicianVerificationNeeded=1 and ((Investigationid =@attgroupid and Type='GRP' and orgid=@Orgid) 
+  or (investigationid in (select investigationid from invgroupmapmaster where groupid=@Groupid) and Type='INV')))
+  begin
+   set @IsTechnicianVerificationNeeded=1
+   update patientinvestigation set approvedat=0 where PatientVisitID=@PVisitid and GroupID=@Groupid 
+   update patientinvestigation set approvedat=0 where  PatientVisitID=@PVisitid and Investigationid=@Investiationid 
+  End
+ 
+ if(@IsTechnicianVerificationNeeded=0)
+ Begin
+	 declare @InvAuthorizeCount int 
+	 declare @InvCount int 
+	 Declare @PackageID int=0
+	select  @InvAuthorizeCount=count(1) from PatientInvestigation where PatientVisitID=@PVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC') and IsAutoAuthorize='Y'
+	 select  @InvCount=count(1) from PatientInvestigation where PatientVisitID=@PVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC') 
+
+
+ 		if((@InvCount-@InvAuthorizeCount)=1 or @InvAuthorizeCount=@InvCount)
+		begin		
+		declare @InstrumentID bigint
+		select top 1 @InstrumentID=Instrumentid from invinstrumentmaster where ProductCode=@DeviceID and orgid=@Orgid
+
+		if exists (select 1 from OrderedInvestigations where accessionnumber=@AccNo and updatestauts='Y')
+		Begin
+		set @PackageID=1
+		End
+			                                                   
+	   select InvestigationName, IV.Value ,PI.InvestigationID,PI.GroupID,Pi.PatientVisitID,'Approve' as Status,GETDATE() as CreatedAt, ISNULL(IORM.ReferenceRange, IOM.ReferenceRange) AS ReferenceRange, PI.IsAbnormal,                          
+	   PI.GroupName,PI.Orgid,PI.UID,PI.AccessionNumber,  @PackageID  as PackageID  ,PI.MedicalRemarks,IV.UOMID,IV.UOMCode,IV.DeviceID,IV.DeviceValue,IV.DeviceActualValue                                                                              
+			from PatientInvestigation PI (nolock)                                                                                       
+	   --inner join Investigationvalues CT on CT.GroupID=PI.GroupID and CT.PatientVisitid=PI.PatientVisitID and CT.orgid=PI.OrgID and PI.InvestigationID=CT.InvestigationID                                                                           
+	   Inner join Investigationvalues IV (nolock) on IV.PatientVisitID=PI.PatientVisitid and IV.InvestigationID=PI.InvestigationID and PI.GroupID=IV.GroupID and isnull(IV.statustype,'') not in ('RR','RC')  
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = PI.InvestigationID
+AND IOM.OrgID = PI.OrgID
+LEFT JOIN InvOrgReferenceMapping IORM WITH(NOLOCK)
+ON IORM.InvestigationID = PI.Investigationid
+AND  IORM.InstrumentID=@InstrumentID
+AND IORM.OrgID = @Orgid
+
+	   where isnull(PI.statustype,'') not in ('RR','RC') and PI.Patientvisitid=@PVisitid and PI.accessionnumber=@AccNo and PI.orgid=@Orgid
+	  End 
+  End  
+                        
+ End

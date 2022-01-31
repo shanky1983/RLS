@@ -1,0 +1,56 @@
+   CREATE procedure [dbo].[pGetPatientAttributesForReportQM] (@pVisitID BIGINT,    
+                                                         @OrgID    INT  
+                                                        )    
+As    
+  Begin    
+
+      declare @VoucherNumber VARCHAR(50)    
+    
+      set @VoucherNumber=(select ISNULL(ApprovalNo, '')    
+                          from   AdditionalVisitDetails WITH(NOLOCK)    
+                          where  PatientVisitID = @pVisitID)  
+       
+    
+      if ( @VoucherNumber != '' )    
+        begin   
+         
+            select 'SOCSO VOUCHER NO' as AttributeName,    
+                   ApprovalNo         as AttributeValue,    
+                   PatientVisitId    
+            from   AdditionalVisitDetails WITH(NOLOCK)    
+            where  PatientVisitID = @pVisitID  
+               
+        end    
+      else    
+        begin    
+            if exists(select 1    
+                      from   PatientAttributes WITH(NOLOCK)    
+                      where  PatientVisitID = @pVisitID    
+                             and OrgId = @OrgID    
+                             and Status = 'A'    
+                             and IsReportable = 'Y')    
+              begin    
+                
+                  Select   
+                  upper(AttributeName)  as AttributeName,    
+                         upper(AttributeValue) as AttributeValue,    
+                         PatientVisitId    
+                  from   PatientAttributes WITH(NOLOCK)    
+                  where  OrgId = @OrgID    
+                         and PatientVisitID = @pVisitID    
+                         and IsReportable = 'Y'    
+                         and Status = 'A'    
+                         and AttributeValue is not null    
+                         and AttributeValue != ''    
+                         and clientid = (select top 1 clientid    
+                                         from   visitclientmapping WITH(NOLOCK)    
+                                         where  visitid = @pvisitid    
+                                                and isactive is null    
+                                         order  by createdat desc)   
+                                           
+              End    
+        End    
+  end    
+    
+    
+  

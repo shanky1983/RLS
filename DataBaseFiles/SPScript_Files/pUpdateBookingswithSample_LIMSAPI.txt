@@ -1,0 +1,144 @@
+CREATE PROCEDURE pUpdateBookingswithSample_LIMSAPI
+(
+    @pOrgCode NVARCHAR(100), 
+    @pType NVARCHAR(150),
+	@BookingStatus [dbo].[BookingInfo] READONLY,
+	@Payment [dbo].[HCPaymentInfo] READONLY,
+	@TestInfo [dbo].[BookingInfo] READONLY,
+	@TestSampleInfo [dbo].[BookingInfo] READONLY
+)
+
+AS
+BEGIN
+  
+   DECLARE @pOrgID INT = 0, @pOrgAddrID INT = 0, @ServerdateTime datetime,
+           @OrgCode NVARCHAR(100) = null, @LocationCode NVARCHAR(100) = null;
+
+   set @ServerdateTime = getdate();
+
+   SELECT @pOrgID = OrgID, @pOrgAddrID = LocationID, @OrgCode = OrgCode,  @LocationCode = LocationCode
+   FROM @BookingStatus
+
+   --IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode)
+   -- BEGIN
+   --    SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID
+   --     FROM Integrationtypemaster ITM
+   --         INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+   --         INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+   --     WHERE ITM.IntegrationTypeName = @pOrgCode
+   -- END
+
+    IF (ISNULL(@pOrgID,0) = 0 AND ISNULL(@OrgCode,0) != 0 AND ISNULL(@LocationCode,0) != 0)
+    BEGIN
+         SELECT @pOrgID = O.OrgID, @pOrgAddrID = OA.AddressID
+		   FROM organization O
+		   INNER JOIN OrganizationAddress OA ON O.OrgID = OA.OrgID
+		   WHERE O.IntegrationName = @OrgCode AND OA.LocationCode = @LocationCode
+    END
+
+  IF @pType = 'HCCompletion'
+     BEGIN
+	     IF NOT EXISTS(SELECT 1 FROM ERPHCBookingInBound B WITH(NOLOCK)      
+								INNER JOIN @BookingStatus BS ON BS.BookingID = B.BookingID AND BS.OrgID = @pOrgID)
+           BEGIN 
+			   INSERT INTO ERPHCBookingInBound
+					 ( BookingID,	  BookingDTTM,	DispatchType, TripStatus,        Salutation,	     
+					   FirstName,	  MiddleName,   LastName,	  Age,				 DateofBirth,  Gender,   	
+					   MobileNumber,  Email,	    LISPatientID, ExternalPatientNo, City,	       State,	
+					   Country,       PostalCode,   OrderedFrom,  
+					   OrgID,	      LocationID,   
+					   LoginID,  	  CreatedBy,	CreatedAt,	  ISProcessed,       JsonValue,	   JsonString,   FullName,   
+					   AddressType,   Address,      URNNo,        URNType,           [Status],     [EmployeeID],  [Reason] )
+			   Select BookingID,      CASE YEAR(BookingDTTM) WHEN 9999 THEN NULL ELSE BookingDTTM END,   DispatchType,  [Status],    Salutation,    
+					  FirstName,      MiddleName,   LastName,     Age,	              CASE YEAR(DateofBirth) WHEN 9999 THEN NULL ELSE DateofBirth END, 	 Gender,     
+					  MobileNumber,   Email,        PatientID,    ExternalPatientNumber, City,      State, 
+					  Country,        PostalCode,   OrderedFrom,  
+					  case when ISNULL(OrgID,0) = 0 then @pOrgID else OrgID end,  case when ISNULL(LocationID,0) = 0 then @pOrgAddrID else LocationID end,   
+					  LoginID, 		  LoginID,      @ServerdateTime,'N',               JsonValue,   JsonValue,    Name, 
+					  AddressType,    Address,      URNNo,        URNType,            [Status],     EmployeeID,  Reason
+			   FROM  @BookingStatus
+		   END
+         ELSE
+		   BEGIN
+		     INSERT INTO [LIS_PDT_Integration].[dbo].[HCBookingInBound_HIST]
+			   ( [BookingID],        [BookingDTTM]           ,[TRFFile]           ,[DispatchType]          ,[Status]           ,[Salutation],
+				 [FirstName],        [MiddleName]            ,[LastName]          ,[Age]                   ,[DateofBirth]      ,[Gender],
+				 [MobileNumber],     [Email]                 ,[LISPatientID]      ,[ExternalPatientNo]     ,[FullName]         ,[AddressType],
+                 [Address],          [City]                  ,[State]             ,[Country]               ,[PostalCode]       ,[URNType],
+				 [URNNo],            [OrderedFrom]           ,[OrgID]             ,[LocationID]            ,[LoginID]          ,[SourceType],
+				 [ExternalRefNo],    [TotalGrossAmount]      ,[DiscountAmount]    ,[NetAmount]             ,[DiscountID]       ,[ClientID],
+                 [ClientCode],       [CreatedBy]             ,[CreatedAt]         ,[ModifiedBy]            ,[ModifiedAt]       ,[ISProcessed],
+				 [Error],            [Remarks]               ,[JsonValue]         ,[JsonString]            ,[UserID]           ,[TripStatus],       
+				 [TripReason],       [HealthHubID]           ,[EmployeeID]        ,[Reason]                ,[CollectionTime]    )
+ 
+		  SELECT HCB.[BookingID],    HCB.[BookingDTTM]       ,HCB.[TRFFile]       ,HCB.[DispatchType]      ,HCB.[Status]       ,HCB.[Salutation],
+		         HCB.[FirstName],    HCB.[MiddleName]        ,HCB.[LastName]	  ,HCB.[Age]               ,HCB.[DateofBirth]  ,HCB.[Gender],
+				 HCB.[MobileNumber], HCB.[Email]             ,HCB.[LISPatientID]  ,HCB.[ExternalPatientNo] ,HCB.[FullName]     ,HCB.[AddressType],
+				 HCB.[Address],      HCB.[City]              ,HCB.[State]         ,HCB.[Country]           ,HCB.[PostalCode]   ,HCB.[URNType],
+				 HCB.[URNNo],        HCB.[OrderedFrom]       ,HCB.[OrgID]         ,HCB.[LocationID]   	   ,HCB.[LoginID]      ,HCB.[SourceType],
+				 HCB.[ExternalRefNo],HCB.[TotalGrossAmount]  ,HCB.[DiscountAmount],HCB.[NetAmount]         ,HCB.[DiscountID]   ,HCB.[ClientID],
+				 HCB.[ClientCode],   HCB.[CreatedBy]         ,HCB.[CreatedAt]     ,HCB.[ModifiedBy]        ,HCB.[ModifiedAt]   ,HCB.[ISProcessed],
+				 HCB.[Error],        HCB.[Remarks]           ,HCB.[JsonValue]     ,HCB.[JsonString]        ,HCB.[UserID]       ,HCB.[TripStatus],   
+				 HCB.[TripReason],   HCB.[HealthHubID]       ,HCB.[EmployeeID]    ,HCB.[Reason]            ,HCB.[CollectionTime]
+			  FROM ERPHCBookingInBound HCB
+			  inner join  @BookingStatus TS on HCB.BookingID = TS.BookingID and HCB.OrgID = @pOrgID
+
+		      UPDATE BI SET BI.BookingDTTM = CASE YEAR(BS.BookingDTTM) WHEN 9999 THEN NULL ELSE BS.BookingDTTM END,
+			                BI.DateofBirth= CASE YEAR(BS.DateofBirth) WHEN 9999 THEN NULL ELSE BS.DateofBirth END,
+			                BI.DispatchType = BS.DispatchType, BI.TripStatus = BS.[Status],
+							BI.Salutation = BS.Salutation,     BI.FirstName = BS.FirstName,    BI.MiddleName = BS.MiddleName, 
+							BI.LastName= BS.LastName,          BI.Age = BS.Age,                BI.Gender = BS.Gender,
+							BI.MobileNumber = BS.MobileNumber, BI.Email = BS.Email,            BI.LISPatientID = BS.PatientID,
+							BI.ExternalPatientNo = BS.ExternalPatientNumber,  BI.City = BS.City,          BI.State = BS.State,
+							BI.Country = BS.Country,           BI.PostalCode = BS.PostalCode,  BI.LocationID = @pOrgAddrID,
+							BI.LoginID = BS.LoginID,           BI.CreatedBy = BS.LoginID,      BI.CreatedAt = @ServerdateTime,
+							BI.AddressType = BS.AddressType,   BI.[Address] = BS.[Address],    BI.URNNo  = BS.URNNo,
+							BI.URNType = BS.URNType,           BI.FullName = BS.Name,          BI.JsonValue  = BS.JsonValue,
+							BI.JsonString = BS.JsonValue,      BI.[Status] = BS.[Status],      BI.ISProcessed = 'N',
+							BI.EmployeeID = BS.EmployeeID,     BI.[Reason] = BS.Reason,        BI.[CollectionTime] = BS.[CollectionTime]
+			  FROM @BookingStatus BS 
+			  INNER JOIN ERPHCBookingInBound BI ON BI.BookingID = BS.BookingID AND BI.OrgID = @pOrgID 
+		     
+		   END
+
+
+		   INSERT INTO ERPHCPaymentDetailsInBound 
+				([BookingID],             [AmtReceived],	 [OrgID],          
+				 [CreatedBy],             [CreatedAt],       [ReceivedBy],
+				 [ChequeorCardNumber],    [BaseCurrencyID],  [PaidCurrencyID], [CardHolderName],   [TransactionID], [PaymentMode],
+				 [OtherCurrencyAmount],   ISProcessed )
+
+		   SELECT Pay.BookingID,          Pay.ReceivedAmount, case when Pay.OrgID =0 then @pOrgID else Pay.OrgID end, 
+		          Pay.CreatedBy,          @ServerdateTime,    Pay.CreatedBy,   
+		          Pay.ChequeorCardNumber, CM.CurrencyID,      CM.CurrencyID,  Pay.CardHolderName, Pay.TransactionID, Pay.PaymentMode,
+				  Pay.ReceivedAmount,     'N'
+		   FROM @Payment Pay
+		      LEFT JOIN CurrencyMaster CM ON CM.CurrencyCode = coalesce(Pay.CurrencyType,'INR')
+
+
+		   INSERT INTO ERPHCTestInBound
+				  ( [BookingID],            [OrderedFrom],     [Type],                    [TestCode],                [SampleID],        [SampleName],
+				    [ContainerID],          [ContainerName],   [SampleContainerColour],   [CollectionStatus],        [AmtReceived], 	[OrgID],
+				    [CreatedBy],            [CreatedAt],       [SampleCollectedTime],     [IsAdded],                 [ReceivedBy],      [BarcodeNo],
+					ISProcessed )
+
+		   SELECT   Test.BookingID,         Test.OrderedFrom,  Test.[Type],               Test.TestCode,             Test.SampleID,     Test.SampleName,
+		            Test.ContainerID,       Test.ContainerName,Test.SampleContainerColour,Test.[Status],             Test.Price,        @pOrgID, 
+		            Test.LoginID,           @ServerdateTime,   Test.SampleCollectionTime, ISNULL(Test.Remarks,'N'),  Test.LoginID,      Test.BarcodeNo,
+					'N'
+		   FROM @TestInfo Test
+		   Where ISNULL(Test.TestCode,'') != '' AND ISNULL(Test.[Type], '') != ''
+
+		   INSERT INTO ERPHCTestSampleInBound
+				  ( [BookingID],             [SampleCode],        [SampleName],	       [ContainerID],        [ContainerName],   [SampleContainerColour],   
+				    [SampleCollectedTime],   [BarcodeNo],         [IsNewSampleYN],     [OrgID],              
+					[LocationID],	         [CreatedBy],   	  [CreatedAt],         [IsProcessed],        
+					[CollectionStatus],      [Reason]  )
+
+		   SELECT   TS.BookingID,            TS.SampleID,          TS.SampleName,            TS.ContainerID,   TS.ContainerName,   TS.SampleContainerColour,
+		            TS.SampleCollectionTime, TS.BarcodeNo,         ISNULL(TS.Remarks,'N'),   case when TS.OrgID = 0 then @pOrgID else TS.OrgID end,
+					case when TS.LocationID = 0 then @pOrgAddrID else TS.LocationID end,     TS.LoginID,    @ServerdateTime,         'N', 
+					TS.SampleStatus,         TS.Reason
+		   FROM @TestSampleInfo TS
+	 END
+ END

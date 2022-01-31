@@ -1,0 +1,22 @@
+CREATE proc PgetPakageDetails
+(        
+@PkgID int,      
+@ContextInfo [dbo].[UDT_Context] READONLY         
+)        
+As BEGIN
+Declare @Orgid int
+select @OrgID = OrgID  from @ContextInfo
+select  iom.TestCode,iom.DisplayText  as TestName,ipm.active as Status,ipm.Type,ISNULL(ipm.PrintSeparately,'N') AS PrintSeparately,case when ipm.SequenceNo=0 then '' else  ipm.SequenceNo end as SequenceNo
+ from invpackagemapping ipm
+inner join investigationorgmapping iom on iom.InvestigationID=ipm.id and ipm.Type='inv'
+where ipm.PackageID=@PkgID  and iom.OrgID=@OrgID
+
+Union 
+select  ig.TestCode,ig.displaytext as TestName,ipm.active as Status,ipm.Type,ISNULL(ipm.PrintSeparately,'N') AS PrintSeparately,case when ipm.SequenceNo=0 then '' else  ipm.SequenceNo end as SequenceNo
+ from invorggroup ig 
+inner join invpackagemapping ipm on IG.OrgGroupID=ipm.ID and ipm.Type='grp'
+where ipm.PackageID=@PkgID  and ig.OrgID=@OrgID
+
+ORder by Type asc
+
+END

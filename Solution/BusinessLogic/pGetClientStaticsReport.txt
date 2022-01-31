@@ -1,0 +1,325 @@
+CREATE  PROCEDURE pGetClientStaticsReport                         
+
+
+
+(                         
+
+
+
+ @fromdate DATETIME,                                      
+
+
+
+ @todate DATETIME,                  
+
+
+
+ @orgid INT,      
+
+
+
+@pClientName varchar (50),                                                                               
+
+
+
+ @preporttype INT,                                                                                  
+
+
+
+ @ContextInfo [UDT_Context] READONLY                             
+
+
+
+)                   
+
+
+
+AS                          
+
+
+
+BEGIN                          
+
+
+
+SET NOCOUNT ON                     
+
+
+
+ /*                          
+
+
+
+ exec pgetClientStaticsReport @fromdate= '20131001 13:37:48.027',@todate='20141030 13:37:48.027',@Orgid =87                        
+
+
+
+ */                      
+
+
+
+DECLARE @Finalbill AS TABLE                          
+
+
+
+(                  
+
+
+
+ Finalbillid INT PRIMARY KEY,                          
+
+
+
+ Billdate DATE,                          
+
+
+
+ Billamount DECIMAL(18,2),                          
+
+
+
+ Clientid INT,                          
+
+
+
+ Discount DECIMAL(18,2),                          
+
+
+
+ Createdby BIGINT                          
+
+
+
+)                
+
+
+
+ --SET @fromdate = Convert(varchar,@fromdate,103)+'00:00:00'                
+
+
+
+ --SET @todate = Convert(varchar,@todate,103)+'23:59:58'                
+
+
+
+                   
+
+
+
+ /* *******Part 1*****                  
+
+
+
+ Get the billing details(BillAmount,Bill Date and Finalbillid ) of all the users between given date.                  
+
+
+
+ For better performance first we need to get billing detail items upto given date range */                  
+
+
+
+                  
+
+
+
+  INSERT INTO @Finalbill(Finalbillid,Billamount,Billdate)                          
+
+
+
+  SELECT BD.FinalBillID ,SUM(isnull(BD.Amount,0) * isnull(BD.Quantity,0)),MAX(BD.CreatedAt)                          
+
+
+
+  FROM BillingDetails BD(NOLOCK)                           
+
+
+
+  WHERE OrgID = @orgid                          
+
+
+
+  and Createdat between @Fromdate and @todate                          
+
+
+
+  GROUP BY BD.FinalBillID                    
+
+
+
+ /********Part 1 END***** */                     
+
+
+
+                    
+
+
+
+                    
+
+
+
+                    
+
+
+
+ /* *******Part 2***** */                  
+
+
+
+  UPDATE F SET Discount = FB.DiscountAmount,Createdby = FB.Createdby                  
+
+
+
+  FROM @Finalbill F INNER JOIN FinalBill FB (NOLOCK) ON FB.FinalBillID = F.Finalbillid                   
+
+
+
+ /********Part 2 END***** */                           
+
+
+
+                          
+
+
+
+                          
+
+
+
+                          
+
+
+
+ /********Part 3 ***** */                     
+
+
+
+ If (@preporttype=0)   
+
+
+
+ Begin                 
+
+
+
+  SELECT Cm.ClientName AS [Client Name],isnull(Cm.ISCash,'N')  as iscash,CONVERT(VARCHAR,F.Billdate,103) AS [Bill Date],                  
+
+
+
+  SUM(F.Billamount) AS GrossBillValue,                          
+
+
+
+  --as TotalBillamount,                                  
+
+
+
+  SUM(F.Billamount)- SUM(F.Discount) AS [Net Value],                   
+
+
+
+  SUM(F.Discount) AS [Discount Amount]                         
+
+
+
+  FROM @Finalbill F                          
+
+
+
+  inner JOIN VisitClientMapping VCM(NOLOCK) ON F.Finalbillid = VCM.FinalBillID and ISNULL(VCM.IsActive,'Y') !='N'                         
+
+
+
+  inner JOIN ClientMaster CM (NOLOCK) ON VCM.ClientID = CM.Clientid AND CM.OrgID = @orgid  --and cm.ClientCode <>'GENERAL'   
+
+
+
+           
+
+
+
+                      
+
+
+
+  GROUP BY Cm.ClientName,Cm.ISCash,F.Billdate                  
+
+
+
+  ORDER BY F.Billdate,Cm.ClientName                  
+
+
+
+ /********Part 3 END***** */                        
+
+
+
+End
+
+
+
+Else if (@preporttype=1)
+
+
+
+Begin                 
+
+
+
+  SELECT Cm.ClientName AS [Client Name],isnull(Cm.ISCash,'N')  as iscash,CONVERT(VARCHAR,F.Billdate,103) AS [Bill Date],                      
+
+
+
+  F.Billamount AS GrossBillValue,              
+
+
+
+  --as TotalBillamount,                                      
+
+
+
+  F.Billamount- F.Discount AS [Net Value],        
+
+
+
+  F.Discount AS [Discount Amount]                             
+
+
+
+  FROM @Finalbill F                              
+
+
+
+  inner JOIN VisitClientMapping VCM(NOLOCK) ON F.Finalbillid = VCM.FinalBillID and ISNULL(VCM.IsActive,'Y') !='N'                             
+
+
+
+  inner JOIN ClientMaster CM (NOLOCK) ON VCM.ClientID = CM.Clientid AND CM.OrgID = @orgid    --and cm.ClientCode <>'GENERAL'        
+
+
+
+  --where CM.ClientID = @Clientid     
+
+
+
+ -- GROUP BY Cm.ClientName,Cm.ISCash,F.Billdate                      
+
+
+
+  ORDER BY F.Billdate,Cm.ClientName  
+
+
+
+End
+
+
+
+                          
+
+
+
+SET NOCOUNT OFF                          
+
+
+
+END 

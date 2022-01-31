@@ -1,0 +1,38 @@
+
+create procedure [dbo].[PgetOrderableTcodeValueForFormL](   
+ @fdate [DATETIME]=null ,  
+ @tdate [DATETIME] =null,    
+ @pOrgID bigint    
+,@Pparamtype VARCHAR(100)=null  
+,@Pparamvalue VARCHAR(100)=null  
+,@pExcelReportId [INT] = NULL  
+,@pExcelReportName VARCHAR(255) = NULL  
+,@pToExecute VARCHAR(10) = NULL  
+  )  
+  As  
+  begin 
+
+
+
+select '111' as Empty,* from (select  VisitDate,VisitNumber,PreviousLabNumber as [OP/IP Number],PA.Name as PatientName,IOM.TestCode,IV.GroupName as[GroupName / Inv name],IV.Name as [Parameter Name],IV.Value as[Results Value] 
+from patientvisit PV with (NOLOCK) 
+inner join Patient PA with (NOLOCK) on PA.OrgId=PV.OrgID and PA.PatientID=PV.PatientID
+inner join InvestigationValues IV with(NOLOCK) on IV.PatientVisitID=PV.PatientVisitId and IV.Orgid=PV.OrgID
+inner join Investigationorgmapping IOM with(NOLOCK) on IOM.Investigationid=IV.InvestigationID and IOM.OrgID=IV.Orgid
+inner join OrderableTcodeForFormL OT with(NOLOCK) on OT.Investigationid=IV.InvestigationID and OT.OrgID=IV.Orgid and OT.Type='INV'
+where PV.OrgID=@pOrgID and PV.CreatedAt between @fdate and @tdate+' 23:59:59' and IV.InvestigationID=OT.InvestigationID  and Isnull(GroupName,'')=''
+Union All
+select  VisitDate,VisitNumber,PreviousLabNumber as [OP/IP Number],PA.Name as PatientName,IOG.TestCode,IV.GroupName as[GroupName / Inv name],IV.Name as [Parameter Name],IV.Value as[Results Value]
+from patientvisit PV with (NOLOCK) 
+inner join Patient PA with (NOLOCK) on PA.OrgId=PV.OrgID and PA.PatientID=PV.PatientID
+inner join InvestigationValues IV with(NOLOCK) on IV.PatientVisitID=PV.PatientVisitId and IV.Orgid=PV.OrgID
+inner join InvOrgGroup IOG with(NOLOCK) on IOG.OrgGroupID=IV.GroupID and IOG.OrgID=IV.Orgid
+inner join OrderableTcodeForFormL OT with(NOLOCK) on OT.Investigationid=IV.Groupid and OT.OrgID=IV.Orgid and OT.Type='GRP'
+where PV.OrgID=@pOrgID and PV.CreatedAt between  @fdate and @tdate+' 23:59:59' and IV.GroupID=OT.InvestigationID
+) as T
+order by VisitDate,VisitNumber
+End
+ 
+
+
+

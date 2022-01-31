@@ -1,0 +1,764 @@
+/****** Object:  StoredProcedure [dbo].[pInsertStockIssue_Receive_Intend]    Script Date: 07/01/2015 17:24:04 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pInsertStockIssue_Receive_Intend]                
+ @FromLocationID [int],                
+ @ToLocationID [int],                
+ @IndentID [bigint],                
+ @pOrgID [int],                
+ @IssuedTo [bigint],                
+ @Comments [nvarchar](255),                
+ @CreatedBy [bigint],                
+ @pInventoryItemsMappingType [dbo].[InventoryItemsMapping] READONLY,                
+ @OrgAddressID [int],                
+ @StockReceivedID [bigint] OUTPUT,                
+ @pStatus [nvarchar](20),                
+ @pReceivedOrgID [int],                
+ @pReceivedOrgAddID [int],                
+ @IndID [bigint] OUTPUT,                
+ @Status [nvarchar](50) OUTPUT,                
+ @ContextInfo [dbo].[UDT_Context] READONLY                
+WITH EXECUTE AS OWNER                
+AS                
+DECLARE @ServerDate DATETIME                
+SET @ServerDate=dbo.fn_GetServerDate(@ContextInfo)                
+DECLARE @pCreatedAt DATETIME                                                                                                                                                  
+ DECLARE @ret AS INT                                                                                                               
+ DECLARE @insCnt INT                                                                                                                         
+ DECLARE @totCnt INT                                                                                                               
+ DECLARE @pStockReceivedID BIGINT                                                                                                                                                  
+ DECLARE @pStockReceivedNo NVARCHAR(50)                                                                                                               
+ DECLARE @StockOutFlowId bigint                                                                                                                      
+ DECLARE @StockOutFlowNo NVARCHAR (50)                                                                                                                                              
+ DECLARE @StockOutFlowType NVARCHAR (20)                                                                                                            
+ DECLARE @StockOutFlowTypeID INT                                                                                                       
+ DECLARE @pOrgAddressId INT                                                                         
+ DECLARE @pIntendReceivedID BIGINT                                          
+ DECLARE @StockType NVARCHAR(255)                                            
+ DECLARE @FlowTypeID INT                   
+ DECLARE  @pInvKitDetails InventoryItemsMapping ,                                                                          
+ @pInventoryItemsMapping [dbo].[InventoryItemsMapping]                                                                            
+ DECLARE @StockOutFlowIdoutno NVARCHAR (50)                                                                                                 
+                                                                                                                                                        
+                                                                         
+                                                      
+                          
+BEGIN                                                                                     
+                 
+                 
+                 
+                DECLARE                                                                           
+   @pInventoryItemsMapping_Intend [dbo].[InventoryItemsMapping]                
+               
+   INSERT INTO @pInventoryItemsMapping_Intend             
+   SELECT imt.* FROM @pInventoryItemsMappingType  imt     
+   INNER JOIN IntendDetail id on id.ProductID=imt.productid and id.ParentProductID=imt.ParentProductID   
+   WHERE id.IntendID=@IndentID             
+                                                                        
+ DECLARE @IntendNo [nvarchar](50)                               
+ DECLARE @ReceivedID BIGINT                              
+ DECLARE @IndentReceivedNo [nvarchar](50)                                                        
+ DECLARE @OutIndentID NVARCHAR(50)                                                                
+ SET @pCreatedAt= @ServerDate                                                         
+ SET @ret = -1                                                                          
+ SET @insCnt = 0                                                                                         
+ SET @totCnt = 0                                                                                             
+ SET @StockOutFlowType='Stock Issued'                  
+ Declare @tble table (Productid bigint,ParentProductID bigint,OrgID int,CategoryID bigint)                                                                                    
+ insert @pInventoryItemsMapping(ID ,                  
+ProductName,                  
+BatchNo ,                  
+Quantity ,                  
+Unit ,                  
+ProductID ,                  
+Amount ,                  
+Rate ,                  
+Tax ,                 
+ExpiryDate ,                  
+CategoryID ,                  
+                   
+AttributeDetail ,  Providedby ,                  
+UnitPrice ,                  
+ProductKey ,                  
+parentProductID ,                  
+Description ,                  
+MRP                    
+)                  
+ SELECT ID ,ProductName,                  
+BatchNo ,                  
+sum(Quantity) ,                  
+Unit ,                  
+ProductID ,                  
+sum(Amount) ,                  
+Rate ,                  
+Tax ,                  
+ExpiryDate ,                  
+CategoryID ,                  
+                   
+AttributeDetail ,                  
+Providedby ,                  
+UnitPrice ,                  
+ProductKey ,                  
+parentProductID ,                  
+Description ,                  
+MRP                   
+ FROM @pInventoryItemsMapping_Intend                   
+ group by ID ,ProductName,                  
+BatchNo ,                  
+Unit ,                  
+ProductID ,                  
+Rate ,                  
+Tax ,                  
+ExpiryDate ,                  
+CategoryID ,                  
+AttributeDetail ,                  
+Providedby ,                  
+UnitPrice ,                  
+ProductKey ,                  
+parentProductID ,                  
+Description ,                  
+MRP                  
+                                                                              
+ --BEGIN TRY                                                                                                                                                        
+ -- BEGIN TRAN  T1               
+ --SELECT * FROM   dbo.[fnCheckConsumableQuantity](@pOrgID, @OrgAddressID, @ToLocationID, @pInventoryItemsMapping )        
+                                                 
+ IF( NOT EXISTS(SELECT '1' FROM   dbo.[fnCheckConsumableQuantity](@pOrgID, @OrgAddressID, @ToLocationID, @pInventoryItemsMapping)                    
+                     WHERE  isnull(Status,'Y') = 'Y') )                                        
+        BEGIN              
+                    
+                    
+                    
+              
+                                                                               
+  SELECT @pOrgAddressId=OrgAddressID                                                                             
+   FROM Locations                                                                                           
+    WHERE LocationID=@ToLocationID                                                                                           
+          SELECT @StockReceivedID=0                                                    
+                                                            
+                                                          
+    IF (@pReceivedOrgAddID=-1)                                                   
+          SELECT @pReceivedOrgAddID=OrgAddressID                                                                 
+   FROM Locations                                                                                           
+    WHERE LocationID=@FromLocationID                                               
+                                                    
+    IF EXISTS( SELECT 1 FROM  InventoryConfig  WHERE Configkey ='Generate_Automatic_Po' AND orgid=1 AND ConfigValue='Y')            
+ BEGIN       
+     IF EXISTS( SELECT 1 FROM  InventoryConfig  WHERE Configkey ='Generate_Automatic_Po_Receive_Intend' AND orgid=1 AND ConfigValue='Y')            
+     BEGIN                                          
+   SELECT  @FlowTypeID=ISNULL(P.CategoryID,1),@StockType=ISNULL(P.Description,'')   FROM @pInventoryItemsMapping P       
+  END      
+  ELSE      
+  BEGIN      
+   SELECT  @FlowTypeID=ISNULL(P.CategoryID,1),@StockType=ISNULL(P.Description,'Stock Issued')   FROM @pInventoryItemsMapping P       
+  END      
+    END      
+    ELSE      
+    BEGIN      
+   SELECT  @FlowTypeID=ISNULL(P.CategoryID,1),@StockType=ISNULL(P.Description,'Stock Issued')   FROM @pInventoryItemsMapping P       
+    END                                             
+                                           
+     SElect @StockOutFlowType =StockOutFlowType, @StockOutFlowTypeID= StockOutFlowTypeId   from StockOutFlowTypes WITH(NOLOCK)                                         
+     Where StockOutFlowTypeId =@FlowTypeID                   
+                
+     INSERT INTO @tble                  
+     select distinct P.productid,P.parentProductid,P.orgid ,P.CategoryID from  products P                   
+     Inner JOIN  IntendDetail I ON P.Parentproductid =I.Parentproductid                   
+     Inner join trustedOrgdetails T ON T.SharingOrgID = P.ORgid                  
+     Where I.intendid =@IndentID  and T.loggedOrgid=@pOrgID                                      
+                                                                     
+                                                                                    
+  IF(@IndentID =0)                                                                      
+  BEGIN                                                  
+                                        
+ --if(@StockOutFlowType='Stock Return')                                               
+ --  BEGIN                                                                                                
+ --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@IndentID OUTPUT                                                                                   
+ --  SET @IntendNo = 'SSRT'+ CONVERT(NVARCHAR,@IndentID)                                               
+ --  END                                              
+ --  ELSE IF(@StockOutFlowType='Stock Issued')                                           
+ --  BEGIN                                     
+ --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@IndentID OUTPUT                                                                                   
+ --  SET @IntendNo = 'INT'+ CONVERT(NVARCHAR,@IndentID)                                               
+                                                 
+ --  END                                             
+                                             
+ --  ELSE IF(@StockOutFlowType='Stock Damage')                                           
+ --  BEGIN                                              
+ --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@IndentID OUTPUT                                                                                   
+ --  SET @IntendNo = 'SD'+ CONVERT(NVARCHAR,@IndentID)                                               
+                                                 
+ --  END                                           
+ --  ELSE IF(@StockOutFlowType='Disposal')                      
+ --  BEGIN                                              
+ --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@IndentID OUTPUT                                
+ --  SET @IntendNo = 'SDL'+ CONVERT(NVARCHAR,@IndentID)                                               
+                                               
+ --  END                                            
+                                            
+ --   ELSE IF(@StockOutFlowType='Expiry Date')                                           
+ --  BEGIN                                              
+ --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@IndentID OUTPUT                                                                                   
+ --  SET @IntendNo = 'SE'+ CONVERT(NVARCHAR,@IndentID)                                               
+                                                 
+--  END                                            
+                                            
+                                               
+   IF( @StockOutFlowType = 'Stock Transfer' )                
+        BEGIN                
+                      EXEC dbo.Pgetnextinventoryidformaster                                          
+                        @pOrgID,                                          
+                       'Stock Transfer',                                          
+                        @OutIndentID OUTPUT                                            
+                                          
+                      SET @IntendNo = 'STR' + CONVERT(NVARCHAR, @OutIndentID)                                            
+                      SET @StockType='STR'                                          
+        END                
+        ELSE                
+        BEGIN                                
+        --IF EXISTS(select 1 from IDPatternMaster where CategoryID in (select CategoryId from MasterCategories where categoryName ='Intend') and OrgID=@pOrgID)                            
+  --IF(@StockOutFlowType='Intend')                
+       -- BEGIN                        
+                           
+   EXEC dbo.pGetNextInventoryIDForMaster @pReceivedOrgID,'Intend',@IntendNo OUTPUT,-1, @FromLocationID,'LOCN',@ToLocationID                      
+   --SET  @IntendNo =@OutIndentID                     
+                                  
+  --END                            
+  --ELSE                            
+  --BEGIN                            
+                                                    
+  --  EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,'Intend',@OutIndentID OUTPUT,-1,-1,'',@ToLocationID                                                                     
+  --               SET @IntendNo = 'INT' + CONVERT(NVARCHAR, @OutIndentID)                        
+  --END                                          
+                                 
+                  END                         
+                                                                                                                              
+                                                                                          
+   INSERT INTO Intend(IntendNo,                                                                                           
+     IntendDate,Status,                                                                                        
+      CreatedBy,CreatedAt,                                                                                          
+      OrgID,OrgAddressID,                                                                                   
+      LocationID,Comments,ToLocationID,RaiseOrgID,RaiseOrgAddID,StockType,StockReturnReasonType )                                
+   VALUES (@IntendNo, @pCreatedAt,                                                                                          
+ @pStatus,@CreatedBy,                                                                                          
+      @pCreatedAt,@pReceivedOrgID,                
+      @pReceivedOrgAddID,                                                         
+      @FromLocationID,@Comments,@ToLocationID,@pOrgID,@OrgAddressID,@StockType,@StockOutFlowTypeID )                                                                                                    
+                                                                                          
+   SET @IndentID  = SCOPE_IDENTITY()                                                                                                                                  
+                                                                                          
+   SELECT @IndID=@IndentID                               
+   select    @ReceivedID =MAX(IntendReceivedID)+1 from IntendReceived   WITH(NOLOCK)                                                                                
+   SET @IndentReceivedNo = 'IRN'+ CONVERT(NVARCHAR,@ReceivedID)                                                                                      
+                                                                               
+   INSERT INTO IntendDetail(IntendID,                                                                                          
+   ProductID,Quantity,                                                                                          
+   OrgID,OrgAddressID,                                                              
+   LocationID,IntendDetailDate,SellingUnit,ProductKey,ParentProductID,RaiseOrgID,RaiseOrgAddID,ParentProductKey,createdAt ,createdby,ExpiryDate,InvoiceQty  )                                                                                                 
+  
+    
+       
+        
+         
+            
+              
+                                                   
+   SELECT @IndentID,P.ProductID,                                                                                          
+   IIM.Quantity,@pReceivedOrgID,                                                                                          
+    @pReceivedOrgAddID,                                                                                          
+   @FromLocationID ,@pCreatedAt ,                                                     
+   IIM.Unit,                                                  
+   CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),P.ProductID) +'@#$'+Convert(NVARCHAR(50),IIM.BatchNo ) +'@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),IIM.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                                                 
+   Convert(NVARCHAR(50),ISNULL(IIM.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),IIM.Rate)+'@#$'+ Convert(NVARCHAR(20),ISNULL(IIM.Unit ,'Nos')))                                      
+,IIM.ParentProductID,@pOrgID,@OrgAddressID ,IIM.ProductKey,@pCreatedAt ,@CreatedBy,IIM.ExpiryDate ,IIM.Quantity                                  
+   FROM @pInventoryItemsMapping IIM                                                   
+  -- INNER JOIN Products P ON P.ProductID =IIM.ProductID  AND P.OrgID =@pReceivedOrgID                 
+  INNER JOIN Products P ON P.ParentProductID=IIM.ParentProductID AND P.OrgID =@pReceivedOrgID                                                                                                                              
+                                                                     
+                  
+   Declare @Cnt int                  
+   SELECT @Cnt=COUNT(1) FROM @tble                                                                  
+   If @Cnt=0                
+   BEGIN                
+   INSERT INTO @tble                    
+     select distinct P.productid,P.parentProductid,P.orgid ,P.CategoryID from  products P                     
+     Inner JOIN  IntendDetail I ON P.Parentproductid =I.Parentproductid                     
+     Inner join trustedOrgdetails T ON T.SharingOrgID = P.ORgid                    
+     Where I.intendid =@IndentID  and T.loggedOrgid=@pOrgID                 
+   END                
+                                 
+  INSERT INTO IntendReceived(IntendID,IntendIssuedDate,Status,OrgID,                                                                                
+  OrgAddressID,FromLocationID,ToLocationID,                                                                     
+  CreatedAt,CreatedBy,Comments,RaiseOrgID ,RaiseOrgAddID,StockType,StockReturnReasonType,IndentReceivedNo)                                                                                  
+  select @IndentID,@pCreatedAt,'Issued',                                                                                
+ @pOrgID,@OrgAddressID, @FromLocationID,@ToLocationID,@pCreatedAt,                                                                             
+  @CreatedBy,@Comments ,@pReceivedOrgID,@pReceivedOrgAddID,@StockType, @StockOutFlowTypeID ,@IndentReceivedNo --from @pInventoryItemsMapping_Intend IM                                                                                
+                                                                                       
+  --Select @pIntendReceivedID =IntendReceivedID  from IntendReceived  Where IntendID =@IndID  AND OrgID =@pOrgID AND OrgAddressID = @pOrgAddressID                                                                             
+        SET @pIntendReceivedID  = SCOPE_IDENTITY()                                                                                
+ insert into IntendReceivedDetail(IntendReceivedID,IntendIssuedDate,Status,ProductID,Quantity,OrgID,OrgAddressID,FromLocationID,ToLocationID ,BatchNo,CategoryId, ExpiryDate,                                                                                  
+  
+ Tax,SellingUnit,UnitPrice,SellingPrice,IssueQty,RecdQty,ProductKey,ParentProductID,RaiseOrgID,RaiseOrgAddID,ParentProductKey,createdAt ,createdby,MRP )                 
+ select @pIntendReceivedID,@pCreatedAt,'',P.ProductID,IM.Quantity,@pOrgID,@OrgAddressID,@FromLocationID,@ToLocationID,IM.BatchNo,P.CategoryID,IM.ExpiryDate,                                                                                    
+ IM.Tax,IM.Unit,IM.UnitPrice,IM.Rate,IM.Quantity,IM.RECQuantity, CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),P.ProductID) +'@#$'+Convert(NVARCHAR(50),IM.BatchNo ) +'@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),IM.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+ 
+  
+    
+      
+       
+           
+            
+              
+                   
+                  
+                    
+                      
+                         
+                         
+                             
+                             
+                                
+                                  
+                                    
+                                      
+                                        
+                                          
+                                            
+  Convert(NVARCHAR(50),ISNULL(IM.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),IM.Rate)+'@#$'+ Convert(NVARCHAR(20),ISNULL(IM.Unit ,'Nos')))                                                    
+ ,IM.ParentProductID ,@pReceivedOrgID,@pReceivedOrgAddID,IM.ProductKey,@pCreatedAt ,@CreatedBy ,IM.MRP  from @pInventoryItemsMapping IM                                                    
+ INNER JOIN Products P ON P.ParentProductID=IM.ParentProductID AND P.OrgID =@pReceivedOrgID                                                                        
+                                                                    
+                                                                    
+                                         
+ select @pIntendReceivedID,@pCreatedAt,'',P.ProductID,IM.Quantity,@pReceivedOrgID,@pReceivedOrgAddID ,@FromLocationID,@ToLocationID                    
+ ,IM.BatchNo,P.CategoryID,IM.ExpiryDate,                                                                          
+ IM.Tax,IM.Unit,IM.UnitPrice,IM.Rate,IM.Quantity,IM.RECQuantity, CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),P.ProductID)                     
+ +'@#$'+Convert(NVARCHAR(50),IM.BatchNo ) +'@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),IM.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                         
+  Convert(NVARCHAR(50),ISNULL(IM.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),IM.Rate)+'@#$'+ Convert(NVARCHAR(20),ISNULL(IM.Unit ,'Nos')))                                                                              
+ ,IM.ParentProductID ,@pOrgID,@OrgAddressID,IM.ProductKey,@pCreatedAt ,@CreatedBy ,IM.MRP  from @pInventoryItemsMapping IM                                                                              
+ INNER JOIN Products P ON P.ParentProductID=IM.ParentProductID AND P.OrgID =@pReceivedOrgID                       
+                                                                    
+                                                                           
+        ---indentreceived,indentreceiveddetails                                                                                       
+                                                      
+    UPDATE SH SET SH.TotalLocationIssued =ISNULL(SH.TotalLocationIssued,0)+ISNULL(SO.Quantity,0),                
+    ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                        
+    FROM @pInventoryItemsMapping SO                                                                                                                    
+     INNER JOIN StockInHand SH                                                        
+    ON SH.OrgID= @pOrgID                                                                                                                       
+    WHERE SH.ProductID=SO.ProductID                                
+    AND  SH.StockInHandID=so.ID                         
+                                                                                               
+    update KS set KS.KitBacthNo=SH.BatchNo,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy from KitStudyDetails KS                   
+    inner join IntendDetail ID on  ks.IndentID =id.IntendID and KS.KitID=ID.ProductID                            
+ INNER JOIN Products P ON P.ProductID=ID.ProductID                    
+ INNER JOIN Products P2 ON P2.ProductID=P.ProductID                      
+   inner join StockInHand SH on SH.ProductID=P.ProductID AND SH.OrgID=P2.OrgID                   
+ where ID.IntendID=@IndentID                            
+                                                                                       
+                                          
+                                           
+                            
+   SELECT @StockOutFlowTypeID=StockOutFlowTypeId                                                                                           
+   FROM  StockOutFlowTypes       WITH(NOLOCK)                                                                                     
+   WHERE StockOutFlowType=@StockOutFlowType                                         
+                                             
+      EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,@StockOutFlowType,@StockOutFlowIdoutno OUTPUT                                           
+                                             
+      IF(@StockOutFlowType='Stock Return')                                                      
+         BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SRT'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                                       
+         END                                                                                                                        
+   IF(@StockOutFlowType='Stock Damage')                                                     
+         BEGIN                                                                                                                     
+   SET @StockOutFlowNo = 'SD'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                
+         END                                                                                                           
+   IF(@StockOutFlowType='Stock Issued')                                                                                                                        
+         BEGIN                                                              
+   SET @StockOutFlowNo = 'SI'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                                          
+         END                
+         IF(@StockOutFlowType='Stock Usage')                                                                                                                        
+         BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SU'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                             
+         END                                            
+                                                                                   
+     IF(@StockOutFlowType='Disposal')                                                                                                                        
+       BEGIN                                           
+   SET @StockOutFlowNo = 'SDL'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                               
+       END                                          
+       IF(@StockOutFlowType='Expiry Date')                                                                   
+       BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SE'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                             
+       END                                                    
+                                             
+                                                                          
+                                                                                            
+   BEGIN                                                                                           
+                                       
+       ---------------------------------------------------------------------                        
+  ----- Inserts Issued product details into StockOutFlow and -----                                                                                          
+    ----- StockOutFlowDetail     -----                                                    
+    ---------------------------------------------------------------------                                                                                          
+                                                          
+   -- SET @StockOutFlowNo = 'SI'+ CONVERT(NVARCHAR,@StockOutFlowId)                                                                                          
+                                                                                                                         
+    INSERT INTO StockOutFlow (StockOutFlowNo,                                                                                          
+         StockOutFlowTypeID,OrgID,                                                                                          
+         OrgAddressID,Status,                                                                                          
+       SupplierID,ConsumedBy,                                                                                          
+         Description,CreatedBy,                                                                             
+         CreatedAt,--ApprovedBy,ApprovedAt,            
+         LocationID,RaiseOrgID ,RaiseOrgAddID)                                                                                                                          
+    VALUES (@StockOutFlowNo,@StockOutFlowTypeID,                                                                                          
+         @pOrgID,@OrgAddressID,                                                                       
+         'Pending',0,                                                                                          
+        @FromLocationID ,'Issued To Location',      
+    @CreatedBy,@pCreatedAt,                                                                                          
+        -- @CreatedBy,@pCreatedAt,                                                                                          
+         @ToLocationID,@pReceivedOrgID,@pReceivedOrgAddID)                                                                          
+                                                                                              
+    SET @StockOutFlowId  = SCOPE_IDENTITY()                                                                                                                  
+                                      
+    INSERT INTO StockOutFlowDetails(                                                            
+        StockOutFlowID,OrgID,                                                                                          
+        OrgAddressID,ProductID,                                                                                          
+        BatchNo,Quantity,Unit,                                                                                          
+        StockOutFlowDate,LocationID ,ExpiryDate ,TaxPercent ,SellingPrice ,UnitPrice ,ProductKey , RaiseOrgID,RaiseOrgAddID , ParentProductID,createdAt ,createdby,MRP                                                       
+        )                           
+    SELECT @StockOutFlowId,@pOrgID,                                                                                                  
+        @pOrgAddressId,ISNULL((select  p1.Productid From  @tble p1  where p1.ParentProductID =S.ParentProductID and p1.orgid=@pOrgID ),S.ProductID ),                                                                                        
+        S.BatchNo,S.Quantity,S.Unit,                                                                                          
+        @pCreatedAt,@ToLocationID ,S.ExpiryDate ,S.Tax ,S.Rate ,S.UnitPrice,                
+CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),ISNULL((select  p1.Productid From  @tble p1  where p1.ParentProductID =S.ParentProductID and p1.orgid=@pOrgID ),S.ProductID )    ) +'@#$'+                
+Convert(NVARCHAR(50),S.BatchNo ) +                              
+     '@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),S.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                               
+     Convert(NVARCHAR(50),ISNULL(S.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),S.Rate)+'@#$'+                 
+Convert(NVARCHAR(20),ISNULL(S.Unit ,'Nos')))                
+,@pOrgID,@OrgAddressID ,S.ParentProductID,@pCreatedAt ,@CreatedBy ,S.MRP                                        
+    FROM @pInventoryItemsMapping S                                                                                 
+                                                                                       
+       ---kit products outflow                         
+                                               
+ INSERT INTO @pInvKitDetails(                                                       
+ ProductId,BatchNo,                                                                                                  
+ ExpiryDate  ,                                                                                                 
+ Tax,Unit,                                                                                                            
+ UnitPrice,                 
+ Rate,                                           
+ Quantity,InvoiceQty,ProductKey,ID)                                              
+ SELECT IIM.ProductID ,IIM.BatchNo ,IIM.ExpiryDate ,IIM.TaxPercent ,ISNULL(IIM.SellingUnit,'Nos') ,                                              
+ IIM.UnitPrice ,IIM.SellingPrice,SUM(IIM.Quantity) ,0,IIM.ProductKey,IIM.KitID FROM KitPrepMasterDetails  IIM                                                
+ INNER JOIN KitPrepMaster  KPM ON IIM.KitID = KPM.KitID AND IIM.OrgID = KPM.OrgID                                                
+ INNER JOIN @pInventoryItemsMapping S           
+ ON KPM.MasterKitID =S.ProductID AND KPM.ProductKey =S.ProductKey Where KPM .OrgID =@pOrgID                                   
+ group by IIM.ProductID ,IIM.BatchNo ,IIM.ExpiryDate ,IIM.TaxPercent ,IIM.SellingUnit ,IIM.UnitPrice                                             
+ ,IIM.SellingPrice,IIM.Quantity ,IIM.ProductKey ,IIM.KitID                                    
+                                        
+                          
+      INSERT INTO StockOutFlowDetails(                                               
+        StockOutFlowID,OrgID,                                                                                                                        
+        OrgAddressID,ProductID,                                                                                                                        
+        BatchNo,Quantity,Unit,                
+        StockOutFlowDate,LocationID ,ExpiryDate ,TaxPercent ,SellingPrice ,UnitPrice ,ProductKey , RaiseOrgID,RaiseOrgAddID , ParentProductID,KitID,createdAt ,createdby                                                                                     
+        )                                                                                                              
+                    
+       SELECT  @StockOutFlowId,@pReceivedOrgID,@pReceivedOrgAddID,S.ProductID,  S.BatchNo,S.Quantity,S.Unit,                      
+         @pCreatedAt,@ToLocationID ,S.ExpiryDate ,S.Tax ,S.Rate ,S.UnitPrice,S.ProductKey,@pOrgID,@OrgAddressID ,S.ParentProductID,S.ID,@pCreatedAt ,@CreatedBy                         
+         FROM @pInvKitDetails S                       
+                               
+                                                                                                      
+     --kit flow end                                                                                  
+                                                         
+   UPDATE IntendReceived SET                            
+  StockOutFlowID=@StockOutFlowId,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                           
+   WHERE                           
+  IntendID= @IndentID AND IntendReceivedID =@pIntendReceivedID                                     
+                                            
+                       
+  --UPDATE ID SET                                                           
+  --  ID.InvoiceQty =  ISNULL(ID.InvoiceQty,0)+isnull(PP.Quantity,0)                                          
+  --  ,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy  from IntendDetail ID inner join                                                
+  --   (select P.productid,sum(P.Quantity) as quantity from @pInventoryItemsMapping_Intend p group by P.ProductID) PP                                                 
+  --   on PP.ProductID=Id.ProductID and ID.IntendID=@IndentID                                      
+  --  where ID.IntendID=@IndentID   and ID.OrgID=@pOrgID                                                         
+                               
+                  
+  UPDATE I SET                                     
+    I.Status =Case When I.Quantity -ISNULL(I.InvoiceQty,0)=0 then 'Closed' Else 'Open' END                           
+    ,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                                     
+ FROM                                     
+    IntendDetail I                                      WHERE                                     
+    I.IntendID = @IndentID                               
+                                 
+                              
+   Update I set I.Status=                         
+  Case                        
+    when 0=(SELECT COUNT(1) FROM IntendDetail ID1 WHERE  ID1.IntendID=I.IntendID                                                                  
+    AND (ID1.Status='Open' OR ID1.Status IS NULL)) Then 'Issued'                         
+     Else 'Partial Issued'                        
+  END,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                      
+   FROM                           
+   Intend I Inner Join IntendDetail IRD on I.IntendID=IRD.IntendID               
+                            
+   where  I.IntendID=@IndentID and I.OrgID=@pOrgID                          
+   END                                                      
+                                                                         
+                                                                                        
+   END                                                          
+   ELSE                                                                
+   BEGIN             
+                                                         
+   select  @ReceivedID =MAX(IntendReceivedID)+1 from IntendReceived  WITH(NOLOCK)                                                      
+   SET @IndentReceivedNo = 'IRN'+ CONVERT(NVARCHAR,@ReceivedID)                                                             
+                                                                                                        
+  INSERT INTO IntendReceived                                                    
+     (IntendID,IntendIssuedDate,Status,OrgID, OrgAddressID,FromLocationID,ToLocationID,                                                                                                            
+     CreatedAt,CreatedBy,Comments,RaiseOrgID ,RaiseOrgAddID,StockType,StockReturnReasonType,IndentReceivedNo)                                                 
+  select                                         
+   @IndentID,@pCreatedAt,'Issued',  @pReceivedOrgID,@pReceivedOrgAddID,@FromLocationID,@ToLocationID,@pCreatedAt,                                                            
+   @CreatedBy,@Comments ,@pOrgID,@OrgAddressID,@StockType, @StockOutFlowTypeID,@IndentReceivedNo  --from @pInventoryItemsMapping_Intend IM                                                                                                          
+                                                                                                                 
+  --Select @pIntendReceivedID =IntendReceivedID  from IntendReceived  Where IntendID =@IndID  AND OrgID =@pOrgID AND OrgAddressID = @pOrgAddressID                                                    
+                                                                                                       
+            SET @pIntendReceivedID  = SCOPE_IDENTITY()                
+                                                     
+                                                                                                               
+ insert into IntendReceivedDetail                                                    
+   (IntendReceivedID,IntendIssuedDate,Status,ProductID,Quantity,OrgID,OrgAddressID,FromLocationID,ToLocationID ,                                                    
+   BatchNo,CategoryId, ExpiryDate,Tax,SellingUnit,UnitPrice,SellingPrice,IssueQty,RecdQty,ProductKey,ParentProductID,                                                    
+   RaiseOrgID,RaiseOrgAddID,ParentProductKey,createdAt ,createdby ,MRP)                                                                                                              
+ select                                                     
+   @pIntendReceivedID,@pCreatedAt,'Open',IM.ProductID,IM.Quantity,@pReceivedOrgID,@pReceivedOrgAddID,@FromLocationID,                                                    
+   @ToLocationID,IM.BatchNo,P.CategoryID,IM.ExpiryDate, IM.Tax,IM.Unit,IM.UnitPrice,IM.Rate,IM.Quantity,IM.RECQuantity,                                                    
+   CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),IM.ProductID) +'@#$'+Convert(NVARCHAR(50),IM.BatchNo ) +                                                    
+     '@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),IM.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                                                     
+     Convert(NVARCHAR(50),ISNULL(IM.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),IM.Rate)+'@#$'+ Convert(NVARCHAR(20),ISNULL(IM.Unit ,'Nos')))                                                                              
+   ,IM.ParentProductID , @pOrgID,@OrgAddressID, CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),(SElect Top 1 S.ProductID from @tble s Where s.ParentProductID=IM.ParentProductID AND S.orgid=@pReceivedOrgID )) +'@#$'+Convert(NVARCHAR(50),IM.BatchNo ) +       
+  
+    
+      
+        
+          
+            
+              
+                    
+                  
+ '@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),IM.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                                                         
+  Convert(NVARCHAR(50),ISNULL(IM.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),IM.Rate)+'@#$'+                                          
+ Convert(NVARCHAR(20),ISNULL(IM.Unit ,'Nos')))                                           
+,@pCreatedAt ,@CreatedBy ,IM.MRP                                                
+ from  @pInventoryItemsMapping IM                                                           
+  INNER JOIN Products P ON P.ParentProductID=IM.ParentProductID AND P.OrgID =@pReceivedOrgID                                                                                                                             
+                                                   
+        ---indentreceived,indentreceiveddetails                                                                                                                 
+                                                                                
+    UPDATE SH SET                                                     
+   SH.TotalLocationIssued =ISNULL(SH.TotalLocationIssued,0)+ISNULL(SO.Quantity,0),                                          
+   ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                                                                                                                                                        
+    FROM @pInventoryItemsMapping SO                                                                                                                                              
+   INNER JOIN StockInHand SH ON  SH.OrgID= @pReceivedOrgID                                                                                                                                                            
+    inner join @tble p1 on  P1.ParentProductID = SO.ParentProductID  and P1.OrgID=@pReceivedOrgID                                                   
+    WHERE SH.ProductID=p1.ProductID  AND  SH.StockInHandID=so.ID   and P1.OrgID=@pReceivedOrgID                                                                
+                                                                   
+  update KS set KS.KitBacthNo=SH.BatchNo,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy from KitStudyDetails KS                                             
+  inner join IntendDetail ID on  ks.IndentID =id.IntendID and KS.KitID=ID.ProductID                                                      
+   INNER JOIN Products P ON P.ProductID=ID.ProductID                                              
+   INNER JOIN Products P2 ON P2.ProductID=P.ProductID                                                
+   inner join StockInHand SH on SH.ProductID=P.ProductID AND SH.OrgID=P2.OrgID                               
+  where ID.IntendID=@IndentID                                                                    
+                                       
+                                                                                                   
+   SELECT @StockOutFlowTypeID=StockOutFlowTypeId                                                                                                                     
+   FROM  StockOutFlowTypes       WITH(NOLOCK)                                
+   WHERE StockOutFlowType=@StockOutFlowType                                                                   
+                                                                       
+      EXEC dbo.pGetNextInventoryIDForMaster @pOrgID,@StockOutFlowType,@StockOutFlowIdoutno OUTPUT                                                                     
+                                                                       
+      IF(@StockOutFlowType='Stock Return')                                                      
+        BEGIN                                                                                                                      
+   SET @StockOutFlowNo = 'SRT'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                                          
+         END                                                                                                                        
+   IF(@StockOutFlowType='Stock Damage')                                                                                                                        
+         BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SD'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                            
+         END                                                                                                           
+   IF(@StockOutFlowType='Stock Issued')                        
+         BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SI'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                                          
+         END                                                                             
+         IF(@StockOutFlowType='Stock Usage')                                                                                                                        
+         BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SU'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                                             
+         END                             
+                                                                 
+     IF(@StockOutFlowType='Disposal')                                                                                                                        
+       BEGIN                                           
+   SET @StockOutFlowNo = 'SDL'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                               
+       END                                                                       
+       IF(@StockOutFlowType='Expiry Date')                                                                                                                        
+       BEGIN                                                                                                                        
+   SET @StockOutFlowNo = 'SE'+ CONVERT(NVARCHAR,@StockOutFlowIdoutno)                                                                                               
+       END                                                           
+                                                       
+                                    
+                                                                                                                      
+   BEGIN                                                                                                                     
+                                                                 
+       ---------------------------------------------------------------------                                                                                      
+  ----- Inserts Issued product details into StockOutFlow and -----                                                                                                                    
+    ----- StockOutFlowDetail         -----                                                                              
+    ---------------------------------------------------------------------                                                                               
+                                                                       
+   -- SET @StockOutFlowNo = 'SI'+ CONVERT(NVARCHAR,@StockOutFlowId)                                                                                                                    
+                                                                                                                              
+    INSERT INTO StockOutFlow (StockOutFlowNo,                                                                                                                    
+         StockOutFlowTypeID,OrgID,                                                                                                                    
+         OrgAddressID,Status,                                                                                                                    
+       SupplierID,ConsumedBy,                                                                                                                    
+         Description,CreatedBy,                                                                               
+         CreatedAt,--ApprovedBy,ApprovedAt,                                                                  
+         LocationID,RaiseOrgID ,RaiseOrgAddID)                                                                                                                                                    
+    VALUES (@StockOutFlowNo,@StockOutFlowTypeID,                                                     
+         @pReceivedOrgID,@pReceivedOrgAddID,                                                                                                 
+         'Pending',0,                                                                   
+        @FromLocationID ,'Issued To Location',                                                                                                                    
+    @CreatedBy,@pCreatedAt,                                                                                                                    
+        -- @CreatedBy,@pCreatedAt,                                                                                                                    
+         @ToLocationID,@pOrgID,@OrgAddressID)                                                                                                   
+                                                                                                                        
+    SET @StockOutFlowId  = SCOPE_IDENTITY()                                                                                     
+                                                                                                                    
+    INSERT INTO StockOutFlowDetails(                                                                                      
+        StockOutFlowID,OrgID,                                                                                                                    
+        OrgAddressID,ProductID,                                                      
+        BatchNo,Quantity,Unit,                                                                     
+        StockOutFlowDate,LocationID ,ExpiryDate ,TaxPercent ,SellingPrice ,UnitPrice ,ProductKey , RaiseOrgID,RaiseOrgAddID , ParentProductID,createdAt ,createdby,MRP                                                                               
+        )                                                                                                                        
+    SELECT @StockOutFlowId,@pReceivedOrgID,                                                                                                                            
+        @pReceivedOrgAddID,ISNULL((select p1.Productid From  @tble p1  where p1.ParentProductID =S.ParentProductID and p1.CategoryID =S.CategoryID and p1.orgid=@pReceivedOrgID ) ,S.ProductID ),              
+      
+        
+           
+           
+               
+                                     
+                      
+        S.BatchNo,S.Quantity,S.Unit,                                                                                                          
+        @pCreatedAt,@ToLocationID ,S.ExpiryDate ,S.Tax ,S.Rate ,S.UnitPrice,                                         
+CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),ISNULL((select  p1.Productid From  @tble p1  where p1.ParentProductID =S.ParentProductID and p1.CategoryID =S.CategoryID and p1.orgid=@pReceivedOrgID ),S.ProductID )  ) +'@#$'+                                  
+  
+     
+      
+       
+Convert(NVARCHAR(50),S.BatchNo ) +                                                        
+     '@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),S.ExpiryDate , 113), 4, 8),' ','/') +'@#$'+                                                         
+     Convert(NVARCHAR(50),ISNULL(S.UnitPrice ,0)) +'@#$'+ Convert(NVARCHAR(50),S.Rate)+'@#$'+                                           
+Convert(NVARCHAR(20),ISNULL(S.Unit ,'Nos')))                                          
+,@pOrgID,@OrgAddressID ,S.ParentProductID,@pCreatedAt ,@CreatedBy ,S.MRP                                                                                                                            
+    FROM @pInventoryItemsMapping S                                                                                                           
+                             
+                         
+       ---kit products outflow                                                   
+                                                                 
+ INSERT INTO @pInvKitDetails(                                                                                 
+ ProductId,BatchNo,                                                                                                                            
+ ExpiryDate  ,                                                                                                                           
+ Tax,Unit,                                                        
+ UnitPrice,                                                                                                                                 
+ Rate,                                                 
+ Quantity,InvoiceQty,ProductKey,ID)                                                                  
+ SELECT IIM.ProductID ,IIM.BatchNo ,IIM.ExpiryDate ,IIM.TaxPercent ,ISNULL(IIM.SellingUnit,'Nos') ,                                                                        
+ IIM.UnitPrice ,IIM.SellingPrice,SUM(IIM.Quantity) ,0,IIM.ProductKey,IIM.KitID FROM KitPrepMasterDetails  IIM                                                                          
+ INNER JOIN KitPrepMaster  KPM ON IIM.KitID = KPM.KitID AND IIM.OrgID = KPM.OrgID                                                                          
+ INNER JOIN @pInventoryItemsMapping S                                                                         
+ ON KPM.MasterKitID =S.ProductID AND KPM.ProductKey =S.ProductKey Where KPM .OrgID =@pOrgID                                                                         
+ group by IIM.ProductID ,IIM.BatchNo ,IIM.ExpiryDate ,IIM.TaxPercent ,IIM.SellingUnit ,IIM.UnitPrice                                                      
+ ,IIM.SellingPrice,IIM.Quantity ,IIM.ProductKey ,IIM.KitID                                                              
+                                                                  
+                                                    
+      INSERT INTO StockOutFlowDetails(                                                                         
+        StockOutFlowID,OrgID,                                                                         
+        OrgAddressID,ProductID,                                                                                                                  
+        BatchNo,Quantity,Unit,                                                                                                        
+        StockOutFlowDate,LocationID ,ExpiryDate ,TaxPercent ,SellingPrice ,UnitPrice ,ProductKey , RaiseOrgID,RaiseOrgAddID , ParentProductID,KitID,createdAt ,createdby                                                                                       
+  
+    
+      
+       
+           
+            
+             
+                
+                  
+                    
+                      
+                        
+                         
+        )                                   
+                                                   
+       SELECT  @StockOutFlowId,@pReceivedOrgID,@pReceivedOrgAddID,S.ProductID,  S.BatchNo,S.Quantity,S.Unit,                                                
+         @pCreatedAt,@ToLocationID ,S.ExpiryDate ,S.Tax ,S.Rate ,S.UnitPrice,S.ProductKey,@pOrgID,@OrgAddressID ,S.ParentProductID,S.ID,@pCreatedAt ,@CreatedBy                                  
+         FROM @pInvKitDetails S                                                 
+                                                         
+                                                                                                                                             
+     --kit flow end                                                                                                            
+                                                                                   
+   UPDATE IntendReceived SET                                                      
+  StockOutFlowID=@StockOutFlowId,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                                                     
+   WHERE                                                     
+  IntendID= @IndentID AND IntendReceivedID =@pIntendReceivedID                                                               
+                                                                      
+                                                 
+  UPDATE ID SET                                                           
+    ID.InvoiceQty =  ISNULL(ID.InvoiceQty,0)+isnull(PP.Quantity,0)                                          
+    ,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy    from IntendDetail ID inner join                                                
+     (select P.productid,sum(P.Quantity) as quantity  from @pInventoryItemsMapping p group by P.ProductID) PP                                                 
+     on PP.ProductID=Id.ProductID and ID.IntendID=@IndentID                                                
+    where ID.IntendID=@IndentID   and ID.OrgID=@pOrgID                                                         
+                                                         
+                                            
+  UPDATE I SET                                                  
+    I.Status =Case When I.Quantity -ISNULL(I.InvoiceQty,0)=0 then 'Closed' Else 'Open' END                                                     
+    ,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                                                               
+ FROM                               
+    IntendDetail I                        
+ WHERE                                                               
+    I.IntendID = @IndentID                                                         
+                                                           
+                                                        
+   Update I set I.Status=                                                   
+  Case                                                  
+    when 0=(SELECT COUNT(1) FROM IntendDetail ID1 WHERE  ID1.IntendID=I.IntendID                                                               
+    AND (ID1.Status='Open' OR ID1.Status IS NULL)) Then 'Issued'                                                   
+     Else 'Partial Issued'                                                  
+  END,ModifiedAt =@ServerDate,ModifiedBy =@CreatedBy                                                
+   FROM                                                     
+   Intend I Inner Join IntendDetail IRD on I.IntendID=IRD.IntendID     
+                                                      
+   where  I.IntendID=@IndentID and I.OrgID=@pOrgID                                                    
+  END                                                                                     END                                    
+ SET @IndID=@IndentID                                         
+ SET @StockReceivedID=@pIntendReceivedID                
+ SElect  @Status=Status from  Intend where   IntendID = @IndentID                                      
+                                                                  
+             UPDATE t set T.StockOutFlowID=@StockOutFlowId from StockReceivedBarcodeMapping T INNER JOIN  @pInventoryItemsMapping_Intend  s on T.BarcodeMappingId=s.ClientFeeTypeRateCustID                
+                                                                           
+                                                                                                  
+ -- COMMIT TRAN T1                                                                                  
+                                                                        
+ --END TRY                                                                             
+                                                        
+ --BEGIN CATCH                                                                                                          
+                                                                                           
+ -- ROLLBACK TRANSACTION T1                                
+                                                                                  
+ --END CATCH                                                                           
+                         
+ SET NOCOUNT OFF                                                                                           
+                                                                                                                     
+ RETURN @IndID                                                                                          
+ END                      
+                                                           
+END 
+GO

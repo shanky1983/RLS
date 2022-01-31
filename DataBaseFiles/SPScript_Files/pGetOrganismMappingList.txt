@@ -1,0 +1,25 @@
+/****** Object:  StoredProcedure [dbo].[pGetOrganismMappingList]    Script Date: 6/25/2018 11:38:26 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pGetOrganismMappingList](          
+@pId bigInt,                     
+@ContextInfo [UDT_Context] READONLY)                  
+as                  
+begin          
+ declare @LoginId bigint          
+ declare @OrgId bigint          
+ select @LoginId=LoginId,@OrgId=orgid from @ContextInfo          
+          
+ select distinct m.InvestigationID,InvestigationName,OrganismID,Name as OrganismName      
+ from InvOrganismDrugMapping m with(nolock)      
+ inner join Investigationmaster inv with(nolock)      
+ on m.InvestigationID=inv.InvestigationID      
+ inner join OrganismMaster o with(nolock)      
+ on m.OrganismID=o.id      
+  where m.OrgID=@OrgId          
+end 
+GO

@@ -1,0 +1,174 @@
+ 
+/****** Object:  StoredProcedure [dbo].[PGetICMRReportMIS]    Script Date: 11/27/2020 4:19:00 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+ CREATE Procedure [dbo].[PGetICMRReportMIS]        
+(        
+@Fdate Datetime,        
+@Tdate Datetime,        
+@ClientID Int,        
+@VisitType Int,      
+@ContextInfo [dbo].[UDT_Context] READONLY         
+)        
+As        
+Begin  
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED     
+  SET NOCOUNT ON;  
+  SET XACT_ABORT ON; 
+   
+ Declare @pOrgId int    
+select  @pOrgId=OrgID from @ContextInfo    
+     
+Create table #TempFinal (Patientvisitid bigint
+,[Date of Sample Collection] Date,[Date Of Sample Tested] Date ,[Collection Center] varchar(100)
+,[Referred By] nvarchar(max),[Patient Name] nvarchar(max),Age nvarchar(100),Gender varchar(100),[Contact no] varchar(50),Aadhaar varchar(50)
+,[Patient Address] nvarchar(500),RESULTS nvarchar(max),[Lab Name] varchar(100),[Sample ID] varchar(100),AccessionNumber Bigint,GroupID Bigint,InvestigationID BigInt,UID nvarchar(Max)
+,[State Of Residence] varchar(100),[District Of Residence] varchar(100),[Patient Village or Town] varchar(100),[Patient Pincode] varchar(20),[Arogya Setu App Downloded Yes/No] Varchar(10)
+,[Patient Quarantined Yes/No] varchar(10),[Home quarantined/  hospital quarantined name] varchar(10),[Patient Category] varchar(100),[hospital name, date] varchar(10),[Sample Type] varchar(255)
+,[Date of Sample Received] Date,[Sample Diagnostic/ Repeat] varchar(10),[Remarks] char(1),[Mobile Number Belongs to pt./relative] varchar(20),Email varchar(50)
+,CountryID bigint, StateID bigint ,ReferredAccessionNo Bigint,refervisitid bigint,[JHH ID] Varchar(100),[Employee ID] Varchar(100),[External Order ID] Varchar(100), ClientID bigint
+) 
+ 
+Select Distinct PV.[PatientVisitId],OA.Location As [Collection Point Code],PV.ReferingPhysicianName As [Referred By],P.Name As [Name],P.Age,
+Case When P.SEX='F' then 'FEMALE' Else 'MALE' End As Gender,
+(Case When (Select DisplayText from URNOrgMapping WITH(NOLOCK)  Where URNTypeID=P.URNTypeID and OrgID=@pOrgId)='Aadhaar card' then Isnull(P.URNO,'') Else '' End)  As Aadhaar
+,Isnull(PA.Add1,'') As Address,Isnull(PA.MobileNumber,PA.LandLineNumber) As Contact
+,P.EMAID as Email,PA.CountryID,PA.StateID,PA.City,PA.PostalCode,P.PatientNumber,PA.Add2 as [Patient Village or Town]
+,PV.OrgID,PV.ReferVisitID,P.HealthHubID as [JHH ID],P.EmployeeID as [Employee ID],'' as [External Order ID]
+
+ Into #temp
+from PatientVisit PV WITH (NOLOCK)
+inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID --and P.Orgid=PV.Orgid
+inner Join PatientAddress PA WITH (NOLOCK) ON PA.PatientID=PV.PatientID and PA.AddressType='P'
+Inner Join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID
+where PV.orgid=@pOrgId and PV.Createdat between Cast(@Fdate AS DATETIME) and Cast(@Tdate AS DATETIME) 
+--And Isnull(PV.Refervisitid,'')=''
+
+Update T Set [Collection Point Code]=OA.Location
+from #temp T
+Inner join PatientVisit PV on PV.PatientvisitID=T.ReferVisitID
+Inner join OrganizationAddress OA ON OA.AddressID=PV.OrgAddressID
+Where T.ReferVisitID is not null
+
+Insert Into #TempFinal
+(Patientvisitid,[Collection Center],[Referred By],[Patient Name],Age,Gender,Aadhaar
+,[Patient Address],AccessionNumber,GroupID,InvestigationID,UID
+,[District Of Residence],[Patient Pincode],[Arogya Setu App Downloded Yes/No]
+,[Patient Quarantined Yes/No],[Home quarantined/  hospital quarantined name],[Patient Category],[hospital name, date]
+,[Date Of Sample Tested],[Sample Diagnostic/ Repeat],[Remarks],[Mobile Number Belongs to pt./relative],Email,CountryID, StateID ,[Sample Type],[Contact no]
+,[Patient Village or Town] ,[JHH ID],[Employee ID],[External Order ID],ClientID
+)
+ 
+Select Distinct T.Patientvisitid,T.[Collection Point Code],T.[Referred By],T.[Name],T.Age,T.Gender,T.Aadhaar,'',--T.Address,
+
+PI.AccessionNumber,GroupID,InvestigationID,PI.UID,T.City,T.PostalCode,'No','Yes','Others',T.PatientNumber,''
+,PI.ApprovedAt,'No','','Patient',Email,CountryID,StateID,ISM.SampleDesc,T.Contact,T.[Patient Village or Town],T.[JHH ID],T.[Employee ID],T.[External Order ID],
+VCM.ClientID
+from #Temp T
+Inner Join PatientInvestigation PI WITH(NOLOCK) ON PI.PatientVisitID=T.PatientVisitID and PI.OrgID=T.OrgID 
+Inner Join VisitClientMapping VCM With (Nolock) ON VCM.VisitID=T.PatientVisitID and VCM.OrgID=T.OrgID 
+Left Join InvSampleMaster ISM WITH(NOLOCK) ON ISM.OrgID=PI.OrgID and ISM.SampleCode=PI.SampleID
+Where PI.Status='Approve'  AND
+ PI.InvestigationID in (select InvestigationID from OrderableTcodeForFormL Where OrgID=@pOrgId)
+ 
+Drop Table #Temp
+
+Update T Set ReferredAccessionNo=OI.ReferredAccessionNo
+from #TempFinal T
+Inner join OrderedInvestigations OI WITH(NOLOCK) ON OI.AccessionNumber=T.AccessionNumber
+Where T.refervisitid is not null
+
+
+Update T Set T.RESULTS=IV.Value
+From #TempFinal  T
+Inner Join InvestigationValues IV WITH(NOLOCK) ON IV.PatientVisitID=T.PatientVisitID and IV.GroupID=T.GroupID and IV.InvestigationID=T.InvestigationID
+Where IV.StatusType is Null
+
+Update T Set  [Date of Sample Collection]=PIS.CollectedDateTime
+from #TempFinal T
+Inner Join OrderedInvestigations OI WITH(NOLOCK) ON T.ReferredAccessionNo=OI.AccessionNumber 
+Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.AccessionNumber=OI.AccessionNumber and PISM.UID=OI.UID and PISM.ID=OI.ID and PISM.Type=OI.Type
+Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID=PISM.VisitID and PIS.UID=PISM.UID and PIS.SampleID=PISM.SID and PIS.BarcodeNumber=PISM.Barcode
+--Inner Join SampleTracker ST WITH(NOLOCK) ON ST.PatientVisitID=PISM.VisitID and ST.SampleID=PISM.SID and ST.InvSampleStatusID=3
+Where OI.Status Not in ('Retest') and PISM.Barcode<>'0'
+
+Update T Set T.[Date of Sample Collection]=(Case When isnull([Date of Sample Collection],'')='' then PIS.CollectedDateTime end)
+,[Sample ID]=PIS.BarcodeNumber ,[Date of Sample Received]= ST.CreatedAt
+From #TempFinal  T
+Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.VisitID=T.PatientVisitID and PISM.AccessionNumber=T.AccessionNumber and PISM.UID=T.UID
+Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID=PISM.VisitID and PIS.UID=PISM.UID and PIS.SampleID=PISM.SID and PIS.BarcodeNumber=PISM.Barcode
+Left Join SampleTracker ST WITH(NOLOCK) ON ST.SampleID=PIS.SampleID and ST.PatientVisitID=PIS.PatientVisitID and ST.InvSampleStatusID=3
+Where PISM.Barcode<>'0'
+
+--Update T Set  [Date of Sample Received]=ST.CreatedAt
+--from #TempFinal T
+--Inner Join OrderedInvestigations OI WITH(NOLOCK) ON T.AccessionNumber=OI.ReferredAccessionNo 
+--Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.AccessionNumber=OI.AccessionNumber and PISM.UID=OI.UID and PISM.ID=OI.ID and PISM.Type=OI.Type
+--Inner Join SampleTracker ST WITH(NOLOCK) ON ST.PatientVisitID=PISM.VisitID and ST.SampleID=PISM.SID and ST.InvSampleStatusID=3
+--Where OI.Status Not in ('Retest') and PISM.Barcode<>'0'
+
+--Update T Set T.[Date of Sample Collection]=PIS.CollectedDateTime,[Sample ID]=PIS.BarcodeNumber ,[Date of Sample Received]= (Case When isnull([Date of Sample Received],'')='' then ST.CreatedAt end)
+--From #TempFinal  T
+--Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.VisitID=T.PatientVisitID and PISM.AccessionNumber=T.AccessionNumber and PISM.UID=T.UID
+--Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID=PISM.VisitID and PIS.UID=PISM.UID and PIS.SampleID=PISM.SID and PIS.BarcodeNumber=PISM.Barcode
+--Left Join SampleTracker ST WITH(NOLOCK) ON ST.SampleID=PIS.SampleID and ST.PatientVisitID=PIS.PatientVisitID and ST.InvSampleStatusID=3
+--Where PISM.Barcode<>'0'
+
+Update T Set [State Of Residence]=ST.StateName,[Patient Address]=CT.CountryName
+from #TempFinal T
+Left Join Country CT on CT.CountryID=T.CountryID
+Left Join State ST ON ST.StateID=T.StateID 
+
+ -- ExternalOrderID -- Start ---
+ Update T Set T.[External Order ID]=isnull(B.ExternalRefNo ,PV.Externalvisitid)
+from #TempFinal T
+inner join patientvisit PV on PV.patientvisitid=T.PatientVisitID and PV.OrgID=@pOrgId
+left  Join Bookings B WITH(NOLOCK) ON B.PatientVisitID=T.PatientVisitID and B.OrgID=@pOrgId
+
+
+--- ExternalOrderID -- End ---
+
+if(@ClientID = 0)
+BEGIN
+
+Select Row_Number()OVER (ORDER BY PatientVisitID,[Sample ID]) AS [S.No] ,
+[Sample ID],[Collection Center],[Referred By],[Patient Name],Age,Gender,[Contact no],[Mobile Number Belongs to pt./relative],Email,[Aadhaar] as[Aadhaar card no.],[Patient Address]
+,[State Of Residence],Isnull([District Of Residence],'') As [District Of Residence],[Patient Village or Town],[Patient Pincode],
+[Arogya Setu App Downloded Yes/No],[Patient Quarantined Yes/No],[Home quarantined/  hospital quarantined name],[Patient Category],[hospital name, date],[Sample Type]
+,Convert(Varchar(30),[Date of Sample Collection],103) As [Date of Sample Collection],
+Convert(Varchar(30),[Date of Sample Received],103) As [Date of Sample Received]
+,Convert(Varchar(30),[Date Of Sample Tested],103) As [Date Of Sample Tested],Results,[Sample Diagnostic/ Repeat],[Remarks], ISNULL([JHH ID],'') AS [JHH ID],ISNULL([Employee ID],'') AS [Employee ID],ISNULL([External Order ID],'') as [External Order ID]
+ 
+from #TempFinal 
+
+END
+ELSE 
+BEGIN
+
+
+Select Row_Number()OVER (ORDER BY PatientVisitID,[Sample ID]) AS [S.No] ,
+[Sample ID],[Collection Center],[Referred By],[Patient Name],Age,Gender,[Contact no],[Mobile Number Belongs to pt./relative],Email,[Aadhaar] as[Aadhaar card no.],[Patient Address]
+,[State Of Residence],Isnull([District Of Residence],'') As [District Of Residence],[Patient Village or Town],[Patient Pincode],
+[Arogya Setu App Downloded Yes/No],[Patient Quarantined Yes/No],[Home quarantined/  hospital quarantined name],[Patient Category],[hospital name, date],[Sample Type]
+,Convert(Varchar(30),[Date of Sample Collection],103) As [Date of Sample Collection],
+Convert(Varchar(30),[Date of Sample Received],103) As [Date of Sample Received]
+,Convert(Varchar(30),[Date Of Sample Tested],103) As [Date Of Sample Tested],Results,[Sample Diagnostic/ Repeat],[Remarks], ISNULL([JHH ID],'') AS [JHH ID],ISNULL([Employee ID],'') AS [Employee ID],ISNULL([External Order ID],'') as [External Order ID]
+ 
+from #TempFinal where ClientID=@ClientID
+END
+
+Drop Table #TempFinal
+
+END
+
+
+
+
+
+GO
+
+

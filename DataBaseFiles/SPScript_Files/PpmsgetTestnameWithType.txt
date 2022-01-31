@@ -1,0 +1,54 @@
+
+CREATE PROCEDURE [dbo].[PpmsgetTestnameWithType] @lID BIGINT
+
+AS
+
+BEGIN
+
+
+
+SELECT Cast(IOM.InvestigationID AS VARCHAR(10)) + '-'+'INV' AS Code
+
+,IOM.BillingName AS DisplayName
+
+FROM investigationorgmapping IOM --where orgid=167 and Display='Y'
+
+INNER JOIN Organization t ON t.OrgID= IOM.OrgID
+
+INNER JOIN LOGIN l ON l.OrgID = t.OrgID
+
+WHERE l.loginID = @lID and IOM.Display='Y'
+
+
+
+Union 
+
+
+
+SELECT Cast(IOG.AttGroupID AS VARCHAR(10))+ '-'+IGM.Type AS Code
+
+,IOG.BillingName AS DisplayName
+
+FROM invorggroup IOG --where orgid=167 and isnonorderable='N'
+INNER JOIN InvGroupMaster IGM ON IGM.GroupID=IOG.AttGroupID
+INNER JOIN Organization t ON t.OrgID= IOG.OrgID
+INNER JOIN LOGIN l ON l.OrgID = t.OrgID
+WHERE l.loginID = @lID and  ISNULL(IOG.isnonorderable,'N')='N'
+
+
+
+--SELECT Cast(D.DeptID AS VARCHAR(10)) AS Code
+
+--,D.DeptName AS DisplayName
+
+--FROM investigationorgmapping (NOLOCK) D
+
+--INNER JOIN Organization t ON t.OrgID= D.OrgID
+
+--INNER JOIN LOGIN l ON l.OrgID = t.OrgID and Display='Y'
+
+--WHERE l.loginID = @lID
+
+
+END
+

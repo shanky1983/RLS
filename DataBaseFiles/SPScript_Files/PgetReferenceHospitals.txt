@@ -1,0 +1,13 @@
+CREATE proc  PgetReferenceHospitals(
+@porgid BIGINT
+ ,@PparamType VARCHAR(20) = NULL
+ ,@Pparamvalue SMALLINT = NULL
+ ,@Debugflag BIT = 0
+ )
+ as 
+ begin
+ select '123' as Empty,LRO.LabRefOrgID,RefOrgName,Status,Code,ReferringType,LRA.ADD1,LRA.MobileNumber
+ from LabReferenceORg LRO with(NOLOCK)
+ left join labreforgaddress LRA with(NOLOCK) on LRA.LabRefOrgID=LRO.LabRefOrgID --and LRA.OrgID=LRO.OrgID
+ where LRO.OrgID=@porgid
+ End

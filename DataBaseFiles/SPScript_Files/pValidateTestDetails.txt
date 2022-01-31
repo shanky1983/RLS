@@ -1,0 +1,30 @@
+CREATE procedure pValidateTestDetails
+(
+@Orderedtests   Nvarchar(max),
+@ContextInfo       [UDT_CONTEXT] READONLY,
+@Invalidtest     Nvarchar(max) OUTPUT
+)
+as 
+Begin 
+DECLARE @TCODES as table (TestCode varchar(50))
+DECLARE @TCODES1 as table (TestCode varchar(50))
+DECLARE @ContentCount int
+DECLARE @ContentCount1 int
+insert into @TCODES
+   select Discount from dbo.Splitfunc(@Orderedtests,',')
+   SELECT @ContentCount= COUNT(1) FROM @TCODES
+
+insert into @TCODES1
+   select CM.CodeName from CodeMaster CM
+   Inner join @TCODES T on CM.CodeName=T.TestCode
+   inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID and CSM.OrgID=224
+   SELECT @ContentCount1= COUNT(1) FROM @TCODES1
+
+if(@ContentCount = @ContentCount1)
+select @Invalidtest =''
+else
+select @Invalidtest=STUFF(
+                 ( select ',' + TestCode from @TCODES where TestCode not in (select TestCode from @TCODES1) FOR XML PATH ('')), 1, 1, ''
+               )
+select @Invalidtest
+End

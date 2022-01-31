@@ -1,0 +1,61 @@
+
+CREATE PROCEDURE pHCUserProcess_LIMSAPI (
+     @UsersList [dbo].[UsersInfo] READONLY
+)
+AS
+    DECLARE @ServerDateTime AS DATETIME
+    SET @ServerDateTime = Getdate()
+
+  BEGIN
+    --------------------------------------- User Process Start ----------------------------------------------
+
+    CREATE TABLE #TempUsers
+	(   Sno  SMALLINT identity(1, 1),   
+	    OrgID INT,
+		UserID BIGINT,
+		NAME NVARCHAR(200),
+		LoginID NVARCHAR(50),
+		LoginName NVARCHAR(200),
+		Password NVARCHAR(50),
+		MobileNumber NVARCHAR(20),
+		ServerName NVARCHAR(300),
+		ServerUrl NVARCHAR(500)
+    )
+
+
+		INSERT INTO #TempUsers
+		SELECT distinct OrgID, UserID, Name, loginID, LoginName, [Password], MobileNumber, ServerName, [URL]
+		FROM @UsersList where LEN(ISNULL(MobileNumber,0)) >= 10
+
+	    UPDATE EIB
+		SET [Password] = Temp.[Password],
+			MobileNo = Temp.MobileNumber,
+			ModifiedAt = @ServerDateTime,
+			ModifiedBy = -1
+		FROM #TempUsers Temp
+		INNER JOIN ERPUserInBound (Nolock) EIB
+		   ON EIB.UserID= Temp.UserID
+			   AND EIB.LoginID 
+= Temp.LoginID
+			   AND EIB.OrgID = Temp.OrgID
+		       AND EIB.ServerName = Temp.ServerName
+		       AND EIB.[URL] = Temp.ServerUrl
+		  
+
+		INSERT INTO ERPUserInBound
+				    ([UserID],	      [UserName],	  [LoginID],     [LoginName],    [Password],	 [MobileNo],	
+				     [ServerName],    [Url],          [OrgID],       [CreatedBy],    [CreatedAt] )
+        SELECT    Temp.UserID,      Temp.[NAME],    Temp.LoginID,  Temp.LoginName, Temp.[Password], Temp.MobileNumber,
+			      Temp.ServerName,  Temp.ServerUrl, Temp.OrgID,     -1,            @ServerDateTime
+		FROM #TempUsers Temp
+		  LEFT JOIN ERPUserInBound (NolocK) EIB 
+		          ON EIB.UserID= Temp.UserID
+		             AND EIB.OrgID = Temp.OrgID
+		WHERE EIB.[URL] IS NULL
+
+	--------------------------------------- User Process End ----------------------------------------------
+
+	drop table #TempUsers;
+  
+ END
+

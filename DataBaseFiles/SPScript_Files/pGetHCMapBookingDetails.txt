@@ -1,0 +1,733 @@
+CREATE PROCEDURE pGetHCMapBookingDetails
+(
+  @BookingNumber  BIGINT,
+  @pUserID BIGINT,
+  @ContextInfo    [UDT_CONTEXT] READONLY
+)
+AS
+BEGIN
+ ---pGetNewBookingDetails_LIMSAPI '','20200702','limsapi'
+ declare  @pDateRange DATETIME
+ DECLARE @pLocationID INT
+ DECLARE @pFdate DATETIME, @pTdate DATETIME
+ DECLARE @pOrgID INT = NULL, @pOrgAddrID INT = NULL
+
+ set @pDateRange =  CONVERT(DATE, GETDATE(), 120)
+-- set @pDateRange=Convert(Date,'2020-08-21 14:51:00.000',120)
+ --select @pDateRange 
+
+ SELECT @pFdate=CONVERt(DATE,@pDateRange), @pTdate=DATEADD(ss,-1,DATEADD(dd,1,@pFdate))
+
+ --IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+ --  BEGIN
+	--  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID
+	--	FROM Integrationtypemaster ITM WITH(NOLOCK) 
+	--		INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+	--		INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+	--	WHERE ITM.IntegrationTypeName = @pOrgCode
+	--END
+	  if( @pUserID = 0 )
+       set @pUserID=null
+		  if( @BookingNumber = 0 )
+        set @BookingNumber=null
+	select @pOrgID=ORgid ,@pOrgAddrID =OrgAddressID from @ContextInfo
+
+ --IF @UserID = 0 OR @UserID = -1
+--    SET @UserID = null
+
+ CREATE TABLE #Inventorycount
+ (
+   BookingID BIGINT,
+   Invcount INT
+ )
+ 
+ CREATE TABLE #TempBookings
+ (
+	BookingID BIGINT,
+	Salutation NVARCHAR(10),
+	Name NVARCHAR(150),
+	--FirstName NVARCHAR(150),
+	--MiddleName NVARCHAR(150),
+	--LastName NVARCHAR(150),
+	Gender NVARCHAR(10),
+	Age NVARCHAR(30),
+	DateofBirth DATETIME,
+	Address NVARCHAR(500),
+	City NVARCHAR(75),
+	State NVARCHAR(150),
+	Country NVARCHAR(150),
+	PostalCode NVARCHAR(10),
+	MobileNumber NVARCHAR(30),
+	Email NVARCHAR(100),
+	SampleCollectionTime DATETIME,
+	DispatchType NVARCHAR(100),
+	TotalAmount DECIMAL(18,2),
+	DueAmount DECIMAL(18,2),
+	PaymentStatus NVARCHAR(50),
+	Status NVARCHAR(50),
+	SampleCode INT, 
+	SampleContainerID INT, 
+	TestCode NVARCHAR(100),
+	InventoryCount INT,
+	UserID bigint,
+	LoginID bigint,
+	PhleboName NVARCHAR(100),RescheduleToken bigint
+ )
+
+
+  DECLARE @Type      NVARCHAR(20) = NULL,  
+          @ID        BIGINT = NULL ,
+		  @BookingId BIGINT=NULL
+ CREATE TABLE #Testinfo 
+(  
+    SNO       SMALLINT IDENTITY(1, 1),  
+    ID        BIGINT,  
+    Type      NVARCHAR(20),
+	BookingId BIGINT
+)
+
+DECLARE @Loop  INT = 1, @Count INT = 0  
+      
+CREATE TABLE #TempResult 
+(  
+    sno                    INT IDENTITY(1, 1),  
+	BookingId BIGINT,
+    Investigationid        BIGINT,  
+    TYPE                   nvarchar(20),  
+    InvestigationName      nvarchar(100),  
+    SampleContainerID      INT,  
+	SampleContainerName NVARCHAR(100),
+    SampleCode             INT,  
+    SampleDescription             nvarchar(100),  
+    [SampleContainerColor] nvarchar(100) ,
+	Price                  Decimal(18,2),
+	TestCode               nvarchar(100)
+)  
+  
+
+  --select @pFdate,@pTdate
+
+ INSERT #Testinfo  
+             (ID,  
+              Type,
+			  BookingId 
+              )  
+      SELECT 
+	  PO.ID,  
+             PO.TYPE,
+			 BI.BookingId 
+    FROM   Bookings BI
+	inner join PreOrderedInvestigations PO  
+     ON PO.QuotationId = Bi.BookingID  
+      WHERE (BI.CollectionTime >= @pFdate AND BI.CreatedAt < @pTdate ) AND
+      Bi.SourceType ='Home Collection'  	  and 
+	  (UserID=@pUserID or @pUserID=0)
+
+      SELECT @Count = Count(1)  
+      FROM   #Testinfo  
+  
+      WHILE @loop <= @Count  
+        BEGIN  
+            SELECT @ID = NULL,  
+                   @TYPE = NULL  
+  
+            SELECT @ID = ID,	
+                   @Type = Type,
+				   @BookingId=BookingId 
+            FROM   #Testinfo  
+            WHERE  Sno = @Loop  
+  
+            IF @Type = 'PKG'  
+              BEGIN ;  
+                  WITH Pkgdet  
+                       AS (SELECT Cast(grp.Attgroupid AS BIGINT) AS Parentattgroupid,  
+                                  Cast(grp.orggroupid AS BIGINT) AS Parentorggroupid,  
+     PM.ID         AS childgroupid,
+								  Grp.TestCode 
+                           FROM   invorggroup Grp (nolock) 
+                LEFT JOIN Invpackagemapping PM (nolock)  
+                                         ON GRP.Orggroupid = PM.Packageid  
+  AND PM.Type = 'PKG'  
+                                            AND Isnull(PM.Active, 'A') IN( 'A', 'Y' )  
+						   WHERE  grp.Attgroupid = @ID  
+                               AND grp.Orgid = @pOrgid  
+                           UNION ALL  
+                           SELECT Pkgdet.Parentorggroupid              AS Parentattgroupid,  
+                                  pkgdet.Parentorggroupid              AS Parentorggroupid,  
+                                  Cast(gdet.Investigationid AS BIGINT) AS Childgroupid,
+								  Cast(TestCode AS NVARCHAR(30)) As TestCode
+                           FROM   pkgdet  
+                                  INNER JOIN invgroupmapmaster gdet (nolock)  
+                                          ON pkgdet.childgroupid = gdet.GroupID  
+                                             AND gdet.parent = 'Y'  
+                                             AND Isnull(gdet.active, 'Y') = 'Y')  
+                  INSERT #TempResult  
+                         (Investigationid,  
+                          TYPE,  
+                          InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+                          SampleCode,  
+                          SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)  
+                  SELECT DISTINCT g.attgroupid                    AS Investigationid,  
+                                  'Pkg'                           AS TestType,  
+                                  g.Displaytext                   AS InvestigationName,  
+                                  con.SampleContainerID,  
+								  Isnull(con.ContainerName, '') ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId,
+								  g.TestCode 
+                  FROM   pkgdet  
+                         INNER JOIN invorggroup g (nolock)  
+                                 ON pkgdet.Parentorggroupid = g.orggroupid  
+                         INNER JOIN invgroupmapmaster Gm (nolock)  
+                                 ON pkgdet.childgroupid = gm.GroupID  
+                                    AND gm.Parent = 'N'  
+                                    AND gm.active = 'Y'  
+                         INNER JOIN investigationorgmapping Invmap (nolock)  
+                                 ON gm.Investigationid = invmap.investigationid  
+                                    AND invmap.Orgid = @pOrgID  
+                         INNER JOIN InvSampleMaster Sam (nolock)  
+                                 ON invmap.SampleCode = sam.SampleCode  
+                                    AND sam.orgid = @pOrgID  
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                                 ON Invmap.SampleContainerID = Con.SampleContainerID  
+                                    AND con.OrgID = @pOrgID  
+              END  
+  
+            IF @Type = 'GRP'  
+              BEGIN ;  
+                  WITH grpdet  
+                       AS (SELECT Cast(grp.Attgroupid AS BIGINT)     AS Parentattgroupid,  
+                                  Cast(grp.orggroupid AS BIGINT)     AS Parentorggroupid,  
+                                  Cast(GM.Investigationid AS BIGINT) AS childgroupid,
+								  Grp.TestCode 
+                           FROM   invorggroup Grp (nolock)  
+                                  LEFT JOIN invgroupmapmaster GM (nolock)  
+          ON GRP.Orggroupid = GM.groupid  
+   AND GM.parent = 'Y'  
+ AND GM.active = 'Y'  
+                           WHERE  grp.attgroupid = @ID  
+                                  AND grp.Orgid = @pOrgid  
+                           UNION ALL  
+SELECT grpdet.Parentorggroupid              AS Parentattgroupid,  
+                                  grpdet.Parentorggroupid             AS Parentorggroupid,  
+                                  Cast(gdet.Investigationid AS BIGINT) AS Childgroupid,
+								  Cast(TestCode AS NVARCHAR(30)) As TestCode  
+               FROM   grpdet  
+                                  INNER JOIN invgroupmapmaster gdet (nolock)  
+                                          ON grpdet.childgroupid = gdet.GroupID  
+                                             AND gdet.parent = 'Y'  
+                                             AND gdet.active = 'Y'
+											 WHERE Parentattgroupid < 500) --maximum recursion level 
+											 
+                  INSERT #TempResult  
+                          (Investigationid,  
+                          TYPE,  
+                          InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+                          SampleCode,  
+                          SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)   
+                  SELECT DISTINCT g.attgroupid                             AS Investigationid,  
+                                  'GRP'                                    AS TestType,  
+                                  g.Displaytext                            AS InvestigationName,  
+                                 con.SampleContainerID,  
+								  Isnull(con.ContainerName, '') ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId,
+								  g.TestCode  
+                  FROM   (SELECT Parentorggroupid,  
+                                 childgroupid  
+                          FROM   grpdet  
+                          WHERE  childgroupid IS NOT NULL  
+                          UNION  
+                          SELECT Parentorggroupid,  
+                                 Parentorggroupid AS childgroupid  
+                          FROM   grpdet) tp  
+                          INNER JOIN invorggroup g (nolock)  
+                                 ON tp.Parentorggroupid = g.orggroupid  
+                         INNER JOIN invgroupmapmaster Gm (nolock)  
+                                 ON tp.childgroupid = gm.GroupID  
+                                    AND gm.Parent = 'N'  
+                                    AND gm.active = 'Y'  
+                         INNER JOIN investigationorgmapping Invmap (nolock)  
+                                 ON gm.investigationid = invmap.investigationid  
+                                    AND invmap.Orgid = @pOrgID  
+                         INNER JOIN InvSampleMaster Sam (nolock)  
+                                 ON invmap.SampleCode = sam.SampleCode  
+                                    AND sam.orgid = @pOrgID  
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                                 ON Invmap.SampleContainerID = Con.SampleContainerID  
+                                    AND con.OrgID = @pOrgID  
+									OPTION (MAXRECURSION 0) --- maximum recursion level
+              END  
+  
+            IF @Type = 'INV'  
+              BEGIN  
+                  INSERT #TempResult  
+                          (Investigationid,  
+                          TYPE,  
+                          InvestigationName,  
+                          SampleContainerID,  
+						  SampleContainerName,
+                          SampleCode,  
+                          SampleDescription,
+                          [SampleContainerColor],
+						  BookingID,
+						  TestCode)  
+   SELECT invmap.Investigationid,  
+                         'INV'                AS TestType,  
+                         invmap.Displaytext   AS InvestigationName,  
+                         con.SampleContainerID,  
+                       
+								  Isnull(con.ContainerName, '') ,
+                                  sam.sampleCode,  
+								  sam.SampleDesc,
+                                  Con.ContainerColor              AS [SampleContainerColor],
+								  @BookingId ,
+								  Invmap.TestCode 
+                  FROM   investigationorgmapping Invmap (nolock)  
+                   INNER JOIN InvSampleMaster Sam (nolock)  
+                    ON invmap.SampleCode = sam.SampleCode  
+                                    AND sam.orgid = @pOrgID  
+                         INNER JOIN InvestigationSampleContainer Con (nolock)  
+                      ON Invmap.SampleContainerID = Con.SampleContainerID  
+                                    AND con.OrgID = @pOrgID  
+                  WHERE  invmap.Orgid = @pOrgID  
+                         AND invmap.Investigationid =@ID  
+              END  
+
+            SELECT @Loop = @Loop + 1  
+        END  
+
+	    -----Due Amount & TotalAmount Logic to be included
+
+		Declare @loginid bigint,@ppUserID bigint
+
+
+
+
+
+
+
+		if (@BookingNumber>0 and  @pUserID>0)
+		begin
+		select @ppUserID=userid from Users where LoginID=@pUserID and Orgid=@pOrgID
+		    INSERT INTO #TempBookings 
+		   (	BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalAmount,  DueAmount, PaymentStatus, 
+				Status, UserID,LoginID,PhleboName,RescheduleToken
+				)
+		SELECT DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State, Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+				B.BookingStatus as Status, U.UserID as UserID,U.LoginID as LoginID,U.Name as PhleboName,b.RescheduleToken
+		FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode='en_GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)                
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+
+		WHERE B.OrgID = @pOrgID 
+		-- AND (B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+	 and B.UserID=@ppUserID -- @pUserID   
+		--and (B.BookingID=@pUserID or @pUserID=0)
+		and B.BookingID = @BookingNumber --and B.BookingStatus="CD"
+	--	and (B.UserId=@pUserID or @pUserID=0)
+
+	--and B.BookingStatus!='CD' and B.BookingStatus!='Completed'
+
+
+
+
+
+		end
+		else if (@BookingNumber>0 )
+		
+		begin
+--	select 'hi1'
+
+
+	--	select @loginid=userid from Bookings where BookingID=@BookingNumber  and ORgid= @pOrgID 
+
+	--	select @ppUserID=UserID from Users where Userid=@loginid and ORgid= @pOrgID 
+
+	    INSERT INTO #TempBookings 
+		   (	BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalAmount,  DueAmount, PaymentStatus, 
+				Status, UserID,LoginID,PhleboName,RescheduleToken
+				)
+		SELECT DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State, Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+				B.BookingStatus as Status, U.UserID as UserID,U.LoginID as LoginID,U.Name as PhleboName,b.RescheduleToken
+		FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode='en_GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)                
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+
+		WHERE B.OrgID = @pOrgID 
+		-- AND (B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+	--	 and B.UserID=COALESCE(B.UserID,@ppUserID)
+
+		--and (B.BookingID=@pUserID or @pUserID=0)
+		and B.BookingID = @BookingNumber
+	--	and B.BookingStatus!='CD' and B.BookingStatus!='Completed'
+	--	and (B.UserId=@pUserID or @pUserID=0)
+
+	--select * from #TempBookings
+	end
+	else if (@pUserID>0)
+	begin
+ --select 'h'
+if EXISTS ((select  * from USERS where USERID=@pUserID and Orgid=@pOrgID))
+begin
+	select  @ppUserID=LoginID from Users where UserID=@pUserID and Orgid=@pOrgID
+	--SELECT 'HI'
+	   INSERT INTO #TempBookings 
+		   (BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalAmount,  DueAmount, PaymentStatus, 
+				Status, UserID,LoginID,PhleboName,RescheduleToken
+				)
+		SELECT DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State, Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+				B.BookingStatus as Status, U.UserID as UserID,U.LoginID as LoginID,U.Name as PhleboName,b.RescheduleToken
+		FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode='en_GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)                
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+
+		WHERE B.OrgID = @pOrgID  --and  B.BookingStatus!='Completed'
+		 AND (B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+	 and B.USERID=@pUserID 
+		--and (B.BookingID=@pUserID or @pUserID=0)
+		and B.BookingID = COALESCE(B.BookingID,@BookingNumber)
+		
+	--	and (B.UserId=@pUserID or @pUserID=0)
+		end
+		else
+		begin
+	--	select 'h'
+	select  @ppUserID=userid   from Users where  LoginID=@pUserID and Orgid=@pOrgID
+		   INSERT INTO #TempBookings 
+		   (BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalAmount,  DueAmount, PaymentStatus, 
+				Status, UserID,LoginID,PhleboName,RescheduleToken
+				)
+		SELECT DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State, Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+				B.BookingStatus as Status, U.UserID as UserID,U.LoginID as LoginID,U.Name as PhleboName,b.RescheduleToken
+		FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode='en_GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)                
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+
+		WHERE B.OrgID = @pOrgID  --and B.BookingStatus<>'Completed'
+		 AND (B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+	 and B.USERID=@ppUserID 
+		--and (B.BookingID=@pUserID or @pUserID=0)
+		and B.BookingID = COALESCE(B.BookingID,@BookingNumber)
+	
+		end
+
+
+		 
+	end
+
+		INSERT INTO #Inventorycount (BookingID, Invcount) 
+		SELECT tgr.BookingId, count(tgr.SampleCode)
+			FROM #TempResult tgr
+		GROUP BY tgr.BookingId 
+
+        UPDATE T SET T.InventoryCount = S.Invcount 
+		FROM #Inventorycount S
+		INNER JOIN #TempBookings T ON S.BookingID = T.BookingID
+		
+		SELECT 'tempbookings',BookingID, Salutation, Name, Gender, Age, DateofBirth, Address, City, State, Country, PostalCode,	
+		       MobileNumber, Email, SampleCollectionTime, DispatchType, TotalAmount, DueAmount, PaymentStatus, 		
+			    CASE
+			 WHEN  (Status  = 'B' or  Status  = 'Booked') AND  RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (Status  = 'B' or  Status  = 'Booked') THEN 'Booked'
+               WHEN (Status = 'CD'  or Status  = 'Completed') THEN 'Completed'
+            WHEN (Status  = 'C' or Status  =  'Canceled') THEN 'Canceled'
+			WHEN (Status  = 'IP' or Status  =  'In-progress') THEN 'In-progress'
+			   WHEN (Status  = 'TS' or Status  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (Status  = 'TC'  or Status  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (Status  = 'RD' or Status  = 'Reached Destination') THEN 'Reached Destination'
+				when (Status  ='A'   or Status  ='Assigned') THEN 'Assigned'
+            
+             END AS Status, 
+			 UserID, LoginID,PhleboName as  Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID,
+			 	 CASE
+			 WHEN (Status  = 'B' or  Status  = 'Booked') AND  RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (Status  = 'B' or  Status  = 'Booked') THEN 'New Booking Done' 
+               WHEN (Status  = 'R'  or Status  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (Status  = 'C' or Status  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (Status  = 'TS' or Status  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (Status  = 'TC'  or Status  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (Status  = 'RD' or Status  = 'ReachedDestination') THEN 'Reached Destination' 
+				when (Status  ='A'   or Status  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+		FROM #TempBookings where Status <>'R' and Status<>'Completed'
+
+		SELECT  '#TempResult', BookingId as BookingID,  SampleCode as SampleID, SampleDescription as SampleName, SampleContainerID as ContainerID, 
+		       SampleContainerName as ContainerName,  ISNULL([SampleContainerColor],'') as SampleContainerColour, ISNULL(TestCode,'') as TestCode, ISNULL(Price,0) as Price
+		FROM #TempResult
+
+	 /*
+	
+			select  '#bookhist', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				BH.CollectionAddress + ' ' + BH.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (BH.BookingStatus  = 'B' or  BH.BookingStatus  = 'Booked') AND  BH.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (BH.BookingStatus  = 'B' or  BH.BookingStatus  = 'Booked') THEN 'Booked'
+               WHEN (BH.BookingStatus  = 'CD'  or BH.BookingStatus  = 'Completed') THEN 'Completed'
+               WHEN (BH.BookingStatus  = 'C' or BH.BookingStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (BH.BookingStatus  = 'TS' or BH.BookingStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (BH.BookingStatus  = 'TC'  or BH.BookingStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (BH.BookingStatus  = 'RD' or BH.BookingStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (BH.BookingStatus  ='A'   or BH.BookingStatus  ='Assigned') THEN 'Assigned'
+					WHEN (BH.BookingStatus   = 'IP' or BH.BookingStatus   =  'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 BH.UserID as UserID,U.LoginID as LoginID,U.Name as  Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (BH.BookingStatus  = 'B' or  BH.BookingStatus  = 'Booked') AND  BH.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (BH.BookingStatus  = 'B' or  BH.BookingStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (BH.BookingStatus  = 'R'  or BH.BookingStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (BH.BookingStatus  = 'C' or BH.BookingStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (BH.BookingStatus  = 'TS' or BH.BookingStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (BH.BookingStatus  = 'TC'  or BH.BookingStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (BH.BookingStatus  = 'RD' or BH.BookingStatus  = 'ReachedDestination') THEN 'Reached Destination' 
+				when (BH.BookingStatus  ='A'   or BH.BookingStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from Bookings_HIST BH inner join
+		#TempBookings TB on BH.BookingID=TB.BookingID --and BH.UserID = TB.UserID
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = BH.TITLECode AND SOM.OrgID = BH.OrgID
+			INNER JOIN Users U with(Nolock) ON BH.UserID = U.UserID and BH.OrgID = U.OrgID 
+		where BH.BookingID=@BookingNumber --and status!='R'
+		union all
+			select  distinct '#book', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'Booked'
+               WHEN (B.BookingStatus  = 'CD'  or B.BookingStatus  = 'Completed') THEN 'Completed'
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Assigned'
+					WHEN (B.BookingStatus   = 'IP' or B.BookingStatus   =  'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 B.UserID as UserID,U.LoginID as LoginID,U.Name as Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (B.BookingStatus  = 'R'  or B.BookingStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'ReachedDestination') THEN 'Reached Destination' 
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from Bookings B 
+				left join #TempBookings TB on B.BookingID=TB.BookingID and B.BookingStatus ! ='A'   or B.BookingStatus  !='Assigned'
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+		where B.BookingID=@BookingNumber
+
+	union all
+		select  distinct '#book', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'Booked'
+               WHEN (B.BookingStatus  = 'CD'  or B.BookingStatus  = 'Completed') THEN 'Completed'
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Assigned'
+					WHEN (B.BookingStatus   = 'IP' or B.BookingStatus   =  'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 B.UserID as UserID,U.LoginID as LoginID,U.Name as Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (B.BookingStatus  = 'R'  or B.BookingStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'ReachedDestination') THEN 'Reached Destination' 
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from ERPHCBookingInBound ERHC 
+				left join #TempBookings TB on ERHC.BookingID=TB.BookingID 
+				left join Bookings B  on B.BookingID=TB.BookingID  and (B.BookingStatus ! ='A'   or B.BookingStatus  !='Assigned')
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+		where B.BookingID=@BookingNumber
+		union all
+		select  distinct '#book', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'Booked'
+               WHEN (B.BookingStatus  = 'CD'  or B.BookingStatus  = 'Completed') THEN 'Completed'
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Assigned'
+					WHEN (B.BookingStatus   = 'IP' or B.BookingStatus   =  'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 B.UserID as UserID,U.LoginID as LoginID,U.Name as Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (B.BookingStatus  = 'B' or  B.BookingStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (B.BookingStatus  = 'R'  or B.BookingStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (B.BookingStatus  = 'C' or B.BookingStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (B.BookingStatus  = 'TS' or B.BookingStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (B.BookingStatus  = 'TC'  or B.BookingStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (B.BookingStatus  = 'RD' or B.BookingStatus  = 'ReachedDestination') THEN 'Reached Destination' 
+				when (B.BookingStatus  ='A'   or B.BookingStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from ERPHCBookingInBound_HIST ERHC 
+				left join #TempBookings TB on ERHC.BookingID=TB.BookingID 
+				left join  Bookings B  on B.BookingID=TB.BookingID and (B.BookingStatus ! ='A'   or B.BookingStatus  !='Assigned' )
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+		where B.BookingID=@BookingNumber
+
+		*/
+
+		select  distinct '#book', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') THEN 'Booked'
+               WHEN (ERHC.TripStatus  = 'CD'  or ERHC.TripStatus  = 'Completed') THEN 'Completed'
+               WHEN (ERHC.TripStatus  = 'C' or ERHC.TripStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (ERHC.TripStatus  = 'TS' or ERHC.TripStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (ERHC.TripStatus  = 'TC'  or ERHC.TripStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (ERHC.TripStatus  = 'RD' or ERHC.TripStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (ERHC.TripStatus  ='A'   or ERHC.TripStatus  ='Assigned') THEN 'Assigned'
+					WHEN (ERHC.TripStatus   = 'IP' or ERHC.TripStatus  = 'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 B.UserID as UserID,U.LoginID as LoginID,U.Name as Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (ERHC.TripStatus  = 'B' or ERHC.TripStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (ERHC.TripStatus  = 'B' or ERHC.TripStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (ERHC.TripStatus  = 'R'  or ERHC.TripStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (ERHC.TripStatus  = 'C' or ERHC.TripStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (ERHC.TripStatus  = 'TS' or ERHC.TripStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (ERHC.TripStatus  = 'TC'  or ERHC.TripStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (ERHC.TripStatus  = 'RD' or ERHC.TripStatus  = 'ReachedDestination') THEN 'Reached Destination'
+					 WHEN (ERHC.TripStatus  = 'IP' or ERHC.TripStatus  = 'Inprogress') THEN 'Still inprogress' 
+				when (ERHC.TripStatus  ='A'   or ERHC.TripStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from ERPHCBookingInBound ERHC 
+				left join #TempBookings TB on ERHC.BookingID=TB.BookingID 
+				left join Bookings B  on B.BookingID=TB.BookingID  and (B.BookingStatus ! ='A'   or B.BookingStatus  !='Assigned')
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+		where B.BookingID=@BookingNumber
+		union all
+		select  distinct '#book', TB.BookingID as [BookingID], TB.Salutation as [Salutation], TB.Name as [Name],
+				TB.Gender as [Gender], TB.Age as [Age],TB.DateofBirth as [DateofBirth],
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as [Address], TB.City as [City],TB.State as [State], TB.Country as [Country], TB.PostalCode as [PostalCode], TB.MobileNumber as [MobileNumber], 
+				tb.Email as [Email], TB.SampleCollectionTime as [SampleCollectionTime], TB.DispatchType as [DispatchType], 0.00 as TotalAmount, 0.00 as DueAmount, '' as PaymentStatus, 
+
+				 CASE
+			 WHEN  (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Rescheduled'
+               WHEN (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') THEN 'Booked'
+               WHEN (ERHC.TripStatus  = 'CD'  or ERHC.TripStatus  = 'Completed') THEN 'Completed'
+               WHEN (ERHC.TripStatus  = 'C' or ERHC.TripStatus  =  'Canceled') THEN 'Canceled'
+			   WHEN (ERHC.TripStatus  = 'TS' or ERHC.TripStatus  =  'Trip Started') THEN 'Trip Started'
+			   	   WHEN (ERHC.TripStatus  = 'TC'  or ERHC.TripStatus  ='Trip Can-celled') THEN 'Trip Can-celled'
+				     WHEN (ERHC.TripStatus  = 'RD' or ERHC.TripStatus  = 'Reached Destination') THEN 'Reached Destination'
+				when (ERHC.TripStatus  ='A'   or ERHC.TripStatus  ='Assigned') THEN 'Assigned'
+					WHEN (ERHC.TripStatus   = 'IP' or ERHC.TripStatus   =  'In-progress') THEN 'In-progress'
+            
+             END AS [Status],
+				 	 B.UserID as UserID,U.LoginID as LoginID,U.Name as Remarks,@pOrgID as OrgID, @pOrgAddrID as LocationID ,
+				 CASE
+			 WHEN (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') AND  B.RescheduleToken=1 THEN 'Sample not Collected Different Time Rescheduled'
+               WHEN (ERHC.TripStatus  = 'B' or  ERHC.TripStatus  = 'Booked') THEN 'New Booking Done' 
+               WHEN (ERHC.TripStatus  = 'R'  or ERHC.TripStatus  = 'Completed') THEN 'Sample Collection Collected' 
+               WHEN (ERHC.TripStatus  = 'C' or ERHC.TripStatus  =  'Cancelled') THEN 'Booking Cancelled' 
+			   WHEN (ERHC.TripStatus  = 'TS' or ERHC.TripStatus  =  'TripStarted') THEN 'Trip Started to Patient Address' 
+			   	   WHEN (ERHC.TripStatus  = 'TC'  or ERHC.TripStatus  ='TripCancelled') THEN 'Trip Cancelled' 
+				     WHEN (ERHC.TripStatus  = 'RD' or ERHC.TripStatus  = 'ReachedDestination') THEN 'Reached Destination' 
+					 WHEN (ERHC.TripStatus  = 'IP' or ERHC.TripStatus  = 'Inprogress') THEN 'Still inprogress'
+				when (ERHC.TripStatus  ='A' or ERHC.TripStatus  ='Assigned') THEN 'Sample Collection Task Assigned' 
+             END AS [Reason]
+				
+				from ERPHCBookingInBound_HIST ERHC 
+				left join #TempBookings TB on ERHC.BookingID=TB.BookingID 
+				left join  Bookings B  on B.BookingID=TB.BookingID and (B.BookingStatus ! ='A'   or B.BookingStatus  !='Assigned' )
+		left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+		where B.BookingID=@BookingNumber
+
+		drop table #Inventorycount
+		drop table #TempBookings
+		drop table #TempResult
+END

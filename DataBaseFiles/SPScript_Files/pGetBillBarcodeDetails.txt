@@ -1,0 +1,34 @@
+CREATE PROCEDURE [dbo].[pGetBillBarcodeDetails]                    
+ @pVisitID BIGINT,  
+ @OrgID INT                    
+AS                    
+BEGIN    
+Declare @pReferVisitID Bigint,@OldOrgID INT
+Declare @pReferOrgCVisitID Bigint,@OrgCOrgID INT
+Select @pReferVisitID= ISNULL(ReferVisitID,0) from PatientVisit (nolock) where OrgID =@OrgID and PatientVisitID =@pVisitID
+select @OldOrgID = OrgID from PatientVisit (nolock) where PatientVisitID =@pReferVisitID
+
+If ((Select Isnull(ReferVisitID,0) from PatientVisit (nolock) where PatientVisitId=@pReferVisitID)>0)
+Begin
+Select @pReferVisitID = ReferVisitID from PatientVisit (nolock) where PatientVisitId=@pReferVisitID
+Select @OldOrgID=OrgID from PatientVisit (nolock) where PatientVisitId=@pReferVisitID
+End
+
+IF  EXISTS(
+  select ckm.ConfigKeyID from configkeymaster ckm with(nolock) 
+  INNER JOIN configOrgmaster COM with(nolock) ON ckm.ConfigKeyID=COM.ConfigKeyID
+  where ckm.ConfigKey='BillBarcode' AND COM.OrgID=@OrgID)
+BEGIN
+If(@pReferVisitID >0)
+Begin
+   SELECT BillBarcode FROM ReportBarcode WITH (NOLOCK)
+    WHERE VisitID=@pReferVisitID AND OrgID=@OldOrgID 
+End
+Else
+Begin
+
+ SELECT BillBarcode FROM ReportBarcode WITH (NOLOCK)
+ WHERE VisitID=@pVisitID AND OrgID=@OrgID 
+END  
+END
+end

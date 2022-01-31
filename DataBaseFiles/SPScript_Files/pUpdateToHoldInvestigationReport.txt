@@ -1,0 +1,62 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pUpdateToHoldInvestigationReport]  
+ @pUDT [PatientInvestigation] READONLY,  
+ @returnStatus [int] OUTPUT,  
+ @ContextInfo [UDT_Context] READONLY  
+WITH EXECUTE AS OWNER  
+AS  
+begin  
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE  
+ SET NOCOUNT ON;   
+BEGIN TRY  
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)  
+SET @returnStatus=-1  
+Declare @refervisitid bigint  
+  
+select top 1 @refervisitid= refervisitid  from patientvisit PV  
+Inner join  @pUDT T on PV.patientvisitid =T.patientvisitid  
+  
+UPDATE   
+ PIS SET  IsReportable = case when T.IsAutoAuthorize ='N' then 0 else 1 end from PatientInvestigation PIS  
+ inner join @pUDT T on  PIS.InvestigationID=T.InvestigationID where PIS.PatientVisitID=@refervisitid   
+  
+  
+UPDATE   
+ PIS SET  IsReportable = case when T.IsAutoAuthorize ='N' then 0 else 1 end from PatientInvestigation PIS  
+ inner join @pUDT T on PIS.PatientInvID=T.InstrumentID and PIS.PatientVisitID=T.PatientVisitID and PIS.InvestigationID=T.InvestigationID  
+  
+Declare @temptable [PatientInvestigation]  
+insert into @temptable  
+select * from @pUDT  
+  
+update ISH set reason= T.Reason from InvestigationStatusHistory ISH  
+inner join @pUDT  T on ISH.InvestigationID=T.InvestigationID and ISH.PatientVisitID=T.PatientVisitID  
+  
+delete T from @temptable T  
+inner join InvestigationStatusHistory TT on T.InvestigationID=TT.InvestigationID and T.PatientVisitID=TT.PatientVisitID  
+  
+  
+INSERT INTO InvestigationStatusHistory(PatientVisitID,InvestigationID,InvestigationName,Type                          
+,ModifiedBy,modifiedat,UID,OrgID,OrginalStatus,AlteredStatus,ApprovedBy,Reason)                          
+SELECT PatientVisitID,InvestigationID,InvestigationName,Type,ApprovedBy,getdate(),GUID,OrgID,Status,                                         
+Status,CreatedBy, Reason FROM @temptable     
+  
+SET @returnStatus=0  
+END TRY  
+BEGIN CATCH                                   
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pUpdateToHoldInvestigationReport'   
+    
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH  
+end  
+  
+SET ANSI_NULLS ON  
+  
+  
+  
+  
+  
+  

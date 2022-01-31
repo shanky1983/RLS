@@ -1,0 +1,30 @@
+CREATE procedure PGetCustomizedREportDetails
+(
+@ReportID bigint,
+@Fdate datetime,
+@Tdate datetime,
+@ClientID bigint,
+@VisitType int,
+@TestDetail varchar(100),
+@DeptID int,
+@ContextInfo [UDT_Context] READONLY     
+
+)
+as 
+
+begin
+Declare @Orgid int
+select @Orgid=orgid from @ContextInfo
+
+Declare @Spname Nvarchar(100)
+
+Select @Spname=Spname from CustomisedReport where ReportId=@ReportID  and Orgid=@Orgid
+
+if (@Spname !='' )
+BEGIN
+
+exec @Spname @Fdate,@Tdate,@ClientID,@VisitType,@ContextInfo
+
+END
+
+END

@@ -1,0 +1,383 @@
+
+/****** Object:  StoredProcedure [dbo].[pGetAuthenticateValidateUserForDoctorCom_API]    Script Date: 15-07-2021 07:56:55 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetAuthenticateValidateUserForDoctorCom_API]
+
+	@pUserName [nvarchar](255),
+
+	@pPassword [nvarchar](255),
+	@pMobile [nvarchar](255),
+
+	@SessionID [nvarchar](255),
+ @pLoginType   [NCHAR](1),
+ @pDeviceId      NVARCHAR(255),
+                                                          @pFCMInstanceId NVARCHAR(1000),
+                                                          @pAppVersionNo  NVARCHAR(10),
+	@OrgID [int] OUTPUT,
+
+	@Islocked [nchar](1) OUTPUT,
+
+	@IsExpired [nchar](1) OUTPUT
+
+
+
+AS
+
+DECLARE @ServerDate DATETIME  
+
+	SET @ServerDate=GETDATE() 
+
+	DECLARE @loginID BIGINT  
+	DECLARE @USERID BIGINT  
+	DECLARE @OrgAttempts BIGINT  
+
+	DECLARE @pOrgID INT  
+	
+	SET @Islocked = 'N'  
+
+	SET @IsExpired ='N'  
+
+	DECLARE @pwdexpDate DATETIME  
+
+	DECLARE @transpwdexpdate DATETIME  
+
+	DECLARE @currentdate DATETIME  
+
+	DECLARE @login BIGINT  
+	DECLARE @pwd [nvarchar](255)  
+
+	create table #Login(LoginID bigint,UserID bigint, Password [nvarchar](255),MobileNo [nvarchar](255),Orgid bigint,UserName  [nvarchar](255) )
+
+	insert into #Login 
+
+	
+	SELECT EU.LOGINID,eU.USERID,EU.PASSWORD,EU.MobileNO,EU.OrgID,EU.UserName
+	FROM ERPUserInBound EU (NOLOCK)  
+	
+	
+	WHERE EU.PASSWORD=@pPassword and EU.MobileNO=@pMobile
+
+	SELECT @login = loginid  
+
+	FROM   Users  (NOLOCK)  
+
+	BEGIN  
+
+		SELECT @Islocked = isnull(Islocked, 'N')  
+
+		FROM   Login (NOLOCK)  
+
+		WHERE  loginID = @loginID  
+
+		SELECT @OrgID = -1  
+
+  
+
+
+
+	IF( @loginID > 0 )  
+
+		BEGIN  
+
+			DECLARE @Validto DATETIME  
+
+			DECLARE @TodayDate DATETIME  
+
+			DECLARE @BlockedDate DATETIME  
+
+			DELETE LoggedInUsers  
+            WHERE  ( LoginID = @loginID
+                      OR SessionID = @SessionID )
+                   AND LoginType = @pLoginType
+
+            DELETE LoginFCMMapping
+            WHERE  AppName = 'DoctorApp'
+                   AND ( FCMInstanceId = @pFCMInstanceId
+                          OR LoginID = @loginID )
+
+
+
+		INSERT INTO LoggedInUsers  
+
+						(LoginID,
+
+						SessionID,
+                         LoginType,
+						CreatedAt,createdby)  
+
+			VALUES     (@loginID,
+
+						@SessionID,
+                         @pLoginType,
+						@ServerDate,@login )  
+
+			SELECT @TodayDate = DATEADD(d, DATEDIFF(d, 0, @ServerDate), 0)  
+
+			SELECT @Validto = CONVERT(NVARCHAR(10), EndDTTM, 103) ,@pwdexpDate = CONVERT(NVARCHAR(10), LoginPwdExpDate, 103),  
+
+		@transpwdexpdate = CONVERT(NVARCHAR(10), TransPwdExpDate, 103)  
+
+			FROM   login(NOLOCK)  
+
+			WHERE  loginID = @loginID  
+
+			SELECT @BlockedDate = Case when  BlockedTo IS NULL then CONVERT(NVARCHAR(10), BlockedFrom +7  , 103) else CONVERT(NVARCHAR(10), BlockedTo, 103)  end     
+
+			FROM   Login (NOLOCK)      
+
+			WHERE  loginID = @loginID      
+
+					AND @TodayDate BETWEEN CONVERT(NVARCHAR(10), BlockedFrom, 103)    
+
+					AND Case when  BlockedTo IS NULL then CONVERT(NVARCHAR(10), BlockedFrom +7 , 103) else CONVERT(NVARCHAR(10), BlockedTo, 103)  end     
+
+					OR ( @TodayDate = BlockedFrom      
+
+							AND @TodayDate = BlockedTo )   
+
+			IF( @Validto <> '' )  
+
+				BEGIN  
+
+					IF( @Validto < @TodayDate )  
+
+					BEGIN  
+
+						UPDATE login  
+
+						SET    IsFirstLogin = 'N',  
+
+						ModifiedAt = @ServerDate,  
+
+								ModifiedBy = @login  
+
+						WHERE  loginID = @loginID  
+
+					END  
+
+				END  
+
+			IF( @pwdexpDate <> '' )  
+
+				BEGIN  
+
+					IF( @pwdexpDate < @TodayDate )  
+
+		BEGIN  
+
+						UPDATE login  
+
+						SET    IsFirstLogin = 'N',  
+
+		ModifiedAt = @ServerDate,  
+
+								ModifiedBy = @login  
+
+					WHERE  loginID = @loginID  
+
+  
+
+						SET @IsExpired='Y'  
+
+					END  
+
+		END  
+
+		END  
+
+		ELSE  
+
+		BEGIN  
+
+			DECLARE @UserExist BIGINT  
+
+  
+
+			SET @UserExist = (SELECT COUNT(LoginID)  
+
+								FROM   [Login] (NOLOCK)  
+
+								WHERE 
+										IsLocked = 'N'  
+
+										AND Status != 'D')  
+
+  
+
+			IF( @UserExist > 0 )  
+
+				BEGIN  
+				PRINT 'A'
+					DECLARE @NoOfFailure BIGINT  
+
+  
+
+					
+				END  
+  		END  
+		
+
+INSERT INTO LoginFCMMapping
+                  (loginid,
+                   FCMInstanceId,
+                   DeviceId,
+                   AppName,
+                   AppVersion,
+                   IsLogged,
+                   CreatedBy,
+                   CreatedAt)
+select LoginID,@pFCMInstanceId,@pDeviceId, 'DoctorApp',@pAppVersionNo ,1,LoginID,GETDATE()
+from #Login 
+
+    
+
+	  create TABLE  #TempAll 
+        ( LoginID bigint,LoginName NVARCHAR(50),
+
+			OrgID int,
+
+			RoleID BIGINT,
+			
+			FilePath  NVARCHAR(100),
+
+			RepliedMsgDaysConfig NVARCHAR(50),
+
+			Name NVARCHAR(50),
+
+			UserID BIGINT,
+
+			Qualification  NVARCHAR(50),
+
+			Relegion  NVARCHAR(50),
+
+			MaritalStatus  NVARCHAR(50),
+
+			TitleCode BIGINT,
+
+			Sex NVARCHAR(50),
+		
+			OrgName NVARCHAR(50),
+			OrgAddressID INT,
+			LocationID BIGINT,
+			PhysicianID NVARCHAR(50),
+			RoleName  NVARCHAR(50),
+			DeptID INT
+         
+        ) 
+	--	select * from #Login 
+		insert into #TempAll (LoginID,LoginName,OrgID)--,RoleID,FilePath,RepliedMsgDaysConfig,
+	--	Name,UserID,Qualification,Relegion,MaritalStatus,TitleCode,Sex,OrgName,RoleName)
+      SELECT L.LoginID,L.LoginName,Cast(L.OrgID as int)--,R.RoleID,LIS.SessionID,'',
+	  	--	SOM.DisplayText  + U.Name,U.UserID,U.Qualification,U.Relegion,U.MaritalStatus,U.TitleCode,U.SEX,O.Name,R.RoleName
+				   
+		FROM   ERPUserInBound L (NOLOCK)  
+		inner join #Login LN ON LN.LoginID=L.loginID 
+
+
+
+	update T set t.FilePath=LIS.SessionID,t.Name=SOM.DisplayText  + U.Name,
+	T.UserID=U.UserID,T.Sex=U.SEX,T.OrgName=O.Name --,T.RoleID = R.RoleID,T.RoleName=R.RoleName
+from #TempAll T
+inner join login l WITH(NOLOCK) on t.loginid=l.loginid and l.orgid=t.orgid
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId and T.OrgID=U.OrgID
+
+--INNER JOIN  LOGINROLE   LR WITH(NOLOCK) ON LR.LOGINID=U.LOGINID --and T.RoleID=LR.RoleID
+
+	--	INNER JOIN Role R (NOLOCK)  ON T.OrgID = R.OrgID AND ISNULL(R.LangCode,'en-GB')='en-GB' AND  R.RoleID=LR.RoleID 
+		
+				INNER JOIN LoggedInUsers LIS (NOLOCK) ON T.loginID=LIS.LoginID
+               AND LIS.LoginType=@pLoginType
+		
+		INNER JOIN Organization O (NOLOCK) ON T.OrgID=O.OrgID 
+	
+		INNER JOIN SalutationOrgMapping SOM  WITH(NOLOCK)  ON U.TITLECode = SOM.TitleID AND ISNULL(SOM.LanguageCode,'en-GB')='en-GB'
+		AND U.OrgID=SOM.OrgID
+
+			--WHERE  L.loginID = @loginID 
+			--	AND R.RoleName='Doctor'  
+			--	AND U.LoginID =L.loginID
+				
+			--	--AND P.LoginID=L.loginID
+			--	AND L.Status != 'D'  
+			--	AND L.IsLocked = 'N' 
+
+update T set T.OrgAddressID=OA.ADDRESSID
+from #TempAll T
+inner  JOIN OrganizationAddress OA 
+		ON T.OrgId=OA.OrgID
+
+		update T set T.LocationID = LLM.AddressId
+from #TempAll T
+inner  JOIN LoginRole LR on T.LoginID=LR.LoginID 
+inner join LoginLocationMapping LLM on LR.LoginRoleID=LLM.LoginRoleID 
+		and T.OrgId=LLM.OrgID
+
+
+
+
+
+		SELECT  T.LoginID,T.LoginName,T.OrgID,RoleID,FilePath,IsNull(RepliedMsgDaysConfig,'') AS RepliedMsgDaysConfig,
+			    Name,T.UserID,Qualification,Relegion,MaritalStatus,TitleCode,SEX,OrgName,
+				IsNull(RoleName,'') AS RoleName,OrgAddressID,LocationID ,EU.ServerName,EU.URL as Url,EU.MobileNo
+		FROM #TempAll T
+
+		INNER JOIN  ERPUserInBound EU WITH(NOLOCK) ON EU.LoginId=T.LoginId
+
+		 /** Dept **/
+  CREATE TABLE #tempDept
+
+(UserID NVARCHAR(200),DeptName NVARCHAR(300),DeptID INT,DeptCode NVARCHAR,RoleID bigint,LoginID NVARCHAR(200),OrgID bigint)     
+INSERT INTO #tempDept(USERID,DeptName, DeptID,RoleID,LoginID,DeptCode,OrgID)    
+
+SELECT U.USERID,IDM.DeptName, RDM.DeptID ,RDM.RoleID,LDM.loginID,'N',IDM.OrgID 
+FROM #TempAll T
+
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId
+INNER JOIN  LOGINROLE   LR WITH(NOLOCK) ON LR.LOGINID=U.LOGINID and T.RoleID=LR.RoleID
+INNER JOIN LOGINDEPTMAP  LDM WITH(NOLOCK) ON  LDM.LOGINID=LR.LOGINID
+INNER JOIN ROLEDEPTMAP RDM WITH(NOLOCK) ON RDM.ROLEDETPID=LDM.ROLEDETPID and T.RoleID=RDM.RoleID
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID=RDM.DeptID   and IDM.LangCode='en-GB' and IDM.Orgid=T.Orgid
+INNER JOIN ROLE R WITH(NOLOCK)  ON R.ROLEID=RDM.ROLEID and R.LangCode='en-GB'
+
+
+
+IF NOT EXISTS(SELECT 1 FROM #tempDept where DeptCode='Y')
+BEGIN
+UPDATE #tempDept SET DeptCode='Y'
+END
+
+
+
+
+
+
+SELECT distinct LoginID,RoleID,DeptID,DeptName,Orgid FROM #tempDept --where OrgID=@pOrgID
+SELECT COUNT(T.LoginID) as TotalRecords FROM #TempAll T
+		INNER JOIN  ERPUserInBound EU WITH(NOLOCK) ON EU.LoginId=T.LoginId
+
+ drop table #tempDept
+  drop table #TempAll
+ drop table #Login
+	END
+
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+

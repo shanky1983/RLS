@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
+  <!-- EF Runtime content -->
+  <edmx:Runtime>
+    <!-- SSDL content -->
+    <edmx:StorageModels>
+    <Schema Namespace="LISKernelEntities.Store" Provider="System.Data.SqlClient" ProviderManifestToken="2012" Alias="Self" xmlns:store="http://schemas.microsoft.com/ado/2007/12/edm/EntityStoreSchemaGenerator" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+        <EntityType Name="WhatsUpNotification">
+          <Key>
+            <PropertyRef Name="WhatsUpNotificationId" />
+          </Key>
+          <Property Name="WhatsUpNotificationId" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="MobileNo" Type="nvarchar" MaxLength="50" />
+          <Property Name="TemplateMasterNo" Type="int" />
+          <Property Name="TemplateParamJSON" Type="nvarchar" MaxLength="4000" />
+          <Property Name="IsSentYN" Type="nvarchar" MaxLength="1" />
+          <Property Name="IsErrorYN" Type="nvarchar" MaxLength="1" />
+        </EntityType>
+        <EntityType Name="WhatsUpTemplateMaster">
+          <Key>
+            <PropertyRef Name="TemplateMasterNo" />
+          </Key>
+          <Property Name="TemplateMasterNo" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="TemplateName" Type="nvarchar" MaxLength="100" />
+          <Property Name="NoofParameters" Type="int" />
+        </EntityType>
+        <EntityContainer Name="LISKernelEntitiesStoreContainer">
+          <EntitySet Name="WhatsUpNotification" EntityType="Self.WhatsUpNotification" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="WhatsUpTemplateMaster" EntityType="Self.WhatsUpTemplateMaster" Schema="dbo" store:Type="Tables" />
+        </EntityContainer>
+      </Schema></edmx:StorageModels>
+    <!-- CSDL content -->
+    <edmx:ConceptualModels>
+      <Schema Namespace="LISKernelEntities" Alias="Self" annotation:UseStrongSpatialTypes="false" xmlns:annotation="http://schemas.microsoft.com/ado/2009/02/edm/annotation" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+        <EntityType Name="WhatsUpNotification">
+          <Key>
+            <PropertyRef Name="WhatsUpNotificationId" />
+          </Key>
+          <Property Name="WhatsUpNotificationId" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="MobileNo" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+          <Property Name="TemplateMasterNo" Type="Int32" />
+          <Property Name="TemplateParamJSON" Type="String" MaxLength="4000" FixedLength="false" Unicode="true" />
+          <Property Name="IsSentYN" Type="String" MaxLength="1" FixedLength="false" Unicode="true" />
+          <Property Name="IsErrorYN" Type="String" MaxLength="1" FixedLength="false" Unicode="true" />
+        </EntityType>
+        <EntityType Name="WhatsUpTemplateMaster">
+          <Key>
+            <PropertyRef Name="TemplateMasterNo" />
+          </Key>
+          <Property Name="TemplateMasterNo" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="TemplateName" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+          <Property Name="NoofParameters" Type="Int32" />
+        </EntityType>
+        <EntityContainer Name="Entities" annotation:LazyLoadingEnabled="true">
+          <EntitySet Name="WhatsUpNotifications" EntityType="Self.WhatsUpNotification" />
+          <EntitySet Name="WhatsUpTemplateMasters" EntityType="Self.WhatsUpTemplateMaster" />
+        </EntityContainer>
+      </Schema>
+    </edmx:ConceptualModels>
+    <!-- C-S mapping content -->
+    <edmx:Mappings>
+      <Mapping Space="C-S" xmlns="http://schemas.microsoft.com/ado/2009/11/mapping/cs">
+        <EntityContainerMapping StorageEntityContainer="LISKernelEntitiesStoreContainer" CdmEntityContainer="Entities">
+          <EntitySetMapping Name="WhatsUpNotifications">
+            <EntityTypeMapping TypeName="LISKernelEntities.WhatsUpNotification">
+              <MappingFragment StoreEntitySet="WhatsUpNotification">
+                <ScalarProperty Name="IsErrorYN" ColumnName="IsErrorYN" />
+                <ScalarProperty Name="WhatsUpNotificationId" ColumnName="WhatsUpNotificationId" />
+                <ScalarProperty Name="MobileNo" ColumnName="MobileNo" />
+                <ScalarProperty Name="TemplateMasterNo" ColumnName="TemplateMasterNo" />
+                <ScalarProperty Name="TemplateParamJSON" ColumnName="TemplateParamJSON" />
+                <ScalarProperty Name="IsSentYN" ColumnName="IsSentYN" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="WhatsUpTemplateMasters">
+            <EntityTypeMapping TypeName="LISKernelEntities.WhatsUpTemplateMaster">
+              <MappingFragment StoreEntitySet="WhatsUpTemplateMaster">
+                <ScalarProperty Name="TemplateMasterNo" ColumnName="TemplateMasterNo" />
+                <ScalarProperty Name="TemplateName" ColumnName="TemplateName" />
+                <ScalarProperty Name="NoofParameters" ColumnName="NoofParameters" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+        </EntityContainerMapping>
+      </Mapping>
+    </edmx:Mappings>
+  </edmx:Runtime>
+  <!-- EF Designer content (DO NOT EDIT MANUALLY BELOW HERE) -->
+  <Designer xmlns="http://schemas.microsoft.com/ado/2009/11/edmx">
+    <Connection>
+      <DesignerInfoPropertySet>
+        <DesignerProperty Name="MetadataArtifactProcessing" Value="EmbedInOutputAssembly" />
+      </DesignerInfoPropertySet>
+    </Connection>
+    <Options>
+      <DesignerInfoPropertySet>
+        <DesignerProperty Name="ValidateOnBuild" Value="true" />
+        <DesignerProperty Name="EnablePluralization" Value="true" />
+        <DesignerProperty Name="IncludeForeignKeysInModel" Value="true" />
+        <DesignerProperty Name="UseLegacyProvider" Value="false" />
+        <DesignerProperty Name="CodeGenerationStrategy" Value="None" />
+      </DesignerInfoPropertySet>
+    </Options>
+    <!-- Diagram content (shape and connector positions) -->
+    <Diagrams></Diagrams>
+  </Designer>
+</edmx:Edmx>

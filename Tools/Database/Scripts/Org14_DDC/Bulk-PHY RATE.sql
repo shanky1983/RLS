@@ -1,0 +1,4 @@
+DELETE FROM InvRateMaster WHERE Type='PHY' AND ClientID=26
+INSERT INTO InvRateMaster(Type,ID,ClientID,Rate)VALUES('PHY',3031,26,50)
+INSERT INTO InvRateMaster(Type,ID,ClientID,Rate)VALUES('PHY',3040,26,100)
+INSERT INTO InvRateMaster(Type,ID,ClientID,Rate)VALUES('PHY',3041,26,150)

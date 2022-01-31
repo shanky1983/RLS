@@ -1,0 +1,99 @@
+CREATE Procedure PGetOutSourceDetailReport          
+(          
+@Fdate Datetime,          
+@Tdate Datetime,          
+@ClientID Int,          
+@VisitType Int,        
+@ContextInfo [dbo].[UDT_Context] READONLY           
+)          
+As          
+Begin    
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED       
+  SET NOCOUNT ON;    
+  SET XACT_ABORT ON;  
+Create Table #Temp1          
+(          
+PatientvisitID bigint,          
+PatientID Varchar(50),          
+VisitNo Varchar(50),          
+PatientName varchar(100),          
+Age Varchar(20),          
+Gender varchar(2),          
+VisitType varchar(10),          
+Location varchar(100),          
+RegisteredDate DateTime,          
+TestDetails nvarchar(max),  
+ClientName nvarchar(100),
+OrgID Int,  
+OutSourceLocation nvarchar(100),  
+TestID Int,  
+TestType Nvarchar(10)  
+)          
+ IF (@ClientID = 0 OR @ClientID = -1)      
+Set @ClientID=NULL      
+      
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+Declare @OrgID int      
+select  @OrgID=OrgID from @ContextInfo   
+If(   @Datediff<=31)
+BEGIN
+if(@visittype = -1 )    
+Begin  
+Insert into #Temp1 (PatientvisitID, PatientID, VisitNo,PatientName,Age ,Gender ,VisitType,Location ,RegisteredDate,ClientName,OrgID,OutSourceLocation,TestID,TestType)          
+select  Distinct Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name ,P.Age,P.Sex ,          
+Case when Pv.LabVisitType=0 then 'OP' else 'IP' end ,OA.Location, PV.CreatedAt,CM.ClientName,PV.OrgID,LR.RefOrgName,OI.ID,OI.Type         
+from Patientvisit PV           
+Inner join Patient P on P.PatientID=Pv.PatientID and P.OrgID=PV.ORgID         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID   
+Inner Join OrganizationAddress OA on OA.ORGID=PV.ORGID and OA.AddressID=Pv.OrgAddressID   
+inner join OutSourcingDetail OD on OD.PatientVisitID=OI.VisitID and OD.AccessionNumber=OI.AccessionNumber and OD.OrgID=OI.OrgID                 
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID  
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID 
+inner join Labreferenceorg LR on LR.labreforgid=OutSourcingLocationID and LR.OrgID=OD.OrgID  
+where PV.Orgid=@OrgID and PV.CreatedAt between @Fdate and @Tdate and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType in (0,1)      
+and OI.Referralid!=-1  
+order by PV.Createdat desc          
+End  
+Else  
+Begin  
+Insert into #Temp1 (PatientvisitID, PatientID, VisitNo,PatientName,Age ,Gender ,VisitType,Location ,RegisteredDate,ClientName,OrgID,OutSourceLocation,TestID,TestType)          
+select  Distinct Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name ,P.Age,P.Sex ,          
+Case when Pv.LabVisitType=0 then 'OP' else 'IP' end ,OA.Location, PV.CreatedAt,CM.ClientName, PV.OrgID,LR.RefOrgName,OI.ID,OI.Type         
+from Patientvisit PV           
+Inner join Patient P on P.PatientID=Pv.PatientID and P.OrgID=PV.ORgID         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID   
+Inner Join OrganizationAddress OA on OA.ORGID=PV.ORGID and OA.AddressID=Pv.OrgAddressID   
+inner join OutSourcingDetail OD on OD.PatientVisitID=OI.VisitID and OD.AccessionNumber=OI.AccessionNumber and OD.OrgID=OI.OrgID                 
+inner join Labreferenceorg LR on LR.labreforgid=OutSourcingLocationID and LR.OrgID=OD.OrgID     
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID  
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID 
+where PV.Orgid=@OrgID and PV.CreatedAt between @Fdate and @Tdate and VCM.clientid=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType      
+and OI.Referralid!=-1 
+order by PV.Createdat desc    
+End   
+  
+If ((Select Count(1) from #Temp1 where TestType='INV')>=1)  
+Begin  
+update T set T.TestDetails=IOM.DisplayText from #Temp1 T     
+inner join InvestigationOrgMapping IOM on IOM.InvestigationID=T.TestID and IOM.Orgid=T.OrgID  
+End  
+
+If ((Select Count(1) from #Temp1 where TestType='GRP')>=1)    
+Begin  
+update T set T.TestDetails=IOM.DisplayText from #Temp1 T     
+inner join InvOrgGroup IOM on IOM.AttGroupID=T.TestID and IOM.Orgid=T.OrgID  
+End  
+  
+SELECT Distinct ROW_NUMBER() OVER(ORDER BY PatientvisitID ASC) as 'SNo',PatientID, VisitNo as VisitNumber,PatientName,Age ,Gender ,VisitType,Location ,(convert (varchar,(RegisteredDate),103))+' '+(convert (varchar,(RegisteredDate),8)) as RegisteredDate, TestDetails =       
+    STUFF((SELECT ', ' + TestDetails      
+           FROM #Temp1 b       
+    WHERE b.PatientvisitID = a.PatientvisitID and B.VisitNo=A.VisitNo      
+          FOR XML PATH('')), 1, 2, ''),OutSourceLocation   
+FROM #Temp1 a      
+GROUP BY PatientVisitID,PatientID, VisitNo,PatientName,Age ,Gender ,VisitType,Location ,RegisteredDate,ClientName,OrgID,OutSourceLocation order by SNo  
+  
+Drop table #Temp1  
+End
+END

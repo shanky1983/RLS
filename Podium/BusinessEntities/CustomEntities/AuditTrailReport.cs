@@ -1,0 +1,19 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Attune.Podium.BusinessEntities
+{
+    public class AuditTrailReport
+    {
+        public DateTime DateTime { get; set; }
+        public string User { get; set; }
+        public string Location { get; set; }
+        public string Activity { get; set; }
+        public string TestValue { get; set; }
+        public string OldValues { get; set; }
+        public string CurrentValues { get; set; }
+        public string ActionType { get; set; }
+
+    }
+}

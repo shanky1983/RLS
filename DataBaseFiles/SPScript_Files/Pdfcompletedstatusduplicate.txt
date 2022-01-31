@@ -1,0 +1,106 @@
+  CREATE PROCEDURE [dbo].[Pdfcompletedstatusduplicate]
+  as begin
+  
+  DECLARE @Curdate DATE =getdate()
+ DECLARE @Fromdate DATE =getdate()-1
+ DECLARE @MinId INT                  
+  ,@MaxId AS INT  
+  create table #ClientVisitDetails (          
+  Id INT IDENTITY(1, 1)                  
+                 
+  ,VisitId BIGINT                  
+  ,actiontype varchar(100)                  
+  ,OrgId INT                  
+  ,counts INT                  
+  --,ContextType VARCHAR(3)                  
+  )                  
+ INSERT INTO #ClientVisitDetails (                  
+   VisitId                  
+  ,actiontype                  
+  ,OrgId                 
+  ,counts                  
+  --,ContextType                  
+  )   
+  --sp_help notifications
+select top 2 identityid,actiontype,orgid,count(1)as t   from notifications(nolock) where createdat >getdate()-2 and status='Completed' and actiontype='ROUNDBPDF' 
+and Category='Report' group by identityid,actiontype,orgid having count(1)>1
+	UNION ALL
+select top 2 identityid,actiontype,orgid,count(1)as t   from notifications(nolock) where createdat >getdate()-2 and status='Completed' and actiontype='PDF' 
+and Category='Report' group by identityid,actiontype,orgid having count(1)>1
+	
+select * from #ClientVisitDetails
+ SELECT @MinId = (                  
+   SELECT Min(Id)                  
+   FROM #ClientVisitDetails                  
+   )                  
+                  
+ SELECT @MaxId = (                  
+   SELECT Max(Id)                  
+   FROM #ClientVisitDetails                  
+   )   
+   DECLARE @VisitId BIGINT                  
+  ,@actiontype varchar(100)  
+  ,@OrgId INT                  
+WHILE @MinId <= @MaxId                  
+ BEGIN 
+ SELECT @VisitId=visitid ,
+ @actiontype =actiontype,
+ @orgid=orgid
+   FROM #ClientVisitDetails  where id= @MinId
+   Declare @Minnotificationid bigint
+     Declare @Maxnotificationid bigint
+   select @Maxnotificationid=max(notificationid) from notifications(nolock) where createdat >getdate()-2 and  orgid=@orgid and actiontype= @actiontype and identityid=@VisitId
+   and status='Completed' and ActionType='ROUNDBPDF'
+   --   select * from notifications(nolock) where createdat >getdate()-2 and orgid=@orgid and actiontype= @actiontype and identityid=@VisitId and notificationid< @Maxnotificationid
+   --and ActionType='ROUNDBPDF'
+ update notifications set status='DIFFERED' where createdat >getdate()-2 and orgid=@orgid and actiontype= @actiontype and identityid=@VisitId and notificationid< @Maxnotificationid
+   and ActionType='ROUNDBPDF'
+
+     Declare @PdfMaxnotificationid bigint
+      select @PdfMaxnotificationid=max(notificationid) from notifications(nolock) where  Category='Report' and createdat >getdate()-2 and  orgid=@orgid and actiontype= @actiontype and identityid=@VisitId
+   and Category='Report' and status='Completed' and ActionType='PDF'
+   update notifications set status='DIFFERED'  where   Category='Report' and createdat >getdate()-2 and  orgid=@orgid and actiontype= @actiontype and identityid=@VisitId and notificationid< @PdfMaxnotificationid
+   and Category='Report' and status='Completed' and ActionType='PDF' 
+   --select * from notifications(nolock) where   identityid=@VisitId
+
+   SET @MinId = @MinId + 1  
+ END
+ --DECLARE @tableHTML NVARCHAR(MAX);
+ --DECLARE @TblHeader NVARCHAR(MAX);
+ --IF (
+ --(
+ --SELECT count(1)
+ --FROM #ClientVisitDetails
+ --) > 0
+ --)
+ --BEGIN
+ --SET @tableHTML = N'<P>Dear All<br>The following are Notification Action Type based Duplicate List '  + '-' + convert(VARCHAR(11), @Curdate, 6) + N'<table border="2" cellpadding="1" cellspacing="1">' +
+ --N'<tr><th>VisitID</th><th>ActionType</th><th>OrgID</th><th>Counts</th></tr>' 
+ --+ CAST((
+ --SELECT td = VisitId
+ --,''
+ -- ,td = ActionType
+ --,''
+ -- ,td = OrgID
+  
+ --,'' 
+ --,td = Counts
+ --,'' 
+ --FROM #ClientVisitDetails order by VisitId 
+ --FOR XML PATH('tr')
+ --,TYPE
+ --) AS NVARCHAR(MAX)) + N'</table>';
+ --EXEC msdb.dbo.sp_send_dbmail @profile_name = 'Notification'
+ --,@recipients = 'lissupport@attunelive.com'
+ --,@body_format = 'HTML'
+ --,@body = @tableHTML
+ --,@subject = 'Notification Action Type based Duplicate List ' 
+ ----  select @Subject                                   
+ --END 
+  
+drop table #ClientVisitDetails
+end
+ 
+GO
+
+

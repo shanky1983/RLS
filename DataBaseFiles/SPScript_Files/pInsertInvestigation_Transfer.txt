@@ -1,0 +1,2848 @@
+ 
+
+/****** Object:  StoredProcedure [dbo].[pInsertInvestigation_Transfer]    Script Date: 7/14/2020 3:40:24 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pInsertInvestigation_Transfer] @pPatientInvTable   
+[dbo].[PATIENTINVESTIGATION] READONLY,   
+@OrgID            [BIGINT],   
+@pGUId            [nvarchar](255),   
+--@pOrderedInvCnt   [INT] OUTPUT,   
+--@returnstatus     [INT] OUTPUT,   
+@ContextInfo      [UDT_CONTEXT]   
+READONLY   
+WITH EXECUTE AS OWNER   
+AS   
+BEGIN   
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+SET NOCOUNT ON; 
+BEGIN TRY
+  DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000) 
+--SET @returnstatus=-1   
+DECLARE @ServerDate DATETIME   
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))   
+/* Code added by T.Suresh for MIS Report Purpose start here */  
+declare @tmp_ordinv as table (Accessionnumber bigint,status nvarchar(50))  
+declare @tmp_patinv as table (patientinvid bigint,Accessionnumber bigint,status nvarchar(50))  
+Declare @tmp_invv as table (investigationvalueid bigint,status nvarchar(50))  
+Declare @Loginid bigint  
+Select @Loginid  = Loginid from @contextInfo  
+/* Code added by T.Suresh for MIS Report Purpose end here */  
+DECLARE @tblTempGrp TABLE   
+(   
+InvID          nvarchar(10),   
+GrpID          nvarchar(10),   
+ParentGrpID    nvarchar(10),   
+isGroup        nchar(1),   
+Atlevel        INT,   
+GrpContentSeq  INT,   
+PackageID      INT,   
+PatientVisitID BIGINT,   
+CreatedBy      BIGINT,   
+Status         nvarchar(100),   
+OrgID          INT,   
+toplevelGrpID  BIGINT,   
+OrgGrpID       BIGINT   
+)   
+DECLARE @RefAccessionNumber BIGINT   
+DECLARE @RefferedType nvarchar(50)   
+DECLARE @GrpRefferedType nvarchar(50)   
+DECLARE @Type nvarchar(50)   
+DECLARE @GrpType nvarchar(50)   
+DECLARE @pVisitID BIGINT   
+DECLARE @pClientID BIGINT   
+SELECT @pVisitID = Max(PatientVisitID)   
+FROM   @pPatientInvTable   
+CREATE TABLE #OrderedInvestigations   
+(   
+[VisitID]                 [BIGINT] NULL,   
+[ID]                      [BIGINT] NULL,   
+[Name]                    [nvarchar](255) NULL,   
+[Type]                    [nvarchar](20) NULL,   
+[Status]                  [nvarchar](50) NULL,   
+[AccessionNumber]         [BIGINT],   
+[StudyInstanceUId]        [nvarchar](150) NULL,   
+[PerformingPhysicain]     [nvarchar](500) NULL,   
+[ComplaintId]             [INT] NULL,   
+[OrgID]                   [INT] NULL,   
+[CreatedBy]               [BIGINT] NULL,   
+[CreatedAt]               [DATETIME] NULL,   
+[ModifiedBy]              [BIGINT] NULL,   
+[ModifiedAt]              [DATETIME] NULL,   
+[InvestigationsType]      [nvarchar](5) NULL,   
+[ReferralID]              [BIGINT] NULL,   
+[PaymentStatus]           [nvarchar](20) NULL,   
+[UID]                     [nvarchar](255) NULL,   
+[ResCaptureLoc]           [INT] NULL,   
+[MPPSStatus]              [INT] NULL,   
+[ReferredAccessionNo]     [BIGINT] NULL,   
+[TaskID]                  [BIGINT] NULL,   
+[LabNo]                   [nvarchar](30) NULL,   
+[RefPhysicianID]          [BIGINT] NULL,   
+[RefPhyName]              [nvarchar](255) NULL,   
+[ReferenceType]           [nchar](1) NULL,   
+[ReferredType]            [nvarchar](50) NULL,   
+[InvestigationComment]    [nvarchar](max) NULL,   
+[PrintCount]              [INT] NULL,   
+[VisitSampleStatus]       [nvarchar](50) NULL,   
+[SamplePickupDate]        [DATETIME] NULL,   
+[Migrated_Patient_Number] [nvarchar](510) NULL,   
+[Migrated_Request_Number] [nvarchar](510) NULL,   
+[Migrated_Visit_Number]   [nvarchar](510) NULL,   
+[Migrated_TestCode]       [nvarchar](12) NULL,   
+[Patient_HISTID]          [BIGINT] NULL,   
+[PkgID]                   [BIGINT] NULL,   
+[PkgName]                 [nvarchar](max) NULL,   
+[IsStat]                  [nchar](1) NULL,   
+[ReportDateTime]          [DATETIME] NULL,   
+[TatDateTime]             [DATETIME] NULL   
+)   
+CREATE TABLE #PatientInvestigation   
+(   
+[PatientVisitID]                 [BIGINT] NOT NULL,   
+[InvestigationID]                [BIGINT] NULL,   
+[InvestigationName]              [nvarchar](250) NULL,   
+[CreatedBy]                      [BIGINT] NULL,   
+[CreatedAt]                      [DATETIME] NULL,   
+[ModifiedBy]                     [BIGINT] NULL,   
+[ModifiedAt]                     [DATETIME] NULL,   
+[InvestigationMethodID]          [BIGINT] NULL,   
+[InvestigationSampleContainerID] [INT] NULL,   
+[SampleID]                       [INT] NULL,   
+[InvestigationSiteID]            [INT] NULL,   
+[IsCompleted]                    [nchar](1) NULL,   
+[CollectedDateTime]              [DATETIME] NULL,   
+[Status]                         [nvarchar](100) NULL,   
+[ComplaintId]                    [INT] NULL,   
+[GroupID]                        [INT] NULL,   
+[GroupName]                      [nvarchar](250) NULL,   
+[Reason]                         [nvarchar](250) NULL,   
+[ReportStatus]                   [nvarchar](255) NULL,   
+[ReferenceRange]                 [nvarchar](max) NULL,   
+[MethodName]                     [nvarchar](255) NULL,   
+[IPInvSampleCollectionMasterID]  [BIGINT] NULL,   
+[OrgID]                          [INT] NULL,   
+[WorklistDeletedStatus]          [nvarchar](50) NULL,   
+[PerformingPhysicainName]        [nvarchar](500) NULL,   
+[KitID]                          [BIGINT] NULL,   
+[KitName]                        [nvarchar](255) NULL,   
+[InstrumentID]                   [BIGINT] NULL,   
+[InstrumentName]                 [nvarchar](255) NULL,   
+[Interpretation]                 [nvarchar](max) NULL,   
+[PrincipleID]                    [BIGINT] NULL,   
+[PrincipleName]                  [nvarchar](255) NULL,   
+[QCData]                         [nvarchar](max) NULL,   
+[PackageID]                      [INT] NULL,   
+[PackageName]                    [nvarchar](255) NULL,   
+[ApprovedBy]                     [BIGINT] NULL,   
+[PatientInvID]                   [BIGINT] NULL,   
+[OrderedAt]                      [DATETIME] NULL,   
+[UID]                            [nvarchar](255) NULL,   
+[GroupComment]                   [nvarchar](255) NULL,   
+[ApprovedAt]                     [DATETIME] NULL,   
+[AccessionNumber]                [BIGINT] NULL,   
+[IsAbnormal]                     [nvarchar](50) NULL,   
+[InvStatusReasonID]              [INT] NULL,   
+[Test]                           [nvarchar](15) NULL,   
+[ValidatedBy]                    [BIGINT] NULL,   
+[ValidatedAt]                    [DATETIME] NULL,   
+[RemarksID]                      [BIGINT] NULL,   
+[MedicalRemarks]                 [nvarchar](MAX) NULL,   
+[GroupMedicalRemarks]            [nvarchar](255) NULL,   
+[RefSuffixText]                  [nvarchar](100) NULL,   
+[Migrated_Patient_Number]        [nvarchar](510) NULL,   
+[Migrated_Request_Number]        [nvarchar](510) NULL,   
+[Migrated_Visit_Number]          [nvarchar](510) NULL,   
+[Migrated_TestCode]              [nvarchar](12) NULL,   
+[Migrated_TestType]              [nvarchar](8) NULL,   
+[WorkListID]                     [BIGINT] NULL,   
+[AuthorizedBy]                   [BIGINT] NULL,   
+[DeviceID]                       [nvarchar](50) NULL,   
+[WorklistType]                   [nvarchar](100) NULL,   
+[WorklistTypeID]                 [BIGINT] NULL,   
+[PickedBy]                       [BIGINT] NULL,   
+[statustype]                     [NVARCHAR](100) NULL,   
+[ConvReferenceRange]             [NVARCHAR](max) NULL,   
+[RefAccessionNo]                 [BIGINT] NULL,   
+[ManualAbnormal]                 [nvarchar](1) NULL,   
+[IsAutoAuthorize]                [nvarchar](1) NULL,   
+[IsSentBarcode]                  [nchar](1) NULL,   
+[PrintableRange]                 [nvarchar](max) NULL,   
+[WorklistCreatedby]              [nvarchar](250) NULL,   
+[WorklistCreatedat]              [DATETIME] NULL   
+)   
+INSERT INTO #OrderedInvestigations   
+(VisitID,   
+ID,   
+NAME,   
+Type,   
+Status,   
+AccessionNumber,   
+StudyInstanceUId,   
+PerformingPhysicain,   
+ComplaintId,   
+OrgID,   
+CreatedBy,   
+CreatedAt,   
+ModifiedBy,   
+ModifiedAt,   
+InvestigationsType,   
+ReferralID,   
+PaymentStatus,   
+UID,   
+ResCaptureLoc,   
+MPPSStatus,   
+ReferredAccessionNo,   
+TaskID,   
+LabNo,   
+RefPhysicianID,   
+RefPhyName,   
+ReferenceType,   
+ReferredType,   
+InvestigationComment,   
+PrintCount,   
+VisitSampleStatus,   
+SamplePickupDate,   
+Migrated_Patient_Number,   
+Migrated_Request_Number,   
+Migrated_Visit_Number,   
+Migrated_TestCode,   
+Patient_HISTID,   
+PkgID,   
+PkgName,   
+IsStat,   
+ReportDateTime,   
+TatDateTime)   
+SELECT VisitID,   
+ID,   
+NAME,   
+Type,   
+Status,   
+AccessionNumber,   
+StudyInstanceUId,   
+PerformingPhysicain,   
+ComplaintId,   
+OrgID,   
+CreatedBy,   
+CreatedAt,   
+ModifiedBy,   
+ModifiedAt,   
+InvestigationsType,   
+ReferralID,   
+PaymentStatus,   
+UID,   
+ResCaptureLoc,   
+MPPSStatus,   
+ReferredAccessionNo,   
+TaskID,   
+LabNo,   
+RefPhysicianID,   
+RefPhyName,   
+ReferenceType,   
+ReferredType,   
+InvestigationComment,   
+PrintCount,   
+VisitSampleStatus,   
+SamplePickupDate,   
+Migrated_Patient_Number,   
+Migrated_Request_Number,   
+Migrated_Visit_Number,   
+Migrated_TestCode,   
+Patient_HISTID,   
+PkgID,   
+PkgName,   
+IsStat,   
+ReportDateTime,   
+TatDateTime   
+FROM   OrderedInvestigations OI    
+WHERE  OI.ViSitID = @pVisitID   
+AND OI.OrgID = @OrgiD   
+SELECT @RefferedType = OI.RefeRredType,   
+@Type = OI.Type   
+FROM   @pPatientInvTable t1   
+INNER JOIN #OrderedInvestigations OI    
+ON t1.PatientVisitID = OI.VisitID   
+AND t1.InvestigationID = OI.ID   
+AND t1.Type = 'INV'   
+AND OI.OrgID = @OrgID   
+SELECT @GrpRefferedType = OI.ReferRedType,   
+@GrpType = OI.Type   
+FROM   @pPatientInvTable t1   
+INNER JOIN #OrderedInvestigations OI    
+ON t1.PatientVisitID = OI.VisitID   
+AND t1.InvestigationID = OI.ID   
+AND t1.Type = 'GRP'   
+AND OI.OrgID = @OrgID   
+SELECT @pClientID = Max(ClientID)   
+FROM   VisitClientMapping VCM    
+WHERE  VCM.OrgID = @OrgID   
+AND VisitID = @pVisitID   
+AND Isnull(IsActive, 'Y') = 'Y'   
+IF( @pGUId <> '' )   
+BEGIN   
+SELECT @RefAccessionNumber = PI.AccessionNumber   
+FROM   @pPatientInvTable t1   
+INNER JOIN PatientInvestigation PI   
+ON t1.PatientVisitID = PI.PatientVisitID   
+AND t1.InvestigationID = PI.InvestigationID   
+AND t1.Type = 'INV'   
+--select  @RefAccessionNumber                                                 
+SELECT @RefAccessionNumber = PI.AccessionNumber   
+FROM   @pPatientInvTable t1   
+INNER JOIN PatientInvestigation PI    
+ON t1.PatientVisitID = PI.PatientVisitID   
+AND t1.InvestigationID = PI.GroupID   
+AND t1.Type = 'GRP'   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo,   
+IsConfidentialTest)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+GMP1.GroupID   
+--,GMP1.GroupName                                                                           
+,   
+CASE Isnull(OG1.DisplayText, GMP1.GroupName)   
+WHEN '' THEN GMP1.GroupName   
+ELSE Isnull(OG1.DisplayText, GMP1.GroupName)   
+END AS GroupName,   
+GMP.GroupID   
+--,GMP.GroupName                                                                                                                          
+,   
+CASE Isnull(OG.DisplayText, GMP.GroupName)   
+WHEN '' THEN GMP.GroupName  
+ELSE Isnull(OG.DisplayText, GMP.GroupName)   
+END AS GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber,   
+IOM.IsConfidentialTest   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG    
+ON OG.AttGroupID = GMP.GroupID   
+AND OG.OrgID = PInv.OrgID   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG.OrgGroupID   
+AND IPM.Type = 'GRP'   
+AND IPM.active <> 'D'   
+INNER JOIN InvOrgGroup OG1    
+ON OG1.OrgGroupID = IPM.ID   
+AND OG1.OrgID = PInv.OrgID   
+INNER JOIN InvGroupMaster GMP1    
+ON GMP1.GroupID = OG1.AttGroupID   
+AND GMP1.Type = IPM.Type   
+INNER JOIN invGroupMapMaster GMM    
+ON GMM.GroupID = OG1.OrgGroupID   and ISNULL(GMM.Active,'Y')='Y'  
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = GMM.InvestigationID   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = IM.InvestigationID   
+AND IOM.OrgID = PInv.OrgID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND OG.OrgID = PInv.orgid   
+AND ( GMM.Parent != 'Y'   
+OR GMM.Parent IS NULL )   
+AND GMM.Active <> 'N'   
+AND NOT EXISTS (SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus (   
+nolock)   
+)   
+AND PI.UID = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo,   
+IsConfidentialTest)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+GMP2.GroupID   
+--,GMP2.GroupName                                                                                 
+,   
+CASE Isnull(OG2.DisplayText, GMP2.GroupName)   
+WHEN '' THEN GMP2.GroupName 
+ELSE Isnull(OG2.DisplayText, GMP2.GroupName)   
+END AS GroupName,   
+GMP.GroupID   
+--,GMP.GroupName                                                                                 
+,   
+CASE Isnull(OG3.DisplayText, GMP.GroupName)   
+WHEN '' THEN GMP.GroupName   
+ELSE Isnull(OG3.DisplayText, GMP.GroupName)   
+END AS GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber,   
+IOM.IsConfidentialTest   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG3    
+ON OG3.AttGroupID = GMP.GroupID   
+AND OG3.OrgID = PInv.orgid   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG3.OrgGroupID   
+AND IPM.Type = 'GRP'   
+AND IPM.active <> 'D'   
+INNER JOIN invGroupMapMaster GMM    
+ON GMM.GroupID = IPM.ID and ISNULL(GMM.Active,'Y')='Y'    
+INNER JOIN InvOrgGroup OG2    
+ON OG2.OrgGroupID = GMM.InvestigationID   
+AND OG2.OrgID = PInv.orgid   
+INNER JOIN InvGroupMaster GMP2    
+ON GMP2.GroupID = OG2.AttGroupID   
+INNER JOIN invGroupMapMaster GMM1    
+ON GMM1.GroupID = GMM.InvestigationID   and ISNULL(GMM1.Active,'Y')='Y'  
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = GMM1.InvestigationID   
+AND IOM.OrgID = PInv.orgid   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND GMM.Parent = 'Y'   
+AND GMM.Active <> 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.UID = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo,   
+IsConfidentialTest)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName 
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+PInv.GroupID   
+--,PInv.GroupName                                                                            
+,   
+GMP.GroupID,   
+GMP.GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+iom.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber,   
+IOM.IsConfidentialTest   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG    
+ON OG.AttGroupID = GMP.GroupID   
+AND OG.OrgID = PInv.OrgID   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG.OrgGroupID   
+AND IPM.Type = 'INV'   
+AND IPM.active <> 'D'   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = IPM.ID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND IOM.OrgID = PInv.orgid   
+AND NOT EXISTS (SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus (   
+nolock)   
+)   
+AND PI.UID = @pGUId);   
+WITH C1   
+AS (SELECT IGM.GroupID             AS GrpID,   
+IGM.InvestigationID     AS InvID,   
+OI.InvestigationID      AS ParentGrpID,   
+Isnull(IGM.Parent, 'N') AS Parent,   
+0                       AS [level],   
+IGM.SequenceNo,   
+OI.PackageID,   
+OI.PatientVisitID,   
+OI.CreatedBy,   
+OI.Status,   
+OI.OrgID,   
+OI.InvestigationID      AS ToplevelGrpID,   
+IGM.GroupID             AS OrgGrpID   
+FROM   @pPatientInvTable OI   
+INNER JOIN InvOrgGroup IOG    
+ON iog.AttGroupID = OI.InvestigationID   
+AND IOG.OrgID = OI.OrgID   
+INNER JOIN InvGroupMapMaster IGM    
+ON IOG.OrgGroupID = IGM.GroupID and isnull(IGM.Active ,'Y')='Y'          
+WHERE  OI.Type = 'GRP'   
+UNION ALL   
+SELECT IGM.GroupID         AS GrpID,   
+IGM.InvestigationID AS InvID,   
+OI.InvID            AS ParentGrpID,   
+Isnull(IGM.Parent, 'N'),   
+[level] + 1,   
+CASE   
+WHEN OI.GrpID IN(SELECT OI1.InvestigationID   
+FROM   @pPatientInvTable OI1   
+WHERE  Type = 'GRP') THEN   
+OI.SequenceNo   
+ELSE OI.SequenceNo + 1   
+-- + [level]                                                                               
+END,   
+OI.PackageID,   
+oi.PatientVisitID,   
+oi.CreatedBy,   
+OI.Status,   
+OI.OrgID,   
+OI.ToplevelGrpID,   
+OI.OrgGrpID   
+FROM C1 OI   
+INNER JOIN InvGroupMapMaster IGM    
+ON OI.InvID = IGM.GroupID  AND  isnull(IGM.Active ,'Y')='Y'          
+WHERE  OI.Parent = 'Y'   
+AND  isnull(IGM.Active ,'Y')='Y')           
+--SELECT * FROM C1                                                                               
+INSERT INTO @tblTempGrp   
+SELECT InvID,   
+GrpID,   
+ParentGrpID,   
+Parent,   
+level,   
+SequenceNo,   
+PackageID,   
+PatientVisitID,   
+CreatedBy,   
+Status,   
+OrgID,   
+ToplevelGrpID,   
+OrgGrpID   
+FROM   C1   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo,   
+IsConfidentialTest)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END         AS InvestigationName,   
+IGMM.GroupID   
+--,IGM1.GroupName                                              
+,   
+CASE Isnull(IOG.DisplayText, IGM .GroupName)   
+WHEN '' THEN IGM .GroupName   
+ELSE Isnull(IOG.DisplayText, IGM .GroupName)   
+END         AS GroupName,   
+tblTemp.PackageID,   
+tblTemp.PatientVisitID,   
+IM.InvestigationID,   
+tblTemp.CreatedBy,   
+@ServerDate AS Date,   
+'N'         AS Iscomplete,   
+tblTemp.Status,   
+tblTemp.OrgID,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END         AS ReferenceRange,   
+@pGUId      AS GUID,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber,   
+IOM.IsConfidentialTest   
+--,IOM.SampleCode                 
+--,IGMM.Parent                                                                       
+FROM   @tblTempGrp tblTemp   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = tblTemp.InvID   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = im.InvestigationID   
+AND IOM.OrgID = tblTemp.OrgID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvGroupMapMaster IGMM    
+ON IGMM.GroupID = tblTemp.GrpID and  isnull(IGMM.Active ,'Y')='Y'        
+AND IGMM.InvestigationID = tblTemp.InvID   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.OrgGroupID = IGMM.GroupID   
+AND IOG.OrgID = tblTemp.OrgID   
+INNER JOIN InvGroupMaster IGM    
+ON IGM.GroupID = IOG.AttGroupID   
+AND IOG.OrgID = tblTemp.OrgID   
+INNER JOIN #OrderedInvestigations OI    
+ON oi.ID = tblTemp.toplevelGrpID   
+AND oi.VisitID = tblTemp.PatientVisitID   
+AND OI.UID = @pGUId   
+AND OI.Type = 'GRP'   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM   on VCM.VisitID=tblTemp.PatientVisitID and VCM.OrgID =tblTemp.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  tblTemp.isGroup = 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.InvestigationID = tblTemp.InvID   
+AND PatientVisitID =   
+tblTemp.PatientVisitID   
+AND OrgID = tblTemp.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+)   
+AND PI.UID = @pGUId)   
+AND IGMM.Active <> 'N'   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+PackageID,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo,   
+IsConfidentialTest)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+PInv.GroupID,   
+PInv.PackageID   
+--,PInv.GroupName                                                                                                                      
+,   
+PInv.PatientVisitID,   
+PInv.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+pInv.Status,   
+PInv.OrgID,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+iom.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber,   
+IOM.IsConfidentialTest   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = PInv.InvestigationID   
+AND IOM.OrgID = PInv.OrgID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+AND OI.Type = PInv.Type   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  pInv.type = 'INV'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+pInv.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND GroupID = 0   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.UID = @pGUId)   
+------------------DeltaCheck-------------------------
+Create table #tempdeltacheck
+(
+Patientinvid bigint,
+Investigationid bigint,
+LowerLimitvalue decimal(18,2),
+Upperlimitvalue decimal(18,2),
+Recentvalue  nvarchar(50)
+)
+Create table #tempvisitid
+(
+rowno int,
+visitid bigint,
+Investigationid bigint
+)
+Create table #tempFinal
+(
+Investigationid bigint,
+Value nVarchar(50),
+CreatedAt datetime,
+visitid bigint
+)
+
+Create table #tempminvisitid
+(
+Investigationid bigint,
+Value nVarchar(50),
+CreatedAt datetime,
+visitid bigint
+)
+
+Declare @DeltacheckStatus bit
+set @DeltacheckStatus=0
+
+Create table #temp
+(
+patientId bigint,
+Patientinvid bigint,
+investigationid bigint,
+timeframe int,
+TimeUnit varchar(10),
+DeltaCalculationType varchar(10),
+Orgid bigint,
+DeltaValue decimal(18,2)
+)
+insert into #temp
+select PV.PatientID,PIV.Patientinvid,IDC.InvestigationId,IDC.TimeFrame,IDC.TimeUnit,IDC.DeltaCalculationType,PV.Orgid,DeltaUnit from patientinvestigation PIV
+inner join PatientVisit PV on PIV.PatientVisitID=PV.PatientVisitId and PV.OrgID=PIV.OrgID
+inner join  InvDeltaCheck IDC on IDC.InvestigationId=PIV.InvestigationID and IDC.Orgid=PIV.OrgID
+where PIV.PatientVisitID = @pVisitID and PIV.OrgID = @OrgID and isnull(PIV.statustype,'') not in ('RR','RC')
+
+
+if exists (select 1 from #temp)
+begin
+
+insert into #tempvisitid
+select row_number()over(order by PV.patientvisitid) as rowno, PV.patientvisitid,T.investigationid from patientvisit PV 
+inner join #temp T on T.patientId=PV.PatientID and PV.OrgID=T.Orgid
+
+delete from   #tempvisitid where visitid=@pVisitID
+declare @cnt bigint
+--select @maxvid= max(visitid) from #tempvisitid
+select @cnt=count(1) from #tempvisitid
+DECLARE @site_value INT;
+SET @site_value = 1;
+WHILE @site_value <= @cnt
+Begin
+declare @invid bigint
+select @invid=Investigationid from #tempvisitid where rowno=@site_value
+
+insert into #tempminvisitid
+select top 1 IV.InvestigationID,IV.Value,IV.CreatedAt,IV.PatientVisitID from investigationvalues IV
+inner join #tempvisitid T on IV.PatientVisitID =T.visitid and IV.InvestigationID=T.Investigationid
+inner join patientinvestigation PI on PI.patientvisitid=IV.PatientVisitID and PI.InvestigationID=IV.Investigationid and isnull(PI.statustype,'') not in ('RR','RC') 
+where isnull(IV.statustype,'') not in ('RR','RC') and PI.Status='Approve' and T.investigationid=@invid  order by IV.PatientVisitID desc
+ SET @site_value = @site_value + 1;
+end
+
+insert into #tempFinal
+select distinct * from #tempminvisitid
+--insert into #tempminvisitid
+--select  min(visitid),InvestigationID,count(visitid) from #tempFinal group by InvestigationID
+
+
+--delete T from #tempFinal  T
+--inner join #tempminvisitid TT on TT.visitid=T.visitid and TT.investigationid=T.investigationid
+--where TT.cnt>1
+insert into  #tempdeltacheck
+(
+Patientinvid ,
+Investigationid ,
+LowerLimitvalue ,
+Upperlimitvalue ,
+Recentvalue
+)
+select TT.Patientinvid,TT.investigationid, Convert(decimal,T.Value)-TT.DeltaValue , Convert(decimal,T.Value)+TT.DeltaValue ,T.Value from #tempFinal T
+inner join #temp TT on T.Investigationid = TT.investigationid
+ where TT.timeframe >=  DATEDIFF(hh, CreatedAt, GETDATE()) and TT.TimeUnit='hrs' and TT.DeltaCalculationType='ABS'   
+ union
+ select TT.Patientinvid,TT.investigationid, Convert(decimal,T.Value)-(TT.DeltaValue*Convert(decimal,T.Value)/100.0) , Convert(decimal,T.Value)+(TT.DeltaValue*Convert(decimal,T.Value)/100.0) ,T.Value from #tempFinal T
+inner join #temp TT on T.Investigationid = TT.investigationid
+ where TT.timeframe >=  DATEDIFF(hh, CreatedAt, GETDATE()) and TT.TimeUnit='hrs' and TT.DeltaCalculationType='PER'  
+  union
+ select TT.Patientinvid,TT.investigationid, Convert(decimal,T.Value)-TT.DeltaValue , Convert(decimal,T.Value)+TT.DeltaValue ,T.Value from #tempFinal T
+inner join #temp TT on T.Investigationid = TT.investigationid
+ where TT.timeframe >=  DATEDIFF(minute, CreatedAt, GETDATE()) and TT.TimeUnit='mins' and TT.DeltaCalculationType='ABS'   
+ union
+ select TT.Patientinvid,TT.investigationid, Convert(decimal,T.Value)-(TT.DeltaValue*Convert(decimal,T.Value)/100.0) , Convert(decimal,T.Value)+(TT.DeltaValue*Convert(decimal,T.Value)/100.0) ,T.Value from #tempFinal T
+inner join #temp TT on T.Investigationid = TT.investigationid
+ where TT.timeframe >=  DATEDIFF(minute, CreatedAt, GETDATE()) and TT.TimeUnit='mins' and TT.DeltaCalculationType='PER'   
+End
+------------------End--------------------------------
+--select * into #tempPIA from PatientInvestigationAttributes where PatientVisitID = @pVisitID  
+
+--INSERT INTO PatientInvestigationAttributes  
+--(PatientInvId,   
+--PatientVisitId,   
+--ORgId,   
+--IsConfidentialTest,InvestigationId,DeltaCalculationType,IsDeltaCheck,AccessionNumber,RecentResultValue,DeltaLowerLimit,DeltaHigherLimit,Createdat,DeltaCheckStatus)   
+--SELECT DISTINCT PINV.PatientInvID,   
+--PINV.PatientVisitID,   
+--PINV.OrgID,   
+--IOM.IsConfidentialTest,IOM.InvestigationID,IDC.DeltaCalculationType,case when IDC.InvDeltaCheckId is null then 0 else 1 end,PINV.AccessionNumber,TDC.Recentvalue,
+--TDC.LowerLimitvalue,TDC.Upperlimitvalue,getdate(),case when TDC.LowerLimitvalue is null then 1 else 0 end
+--FROM   PatientInvestigation PINV    
+--left join #tempPIA PIA on PIA.patientinvid=PINV.patientinvId
+--INNER JOIN InvestigationOrgMapping IOM    
+--ON PINV.PatientVisitID = @pVisitID   
+--AND PINV.InvestigationID = IOM.InvestigationID   
+--AND IOM.OrgID = @OrgID   
+--left join InvDeltaCheck IDC on IDC.InvestigationId=IOM.InvestigationID and IDC.Orgid=IOM.OrgID
+--left join #tempdeltacheck TDC on TDC.Patientinvid=PINV.PatientInvID and TDC.Investigationid=PINV.InvestigationID
+--where PIA.patientinvid is null
+----End
+drop table #tempdeltacheck
+drop table #temp
+drop table #tempvisitid
+drop table #tempFinal
+drop table #tempminvisitid  
+IF EXISTS(SELECT 1   
+FROM   InvestigationQueue IQ    
+INNER JOIN @pPatientInvTable PT   
+ON IQ.VisitID = PT.PatientVisitID   
+WHERE  OrderedUID = @pGUId   
+AND IQ.Type = 'GRP')   
+BEGIN   
+--Select 'AA'                                                 
+INSERT INTO InvestigationValues   
+(NAME,   
+Value,   
+InvestigationID,   
+GroupID,   
+PatientVisitID,   
+UOMID,   
+Status,   
+CreatedBy,   
+CreatedAt,   
+ModifiedBy,   
+ModifiedAt,   
+UOMCode,   
+GroupName,   
+Orgid,   
+IPInvSampleCollectionMasterID,   
+PackageID,   
+PackageName,   
+SequenceNo,   
+UID,   
+Dilution,   
+DeviceID,   
+DeviceValue,   
+PRECISION,   
+Migrated_Request_Number,   
+Migrated_TestCode,   
+DeviceActualValue,   
+statustype,   
+ConvValue,   
+ConvUOMCode)   
+output Inserted.investigationvalueid ,Inserted.status into @tmp_invv  
+SELECT DISTINCT IV.NAME,   
+IV.Value,   
+IV.InvestigationID,   
+IV.GroupID,   
+IV.PatientVisitID,   
+IV.UOMID,   
+IV.Status,   
+IV.CreatedBy,   
+IV.CreatedAt,   
+IV.ModifiedBy,   
+IV.ModifiedAt,   
+IV.UOMCode,   
+IV.GroupName,   
+IV.Orgid,   
+IV.IPInvSampleCollectionMasterID,   
+IV.PackageID,   
+IV.PackageName,   
+IV.SequenceNo,   
+@pGUId,   
+IV.Dilution,   
+IV.DeviceID,   
+IV.DeviceValue,   
+IV.PRECISION,   
+IV.Migrated_Request_Number,   
+IV.Migrated_TestCode,   
+IV.DeviceActualValue,   
+IV.statustype,   
+IV.ConvValue,   
+IV.ConvUOMCode   
+FROM   @pPatientInvTable PT   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PT.PatientVisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+INNER JOIN InvOrgGroup IOG   
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN PatientInvestigation PI    
+ON OI.AccessionNumber = PI.AccessionNumber   
+--and PI.GroupID = IV.GroupID and PI.InvestigationID = IV.InvestigationID --and PI.status not in ('Retest')                                                         
+INNER JOIN InvestigationValues IV    
+ON PI.PatientVisitID = IV.PatientVisitID   
+AND PI.Groupid = IV.Groupid   
+AND PI.investigationid = IV.Investigationid   
+WHERE  PI.Status IN( 'Approve', 'Validate', 'Completed',   
+'Pending',   
+'With-hold Completion',   
+'With-hold Validation',   
+'With-hold Approval' )   
+UPDATE PI   
+SET    PI.Status = IV.Status   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+FROM   @pPatientInvTable PT   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PT.PatientVisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN PatientInvestigation PI  WITH (ROWLOCK)  
+ON OI.AccessionNumber = PI.AccessionNumber   
+AND PI.OrgId = @OrgID   
+INNER JOIN InvestigationValues IV    
+ON IV.PatientVisitID = PI.PatientVisitID   
+AND IV.Uid = PI.UID   
+AND PI.GroupID = IV.GroupID   
+AND PI.InvestigationID = IV.InvestigationID   
+WHERE  IV.Status IN( 'Approve', 'Validate', 'Completed',   
+'Pending',   
+'With-hold Completion',   
+'With-hold Validation',   
+'With-hold Approval' )   
+AND iv.UID = @pGUId   
+UPDATE PI   
+SET    PI.ReferenceRange = PI1.ReferenceRange,   
+PI.MedicalRemarks = PI1.MedicalRemarks,   
+PI.IsAbnormal = PI1.IsAbnormal,   
+PI.CreatedAt = PI1.CreatedAt,   
+PI.ApprovedAt = PI1.ApprovedAt,   
+PI.ApprovedBy = PI1.ApprovedBy,   
+PI.MethodName = PI1.MethodName,   
+PI.Interpretation = PI1.Interpretation,   
+PI.ValidatedBy = PI1.ValidatedBy,   
+PI.ValidatedAt = PI1.ValidatedAt,   
+PI.AuthorizedBy = PI1.AuthorizedBy,   
+PI.IsAutoAuthorize = PI1.IsAutoAuthorize   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+FROM   @pPatientInvTable PT   
+INNER JOIN #OrderedInvestigations OI    
+ON OI.VisitID = PT.PatientVisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN PatientInvestigation PI WITH (ROWLOCK)   
+ON PI.PatientVisitID = PT.PatientVisitID   
+AND Oi.AccessionNumber = PI.AccessionNumber   
+AND PI.OrgId = @OrgID   
+INNER JOIN InvestigationValues IV    
+ON IV.PatientVisitID = PI.PatientVisitID   
+AND PI.InvestigationID = IV.InvestigationID   
+AND PI.GroupID = IV.GroupID   
+INNER JOIN PatientInvestigation PI1    
+ON PI1.PatientVisitID = PI.PatientVisitID   
+AND PI1.InvestigationID = PI.InvestigationID   
+AND PI1.GroupID = PI.GroupID   
+AND IV.UID <> @pGUId   
+AND PI1.Status IN( 'Validate', 'Completed',   
+'Approve',   
+'Pending',   
+'InActive', 'Retest',   
+'With-hold Completion',   
+'With-hold Validation',   
+'With-hold Approval'   
+)   
+DECLARE @TableForRetest AS TABLE   
+(   
+AccessionNumber BIGINT,   
+LabNo           nvarchar(500)   
+)   
+INSERT @TableForRetest   
+SELECT OI.AccessionNumber,   
+OI.LabNo   
+FROM   @pPatientInvTable PT   
+INNER JOIN #OrderedInvestigations OI    
+ON PT.PatientVisitID = OI.VisitID   
+AND PT.InvestigationID = OI.ID   
+AND OI.Type = 'GRP'   
+--Update PI set PI.Status = IV.Status   from InvestigationValues IV                                                    
+--  inner join PatientInvestigation PI  on PI.PatientVisitID = IV.PatientVisitID                                                         
+--     and PI.GroupID = IV.GroupID and PI.InvestigationID = IV.InvestigationID --and PI.status not in ('Retest')                         
+--     inner join @pPatientInvTable PT on PT.PatientVisitID = IV.PatientVisitID AND iv.UID = @pGUId  and IV.Status In('Approve','Validate','Completed','Pending')                                                      
+UPDATE IV   
+SET    IV.Status = 'InActive'   
+output Inserted.investigationvalueid ,Inserted.status into @tmp_invv  
+FROM   #OrderedInvestigations OI    
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN @pPatientInvTable PT   
+ON PT.PatientVisitID = OI.VisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+INNER JOIN PatientInvestigation PI    
+ON PI.PatientVisitID = OI.VisitID   
+AND OI.AccessionNumber = PI.AccessionNumber   
+AND PI.OrgId = @OrgID   
+INNER JOIN InvestigationValues IV WITH (ROWLOCK)   
+ON IV.PatientVisitID = OI.VisitID   
+AND PI.GroupID = IV.GroupID   
+AND PI.InvestigationID = IV.InvestigationID   
+AND Pi.GroupID = IV.GroupID   
+--and PI.status not in ('Retest')                    
+--AND iv.UID <> '0efc428b-b993-46e7-a350-44e1ae0e1132'         
+AND IV.Status IN ( 'Approve', 'Validate',   
+'Completed',   
+'Pending',   
+'With-hold Completion',   
+'With-hold Validation',   
+'With-hold Approval'   
+)   
+AND PI.UID <> @pGUId   
+AND iv.UID <> @pGUId   
+--Update IV  set Status ='InActive'  From     InvestigationValues IV                                            
+--inner join PatientInvestigation PI  on PI.PatientVisitID = IV.PatientVisitID                                                         
+-- and PI.GroupID = IV.GroupID and PI.InvestigationID = IV.InvestigationID and IV.UID <> @pGUId --and PI.status not in ('Retest')                                          
+--inner join @pPatientInvTable PT on PT.PatientVisitID = IV.PatientVisitID and PI.Status In('Approve','Validate','Completed','Pending') and PI.UID <> @pGUId                                            
+UPDATE PI   
+SET    PI.Status = 'InActive'   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+FROM   #OrderedInvestigations OI    
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN @pPatientInvTable PT   
+ON PT.PatientVisitID = OI.VisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+INNER JOIN PatientInvestigation PI WITH (ROWLOCK)    
+ON PI.PatientVisitID = OI.VisitID   
+AND OI.AccessionNumber = PI.AccessionNumber   
+AND PI.OrgId = @OrgID   
+INNER JOIN InvestigationValues IV    
+ON IV.PatientVisitID = OI.VisitID   
+AND PI.GroupID = IV.GroupID   
+AND PI.InvestigationID = IV.InvestigationID   
+AND Pi.GroupID = IV.GroupID   
+--and PI.status not in ('Retest')                            
+--AND iv.UID <> '0efc428b-b993-46e7-a350-44e1ae0e1132'                                           
+AND IV.Status IN ( 'Approve', 'Validate',   
+'Completed',   
+'Pending',   
+'With-hold Completion',   
+'With-hold Validation',   
+'With-hold Approval'   
+)   
+AND PI.UID <> @pGUId   
+--Select  PI.Status ,IV.Status,IV.UID,IV.InvestigationID   from InvestigationValues IV inner join PatientInvestigation PI on PI.PatientVisitID = IV.PatientVisitID                        
+--    and PI.GroupID = IV.GroupID and PI.InvestigationID = IV.InvestigationID --and PI.status not in ('Retest')                         
+--    inner join @pPatientInvTable PT on PT.PatientVisitID = IV.PatientVisitID AND iv.UID = @pGUId  and PI.Status = 'Approve'                                               
+--  if exists(                                       
+--select Count(ID),VisitID from #OrderedInvestigations OI                                   
+--inner join InvOrgGroup IOG  on IOG.AttGroupID = OI.ID  and IOg.OrgID = @OrgID and IOG.IsSpecialFormatForRetest ='Y'                                   
+-- where VisitID in (select PatientVisitID from @pPatientInvTable) and Type ='GRP' Group by VisitID                                      
+--having Count(ID) = 2 )                       
+--begin                                       
+----UPdate Tasks Set TaskStatusID = 2 where PatientVisitID in(select PatientVisitID from @TableForRetest) and TaskActionID in(62,39,67) and TaskStatusID = 1                                     
+--update Tasks set RedirectURL =                       
+--REPLACE(                                     
+--STUFF(RedirectURL,                                     
+--(CHARINDEX('&gUID=',RedirectURL) )+6,CHARINDEX('&tid',RedirectURL)-(CHARINDEX('&gUID=',RedirectURL)+6  ),'###')                                      
+--,'###',@pGUId                                     
+--)                                     
+-- FROM Tasks  where PatientVisitID =@pVisitID  and TaskActionID in(62,39,67)                                    
+--enD     
+UPDATE OI   
+SET    OI.Status = 'InActive'   
+OUTPUT Inserted.accessionnumber,Inserted.status into @tmp_ordinv  
+FROM   OrderedInvestigations OI WITH (ROWLOCK)   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupID = OI.ID   
+AND IOg.OrgID = @OrgID   
+AND IOG.IsSpecialFormatForRetest = 'Y'   
+INNER JOIN @pPatientInvTable PT   
+ON OI.VisitID = PT.PatientVisitID   
+AND OI.ID = PT.InvestigationID   
+AND OI.Type = 'GRP'   
+WHERE  OI.AccessionNumber IN(SELECT AccessionNumber   
+FROM   @TableForRetest)   
+AND OI.UID <> @pGUId   
+UPDATE OI1   
+SET    OI1.Status = OI2.Status   
+OUTPUT Inserted.AccessionNumber,Inserted.status into @tmp_ordinv  
+FROM   #OrderedInvestigations OI1    
+INNER JOIN OrderedInvestigations OI2    
+ON OI1.AccessionNumber = OI2.AccessionNumber   
+END   
+END   
+ELSE   
+BEGIN   
+SELECT @RefAccessionNumber = PI.AccessionNumber   
+FROM   @pPatientInvTable t1   
+INNER JOIN PatientInvestigation PI   
+ON t1.PatientVisitID = PI.PatientVisitID   
+AND t1.InvestigationID = PI.InvestigationID   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+GMP1.GroupID   
+--,GMP1.GroupName                                                                       
+,   
+CASE Isnull(OG1.DisplayText, GMP1.GroupName)   
+WHEN '' THEN GMP1.GroupName   
+ELSE Isnull(OG1.DisplayText, GMP1.GroupName)   
+END AS GroupName,   
+GMP.GroupID   
+--,GMP.GroupName                                                                                                                    
+,   
+CASE Isnull(OG.DisplayText, GMP.GroupName)   
+WHEN '' THEN GMP.GroupName   
+ELSE Isnull(OG.DisplayText, GMP.GroupName)   
+END AS GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG    
+ON OG.AttGroupID = GMP.GroupID   
+AND OG.OrgID = PInv.OrgID   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG.OrgGroupID   
+AND IPM.Type = 'GRP'   
+AND IPM.active <> 'D'   
+INNER JOIN InvOrgGroup OG1    
+ON OG1.OrgGroupID = IPM.ID   
+AND OG1.OrgID = PInv.OrgID   
+INNER JOIN InvGroupMaster GMP1    
+ON GMP1.GroupID = OG1.AttGroupID   
+AND GMP1.Type = IPM.Type   
+INNER JOIN invGroupMapMaster GMM    
+ON GMM.GroupID = OG1.OrgGroupID and ISNULL(GMM.Active,'Y')='Y'    
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = GMM.InvestigationID   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = IM.InvestigationID   
+AND IOM.OrgID = PInv.OrgID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND OG.OrgID = PInv.orgid   
+AND ( GMM.Parent != 'Y'   
+OR GMM.Parent IS NULL )   
+AND GMM.Active <> 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.Uid = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+GMM1.GroupID   
+--,GMP2.GroupName                                                                        
+,   
+CASE Isnull(OG2.DisplayText, GMP2.GroupName)   
+WHEN '' THEN GMP2.GroupName   
+ELSE Isnull(OG2.DisplayText, GMP2.GroupName)   
+END AS GroupName,   
+GMP.GroupID   
+--,GMP.GroupName                                                                           
+,   
+CASE Isnull(OG3.DisplayText, GMP.GroupName)   
+WHEN '' THEN GMP.GroupName   
+ELSE Isnull(OG3.DisplayText, GMP.GroupName)   
+END AS GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG3    
+ON OG3.AttGroupID = GMP.GroupID   
+AND OG3.OrgID = PInv.orgid   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG3.OrgGroupID   
+AND IPM.Type = 'GRP'   
+AND IPM.active <> 'D'   
+--INNER JOIN InvGroupMaster GMP1 ON GMP1.GroupID = IPM.ID --AND GMM1.GroupID = GMP1.GroupID                                                                                   
+--INNER JOIN InvOrgGroup OG1 ON OG1.AttGroupID = GMP1.GroupID                                                                                                      
+INNER JOIN invGroupMapMaster GMM    
+ON GMM.GroupID = IPM.ID   and ISNULL(GMM.Active,'Y')='Y'    
+INNER JOIN InvOrgGroup OG2    
+ON OG2.OrgGroupID = GMM.InvestigationID   
+AND OG2.OrgID = PInv.orgid   
+INNER JOIN InvGroupMaster GMP2    
+ON GMP2.GroupID = OG2.AttGroupID   
+INNER JOIN invGroupMapMaster GMM1    
+ON GMM1.GroupID = GMM.InvestigationID  and ISNULL(GMM1.Active,'Y')='Y'     
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = GMM1.InvestigationID   
+AND IOM.OrgID = PInv.orgid   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND GMM.Parent = 'Y'   
+AND GMM.Active <> 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.Uid = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PackageName,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+PInv.GroupID,   
+PInv.GroupName,   
+GMP.GroupID,   
+GMP.GroupName,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.orgid,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvGroupMaster GMP    
+ON GMP.GroupID = PInv.InvestigationID   
+AND GMP.Type = PInv.Type   
+INNER JOIN InvOrgGroup OG    
+ON OG.AttGroupID = GMP.GroupID   
+AND OG.OrgID = PInv.OrgID   
+INNER JOIN InvPackageMapping IPM    
+ON IPM.PackageID = OG.OrgGroupID   
+AND IPM.Type = 'INV'   
+AND IPM.active <> 'D'   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = IPM.ID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  ( PInv.Type = 'PKG'   
+OR PInv.Type = 'INS' )   
+AND IOM.OrgID = PInv.orgid   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.uid = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+IGMM.GroupID   
+--,IGM.GroupName                                                                                                           
+,   
+CASE Isnull(OG.DisplayText, IGM.GroupName)   
+WHEN '' THEN IGM.GroupName   
+ELSE Isnull(OG.DisplayText, IGM.GroupName)   
+END AS GroupName,   
+PInv.PackageID,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.OrgID,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   InvestigationOrgMapping IOM    
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN invGroupMapMaster IGMM    
+ON IGMM.InvestigationID = IOM.InvestigationID and ISNULL(IGMM.Active,'Y')='Y'      
+INNER JOIN InvOrgGroup OG    
+ON OG.OrgGroupID = IGMM.GroupID   
+INNER JOIN InvGroupMaster IGM    
+ON IGM.GroupID = OG.AttGroupID   
+INNER JOIN @pPatientInvTable PInv   
+ON IGM.GroupID = PInv.InvestigationID   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--LEFT Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID  
+WHERE  PInv.type = 'GRP'   
+AND OG.OrgID = PInv.orgid   
+AND ( IGMM.Parent != 'Y'   
+OR IGMM.Parent IS NULL )   
+AND IOM.OrgID = PInv.Orgid   
+AND IGMM.Active <> 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PI.PatientVisitID =   
+PInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND PI.Status IN (SELECT Status   
+FROM   
+investigationstatus (   
+nolock))   
+AND PI.Uid = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+GroupName,   
+PackageID,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+IGMM2.GroupID   
+--,IGM1.GroupName                                                                       
+,   
+CASE Isnull(OG.DisplayText, IGM1.GroupName)   
+WHEN '' THEN IGM1.GroupName   
+ELSE Isnull(OG.DisplayText, IGM1.GroupName)   
+END AS GroupName,   
+PInv.PackageID,   
+PInv.PatientVisitID,   
+IM.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+PInv.Status,   
+PInv.OrgID,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   InvestigationOrgMapping IOM    
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN invGroupMapMaster IGMM2    
+ON IGMM2.InvestigationID = IOM.InvestigationID   and ISNULL(IGMM2.Active,'Y')='Y'    
+INNER JOIN InvOrgGroup OG1    
+ON OG1.OrgGroupID = IGMM2.GroupID   
+AND OG1.OrgID = IOM.OrgID   
+INNER JOIN invGroupMapMaster IGMM1    
+ON IGMM1.InvestigationID = OG1.OrgGroupID  and ISNULL(IGMM1.Active,'Y')='Y'    
+INNER JOIN InvOrgGroup OG    
+ON OG.OrgGroupID = IGMM1.GroupID   
+AND OG.OrgID = IOM.OrgID   
+INNER JOIN InvGroupMaster IGM    
+ON IGM.GroupID = OG.AttGroupID   
+INNER JOIN InvGroupMaster IGM1    
+ON IGM1.GroupID = OG1.AttGroupID   
+INNER JOIN @pPatientInvTable PInv   
+ON IGM.GroupID = PInv.InvestigationID   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  PInv.type = 'GRP'   
+AND OG.OrgID = PInv.orgID  
+AND IGMM1.Parent = 'Y'   
+AND IOM.OrgID = PInv.Orgid   
+AND IGMM1.Active <> 'N'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+IOM.InvestigationID   
+AND PI.PatientVisitID =   
+PInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND PI.Status IN (SELECT Status   
+FROM   
+investigationstatus (   
+nolock))   
+AND PI.UID = @pGUId)   
+INSERT INTO PatientInvestigation   
+(InvestigationName,   
+GroupID,   
+PackageID,   
+PatientVisitID,   
+InvestigationID,   
+CreatedBy,   
+CreatedAt,   
+IsCompleted,   
+Status,   
+OrgID,   
+ReferenceRange,   
+UID,   
+AccessionNumber,   
+SampleID,   
+InvestigationMethodID,   
+MethodName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+RefAccessionNo)   
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv  
+SELECT DISTINCT CASE Isnull(IOM.DisplayText, IM.InvestigationName)   
+WHEN '' THEN IM.InvestigationName   
+ELSE Isnull(IOM.DisplayText, IM.InvestigationName)   
+END AS InvestigationName,   
+PInv.GroupID,   
+PInv.PackageID   
+--,PInv.GroupName                                                                                                                
+,   
+PInv.PatientVisitID,   
+PInv.InvestigationID,   
+PInv.CreatedBy,   
+@ServerDate,   
+'N',   
+pInv.Status,   
+PInv.OrgID,   
+CASE   
+WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+IORM.ReferenceRange   
+ELSE IOM.ReferenceRange   
+END AS ReferenceRange,   
+@pGUId,   
+OI.AccessionNumber,   
+IOM.SampleCode,   
+IMD.MethodID,   
+IMD.MethodName,   
+ikm.KitID,   
+ikm.KitName,   
+iim.InstrumentID,   
+iim.InstrumentName,   
+IOM.Interpretation,   
+ip.PrincipleID,   
+ip.PrincipleName,   
+iom.QCData,   
+@RefAccessionNumber   
+FROM   @pPatientInvTable PInv   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationID = PInv.InvestigationID   
+AND IOM.OrgID = PInv.OrgID   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN InvestigationMaster IM    
+ON IM.InvestigationID = IOM.InvestigationID   
+INNER JOIN OrderedInvestigations OI    
+ON OI.VisitID = PInv.PatientVisitID   
+AND OI.ID = PInv.InvestigationID   
+AND oi.UID = @pGUId   
+LEFT JOIN InvestigationMethod IMD    
+ON IMD.MethodID = IOM.MethodID   
+AND IMD.OrgID = IOM.OrgID   
+LEFT JOIN InvPrincipleMaster IP    
+ON IP.PrincipleID = IOM.PrincipleID   
+AND IP.OrgID = IOM.OrgID   
+LEFT JOIN InvKitMaster IKM    
+ON IKM.KitID = IOM.KitID   
+AND IKM.OrgID = IOM.OrgID   
+LEFT JOIN InvInstrumentMaster IIM    
+ON IIM.InstrumentID = IOM.InstrumentID   
+AND IIM.OrgID = IOM.OrgID   
+--left Join VisitClientMapping VCM  on VCM.VisitID=PInv.PatientVisitID and VCM.OrgID =PInv.OrgID                                               
+LEFT JOIN InvOrgReferenceMapping IORM    
+ON IORM.ClientID = @pClientID   
+AND IORM.InvestigationID = IM.InvestigationID   
+WHERE  pInv.type = 'INV'   
+AND NOT EXISTS(SELECT 1   
+FROM   PatientInvestigation PI    
+WHERE  PI.Patientvisitid = @PVisitid   
+AND PI.InvestigationID =   
+pInv.InvestigationID   
+AND PatientVisitID =   
+pInv.PatientVisitID   
+AND OrgID = PInv.OrgID   
+AND Status IN (SELECT Status   
+FROM   
+investigationstatus   
+(   
+nolock))   
+AND PI.Uid = @pGUId)   
+END   
+--UPDATE PI   
+--SET    PI.SampleID = PIsm.SampleID   
+--FROM   PatientInvestigation  PI   
+--       INNER JOIN PatientInvSampleMapping  PISM ON PI.PatientVisitID = PISM.VisitID   
+--                                                           AND PI.UID = PISM.UID   
+--                                                           AND PI.InvestigationID = PISM.ID   
+--WHERE  PISM.Type = 'INV'   
+--       AND VisitID = @pVisitID   
+--       AND PI.patientVisitid = @pVisitID   
+IF NOT EXISTS(SELECT IAD.PatientInvId   
+FROM   InvestigationAttributesDetails IAD    
+INNER JOIN PatientInvestigation PI   
+ON PI.PatientInvId = IAD.PatientInvId   
+WHERE  PI.PatientVisitID = @pVisitID   
+AND Pi.OrgId = @OrgID)   
+BEGIN   
+INSERT INTO #PatientInvestigation   
+(PatientVisitID,   
+InvestigationID,   
+InvestigationName,   
+CreatedBy,   
+CreatedAt,   
+ModifiedBy,   
+ModifiedAt,   
+InvestigationMethodID,   
+InvestigationSampleContainerID,   
+SampleID,   
+InvestigationSiteID,   
+IsCompleted,   
+CollectedDateTime,   
+Status,   
+ComplaintId,   
+GroupID,   
+GroupName,   
+Reason,   
+ReportStatus,   
+ReferenceRange,   
+MethodName,   
+IPInvSampleCollectionMasterID,   
+OrgID,   
+WorklistDeletedStatus,   
+PerformingPhysicainName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+PackageID,   
+PackageName,   
+ApprovedBy,   
+PatientInvID,   
+OrderedAt,   
+UID,   
+GroupComment,   
+ApprovedAt,   
+AccessionNumber,   
+IsAbnormal,   
+InvStatusReasonID,   
+Test,   
+ValidatedBy,   
+ValidatedAt,   
+RemarksID,   
+MedicalRemarks,   
+GroupMedicalRemarks,   
+RefSuffixText,   
+Migrated_Patient_Number,   
+Migrated_Request_Number,   
+Migrated_Visit_Number,   
+Migrated_TestCode,   
+Migrated_TestType,   
+WorkListID,   
+AuthorizedBy,   
+DeviceID,   
+WorklistType,   
+WorklistTypeID,   
+PickedBy,   
+statustype,   
+ConvReferenceRange,   
+RefAccessionNo,   
+ManualAbnormal,   
+IsAutoAuthorize,   
+IsSentBarcode,   
+PrintableRange,   
+WorklistCreatedby,   
+WorklistCreatedat)   
+SELECT PatientVisitID,   
+InvestigationID,   
+InvestigationName,   
+CreatedBy,   
+CreatedAt,   
+ModifiedBy,   
+ModifiedAt,   
+InvestigationMethodID,   
+InvestigationSampleContainerID,   
+SampleID,   
+InvestigationSiteID,   
+IsCompleted,   
+CollectedDateTime,   
+Status,   
+ComplaintId,   
+GroupID,   
+GroupName,   
+Reason,   
+ReportStatus,   
+ReferenceRange,   
+MethodName,   
+IPInvSampleCollectionMasterID,   
+OrgID,   
+WorklistDeletedStatus,   
+PerformingPhysicainName,   
+KitID,   
+KitName,   
+InstrumentID,   
+InstrumentName,   
+Interpretation,   
+PrincipleID,   
+PrincipleName,   
+QCData,   
+PackageID,   
+PackageName,   
+ApprovedBy,   
+PatientInvID,   
+OrderedAt,   
+UID,   
+GroupComment,   
+ApprovedAt,   
+AccessionNumber,   
+IsAbnormal,   
+InvStatusReasonID,   
+Test,   
+ValidatedBy,   
+ValidatedAt,   
+RemarksID,   
+MedicalRemarks,   
+GroupMedicalRemarks,   
+RefSuffixText,   
+Migrated_Patient_Number,   
+Migrated_Request_Number,   
+Migrated_Visit_Number,   
+Migrated_TestCode,   
+Migrated_TestType,   
+WorkListID,   
+AuthorizedBy,   
+DeviceID,   
+WorklistType,   
+WorklistTypeID,   
+PickedBy,   
+statustype,   
+ConvReferenceRange,   
+RefAccessionNo,   
+ManualAbnormal,   
+IsAutoAuthorize,   
+IsSentBarcode,   
+PrintableRange,   
+WorklistCreatedby,   
+WorklistCreatedat   
+FROM   PatientInvestigation PI    
+WHERE  PI.PatientVisitID = @pVisitID   
+AND PI.OrgID = @OrgiD   
+IF( @RefferedType = 'ReflexTest'   
+AND @Type = 'INV' )   
+BEGIN   
+INSERT INTO InvestigationAttributesDetails   
+(PatientInvId,   
+InvestigationId,   
+AccessionNumber,   
+IsReportable,   
+OrgId,   
+ParentInvId,   
+StatusType,   
+CreatedBy,   
+CreatedAt)   
+SELECT DISTINCT PI.PatientInvId,   
+PI.InvestigationId,   
+IQ.AccessionNumber,   
+IQ.IsReportable,   
+TMP.OrgId,   
+IQ.ParentInvId,   
+@RefferedType,   
+IQ.CreatedBy,   
+IQ.CreatedAt   
+FROM   @pPatientInvTable TMP   
+INNER JOIN InvestigationQueue IQ    
+ON IQ.VisitId = TMP.PatientVisitID   
+AND IQ.UID = TMP.GUID   
+AND IQ.OrgId = TMP.OrgId   
+AND IQ.Status IN ( 'Reflexwithnewsample',   
+'Reflexwithsamesample' )   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationId = IQ.InvestigationId   
+AND IOM.OrgId = IQ.OrgId   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN #PatientInvestigation PI    
+ON PI.PatientVisitID = TMP.PatientVisitID   
+AND PI.InvestigationId = IOM.InvestigationId   
+AND PI.UID = @pGUId   
+INSERT INTO PatientInvSampleMapping   
+(    
+VisitID,    
+OrgID,    
+SampleID,    
+ID,    
+Type,    
+DeptID,    
+SampleInstanceID,    
+UID,    
+Barcode,    
+CreatedAt,    
+SID, 
+AccessionNumber      
+)     
+SELECT DISTINCT OI.VisitId,   
+OI.OrgId,   
+PI.SampleId,   
+PI.InvestigationID,   
+OI.Type,   
+0,   
+NULL,   
+PI.UID,   
+PIS.BarcodeNumber,   
+@ServerDate,   
+PIS.SampleId,
+ISNULL(oi.AccessionNumber,tmp.AccessionNumber)      
+FROM   @pPatientInvTable tmp   
+INNER JOIN #OrderedInvestigations oi    
+ON oi.VisitId = tmp.PatientVisitId   
+AND Oi.ReferredType = 'ReflexTest'   
+AND oi.referredaccessionno IN   
+(SELECT oi.AccessionNumber   
+FROM   
+#OrderedInvestigations oi    
+WHERE   
+oi.Status = 'Reflexwithsamesample'   
+AND oi.VisitId = tmp.PatientVisitId)   
+AND OI.ID = tmp.InvestigationId   
+INNER JOIN InvestigationOrgMapping IOM    
+ON IOM.InvestigationId = tmp.InvestigationId   
+AND IOM.OrgId = tmp.OrgId   
+INNER JOIN InvDeptMaster IDM    
+ON IDM.DeptID = IOM.DeptID   
+AND IDM.OrgID = IOM.OrgID   
+AND ISNULL(IDM.Display, '') != 'N'   
+INNER JOIN #PatientInvestigation Pi    
+ON PI.PatientVisitId = tmp.PatientVisitId   
+AND PI.OrgId = tmp.OrgId   
+AND PI.InvestigationId = IOM.InvestigationId   
+INNER JOIN PatientInvSample PIS    
+ON PIS.PatientVisitID = tmp.PatientVisitId   
+AND PIS.OrgId = PI.OrgId   
+--and PIS.SampleCode=PI.SampleId                                                                  
+WHERE  Pi.Uid = @pGUId   
+END   
+ELSE IF( @GrpRefferedType = 'ReflexTest'   
+AND @GrpType = 'GRP' )   
+BEGIN   
+INSERT INTO InvestigationAttributesDetails   
+(PatientInvId,   
+InvestigationId,   
+AccessionNumber,   
+IsReportable,   
+OrgId,   
+ParentInvId,   
+StatusType,   
+CreatedBy,   
+CreatedAt)   
+SELECT DISTINCT PI.PatientInvId,   
+PI.InvestigationId,   
+IQ.AccessionNumber,   
+IQ.IsReportable,   
+TMP.OrgId,   
+IQ.ParentInvId,   
+@RefferedType,   
+IQ.CreatedBy,   
+IQ.CreatedAt   
+FROM   @tblTempGrp t1   
+INNER JOIN @pPatientInvTable tmp   
+ON tmp.InvestigationId = t1.ParentGrpId   
+INNER JOIN #PatientInvestigation pi    
+ON pi.groupid = t1.InvId   
+INNER JOIN InvestigationQueue IQ    
+ON IQ.VisitId = tmp.PatientVisitID   
+AND IQ.UID = tmp.GUID   
+AND IQ.OrgId = TMP.OrgId   
+AND IQ.Status IN ( 'Reflexwithnewsample',   
+'Reflexwithsamesample' )   
+AND PI.UID = @pGUId   
+AND IQ.Type = 'GRP'   
+UNION ALL   
+SELECT DISTINCT PI.PatientInvId,   
+PI.InvestigationId,   
+IQ.AccessionNumber,   
+IQ.IsReportable,   
+TMP.OrgId,   
+IQ.ParentInvId,   
+@RefferedType,   
+IQ.CreatedBy,   
+IQ.CreatedAt   
+FROM   @pPatientInvTable TMP   
+INNER JOIN InvestigationQueue IQ    
+ON IQ.VisitId = TMP.PatientVisitID   
+AND IQ.UID = TMP.GUID   
+AND IQ.OrgId = TMP.OrgId   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupId = IQ.InvestigationId   
+AND IOG.OrgId = IQ.OrgId   
+INNER JOIN #PatientInvestigation PI    
+ON PI.PatientVisitID = TMP.PatientVisitID   
+AND PI.GroupId = IOG.OrgGroupId   
+AND IQ.Status IN ( 'Reflexwithnewsample',   
+'Reflexwithsamesample' )   
+AND PI.UID = @pGUId   
+AND IQ.Type = 'GRP'   
+INSERT INTO PatientInvSampleMapping   
+(    
+VisitID,    
+OrgID,    
+SampleID,    
+ID,    
+Type,    
+DeptID,    
+SampleInstanceID,    
+UID,    
+Barcode,    
+CreatedAt,    
+SID,
+AccessionNumber    
+)        
+SELECT DISTINCT OI.VisitId,   
+OI.OrgId,   
+PI.SampleId,   
+OI.ID,   
+OI.Type,   
+0,   
+NULL,   
+OI.UID,   
+PIS.BarcodeNumber,   
+@ServerDate,   
+PIS.SampleId,
+ISNULL(oi.AccessionNumber,tmp.AccessionNumber)    
+FROM   @tblTempGrp t1   
+INNER JOIN @pPatientInvTable tmp   
+ON tmp.InvestigationId = t1.ParentGrpId   
+INNER JOIN #OrderedInvestigations oi    
+ON oi.VisitId = tmp.PatientVisitId   
+AND Oi.ReferredType = 'ReflexTest'   
+AND oi.referredaccessionno IN   
+(SELECT oi.AccessionNumber   
+FROM   
+#OrderedInvestigations oi   
+WHERE   
+oi.Status = 'Reflexwithsamesample'   
+AND oi.VisitId = tmp.PatientVisitId)   
+AND OI.ID = tmp.InvestigationId   
+INNER JOIN #PatientInvestigation pi    
+ON pi.groupid = t1.InvId   
+INNER JOIN PatientInvSample PIS    
+ON PIS.PatientVisitID = tmp.PatientVisitId   
+AND PIS.OrgId = PI.OrgId   
+--and PIS.SampleCode=PI.SampleId                                                                  
+WHERE  Pi.Uid = @pGUId   
+UNION ALL   
+SELECT DISTINCT OI.VisitId,   
+OI.OrgId,   
+PI.SampleId,   
+OI.ID,   
+OI.Type,   
+0,   
+NULL,   
+OI.UID,   
+PIS.BarcodeNumber,   
+@ServerDate,   
+PIS.SampleId   
+FROM   @pPatientInvTable tmp   
+INNER JOIN #OrderedInvestigations oi    
+ON oi.VisitId = tmp.PatientVisitId   
+AND Oi.ReferredType = 'ReflexTest'   
+AND oi.referredaccessionno IN   
+(SELECT oi.AccessionNumber   
+FROM   
+#OrderedInvestigations oi    
+WHERE   
+oi.Status = 'Reflexwithsamesample'   
+AND oi.VisitId = tmp.PatientVisitId)   
+AND OI.ID = tmp.InvestigationId   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupId = tmp.InvestigationId   
+AND IOG.OrgId = tmp.OrgId   
+INNER JOIN #PatientInvestigation Pi    
+ON PI.PatientVisitId = tmp.PatientVisitId   
+AND PI.OrgId = tmp.OrgId   
+AND PI.GroupId = IOG.OrgGroupId   
+INNER JOIN PatientInvSample PIS    
+ON PIS.PatientVisitID = tmp.PatientVisitId   
+AND PIS.OrgId = PI.OrgId   
+--and PIS.SampleId=PI.SampleId                                                             
+WHERE  Pi.Uid = @pGUId   
+END   
+ELSE IF( @GrpRefferedType = 'ReflexTest'   
+AND @GrpType = 'PKG' )   
+BEGIN   
+INSERT INTO InvestigationAttributesDetails   
+(PatientInvId,   
+InvestigationId,   
+AccessionNumber,   
+IsReportable,   
+OrgId,   
+ParentInvId,   
+StatusType,   
+CreatedBy,   
+CreatedAt)   
+SELECT DISTINCT PI.PatientInvId,   
+PI.InvestigationId,   
+IQ.AccessionNumber,   
+IQ.IsReportable,   
+TMP.OrgId,   
+IQ.ParentInvId,   
+@RefferedType,   
+IQ.CreatedBy,   
+IQ.CreatedAt   
+FROM   @pPatientInvTable TMP   
+INNER JOIN InvestigationQueue IQ    
+ON IQ.VisitId = TMP.PatientVisitID   
+AND IQ.UID = TMP.GUID   
+AND IQ.OrgId = TMP.OrgId   
+AND IQ.Status IN ( 'Reflexwithnewsample',   
+'Reflexwithsamesample' )   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupId = tmp.InvestigationId   
+AND IOG.OrgId = tmp.OrgId   
+INNER JOIN #PatientInvestigation PI    
+ON PI.PatientVisitID = TMP.PatientVisitID   
+AND PI.PackageId = IOG.oRGGroupId   
+AND PI.UID = @pGUId   
+INSERT INTO PatientInvSampleMapping   
+(    
+VisitID,    
+OrgID,    
+SampleID,    
+ID,    
+Type,    
+DeptID,    
+SampleInstanceID,    
+UID,    
+Barcode,    
+CreatedAt,    
+SID,
+AccessionNumber  
+)        
+SELECT DISTINCT OI.VisitId,   
+OI.OrgId,   
+PI.SampleId,   
+OI.ID,   
+OI.Type,   
+0,   
+NULL,   
+PI.UID,   
+PIS.BarcodeNumber,   
+@ServerDate,   
+PIS.SampleId,
+ISNULL(oi.AccessionNumber,tmp.AccessionNumber)    
+FROM   @pPatientInvTable tmp   
+INNER JOIN #OrderedInvestigations oi    
+ON oi.VisitId = tmp.PatientVisitId   
+AND Oi.ReferredType = 'ReflexTest'   
+AND oi.referredaccessionno IN   
+(SELECT oi.AccessionNumber   
+FROM   
+#OrderedInvestigations oi    
+WHERE   
+oi.Status = 'Reflexwithsamesample'   
+AND oi.VisitId = tmp.PatientVisitId)   
+AND OI.ID = tmp.InvestigationId   
+INNER JOIN InvOrgGroup IOG    
+ON IOG.AttGroupId = tmp.InvestigationId   
+AND IOG.OrgId = tmp.OrgId   
+INNER JOIN #PatientInvestigation Pi    
+ON PI.PatientVisitId = tmp.PatientVisitId   
+AND PI.OrgId = tmp.OrgId   
+AND PI.PackageId = IOG.OrgGroupId   
+INNER JOIN PatientInvSample PIS    
+ON PIS.PatientVisitID = tmp.PatientVisitId   
+AND PIS.OrgId = PI.OrgId   
+--and PIS.SampleCode=PI.SampleId                                                
+WHERE  Pi.Uid = @pGUId   
+END   
+END   
+/* Code added by T.Suresh for MIS purpose start here */  
+Update OI set status = tmp.status , modifiedat = @ServerDate  
+From MISOrderedinvestigations OI WITH (ROWLOCK)  
+Inner join @tmp_ordinv tmp  on OI.Accessionnumber = tmp.Accessionnumber  
+Insert into MISOrderedinvestigationhistory  
+(  
+AccessionNumber,Visitid,id,type,Name,statusid,status,  
+CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName  
+)  
+Select mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,mord.status,  
+@Loginid as CreatedBy,@ServerDate as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName  
+From @tmp_ordinv tp  
+Inner join ordtasks tsk  on tp.status = tsk.status  
+Inner join MISOrderedinvestigations MORD  on tp.Accessionnumber = MORD.Accessionnumber  
+Left join MISOrderedinvestigationhistory OH  on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and OH.createdby = @Loginid  
+Where Oh.Accessionnumber is null  
+;with cte as  
+(  
+select row_number() over (partition by patientinvid order by patientinvid) as sno,patientinvid,accessionnumber,status from @tmp_patinv  
+)  
+delete from cte where sno>1  
+Update MPI set modifiedby = PI.modifiedby, modifiedat = @serverdate, [status]  = pi.status,   
+IsAbnormal = PI.IsAbnormal ,ApprovedBy = PI.ApprovedBy,ApprovedAt = PI.ApprovedAt ,ValidatedBy = PI.ValidatedBy ,ValidatedAt = PI.ValidatedAt  
+From @tmp_patinv tmp  
+Inner join patientinvestigation PI  on PI.patientinvid = tmp.patientinvid  
+Inner join MISPatientinvestigation MPI WITH (ROWLOCK)  on PI.PatientInvID = MPI.PatientInvID  
+Where PI.Patientvisitid = @Pvisitid  
+Insert into MISPatientinvestigation  
+(  
+patientinvid,accessionnumber , PatientVisitID ,Orgid ,InvestigationID , InvestigationName , CreatedBy ,   
+CreatedAt , ModifiedBy , ModifiedAt , Status , GroupID , GroupName ,   
+IsAbnormal ,ApprovedBy,ApprovedAt ,ValidatedBy ,ValidatedAt,  
+sampleid , Deptid ,IsSensitive , ContainerID  
+)  
+select  
+PI.patientinvid,pi.AccessionNumber,PI.patientvisitid,PI.Orgid , PI.Investigationid,PI.InvestigationName,PI.Createdby,  
+@serverdate,PI.modifiedby,@serverdate,pi.status,pi.groupid,Pi.GroupName,  
+PI.IsAbnormal ,PI.ApprovedBy,PI.ApprovedAt ,PI.ValidatedBy ,PI.ValidatedAt,  
+IOM.SampleCode,IOM.Deptid , PI.IsSensitive,IOM.SampleContainerID  
+From @tmp_patinv tmp  
+Inner join patientinvestigation PI  on PI.patientinvid = tmp.patientinvid  
+left join investigationOrgmapping IOM  on PI.Investigationid = IOM.Investigationid and PI.Orgid = IOM.Orgid  
+Left join MISPatientinvestigation MPI  on PI.PatientInvID = MPI.PatientInvID and MPI.patientvisitid = @Pvisitid  
+Where PI.Patientvisitid = @Pvisitid and MPI.patientinvid is null  
+Delete from @tmp_ordinv  
+Insert @tmp_ordinv(Accessionnumber)  
+Select distinct accessionnumber from @tmp_patinv  
+Update MOI set modifiedat = @ServerDate,ValidatedAt = isnull(tp.ValidatedAt,MOI.ValidatedAt),ApprovedAt = isnull(tp.ApprovedAt,MOI.ApprovedAt),  
+ValidatedBy= isnull(tp.ValidatedBy,MOI.ValidatedBy),ApprovedBy = isnull(tp.ApprovedBy,MOI.ApprovedBy),AuthorizedBy = isnull(tp.AuthorizedBy,MOI.AuthorizedBy)  
+,Modifiedby = @Loginid  
+From MISOrderedinvestigations MOI WITH (ROWLOCK)  
+Inner join @tmp_ordinv tmp  on MOI.Accessionnumber = tmp.Accessionnumber  
+Cross apply  
+(  
+Select min(PI.ApprovedBy) as ApprovedBy,Max(PI.ApprovedAt) as ApprovedAt ,min(PI.ValidatedBy) as ValidatedBy ,Max(PI.ValidatedAt) as ValidatedAt   
+,Min(AuthorizedBy) as AuthorizedBy  
+from @tmp_patinv tmpPI  
+Inner join patientinvestigation PI  on pi.accessionnumber = tmppi.AccessionNumber  
+where  tmppi.accessionnumber = tmp.AccessionNumber  
+) tp  
+Insert Into MISordereddept(AccessionNumber,Deptid)  
+Select  
+tp.AccessionNumber,tp.Deptid  
+From   
+(  
+Select distinct MPIS.AccessionNumber,MPIS.Deptid  
+From @tmp_ordinv tOrd  
+Inner join MIsPatientinvestigation MPIS  on tord.AccessionNumber = MPIS.AccessionNumber  
+) tp  
+Left join MISordereddept Dpt  on tp.AccessionNumber = Dpt.AccessionNumber and tp.Deptid = dpt.Deptid  
+Where Dpt.AccessionNumber is null  
+;with cteV as  
+(  
+select row_number() over (partition by investigationvalueid order by investigationvalueid) as sno,investigationvalueid,status from @tmp_Invv  
+)  
+delete from cteV where sno>1  
+Update MIV Set modifiedat = @ServerDate, status = tp.status  
+from @tmp_invv tp  
+Inner join MISinvestigationvalues MIV WITH (ROWLOCK)  on Tp.investigationvalueid = MIV.investigationvalueid  
+Insert Into MISInvestigationvalues  
+(  
+InvestigationValueID,accessionNumber,PatientInvID,Name,Value,InvestigationID,  
+GroupID,GroupName,Orgid,PatientVisitID,status,CreatedBy,  
+CreatedAt,ModifiedBy,ModifiedAt,DeviceID,DeviceValue,DeviceErrorCode  
+)  
+Select  
+distinct IV.InvestigationValueID,PI.accessionNumber,PI.PatientInvID,IV.Name,IV.Value,IV.InvestigationID,  
+IV.GroupID,IV.GroupName,IV.Orgid,IV.PatientVisitID,IV.status,IV.CreatedBy,  
+@ServerDate as CreatedAt,IV.ModifiedBy,@ServerDate as ModifiedAt,IV.DeviceID,IV.DeviceValue,IV.DeviceErrorCode  
+from @tmp_invv tp  
+Inner join investigationvalues IV  on Tp.investigationvalueid = IV.investigationvalueid  
+Inner join PatientInvestigation PI  on IV.Patientvisitid = PI.Patientvisitid and IV.Investigationid = PI.Investigationid and IV.Status = PI.Status and PI.Groupid = IV.Groupid  
+Left join MISInvestigationvalues MIV  on IV.Investigationvalueid = MIV.Investigationvalueid  
+Where MIV.Investigationvalueid is null  
+/* Code added by T.Suresh for MIS purpose end here */  
+
+	/*BEGIN | NA | MARIYA | Datein 20180312 | M |  Amended TAT notification */  
+	  --- This is only for reflexwithsamesample
+	-- IF EXISTS (SELECT * FROM @ContextInfo WHERE PageID = 215 OR PageID = 551)
+	IF EXISTS (SELECT * FROM @ContextInfo WHERE PageID IN (SELECT PageID FROM Pages P WITH(NOLOCK) WHERE PageUrl IN ('/Investigation/InvestigationResultsCapture.aspx',
+																													'/Investigation/BatchwiseEnterresult.aspx')))
+
+	BEGIN
+ 
+	  DECLARE @ppatientInvSample [dbo].[PATIENTINVSAMPLECOLLECTED]	
+	  
+	  INSERT INTO @ppatientInvSample
+	  (
+		PatientVisitID,
+		SampleID,
+		BarcodeNumber,
+		SampleCode,
+		OrgID,
+		CollectedDateTime,
+		   UID 
+	  )
+	  SELECT DISTINCT TempInv.PatientVisitID,ST.SampleID
+	  ,PIS.BarcodeNumber,PIS.SampleCode,ST.OrgID  
+	  ,GETDATE()  --,PIS.CollectedDateTime 
+	  ,@pGUId
+	  FROM @pPatientInvTable  TempInv
+	 INNER JOIN SampleTracker ST WITH(NOLOCK)
+										 ON TempInv.PatientVisitID = ST.PatientVisitID
+											AND TempInv.OrgId = ST.OrgId
+	  INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+										 ON PIS.SampleID = ST.SampleID
+	  INNER JOIN PatientInvSampleMapping PISM (NOLOCK)
+										 ON PIS.SampleID = PISM.SID
+										 AND PIS.PatientVisitID = PISM.VisitID
+										 AND PIS.UID = PISM.UID
+										 AND PIS.OrgID = PISM.OrgID
+	  INNER JOIN OrderedInvestigations OI WITH (nolock)
+											 ON PISM.VisitID = OI.VisitID
+												AND PISM.ID = OI.ID
+												AND PISM.Type = OI.Type
+								 INNER JOIN PatientInvestigation pi WITH(NOLOCK)
+											ON oi.AccessionNumber = pi.AccessionNumber
+
+      WHERE   TempINV.Status = 'SampleReceived'	  
+	  AND pi.RefAccessionNo IS NULL and StatusType IS NULL 
+	  AND PI.InvStatusReasonID =0 --- tHIS ONLy for reflex with same same not for Rerun
+
+		
+	 	
+			 IF EXISTS (SELECT 1 FROM @ppatientInvSample)
+			 BEGIN
+					EXEC pUpdateAmendedTAT_Notification @pVisitID,@ppatientInvSample,@ContextInfo
+			 END
+	 END
+	  /*END | NA | MARIYA | Datein 20161003 | M | Amended TAT notification*/
+
+
+DROP TABLE #OrderedInvestigations   
+DROP TABLE #PatientInvestigation   
+--SET @pOrderedInvCnt = 0   
+--SET @returnstatus=0   
+--RETURN @returnstatus  
+END TRY
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pInsertInvestigation @OrgID = '+cast(@OrgID as varchar)+'@pGUId = '+@pGUId
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH  
+END
+
+GO
+
+

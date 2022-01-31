@@ -1,0 +1,78 @@
+CREATE PROCEDURE [dbo].[pGetPatientResult_LIMSAPI]
+	@pOrgCode NVARCHAR(100),
+	@pBookingID INT,
+	@pVisitNumber NVARCHAR(100)
+AS
+BEGIN
+ 
+ DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL
+
+  IF @pBookingID = 0 OR @pBookingID = -1
+   SET @pBookingID = ''
+
+ IF @pVisitNumber = '0' OR @pVisitNumber = '-1'
+   SET @pVisitNumber = ''
+
+ IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+      SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+             @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+
+        FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+
+
+
+    END
+
+;WITH CTE_VisitInfo
+ AS (
+		SELECT P.PatientId,PV.PatientVisitId,PV.VisitNumber,P.ExternalPatientNumber,OI.ID,OI.Type,OI.Status,OI.Orgid,
+		AccessionNumber,PkgID,PkgName,OI.Name, U.Name as ApprovedBy, OI.ApprovedAt as ApprovedDateTime
+		FROM PatientVisit  PV with(NOLOCK) 
+		INNER JOIN Patient P  with(NOLOCK) ON P.OrgId=P.OrgId
+		AND P.PatientId=PV.PatientId
+		INNER JOIN MISOrderedInvestigations OI with(NOLOCK)  ON OI.OrgId=PV.OrgId
+		AND OI.VisitId=PV.PatientVisitId
+		LEFT JOIN Users U with(NOLOCK) ON U.OrgId=OI.OrgId
+		AND U.LoginID=OI.ApprovedBy
+		LEFT JOIN Bookings B with(NOLOCK) ON PV.OrgID=B.OrgID 
+		AND PV.PatientVisitId=B.PatientVisitID
+		WHERE PV.OrgID=@pOrgID 
+		AND (B.BookingId=@pBookingID OR @pBookingID='')
+		AND (PV.VisitNumber=@pVisitNumber OR @pVisitNumber='')
+	) 
+	SELECT	CV.PatientId,CV.VisitNumber,CV.ExternalPatientNumber,IOM.TestCode,CV.NAME AS TestName,
+			IOM.TestCode as ParameterCode,IV.Name as ParameterName,IV.Value as ResultValue, ISNULL(CV.PkgName,'') as PkgName,
+			PIS.ReferenceRange,	IV.IsAbnormal,'Logic Required' as IsCritical,CV.Status, 'Test Result message' as Type, 
+			CV.ApprovedBy, ISNULL(convert(varchar(32),CV.ApprovedDateTime,127),'') as ApprovedDateTime,	@pOrgID as OrgID, @pOrgAddrID as LocationID,'' as ResultType
+	FROM CTE_VisitInfo CV 
+		INNER JOIN PatientInvestigation PIS(NOLOCK) ON PIS.OrgId=CV.Orgid
+			AND PIS.PatientVisitId=CV.PatientVisitId
+			AND PIS.AccessionNumber=CV.AccessionNumber
+		LEFT JOIN InvestigationValues IV (NOLOCK) ON IV.Orgid=PIS.OrgId
+			AND IV.PatientVisitID=PIS.PatientVisitId
+			AND IV.InvestigationID=PIS.InvestigationId
+		INNER JOIN InvestigationOrgMapping IOM ON IOM.OrgID=CV.Orgid
+			AND IOM.InvestigationID=CV.ID
+	WHERE CV.TYPE='INV'
+	UNION ALL
+	SELECT	CV.PatientId,CV.VisitNumber,CV.ExternalPatientNumber,IOG.TestCode,CV.Name as TestName,
+			IOM.TestCode as ParameterCode,IV.NAME as ParameterName,IV.Value as ResultValue, ISNULL(CV.PkgName,'') as PkgName,
+			PIS.ReferenceRange,	IV.IsAbnormal,'Logic Required' as IsCritical,CV.Status, 'Test Result message' as Type, 
+			CV.ApprovedBy, ISNULL(convert(varchar(32),CV.ApprovedDateTime,127),'') as ApprovedDateTime,	@pOrgID as OrgID, @pOrgAddrID as LocationID,'' as ResultType
+	FROM CTE_VisitInfo CV 
+		INNER JOIN PatientInvestigation PIS(NOLOCK) ON PIS.OrgId=CV.Orgid
+			AND PIS.PatientVisitId=CV.PatientVisitId
+			AND PIS.AccessionNumber=CV.AccessionNumber
+		LEFT JOIN InvestigationValues IV (NOLOCK) ON IV.Orgid=PIS.OrgId
+			AND IV.PatientVisitID=PIS.PatientVisitId
+			AND IV.InvestigationID=PIS.InvestigationId
+		INNER JOIN InvOrgGroup IOG ON IOG.AttGroupID=CV.ID AND IOG.OrgID = CV.Orgid
+		INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID=IV.InvestigationID
+			AND IOM.OrgID=IV.Orgid
+	WHERE CV.TYPE='GRP'
+	ORDER BY TestName,ParameterName
+END

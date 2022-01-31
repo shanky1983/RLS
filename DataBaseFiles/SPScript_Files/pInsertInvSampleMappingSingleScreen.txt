@@ -1,0 +1,34 @@
+
+CREATE PROCEDURE [dbo].[pInsertInvSampleMappingSingleScreen]    
+ @pSampleMapping [dbo].[PatientInvSampleMapping] READONLY,    
+ @visitID [bigint],    
+ @orgID [int],    
+ @deptID [int],    
+ @pReturnStatus [int] OUTPUT,    
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN                        
+    SET @pReturnStatus=-1                        
+     DECLARE @PrintSampleBarcode nchar 
+     Declare @ServerDate datetime
+     SELECT @ServerDate=dbo.fn_GetServerDate(@ContextInfo)                           
+ --DELETE FROM PatientInvSampleMapping WHERE VisitID = @visitID AND OrgID = @orgID AND DeptID = @deptID             
+                           
+ IF EXISTS(SELECT '1' FROM @pSampleMapping)            
+  BEGIN          
+   INSERT INTO PatientInvSampleMapping (VisitID, OrgID,SampleID,ID,Type,DeptID,UID,Barcode,[SID],CreatedAt)                        
+   SELECT distinct SM.VisitID,SM.OrgID,SM.SampleID,SM.ID,SM.Type,@deptID,SM.UniqueID,SM.Barcode ,      
+   (Select top 1 SampleID from PatientInvSample WITH (NOLOCK) where SampleCode =SM.SampleID AND Orgid=SM.OrgID 
+   AND PatientVisitID=SM.VisitID AND UID=SM.UniqueID AND BarcodeNumber=SM.Barcode),      
+   @ServerDate FROM @pSampleMapping SM                     
+   SET @pReturnStatus=0                        
+  END          
+END
+
+
+
+
+
+
+

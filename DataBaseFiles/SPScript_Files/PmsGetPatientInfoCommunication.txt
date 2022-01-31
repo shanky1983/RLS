@@ -1,0 +1,143 @@
+--exec pGetPatientInfoCommunication @Fromdate='18/09/2017 00:00:00',@Todate='18/09/2017 22:00:00',@OrgID=98,@LabNo=N'0'
+CREATE  PROCEDURE [dbo].[PmsGetPatientInfoCommunication] -- '02/11/2016 00:00:00','03/11/2016 00:00:00',98
+(
+@Fromdate varchar(155)
+,@Todate varchar(155)
+,@OrgID INT
+,@LabNo VARCHAR(200)=0
+)
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+SET NOCOUNT ON;
+SET XACT_ABORT ON; 
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+
+Declare @DateMinDiff int
+--select DateDiff(hh,@Fromdate,@Todate)
+set @DateMinDiff= DateDiff(hh,@Fromdate,@Todate)
+ 
+IF (Replace(@DateMinDiff,'-','')<=2)
+Begin
+
+IF @LabNo = 0
+SET @LabNo = NULL
+DECLARE @VisitDetails AS TABLE (
+VisitID BIGINT
+,VisitNumber VARCHAR(250)
+,ExternalVisitID VARCHAR(250)
+,CreatedAt varchar(100)
+,ID INT
+,Type VARCHAR(100)
+,RegLocation INT
+,ProcessingLocation INT
+,Patientid BIGINT
+,STATUS VARCHAR(250)
+,NAME VARCHAR(300)
+,Createdby BIGINT
+,AccessionNumber BIGINT
+)
+INSERT INTO @VisitDetails
+SELECT Pv.Patientvisitid
+,PV.visitnumber
+,PV.externalvisitid
+,Convert(Varchar,ORD.createdat,120)
+,ORD.ID
+,ORD.Type
+,PV.orgaddressid
+,isnull(ORD.ResCaptureLoc, PV.orgaddressid)
+,PV.PatientID
+,ORD.STATUS
+,ORD.NAME
+,ORD.CreatedBy
+,ORD.AccessionNumber
+FROM Patientvisit PV
+INNER JOIN MISOrderedinvestigationhistory ORD ON ORD.visitid = PV.patientvisitid
+WHERE PV.OrgID = @OrgID
+AND ORD.createdat BETWEEN @Fromdate
+AND @Todate
+--AND PV.createdat BETWEEN '24/03/2017 00:00:00'  AND '24/03/2017 18:00:00'
+AND PV.Externalvisitid = isnull(@LabNo, PV.Externalvisitid)
+
+
+SELECT V.Externalvisitid AS LabNo
+,V.NAME AS OrderName
+,V.Type AS OrderType
+,P.NAME AS PatientName
+,V.Status
+--,V.CreatedAt
+,OA.Location AS RegisterLocation
+,OA1.location AS ProcessingLocation
+,V.VisitNumber
+,V.CreatedAt AS TransDateTime
+,isnull(U.NAME,'') AS UserName
+--,CMM.CodeName AS CodeName
+,IOM.Testcode as CodeName
+,IDM.DeptName AS Department
+FROM @VisitDetails V
+--INNER JOIN Patientvisit PV ON PV.patientvisitid = ORD.visitid --and PV.orgid=ORD.orgid
+INNER JOIN misordereddept D ON D.AccessionNumber = V.AccessionNumber
+INNER JOIN Invdeptmaster IDM ON IDM.Deptid = D.deptid
+AND IDm.orgid = @OrgID
+INNER JOIN patient P ON P.patientid = V.patientid
+AND p.orgid = @OrgID
+INNER JOIN organizationaddress OA ON OA.orgid = @OrgID
+AND OA.addressid = V.RegLocation
+INNER JOIN Organizationaddress OA1 ON OA1.orgid = @OrgID
+AND oa1.addressid = ProcessingLocation
+left JOIN Users U ON U.loginid = V.createdby
+AND U.orgid = @OrgID
+Inner Join Investigationorgmapping IOM on  IOM.orgid=@OrgID and IOM.Investigationid=v.id
+WHERE V.Type = 'INV'
+UNION ALL
+SELECT V.Externalvisitid AS LabNo
+,V.NAME AS OrderName
+,V.Type AS OrderType
+,P.NAME AS PatientName
+,V.Status
+--,V.CreatedAt
+,OA.Location AS RegisterLocation
+,OA1.location AS ProcessingLocation
+,V.VisitNumber
+,V.CreatedAt AS TransDateTime
+,isnull(U.NAME,'') AS UserName
+--,CMM.CodeName AS CodeName
+,IOG.TestCode as CodeName
+,IDM.DeptName AS Department
+FROM @VisitDetails V
+--INNER JOIN Patientvisit PV ON PV.patientvisitid = ORD.visitid --and PV.orgid=ORD.orgid
+INNER JOIN misordereddept D ON D.AccessionNumber = V.AccessionNumber
+INNER JOIN Invdeptmaster IDM ON IDM.Deptid = D.deptid
+AND IDm.orgid = @OrgID
+INNER JOIN patient P ON P.patientid = V.patientid
+AND p.orgid = @OrgID
+INNER JOIN organizationaddress OA ON OA.orgid = @OrgID
+AND OA.addressid = V.RegLocation
+INNER JOIN Organizationaddress OA1 ON OA1.orgid = @OrgID
+AND oa1.addressid = ProcessingLocation
+left JOIN Users U ON U.loginid = V.createdby
+AND U.orgid = @OrgID
+INNER JOIN Invorggroup IOG ON Iog.orgid = @OrgID
+AND IOG.Attgroupid = v.id
+--INNER JOIN codingschemeorgmapping AS CSM ON CSM.orgid = @orgid
+--	AND isprimary = 'Y'
+--INNER JOIN CodeMapper CM ON Cm.IdentifyingID = Iog.orggroupid
+--	AND IdentifyingType = 'Grp'
+--INNER JOIN CodeMaster CMM ON CMM.codemasterid = CM.codemasterid
+--	AND CMM.CodeType = 'Grp'
+--	AND CMM.CodeSchemeID = CSM.CodeTypeID
+WHERE V.Type = 'GRP'
+--WHERE   PV.orgid=98 and ORD.createdat BETWEEN '24/03/2017 00:00:00'  AND '24/03/2017 18:00:00'
+End
+END TRY
+BEGIN CATCH   			                           
+SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetPatientInfoCommunication @Fromdate = '+CAST(@Fromdate AS VARCHAR) +'@OrgID = '+CAST(@OrgID AS VARCHAR) +'@Todate = '+CAST(@Todate
+
+
+ 
+
+AS VARCHAR) + '@LabNo = '+@LabNo
+exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH     
+END

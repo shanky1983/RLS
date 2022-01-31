@@ -1,0 +1,144 @@
+
+CREATE PROCEDURE [dbo].[pGetClientName_LIMSAPI] (
+		@pOrgCode NVARCHAR(100),      
+        @Page INT,
+		@Size INT )
+
+WITH EXECUTE AS OWNER          
+AS          
+BEGIN
+
+	----exec pGetClientName_LIMSAPI  'LIMSAPI',1,232
+
+	DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)      
+
+	DECLARE @MaxRecordCount INT
+	DECLARE @MaxCountReached BIT
+	DECLARE @TotalRecords INT
+
+	SELECT @MaxRecordCount=MaximumRecordCount 
+	FROM APIConfiguration 
+	WHERE SPName='pGetClientName_LIMSAPI'
+
+	IF @Size > @MaxRecordCount
+	  BEGIN
+	     SET @Size = @MaxRecordCount
+	     SET @MaxCountReached=1
+	  END 
+
+   IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM
+			INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+   SELECT distinct CM.ClientID,CM.ClientCode,ISNULL(S.TitleName,'') AS Salutation,CM.ClientName,IV.ClientTypeName ClientType,'ClientMaster' Type ,CM.PanNo,
+                  ISNULL(IsClientAccess,0) as ClientAccess,ISNULL(IsRemoteAccess,0) as RemoteRegistration, 
+				  CASE WHEN ISCash='Y' THEN 'CASH' ELSE 'CREDIT' END AS  ClientPaymentType,
+				  CM.InvoiceCycle as InvoiceCycleDuration,ISNULL(EDM.EmpDeptName,'') AS ContactPersonType,--RP.ContactPersonID,
+                  ISNULL(E.Name,'')  AS ContactPersonName ,ISNULL(CONVERT(nvarchar,AD.Mobile),'') as ContactPersonMobileNumber,
+				  ISNULL(AD.EmailID,'') AS ContactPersonEmailID,MD.DisplayText AS [Status],'###' AS [Password],@pOrgID  OrgID,
+				  @pOrgAddrID LocationID,@pOrgCode orgCode,MV.Value as Businesstype
+   FROM ClientMaster CM with(NOLOCK) 
+		INNER JOIN MetaData MD with(NOLOCK) ON MD.Code=CM.Status AND MD.Domain='ClientStatus' 
+		INNER JOIN InvClientType IV(NOLOCK) ON IV.ClientTypeID=CM.ClientTypeID
+		LEFT JOIN AddressDetails AD with(NOLOCK) on AD.ReferenceID=CM.ClientID 
+		      and AD.ReferenceType='Client'
+		      and ContactType='ACCHOLDER' --AD.OrgID = E.OrgID and 
+	    LEFT JOIN EmployeeRegMaster E with(NOLOCK) ON AD.EmpID=E.EmpID -- E.EmployerID=CM.SalesManID 
+		LEFT JOIN EmployerDeptMaster EDM with(NOLOCK) ON E.DeptID=EDM.EmpDeptID
+		LEFT JOIN AddressType AT with(NOLOCK) on AT.TypeID=AD.AddressTypeID
+		LEFT JOIN DesignationMaster D with(NOLOCK) ON D.DesignationID=E.DesignationID AND D.OrgID=E.OrgID
+		LEFT JOIN ReferingPhysician RP with(NOLOCK) on RP.ContactPersonID=E.EmpID
+		LEFT JOIN Login L with(NOLOCK) on l.LoginID=RP.LoginId
+		LEFT JOIN Salutation S with(NOLOCK) on s.TitleID = RP.Salutation
+		/*Contact Person*/
+		 --and 
+		 --inner join AddressType AT on AT.TypeID=AD.AddressTypeID 
+		 --INNER JOIN EmployerDeptMaster EDM ON EDM.EmpDeptID=E.DeptID    
+		/***/
+		INNER JOIN MetaValue_Common MV on MV.MetaValueID=CM.CustomerType and MV.OrgID=@pOrgID 
+		INNER JOIN MetaType_Common MT on MV.MetaTypeId=MT.MetaTypeId and MT.Code ='BT'   
+	WHERE  CM.OrgID=@pOrgID  and CM.Status='A'  --and CM.OrgAddressID=@pOrgAddrID
+	ORDER BY CM.ClientID
+
+	/*SELECT CM.ClientCode,CM.ClientName,IV.ClientTypeName ClientType,'ClientMaster' Type ,CM.PanNo,ISNULL(IsClientAccess,0) as ClientAccess,
+			 ISNULL(IsRemoteAccess,0) as RemoteRegistration, CASE WHEN ISCash='Y' THEN 'CASH' ELSE 'CREDIT' END AS  ClientPaymentType,
+			 CM.InvoiceCycle as InvoiceCycleDuration,ISNULL(D.DesignationName,'') AS ContactPersonType,
+			 E.Name  AS ContactPersonName ,CONVERT(nvarchar,AD.Mobile) as ContactPersonMobileNO,AD.EmailID AS ContactPersonEmailID,
+			 MD.DisplayText AS [Status],@pOrgID  OrgID,@pOrgAddrID LocationID,@pOrgCode orgCode,'' BusinessType
+	FROM ClientMaster CM(NOLOCK) 
+		INNER JOIN MetaData MD (nolock) ON MD.Code=CM.Status AND MD.Domain='ClientStatus' 
+		INNER JOIN InvClientType IV(NOLOCK) ON IV.ClientTypeID=CM.ClientTypeID
+
+		LEFT JOIN AddressDetails AD on AD.ReferenceID=CM.ClientID and AD.ReferenceType='Client'   and ContactType='ACCHOLDER' --AD.OrgID = E.OrgID and 
+		LEFT JOIN EmployeeRegMaster E ON AD.EmpID=E.EmpID -- E.EmployerID=CM.SalesManID 
+		LEFT JOIN AddressType AT on AT.TypeID=AD.AddressTypeID
+		LEFT JOIN DesignationMaster D ON D.DesignationID=E.DesignationID AND D.OrgID=E.OrgID
+
+		/*Contact Person*/
+		 --and 
+		 --inner join AddressType AT on AT.TypeID=AD.AddressTypeID 
+		 --INNER JOIN EmployerDeptMaster EDM ON EDM.EmpDeptID=E.DeptID    
+		/***/
+    WHERE  CM.OrgID=@pOrgId and CM.Status='A'  --and CM.OrgAddressID=@pOrgAddrID
+    ORDER BY CM.ClientID*/
+
+    OFFSET (@Page -1) * @Size ROWS
+    FETCH NEXT @Size ROWS ONLY
+
+	SELECT @TotalRecords = COUNT(1) 
+	   FROM ClientMaster CM (nolock) 
+	   INNER JOIN MetaData MD (nolock) ON MD.Code=CM.Status AND MD.Domain='ClientStatus'     
+    WHERE  CM.OrgID=@pOrgId  and CM.Status='A' 
+
+ 	SELECT @TotalRecords as TotalRecords, cast(CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as Int) as TotalPages,
+	@MaxRecordCount as AllowableRecordCount
+ END
+ 
+
+
+ 
+ 
+     
+   
+
+
+   /* --CREATE TABLE #TempClientMaster
+--(
+--ClientType NVARCHAR(100),
+--Salutation NVARCHAR(10),
+--ClientName NVARCHAR(250),
+--ClientCode NVARCHAR(50),
+--BusinessType NVARCHAR(50),
+--         "Password":"",
+--         "PanNo":"DCTRP1234M",
+--         "ClientAccess":"Yes",
+--         "RemoteRegistration":"Yes",
+--		 "ClientPaymentType":"Cash",
+--		 "InvoiceCycleDuration":"Monthly",
+--		 "ContactPersonType":"SalesManager",
+--		 "ContactPersonName":"Vishal Narayan",
+--		 "ContactPersonMobileNumber":"9994420635",
+--		 "ContactPersonEmailID":"vishal@gmail.com",
+--		 "Status":"Active",
+--)
+
+
+--SELECT ISNULL(CM.ClientName,'') as ClientName,ISNULL(CM.ClientCode,'') 
+ --ClientCode,ISNULL(CM.ClientID,''),(CONVERT(nvarchar,ClientID)+'~'+ISNULL(Status,'')+'~'+ISNULL(Reason,'')+'~'+CONVERT(nvarchar,ISNULL(BlockFrom,''),103)+'~'+            
+ --CONVERT(nvarchar,ISNULL(BlockTo,''),103)+'~'+ISNULL(MD.DisplayText,'')+'^')             
+ --AS ClientAttributes,
+ --ISNULL(CM.ClientTypeID,''),
+ --ISNULL(CM.ContactPerson,'') as ContanctPersonName,
+ --ISNULL(CM.PanNo,'') as PanNo,ISNULL(CM.OrgID,'') as OrgID,
+ --ISNULL(CM.OrgAddressID,'') as OrgAddressID 
+ --FROM ClientMaster CM (nolock) 
+ --INNER JOIN      */
+
+
+

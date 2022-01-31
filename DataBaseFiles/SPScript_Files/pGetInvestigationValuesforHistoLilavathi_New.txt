@@ -1,0 +1,272 @@
+CREATE PROCEDURE [dbo].[pGetInvestigationValuesforHistoLilavathi_New]--1 --4679,67,63,5027                                                     
+(                                                       
+ @pVisitID bigint,                                                                               
+ @OrgID int,                                                                               
+ @TemplateID int ,                                                                        
+ @InvestigationID bigint                                                        
+)                                                      
+As                                                      
+Begin                                                      
+Declare @UID nvarchar(255)                                                      
+Declare @InvID nvarchar(255)                                    
+Declare @HeaderName nvarchar(max)                              
+Declare @HeaderID BigInt                         
+Declare @CreatedBy nvarchar(255)                        
+Declare @InvName nvarchar(255)                        
+ Declare @Type nvarchar(255)                                    
+Select @UID=UID,@InvID=ID,@Type=Type from OrderedInvestigations where AccessionNumber=@InvestigationID  AND OrgID=@OrgID AND VisitID=@pVisitID                                                      
+                        
+DECLARE @TempVisits as Table                  
+(                  
+VisitID Bigint,                  
+UID nvarchar (255),                  
+InvID Bigint                  
+)                  
+                  
+INSERT INTO @TempVisits (VisitID,UID,InvID)                  
+SELECT @pVisitID,@UID,@InvID                  
+UNION                  
+SELECT VisitID,UID,ID from OrderedInvestigations WITH (NOLOCK) WHERE ReferredAccessionNo = @InvestigationID AND Type='INV' and OrgID <> @OrgID                  
+  IF(@Type='GRP')                                
+             BEGIN                                
+             SELECT @InvID=pm.InvestigationID FROM InvOrgGroup iog        
+     INNER JOIN InvGroupMapMaster igmm ON igmm.GroupID=iog.OrgGroupID                                 
+             INNER JOIN PatternMapping pm ON pm.InvestigationID=igmm.InvestigationID and pm.OrgID=@OrgID WHERE iog.AttGroupID=@InvID                                  
+             AND pm.PatternID=66 AND ISNULL(igmm.Parent,'N')='N'  and Isnull(igmm.Active,'Y')='Y'                               
+                                             
+             END         
+                           
+select @HeaderName=IH.HeaderName,@HeaderID=IH.HeaderID,@InvName=IOM.DisplayText                   
+from InvestigationOrgMapping IOM (NOLOCK)                                
+Inner Join InvestigationHeader IH (NOLOCK) ON IOM.HeaderID=IH.HeaderID                                
+Where IOM.InvestigationID=@InvID and IOM.OrgID=@OrgID                              
+                        
+If(@HeaderID=63)                        
+Begin                        
+Set @HeaderName=@InvName                        
+End                        
+                              
+                  
+select @CreatedBy=L.LoginName from InvestigationValues IV Inner Join Login L ON L.loginID=IV.CreatedBy AND L.OrgID=IV.Orgid                                                        
+where InvestigationID=@InvID and PatientVisitID=@pVisitID and IV.Orgid=@OrgID AND UID=@UID Group By L.LoginName                                                        
+                      
+                                                           
+   DECLARE @Temp TABLE                                          
+   ( RNo1 int IDENTITY (1, 1),                                      
+   InvestigationID bigint,                                          
+   Specimen nvarchar(max),                                          
+  [Case No] nvarchar(max),                                          
+  Technique nvarchar(max),                                          
+  --[Clinical Notes] nvarchar(max),                
+  Site nvarchar(max),                                          
+  ProcessMethods nvarchar(max),                                          
+  Staining nvarchar(max),                                          
+  Gross nvarchar(max),                                          
+  [Comments/Remarks] nvarchar(max),          
+  Comments  nvarchar(max),        
+  Remarks nvarchar(max),        
+  Interpretation nvarchar(max),                                          
+  Reason nvarchar(max),                                          
+  MedicalRemarks nvarchar(max),                                          
+  InvestigationName nvarchar(max),                         
+  DeptName nvarchar(max),                                   
+  TestInterpretation  nvarchar(max),                                          
+  [IHC]  nvarchar(max),              
+  [IF]  nvarchar(max),                                          
+  Microscopy  nvarchar(max),                                          
+  ClinicalNotes nvarchar(max),                                          
+  [Time oF Fixation] nvarchar(max),                                          
+  [Grossed By] nvarchar(max),                                          
+  [Assisted By] nvarchar(max),                                    
+  [Supervised by] nvarchar(max),                                          
+  [Diagnosis/Impression] nvarchar(max),        
+  Diagnosis  nvarchar(max),           
+  Impression nvarchar(max),                 
+  [Special Stain] nvarchar(max),                  
+  Suggest nvarchar(max),                  
+  [ICD Code] nvarchar(max),                  
+  Category nvarchar(max),                  
+  [Summary of Sections]  nvarchar(max),                  
+  [Cold Ischemic Timen] Varchar(100),                  
+  [Test typed by]    Varchar(100),                       
+  Header nvarchar(max),                                          
+  TestEnteredby nvarchar(max),                                          
+  ImageSource varbinary(max),                                          
+  IsImageExists bit DEFAULT(0)                                          
+   )                                                         
+                                                                   
+                                                                           
+  INSERT INTO @Temp(InvestigationID,Specimen,[Case No],Technique,ClinicalNotes,Site,ProcessMethods                                          
+  ,Staining,Gross,[Comments/Remarks],Comments,Remarks,Interpretation,Reason,MedicalRemarks,DeptName,InvestigationName,TestInterpretation,                                          
+  [IHC],[IF],Microscopy,[Time oF Fixation],[Grossed By],[Assisted By],[Supervised by]                                          
+  ,[Diagnosis/Impression],Diagnosis,Impression,Header,TestEnteredby,[Special Stain],Suggest,[ICD Code],Category,[Summary of Sections],[Cold Ischemic Timen],[Test typed by] )                                                                         
+ SELECT InvestigationID,Specimen,[Case No],Technique,ClinicalNotes,Site,ProcessMethods,Staining,                                                    
+replace(replace(replace(replace(replace(Gross, '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As Gross,                                                    
+replace(replace(replace(replace(replace([Comments/Remarks], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [Comments/Remarks],                                                    
+replace(replace(replace(replace(replace([Comments], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [Comments],                                                    
+replace(replace(replace(replace(replace([Remarks], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [Remarks],                                      
+replace(replace(replace(replace(replace(Interpretation, '<p>', ''), '</p>', '<div>'),'<p align="left">','</div>'),'<p align="right">',''),'<p align="center">','')  As Interpretation,                                                    
+--Gross,                
+--[Comments/Remarks],                
+--Interpretation,           
+ Reason,MedicalRemarks,DeptName,InvestigationName,TestInterpretation,                                                                          
+ replace(replace(replace(replace(replace([IHC], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [IHC],                                                
+ replace(replace(replace(replace(replace([IF], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [IF],              
+replace(replace(replace(replace(replace(Microscopy, '<p>', '<div>'), '</p>', '</div>'),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As Microscopy                  
+             
+                                                                   
+--IHC,                 
+--Microscopy,             
+,[Time oF Fixation]                               
+,[Grossed By]                                          
+,[Assisted By]                                          
+,[Supervised by]                                   
+--,replace(replace(replace(replace(replace([Diagnosis/Impression], '<p>', ''), '</p>', ''),'<p align="left">',''),'<p align="right">',''),'<p align="center">','') As [Diagnosis/Impression]                            
+  --,[Diagnosis/Impression],        
+  --Diagnosis,        
+  --Impression           
+ ,replace(replace(replace(replace(replace([Diagnosis/Impression], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">','</div>'),'<p align="right">',''),'<p align="center">','')  As [Diagnosis/Impression]        
+ ,replace(replace(replace(replace(replace(Diagnosis, '<p>', '<div>'), '</p>', '</div>'),'<p align="left">','</div>'),'<p align="right">',''),'<p align="center">','')  As [Diagnosis]                                                      
+ ,replace(replace(replace(replace(replace(Impression, '<p>', '<div>'), '</p>', '</div>'),'<p align="left">','</div>'),'<p align="right">',''),'<p align="center">','')  As [Impression]        
+,@HeaderName As Header             
+,@CreatedBy As TestEnteredby                    
+--,[Special Stains]        
+,replace(replace(replace(replace(replace([Special Stains], '<p>', '<div>'), '</p>', '</div>'),'<p align="left">','</div>'),'<p align="right">',''),'<p align="center">','')  As [Special Stains]        
+,Suggest,[ICD Code],Category,[Summary of Sections],                  
+[Cold Ischemic Timen]                   
+,  [Test typed by]                             
+ FROM (                                                      
+ SELECT IDM.DeptName , IV.InvestigationID,IV.Name,IV.Value,PINV.Reason,PINV.MedicalRemarks,PINV.InvestigationName,PINV.Interpretation As TestInterpretation                                                                                
+ FROM InvestigationValues IV INNER JOIN                         
+PatientInvestigation PINV ON PINV.InvestigationID=IV.InvestigationID and PINV.OrgID=@OrgID AND IV.UID=PINV.UID AND IV.PatientVisitID=PINV.PatientVisitID                                        
+ INNER JOIN InvestigationOrgMapping IOG ON IOG.InvestigationID =PINV.InvestigationID AND IOG.OrgID =@OrgID                        
+ INNER JOIN InvDeptMaster IDM ON IDM.DeptID = IOG.DeptID AND IDM.OrgID =@OrgID                        
+ where  IV.UID=@UID AND PINV.InvestigationID=@InvID AND IV.PatientVisitID=@pVisitID AND IV.Value<>'<br />' AND iv.status NOT in('Recheck','Rerun')      
+ AND PINV.status NOT in('Recheck','Rerun')      
+ ) up                                                                              
+                                                   
+ PIVOT (             
+ MIN(Value)  FOR Name IN (Specimen,[Case No],Technique,[ClinicalNotes],Site,ProcessMethods,Staining,Gross,[Comments/Remarks],Comments,Remarks,Interpretation,[IHC],[IF],Microscopy                
+ ,[Time oF Fixation]                                   
+,[Grossed By]                                                
+,[Assisted By]                                        
+,[Supervised by]                                      
+,[Diagnosis/Impression]         
+,Diagnosis        
+,Impression                 
+,[Special Stains],Suggest,[ICD Code],Category,[Summary of Sections],                  
+[Cold Ischemic Timen]                   
+,  [Test typed by] )                                                            
+ ) AS pvt                                                            
+               
+         
+                                                         
+ UPDATE T SET T.ImageSource = pif.ImageSource,IsImageExists=1 FROM @Temp T                                  
+ INNER JOIN PatientInvestigationFiles (NOLOCK) pif ON pif.InvestigationID=T.InvestigationID                                        
+ WHERE pif.PatientVisitID = @pVisitID AND pif.Orgid = @OrgID   and ISNULL(pif.statustype,'')=''                                                      
+         
+  DECLARE @Text Varchar(max)=''        
+        
+ IF NOT EXISTS (select 1 from @Temp where ISNULL([Case No],'')='' OR ltrim(RTrim([Case No]))='--')        
+ BEGIN        
+  SELECT @Text = '<U><B>CASE NO</B></U> <br>' +  [Case No]+'<br>'  from  @Temp         
+  SELECT @Text+='<br>'        
+ END        
+        
+ IF NOT EXISTS (select 1 from @Temp where ISNULL(Specimen,'')='' OR ltrim(RTrim(Specimen))='--')        
+ BEGIN        
+   SELECT @Text += '<U><B>SPECIMEN</B></U> <br>' +  [Specimen]+'<br>'  from  @Temp where ISNULL(Specimen,'')!=''        
+   SELECT @Text+='<br>'        
+  END        
+  IF NOT EXISTS (select 1 from @Temp where ISNULL([ClinicalNotes],'')='' OR ltrim(RTrim([ClinicalNotes]))='--' OR ltrim(RTrim([ClinicalNotes]))='<div>--</div>' OR ltrim(RTrim([ClinicalNotes]))='<div>--</div>        
+')        
+ BEGIN        
+  SELECT @Text += '<U><B>CLINICAL NOTES</B></U> <br>' +  [ClinicalNotes]+'<br>'  from  @Temp where ISNULL([ClinicalNotes],'')!=''        
+  SELECT @Text+='<br>'        
+  END     
+    IF NOT EXISTS (select 1 from @Temp where ISNULL([Diagnosis/Impression],'')='' OR ltrim(RTrim([Diagnosis/Impression]))='--' OR ltrim(RTrim([Diagnosis/Impression]))='<div>--</div>' OR ltrim(RTrim([Diagnosis/Impression]))='<div>--</div>        
+')        
+ BEGIN        
+ SELECT @Text += '<U><B>DIAGNOSIS</B></U> <br><B>' +  [Diagnosis/Impression]+'</B>'  from  @Temp where ISNULL([Diagnosis/Impression],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+    IF NOT EXISTS (select 1 from @Temp where ISNULL([Diagnosis],'')='' OR ltrim(RTrim([Diagnosis]))='--' OR ltrim(RTrim([Diagnosis]))='<div>--</div>'  OR ltrim(RTrim([Diagnosis]))='<div>--</div>        
+')        
+ BEGIN        
+ SELECT @Text += '<U><B>DIAGNOSIS</B></U> <br><B>' +  [Diagnosis]+'</B>'  from  @Temp where ISNULL([Diagnosis],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+       
+        
+    IF NOT EXISTS (select 1 from @Temp where ISNULL([Gross],'')=''  OR ltrim(RTrim([Gross]))='--' OR ltrim(RTrim([Gross]))='<div>--</div>' OR ltrim(RTrim([Gross]))='<div>--</div>        
+')        
+ BEGIN        
+  SELECT @Text += '<U><B>GROSS EXAMINATION</B></U> <br>' + [Gross] from  @Temp where ISNULL([Gross],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+   IF NOT EXISTS (select 1 from @Temp where ISNULL([Microscopy],'')='' OR ltrim(RTrim([Microscopy]))='--' OR ltrim(RTrim([Microscopy]))='<div>--</div>' OR ltrim(RTrim([Microscopy]))='<div>--</div>        
+')        
+ BEGIN        
+ SELECT @Text += '<U><B>MICROSCOPIC EXAMINATION</B></U> <br>' +  [Microscopy]  from  @Temp where ISNULL([Microscopy],'')!=''        
+  SELECT @Text+='<br>'        
+  END         
+        
+   IF NOT EXISTS (select 1 from @Temp where ISNULL([Special Stain],'')='' OR ltrim(RTrim([Special Stain]))='--' OR ltrim(RTrim([Special Stain]))='<div>--</div>' OR ltrim(RTrim([Special Stain]))='<div>--<div>        
+')        
+ BEGIN        
+  SELECT @Text += '<U><B>SPECIAL STAIN</B></U> <br>' +  [Special Stain]  from  @Temp where ISNULL([Special Stain],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+    IF NOT EXISTS (select 1 from @Temp where ISNULL([IHC],'')='' OR ltrim(RTrim([IHC]))='--' OR ltrim(RTrim([IHC]))='<div>--</div>' OR ltrim(RTrim([IHC]))='<div>--</div>        
+')        
+ BEGIN        
+  SELECT @Text += '<U><B>IHC</B></U> <br>' +  [IHC] from  @Temp where ISNULL([IHC],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+        
+      IF NOT EXISTS (select 1 from @Temp where ISNULL([IF],'')='' OR ltrim(RTrim([IF]))='--' OR ltrim(RTrim([IF]))='<div>--</div>' OR ltrim(RTrim([IF]))='<div>--</div>        
+')        
+ BEGIN        
+        
+ SELECT @Text += '<U><B>IF</B></U> <br>' +  [IF] from  @Temp where ISNULL([IF],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+    
+IF NOT EXISTS (select 1 from @Temp where ISNULL([Impression],'')='' OR ltrim(RTrim([Impression]))='--' OR ltrim(RTrim([Impression]))='<div>--</div>' OR ltrim(RTrim([Impression]))='<div>--</div>        
+')        
+ BEGIN        
+ SELECT @Text += '<U><B>IMPRESSION</B></U> <br><B>' +  [Impression]+'</B>'  from  @Temp where ISNULL([Impression],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+        
+   IF NOT EXISTS (select 1 from @Temp where ISNULL([Comments/Remarks],'')='' OR ltrim(RTrim([Comments/Remarks]))='--')        
+ BEGIN        
+ SELECT @Text += '<U><B>REMARKS</B></U> <br>' +  [Comments/Remarks]  from  @Temp where ISNULL([Comments/Remarks],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+     IF NOT EXISTS (select 1 from @Temp where ISNULL([Comments],'')='' OR ltrim(RTrim([Comments]))='--')        
+ BEGIN        
+ SELECT @Text += '<U><B>COMMENTS</B></U> <br>' +  [Comments]+'<br>'  from  @Temp where ISNULL([Comments],'')!=''        
+  SELECT @Text+='<br>'        
+  END        
+     IF NOT EXISTS (select 1 from @Temp where ISNULL([Remarks],'')='' OR ltrim(RTrim([Remarks]))='--')        
+ BEGIN        
+ SELECT @Text += '<U><B>REMARKS</B></U> <br>' +  [Remarks]+'<br>'  from  @Temp where ISNULL([Remarks],'')!=''        
+ SELECT @Text+='<br>'        
+  END        
+        
+       IF NOT EXISTS (select 1 from @Temp where ISNULL([Suggest],'')='' OR ltrim(RTrim([Suggest]))='--')        
+ BEGIN        
+ SELECT @Text += '<U><B>SUGGEST</B></U> <br>' +  [Suggest]  from  @Temp where ISNULL([Suggest],'')!=''        
+ SELECT @Text+='<br>'        
+  END        
+        
+ IF NOT EXISTS (select 1 from @Temp where ISNULL([Summary of Sections],'')='' OR ltrim(RTrim([Summary of Sections]))='--')        
+ BEGIN        
+ SELECT @Text += '<U><B>SUMMARY OF SECTIONS</B></U> <br>' +  Replace([Summary of Sections],CHAR(10),'<br>') from  @Temp where ISNULL([Summary of Sections],'')!=''        
+   END          
+                                                
+ SELECT *,@Text as 'Data' FROM @Temp where  ltrim(RTrim(isnull(IHC,'')))not in('--','##','#')            
+        
+                            
+END 

@@ -1,0 +1,2481 @@
+
+CREATE PROCEDURE [dbo].[pUpdatePatientInvestigationCompleteSingleScreen] @pPatientInvTable 
+[dbo].[PatientInvestigation] READONLY, 
+@pSCMID 
+[bigint], 
+@pApprovedBy 
+[bigint], 
+@UID 
+[nvarchar](255), 
+@pReturnStatus 
+[int] OUTPUT, 
+@ContextInfo 
+[UDT_Context] READONLY, 
+@pReflexPatientInvTable [dbo].[PatientInvestigation] READONLY 
+WITH EXECUTE AS OWNER 
+AS 
+BEGIN 
+Set nocount on 
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)  
+SET @pReturnStatus=-1 
+Declare @LoginID Bigint 
+Declare @POrgID bigint
+Declare @pVisitid bigint
+set @POrgID=(select top 1 OrgID from @pPatientInvTable)
+--set @pVisitid=(select top 1 patientvisitID from @pPatientInvTable)
+select @LoginID = LoginID  
+from   @ContextInfo 
+Declare @ServerDateTime datetime 
+Declare @patientVisitid bigint 
+/* Code added by T.Suresh for MIS Purpose start here */
+declare @tmp_patinv as table (patientinvid bigint,accessionnumber bigint,status nvarchar(50))
+declare @tmp_ordinv as table (accessionnumber bigint)
+/* Code added by T.Suresh for MIS Purpose end here */
+/*
+select @patientVisitid = Visitid 
+from   Orderedinvestigations 
+where  UID = @UID   and orgid=@POrgID
+option(MAXDOP 1) 
+*/
+Select top 1 @patientVisitid = patientvisitID from @pPatientInvTable
+SELECT @ServerDateTime = dbo.Fn_getserverdate(@ContextInfo) 
+DECLARE @tblRefAccession AS TABLE (RefAccessionNo BIGINT primary key) 
+/************************ ReferenceRange Verfication Start *************************/
+Insert Into ReferenceRangeTracker(Old_RefernceRange,New_RefernceRange,PatientVisitId,InvestigationID,CrDate,orgid)
+Select PINV.ReferenceRange as Old_RefernceRange, TempInv.ReferenceRange as New_RefernceRange,
+PINV.PatientVisitID, PINV.InvestigationID,Getdate(),PINV.orgid
+FROM PatientInvestigation PINV 
+INNER JOIN @pPatientInvTable TempInv ON TempInv.InvestigationID = PINV.InvestigationID
+AND TempInv.PatientVisitID = PINV.PatientVisitID
+AND PINV.STATUS <> 'Approve'
+AND (
+PINV.UID = @UID
+OR PINV.AccessionNumber IN (
+SELECT RefAccessionNo
+FROM PatientInvestigation p
+WHERE p.UID = Isnull(@UID, [UID])
+)
+)
+AND TempInv.OrgID = pinv.OrgID
+Where Isnull(PINV.ReferenceRange,'') <>'' 
+And  PINV.ReferenceRange not Like '<?xml%'
+AND Ltrim(RTrim(REplace(PINV.ReferenceRange, '<br>', ''))) <> Ltrim(Rtrim(REplace(TempInv.ReferenceRange, '<br>', '')))
+/************************ ReferenceRange Verfication END *************************/
+IF @UID IS NULL 
+BEGIN 
+insert into @tblRefAccession 
+select DISTINCT RefAccessionNo 
+from   PatientInvestigation p 
+where  P.Patientvisitid = @patientVisitid 
+AND Isnull(RefAccessionNo, 0) <> 0 
+END 
+ELSE 
+BEGIN 
+insert into @tblRefAccession 
+select DISTINCT RefAccessionNo 
+from   PatientInvestigation p 
+where  P.Patientvisitid = @patientVisitid 
+and p.UID = @UID 
+AND Isnull(RefAccessionNo, 0) <> 0 
+END 
+DECLARE @OrgID INT 
+SELECT @OrgID = OrgID 
+FROM   @pPatientInvTable 
+CREATE TABLE #TempPatientInvestigation 
+( 
+[PatientVisitID]          [bigint] NULL, 
+[InvestigationID]         [bigint] NULL, 
+[ModifiedBy]              [bigint] NULL, 
+[ModifiedAt]              [datetime] NULL, 
+[Status]                  [nvarchar](100) NULL, 
+[GroupID]                 [int] NULL, 
+[Reason]                  [nvarchar](250) NULL, 
+[ReportStatus]            [nvarchar](255) NULL, 
+[ReferenceRange]          [nvarchar](max) NULL, 
+[OrgID]                   [int] NULL, 
+[PerformingPhysicainName] [nvarchar](500) NULL, 
+[ApprovedBy]              [bigint] NULL, 
+[PatientInvID]            [bigint], 
+[UID]                     [nvarchar](255) NULL, 
+[ApprovedAt]              [datetime] NULL, 
+[AccessionNumber]         [bigint] NULL, 
+[IsAbnormal]              [nvarchar](50) NULL, 
+[InvStatusReasonID]       [int] NULL, 
+[ValidatedBy]             [bigint] NULL, 
+[ValidatedAt]             [datetime] NULL, 
+[RemarksID] [bigint] NULL, 
+[MedicalRemarks]          [nvarchar](max) NULL, 
+[statustype]              [nvarchar](100) NULL, 
+[ConvReferenceRange]      [nvarchar](max) NULL, 
+[RefAccessionNo]          [bigint] NULL, 
+[ManualAbnormal]          [nvarchar](1) NULL, 
+[IsAutoAuthorize]         [nvarchar](1) NULL, 
+[PrintableRange]          [nvarchar](max) NULL, 
+[IsAutoValidate]          [nchar](1) NULL, 
+[IsSensitive]             [nvarchar](1) NULL 
+) 
+IF( @pSCMID = 9999 ) 
+BEGIN 
+DECLARE @ConfigValue [nvarchar](max) 
+SELECT @ConfigValue = ConfigValue 
+FROM   ConfigKeyMaster ckm  
+INNER JOIN ConfigOrgMaster com  
+ON ckm.ConfigKeyID = com.ConfigKeyID 
+WHERE  ckm.ConfigKey = 'SampleStatusAllCompleted' 
+AND com.OrgID = @orgid 
+IF( @ConfigValue = 'Y' ) 
+BEGIN 
+UPDATE PatientInvestigation WITH (ROWLOCK)
+SET    Status = TempInv.Status, 
+Reason = TempInv.Reason, 
+ReportStatus = TempInv.ReportStatus, 
+ReferenceRange = TempInv.ReferenceRange, 
+ModifiedBy = (SELECT LoginID 
+FROM   @ContextInfo), 
+PerformingPhysicainName = 
+TempInv.PerformingPhysicainName, 
+ApprovedBy = CASE 
+WHEN @pApprovedBy = 0 
+AND TempInv.Status = 'Approve' THEN 
+TempInv.AutoApproveLoginID 
+ELSE @pApprovedBy 
+END, 
+--ApprovedBy = @pApprovedBy,                                                       
+ModifiedAt = 
+(SELECT dbo.Fn_getserverdate(@ContextInfo)), 
+IsAbnormal = CASE TempInv.Status 
+WHEN 'Recheck' THEN NULL 
+WHEN 'Retest' THEN NULL 
+ELSE TempInv.IsAbnormal 
+END, 
+RemarksID = TempInv.RemarksID, 
+MedicalRemarks = TempInv.MedicalRemarks, 
+ConvReferenceRange = CASE 
+WHEN 
+Isnull(TempInv.ConvReferenceRange, 
+'') 
+= 
+'' 
+THEN 
+PINV.ConvReferenceRange 
+ELSE TempInv.ConvReferenceRange 
+END, 
+statustype = Isnull(statustype, CASE TempInv.Status 
+WHEN 'Recheck' THEN 'RC' 
+WHEN 'Retest' THEN 'RR' 
+ELSE NULL 
+END), 
+ManualAbnormal = CASE TempInv.Status 
+WHEN 'Recheck' THEN NULL 
+WHEN 'Retest' THEN NULL 
+ELSE TempInv.ManualAbnormal 
+END, 
+IsAutoAuthorize = CASE TempInv.Status 
+WHEN 'Recheck' THEN NULL 
+WHEN 'Retest' THEN NULL 
+ELSE TempInv.IsAutoAuthorize 
+END, 
+IsSensitive = TempInv.IsSensitive ,
+QCData=TempInv.QCData
+--,Test = 'Venky'                      ,RefSuffixText = TempInv.GroupName                                                
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   PatientInvestigation PINV
+INNER JOIN @pPatientInvTable TempInv 
+ON TempInv.InvestigationID = 
+PINV.InvestigationID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+AND PINV.Status <> 'Approve' 
+AND ( PINV.UID = @UID 
+OR PINV.AccessionNumber IN 
+(SELECT 
+RefAccessionNo 
+FROM 
+PatientInvestigation p 
+WHERE 
+p.UID = 
+Isnull(@UID, [UID]) 
+) ) 
+AND TempInv.OrgID = pinv.OrgID 
+SET @pReturnStatus=0 
+END 
+ELSE 
+BEGIN 
+
+--            ([ModifiedBy],   
+--             [ModifiedAt],   
+--             [Status],   
+--             [ReferenceRange],   
+--          [PatientInvID],   
+--             [IsAbnormal],   
+--             [ConvReferenceRange],   
+--             [IsAutoAuthorize],   
+--             [PrintableRange],   
+--             [IsAutoValidate],   
+--             [InvestigationID],   
+--             [GroupID],   
+--             [PatientVisitID],   
+--             [UID],   
+--             [AccessionNumber],   
+--             [OrgID])   
+--SELECT PINV.[ModifiedBy],   
+--       PINV.[ModifiedAt],   
+--       PINV.[Status],   
+--       PINV.[ReferenceRange],   
+--       PINV.[PatientInvID],   
+--       PINV.[IsAbnormal],   
+--       PINV.[ConvReferenceRange],   
+--       PINV.[IsAutoAuthorize],   
+--       PINV.[PrintableRange],   
+--       PINV.[IsAutoValidate],   
+--       PINV.[InvestigationID],   
+--       PINV.[GroupID],   
+--       PINV.[PatientVisitID],   
+--       PINV.[UID],   
+--       PINV.[AccessionNumber],   
+--       PINV.[OrgID]   
+--FROM   @pPatientInvTable TempInv   
+--       INNER JOIN PatientInvestigation PINV    
+--               ON TempInv.PatientVisitID = PINV.PatientVisitID   
+INSERT INTO #TempPatientInvestigation 
+([PatientVisitID], 
+[InvestigationID], 
+[ModifiedBy], 
+[ModifiedAt], 
+[Status], 
+[GroupID], 
+[Reason], 
+[ReportStatus], 
+[ReferenceRange], 
+[OrgID], 
+[PerformingPhysicainName], 
+[ApprovedBy], 
+[PatientInvID], 
+[UID], 
+[ApprovedAt], 
+[AccessionNumber], 
+[IsAbnormal], 
+[InvStatusReasonID], 
+[ValidatedBy], 
+[ValidatedAt], 
+[RemarksID], 
+[MedicalRemarks], 
+[statustype], 
+[ConvReferenceRange], 
+[RefAccessionNo], 
+[ManualAbnormal], 
+[IsAutoAuthorize], 
+[PrintableRange], 
+[IsAutoValidate], 
+[IsSensitive]) 
+SELECT PINV.[PatientVisitID], 
+PINV.[InvestigationID], 
+PINV.[ModifiedBy], 
+PINV.[ModifiedAt], 
+PINV.[Status], 
+PINV.[GroupID], 
+PINV.[Reason], 
+PINV.[ReportStatus], 
+PINV.[ReferenceRange], 
+PINV.[OrgID], 
+PINV.[PerformingPhysicainName], 
+PINV.[ApprovedBy], 
+PINV.[PatientInvID], 
+PINV.[UID], 
+PINV.[ApprovedAt], 
+PINV.[AccessionNumber], 
+PINV.[IsAbnormal], 
+PINV.[InvStatusReasonID], 
+PINV.[ValidatedBy], 
+PINV.[ValidatedAt], 
+PINV.[RemarksID], 
+PINV.[MedicalRemarks], 
+PINV.[statustype], 
+PINV.[ConvReferenceRange], 
+PINV.[RefAccessionNo], 
+PINV.[ManualAbnormal], 
+PINV.[IsAutoAuthorize], 
+PINV.[PrintableRange], 
+PINV.[IsAutoValidate], 
+PINV.[IsSensitive] 
+FROM   @pPatientInvTable TempInv 
+INNER JOIN PatientInvestigation PINV  
+ON TempInv.PatientVisitID = PINV.PatientVisitID 
+AND TempInv.InvestigationID = 
+PINV.InvestigationID 
+and Pinv.Status <> 'Approve'  and  PINV.UID=@UID
+--SELECT @pSCMID   
+--Insert Into [PatientInvestigation_Hist1]   
+--            (PatientVisitID,   
+--             InvestigationID,   
+--             InvestigationName,   
+--             CreatedBy,   
+--             CreatedAt,   
+--             ModifiedBy,   
+--             ModifiedAt,   
+--             InvestigationMethodID,   
+--             InvestigationSampleContainerID,   
+--             SampleID,   
+--             InvestigationSiteID,   
+--             IsCompleted,   
+--             CollectedDateTime,   
+--             Status,   
+--             ComplaintId,   
+--             GroupID,   
+--             GroupName,   
+--             Reason,   
+--             ReportStatus,   
+--             ReferenceRange,   
+--             MethodName,   
+--             IPInvSampleCollectionMasterID,   
+--             OrgID,   
+--             WorklistDeletedStatus,   
+--             PerformingPhysicainName,   
+--             KitID,   
+--             KitName,   
+--             InstrumentID,   
+--             InstrumentName,   
+--             Interpretation,   
+--             PrincipleID,   
+--             PrincipleName,   
+--             QCData,   
+--             PackageID,   
+--             PackageName,   
+--             ApprovedBy,   
+--             PatientInvID,   
+--             OrderedAt,   
+--             UID,   
+--             GroupComment,   
+--             ApprovedAt,   
+--             AccessionNumber,   
+--             IsAbnormal,   
+--             InvStatusReasonID,   
+--             ValidatedBy,   
+--             ValidatedAt,   
+--             GetCurrentDate,   
+--             WorklistType,   
+--             WorklistTypeID,   
+--             PrintableRange)   
+--Select PINV.PatientVisitID,   
+--       PINV.InvestigationID,   
+--       PINV.InvestigationName,   
+--       PINV.CreatedBy,   
+--       PINV.CreatedAt,   
+--       PINV.ModifiedBy,   
+--       PINV.ModifiedAt,   
+--       PINV.InvestigationMethodID,   
+--       PINV.InvestigationSampleContainerID,   
+--       PINV.SampleID,   
+--       PINV.InvestigationSiteID,   
+--       PINV.IsCompleted,   
+--       PINV.CollectedDateTime,   
+--       PINV.Status,   
+--       PINV.ComplaintId,   
+--       PINV.GroupID,   
+--       PINV.GroupName,   
+--       PINV.Reason,   
+--       PINV.ReportStatus,   
+--       PINV.ReferenceRange,   
+--  PINV.MethodName,   
+--       PINV.IPInvSampleCollectionMasterID,  
+--       PINV.OrgID,   
+--       PINV.WorklistDeletedStatus,   
+--       PINV.PerformingPhysicainName,   
+--       PINV.KitID,   
+--       PINV.KitName,   
+--       PINV.InstrumentID,   
+--       PINV.InstrumentName,   
+--       PINV.Interpretation,   
+--       PINV.PrincipleID,              --       PINV.PrincipleName,   
+--       PINV.QCData,   
+--       PINV.PackageID,   
+--       PINV.PackageName,   
+--       PINV.ApprovedBy,   
+--       PINV.PatientInvID,   
+--       PINV.OrderedAt,   
+--       PINV.UID,   
+--       PINV.GroupComment,   
+--       PINV.ApprovedAt,   
+--       PINV.AccessionNumber,   
+--       PINV.IsAbnormal,   
+--       PINV.InvStatusReasonID,   
+--       PINV.ValidatedBy,   
+--       PINV.ValidatedAt,   
+--       ( @ServerDateTime ),   
+--       PINV.WorklistType,   
+--       PINV.WorklistTypeID,   
+--       PINV.PrintableRange   
+--from   PatientInvestigation PINV    
+--       INNER JOIN @pPatientInvTable TempInv   
+--               on TempInv.InvestigationID = PINV.InvestigationID   
+--                  AND TempInv.PatientVisitID = PINV.PatientVisitID   
+--                  and PINV.UID = @UID   
+--                  AND TempInv.OrgID = pinv.OrgID   
+--where  PINV.Status = 'SampleReceived'   
+--UPDATE PINV   
+--SET    InvStatusReasonID = TempInv.InvStatusReasonID,   
+--       Status = TempInv.Status,   
+--       Reason = CASE   
+--                  WHEN TempInv.Reason = 'null' THEN ''   
+--                  ELSE TempInv.Reason   
+--                END,   
+--       ReportStatus = TempInv.ReportStatus,   
+--       ReferenceRange = CASE   
+--                          WHEN TempInv.ReferenceRange = 'null' THEN ''   
+--                          ELSE TempInv.ReferenceRange   
+--                        END,   
+--       ModifiedBy = (select LoginID   
+--                     from   @ContextInfo),   
+--       PerformingPhysicainName = TempInv.PerformingPhysicainName,   
+--       ApprovedBy = CASE   
+--                      When @pApprovedBy = 0   
+--                           AND TempInv.Status = 'Approve' Then TempInv.AutoApproveLoginID  
+--                      ELSE @pApprovedBy   
+--                    End,   
+--       ApprovedAt = case   
+--                      when @pApprovedBy = 0   
+--                           AND TempInv.Status = 'Approve' Then ( @ServerDateTime )   
+--                      Else Null   
+--                    End,   
+--       ValidatedBy = case   
+--                       when TempInv.ValidatedBy > 0 Then TempInv.ValidatedBy   
+--                       Else PINV.ValidatedBy   
+--                     End,   
+--       ValidatedAt = case   
+--                       when TempInv.ValidatedBy > 0 Then ( @ServerDateTime )   
+--                       Else PINV.ValidatedAt   
+--                     End,   
+--       ModifiedAt = ( @ServerDateTime ),   
+--       IsAbnormal = case TempInv.Status   
+--                      when 'Recheck' then null   
+--                      when 'Retest' then null   
+--                      else TempInv.IsAbnormal   
+--                    end,   
+--       RemarksID = TempInv.RemarksID,   
+--       MedicalRemarks = TempInv.MedicalRemarks,   
+--       ConvReferenceRange = Case   
+--                              when Isnull(TempInv.ConvReferenceRange, '') = '' then PINV.ConvReferenceRange  
+--                              Else TempInv.ConvReferenceRange   
+--                            End,   
+--       statustype = Isnull(statustype, case TempInv.Status   
+--                                         when 'Recheck' then 'RC'   
+--                                         when 'Retest' then 'RR'   
+--                                         else null  
+--                                       end),   
+--       ManualAbnormal = case TempInv.Status   
+--                          when 'Recheck' then null   
+--                          when 'Retest' then null   
+--                 else TempInv.ManualAbnormal   
+--                  end,   
+--       IsAutoAuthorize = case TempInv.Status   
+--                           when 'Recheck' then null   
+--                           when 'Retest' then null   
+--                           else TempInv.IsAutoAuthorize   
+--                         end   
+--       --,Test = 'Venky'                      ,RefSuffixText = TempInv.GroupName                                                           
+--       ,   
+--       PrintableRange = CASE   
+--                          WHEN TempInv.PrintableRange = 'null' THEN ''   
+--                          ELSE TempInv.PrintableRange   
+--                        END,   
+--       IsAutoValidate = Case TempInv.Status   
+--                          when 'Recheck' then null   
+--                          when 'Retest' then null   
+--                          else TempInv.IsAutoValidate   
+--                        end   
+--FROM   @pPatientInvTable TempInv   
+--       INNER JOIN PatientInvestigation PINV   
+--               on TempInv.InvestigationID = PINV.InvestigationID   
+--                  AND TempInv.GroupID = PINV.GroupID   
+--                  AND TempInv.PatientVisitID = PINV.PatientVisitID   
+--                  --and ( PINV.UID = @UID   
+--                  --       or PINV.AccessionNumber in (select RefAccessionNo   
+--                  --                                   from   @tblRefAccession) )   
+--                  AND TempInv.OrgID = pinv.OrgID   
+--                  and Pinv.status not in ( 'Retest', 'InActive', 'Recheck' )   
+--Where  PINV.Patientvisitid = @patientVisitid   
+--       AND PINV.OrgID = @OrgID   
+UPDATE PINV
+SET STATUS = TempInv.STATUS
+--,ReferenceRange = CASE 
+--	WHEN TempInv.ReferenceRange = 'null'
+--		THEN ''
+--	ELSE TempInv.ReferenceRange
+--	END
+,ReferenceRange = CASE 
+WHEN PINV.ReferenceRange LIKE '%<?xml%'
+THEN TempInv.ReferenceRange
+WHEN TempInv.STATUS = 'Validate'
+THEN PINV.ReferenceRange
+WHEN TempInv.ReferenceRange = 'null'
+THEN ''
+ELSE PINV.ReferenceRange-- TempInv.ReferenceRange
+END
+,ModifiedBy = (
+SELECT LoginID
+FROM @ContextInfo
+)
+,ModifiedAt = (@ServerDateTime)
+,IsAbnormal = CASE TempInv.STATUS
+WHEN 'Recheck'
+THEN NULL
+WHEN 'Retest'
+THEN NULL
+ELSE TempInv.IsAbnormal
+END
+,ConvReferenceRange = CASE 
+WHEN Isnull(TempInv.ConvReferenceRange, '') = ''
+THEN PINV.ConvReferenceRange
+ELSE TempInv.ConvReferenceRange
+END
+,IsAutoAuthorize = CASE TempInv.STATUS
+WHEN 'Recheck'
+THEN NULL
+WHEN 'Retest'
+THEN NULL
+ELSE TempInv.IsAutoAuthorize
+END
+,PrintableRange = CASE 
+WHEN TempInv.PrintableRange = 'null'
+THEN ''
+ELSE TempInv.PrintableRange
+END
+,IsAutoValidate = CASE TempInv.STATUS
+WHEN 'Recheck'
+THEN NULL
+WHEN 'Retest'
+THEN NULL
+ELSE TempInv.IsAutoValidate
+END
+,IsSensitive = TempInv.IsSensitive
+FROM @pPatientInvTable TempInv
+INNER JOIN #TempPatientInvestigation PINV ON TempInv.InvestigationID = PINV.InvestigationID
+-- AND TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M   
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and ( PINV.UID = @UID 
+or PINV.AccessionNumber in (select 
+RefAccessionNo 
+from 
+@tblRefAccession 
+) ) 
+AND TempInv.OrgID = pinv.OrgID 
+and Pinv.status not in ( 
+'Retest', 'InActive', 
+'Recheck' 
+) 
+Where  PINV.Patientvisitid = @patientVisitid 
+AND PINV.OrgID = @OrgID 
+INSERT INTO PatientInvestigationDevice 
+(ModifiedBy, 
+ModifiedAt, 
+Status, 
+ReferenceRange, 
+IsAbnormal, 
+ConvReferenceRange, 
+IsAutoAuthorize, 
+PrintableRange, 
+IsAutoValidate, 
+PatientInvID) 
+SELECT ModifiedBy, 
+ModifiedAt, 
+Status, 
+ReferenceRange, 
+IsAbnormal, 
+ConvReferenceRange, 
+IsAutoAuthorize, 
+PrintableRange, 
+IsAutoValidate, 
+PatientInvID 
+FROM   #TempPatientInvestigation TempPI  
+option(force order) 
+INSERT INTO PatientInvestigationDeviceRuleBasedTest 
+(PatientVisitID, 
+AccessionNumber, 
+PatientInvID, 
+OrgID, 
+CreatedBy, 
+CreatedAt) 
+SELECT PINV.PatientVisitID, 
+PINV.AccessionNumber, 
+PINV.PatientInvID, 
+PINV.OrgID, 
+@LoginID, 
+dbo.Fn_getserverdate(@ContextInfo) 
+From   Patientinvestigation PINV  
+Inner join @pPatientInvTable p 
+on PINV.Orgid = p.Orgid 
+and PINV.Patientvisitid = p.Patientvisitid 
+Inner join @pReflexPatientInvTable rpi 
+on ( PINV.Investigationid = rpi.InvestigationID 
+or PINV.GroupID in (select OrgGroupID 
+from   invorggroup 
+where  AttGroupID = 
+rpi.InvestigationID) ) 
+Where  PINV.status = 'ReflexTest' 
+SET @pReturnStatus=0 
+END 
+END 
+ELSE 
+BEGIN 
+INSERT INTO #TempPatientInvestigation 
+([PatientVisitID], 
+[InvestigationID], 
+[ModifiedBy], 
+[ModifiedAt], 
+[Status], 
+[GroupID], 
+[Reason], 
+[ReportStatus], 
+[ReferenceRange], 
+[OrgID], 
+[PerformingPhysicainName], 
+[ApprovedBy], 
+[PatientInvID], 
+[UID], 
+[ApprovedAt], 
+[AccessionNumber], 
+[IsAbnormal], 
+[InvStatusReasonID], 
+[ValidatedBy], 
+[ValidatedAt], 
+[RemarksID], 
+[MedicalRemarks], 
+[statustype], 
+[ConvReferenceRange], 
+[RefAccessionNo], 
+[ManualAbnormal], 
+[IsAutoAuthorize], 
+[PrintableRange], 
+[IsAutoValidate], 
+[IsSensitive]) 
+SELECT PINV.[PatientVisitID], 
+PINV.[InvestigationID], 
+PINV.[ModifiedBy], 
+PINV.[ModifiedAt], 
+PINV.[Status], 
+PINV.[GroupID], 
+PINV.[Reason], 
+PINV.[ReportStatus], 
+PINV.[ReferenceRange], 
+PINV.[OrgID], 
+PINV.[PerformingPhysicainName], 
+PINV.[ApprovedBy], 
+PINV.[PatientInvID], 
+PINV.[UID], 
+PINV.[ApprovedAt], 
+PINV.[AccessionNumber], 
+PINV.[IsAbnormal], 
+PINV.[InvStatusReasonID], 
+PINV.[ValidatedBy], 
+PINV.[ValidatedAt], 
+PINV.[RemarksID], 
+PINV.[MedicalRemarks], 
+PINV.[statustype], 
+PINV.[ConvReferenceRange], 
+PINV.[RefAccessionNo], 
+PINV.[ManualAbnormal], 
+PINV.[IsAutoAuthorize], 
+PINV.[PrintableRange], 
+PINV.[IsAutoValidate], 
+PINV.[IsSensitive] 
+FROM   @pPatientInvTable TempInv 
+INNER JOIN PatientInvestigation PINV  
+ON TempInv.PatientVisitID = PINV.PatientVisitID 
+AND TempInv.InvestigationID = PINV.InvestigationID 
+and PINV.STATUS <> 'Approve' and PINV.UID=@UID
+/*****added by sree krishna*****/
+--BEGIN  TRY                                                                                                                             
+--BEGIN TRAN trans                                                                                        
+IF( @pApprovedBy = 0 ) 
+BEGIN 
+/**************Maintain PatientInvestigation_Hist start****************************/ 
+--Insert Into [PatientInvestigation_Hist1]   
+--            (PatientVisitID,   
+--             InvestigationID,   
+--             InvestigationName,   
+--             CreatedBy,   
+--             CreatedAt,   
+--             ModifiedBy,   
+--             ModifiedAt,   
+--             InvestigationMethodID,   
+--             InvestigationSampleContainerID,   
+--             SampleID,   
+--             InvestigationSiteID,   
+--             IsCompleted,   
+--             CollectedDateTime,   
+--             Status,   
+--             ComplaintId,   
+--             GroupID,   
+--             GroupName,   
+--             Reason,   
+--             ReportStatus,   
+--             ReferenceRange,   
+--             MethodName,   
+--             IPInvSampleCollectionMasterID, 
+--             OrgID,   
+--             WorklistDeletedStatus,   
+--             PerformingPhysicainName,   
+--             KitID,   
+--             KitName,   
+--             InstrumentID,   
+--             InstrumentName,   
+--             Interpretation,   
+--             PrincipleID,   
+--             PrincipleName,   
+--             QCData,   
+--             PackageID,   
+--             PackageName,   
+--             ApprovedBy,   
+--             PatientInvID,   
+--             OrderedAt,   
+--             UID,   
+--             GroupComment,   
+--             ApprovedAt,   
+--             AccessionNumber,   
+--             IsAbnormal,   
+--             InvStatusReasonID, 
+--             ValidatedBy,   
+-- ValidatedAt,   
+--         GetCurrentDate,   
+--             WorklistType,   
+--             WorklistTypeID,   
+--             PrintableRange)   
+--Select PINV.PatientVisitID,   
+--       PINV.InvestigationID,   
+--       PINV.InvestigationName,   
+--       PINV.CreatedBy,   
+--       PINV.CreatedAt,   
+--       PINV.ModifiedBy,   
+--       PINV.ModifiedAt,   
+--       PINV.InvestigationMethodID,   
+--       PINV.InvestigationSampleContainerID,   
+--       PINV.SampleID,   
+--       PINV.InvestigationSiteID,   
+--       PINV.IsCompleted,   
+--       PINV.CollectedDateTime,   
+--       PINV.Status,   
+--   PINV.ComplaintId,   
+--       PINV.GroupID,   
+--       PINV.GroupName,   
+--    PINV.Reason,   
+--       PINV.ReportStatus,   
+--       PINV.ReferenceRange,   
+--       PINV.MethodName,   
+--       PINV.IPInvSampleCollectionMasterID,   
+--       PINV.OrgID,   
+--       PINV.WorklistDeletedStatus,   
+--       PINV.PerformingPhysicainName,   
+--       PINV.KitID,   
+--       PINV.KitName,   
+--       PINV.InstrumentID,   
+--       PINV.InstrumentName,   
+--       PINV.Interpretation,   
+--       PINV.PrincipleID,   
+-- PINV.PrincipleName,   
+--       PINV.QCData,   
+--       PINV.PackageID,   
+--       PINV.PackageName,   
+--       PINV.ApprovedBy,   
+--       PINV.PatientInvID,   
+--       PINV.OrderedAt,   
+--       PINV.UID,   
+--       PINV.GroupComment,   
+--       PINV.ApprovedAt,   
+--       PINV.AccessionNumber,   
+--       PINV.IsAbnormal,   
+--       PINV.InvStatusReasonID,   
+--       PINV.ValidatedBy,   
+--       PINV.ValidatedAt,   
+--       ( @ServerDateTime ),   
+--       PINV.WorklistType,   
+--       PINV.WorklistTypeID,   
+--       PINV.PrintableRange   
+--from   PatientInvestigation PINV    
+--       INNER JOIN @pPatientInvTable TempInv   
+--               on TempInv.InvestigationID = PINV.InvestigationID   
+--                 AND TempInv.PatientVisitID = PINV.PatientVisitID   
+--                  and PINV.UID = @UID   
+--                  AND TempInv.OrgID = pinv.OrgID   
+--where  PINV.Status = 'SampleReceived'   
+--UPDATE PINV   
+--SET    InvStatusReasonID = TempInv.InvStatusReasonID,   
+--       Status = TempInv.Status,   
+--       Reason = CASE   
+--                  WHEN TempInv.Reason = 'null' THEN ''   
+--                  ELSE TempInv.Reason   
+--                END,   
+--       ReportStatus = TempInv.ReportStatus,   
+--       ReferenceRange = CASE   
+--                          WHEN TempInv.ReferenceRange = 'null' THEN ''   
+--                          ELSE TempInv.ReferenceRange   
+--                        END,   
+--       ModifiedBy = (select LoginID   
+--                     from   @ContextInfo),   
+--       PerformingPhysicainName = TempInv.PerformingPhysicainName,   
+--       ApprovedBy = CASE   
+--                      When @pApprovedBy = 0   
+--                           AND TempInv.Status = 'Approve' Then TempInv.AutoApproveLoginID  
+--        ELSE @pApprovedBy   
+--                    End,   
+--       ApprovedAt = case   
+--                      when @pApprovedBy = 0   
+--                           AND TempInv.Status = 'Approve' Then ( @ServerDateTime )   
+--                      Else Null   
+--                    End,   
+--       ValidatedBy = case   
+--                       when TempInv.ValidatedBy > 0 Then TempInv.ValidatedBy   
+--                       Else PINV.ValidatedBy   
+--                     End,   
+--       ValidatedAt = case   
+--                       when TempInv.ValidatedBy > 0 Then ( @ServerDateTime )   
+--                       Else PINV.ValidatedAt   
+--                     End,   
+--       ModifiedAt = ( @ServerDateTime ),   
+--       IsAbnormal = case TempInv.Status   
+--                     when 'Recheck' then null   
+--                      when 'Retest' then null   
+--                      else TempInv.IsAbnormal   
+--                    end,   
+--       RemarksID = TempInv.RemarksID,   
+--   MedicalRemarks = TempInv.MedicalRemarks,   
+--       ConvReferenceRange = Case   
+--                              when Isnull(TempInv.ConvReferenceRange, '') = '' then PINV.ConvReferenceRange  
+--                              Else TempInv.ConvReferenceRange   
+--                            End,   
+--       statustype = Isnull(statustype, case TempInv.Status   
+--                                         when 'Recheck' then 'RC'   
+--                                         when 'Retest' then 'RR'   
+--                                         else null   
+--                                 end),   
+--       ManualAbnormal = case TempInv.Status   
+--                          when 'Recheck' then null   
+--                          when 'Retest' then null   
+--                          else TempInv.ManualAbnormal   
+--                        end,   
+--       IsAutoAuthorize = case TempInv.Status   
+--                           when 'Recheck' then null   
+--                           when 'Retest' then null   
+--                           else TempInv.IsAutoAuthorize   
+--                         end   
+--       --,Test = 'Venky'                      ,RefSuffixText = TempInv.GroupName        
+--       ,   
+--       PrintableRange = CASE   
+--                          WHEN TempInv.PrintableRange = 'null' THEN ''   
+--                          ELSE TempInv.PrintableRange   
+--                        END,   
+--       IsAutoValidate = Case TempInv.Status   
+--                          when 'Recheck' then null   
+--                          when 'Retest' then null   
+--                          else TempInv.IsAutoValidate   
+--                        end   
+--FROM   @pPatientInvTable TempInv   
+--       INNER JOIN PatientInvestigation PINV    
+--               on TempInv.InvestigationID = PINV.InvestigationID   
+--                  AND TempInv.GroupID = PINV.GroupID   
+--                  AND TempInv.PatientVisitID = PINV.PatientVisitID   
+--                  and ( PINV.UID = @UID   
+--                         or PINV.AccessionNumber in (select RefAccessionNo   
+--                                                     from   @tblRefAccession) )   
+--                  AND TempInv.OrgID = pinv.OrgID   
+--                  and Pinv.status not in ( 'Retest', 'InActive', 'Recheck' )   
+--Where  PINV.Patientvisitid = @patientVisitid   
+--       AND PINV.OrgID = @OrgID   
+--option(force order)   
+UPDATE PINV 
+SET    InvStatusReasonID = TempInv.InvStatusReasonID, 
+Status = TempInv.Status, 
+Reason = CASE 
+WHEN TempInv.Reason = 'null' THEN '' 
+ELSE TempInv.Reason 
+END, 
+ReportStatus = TempInv.ReportStatus, 
+ReferenceRange = CASE 
+WHEN PINV.ReferenceRange LIKE '%<?xml%'
+THEN TempInv.ReferenceRange
+WHEN TempInv.STATUS = 'Validate'
+THEN PINV.ReferenceRange
+WHEN TempInv.ReferenceRange = 'null'
+THEN ''
+ELSE PINV.ReferenceRange--TempInv.ReferenceRange
+END
+,ModifiedBy = (
+SELECT LoginID
+FROM @ContextInfo
+)
+,PerformingPhysicainName = TempInv.PerformingPhysicainName
+,ApprovedBy = CASE 
+WHEN @pApprovedBy = 0
+AND TempInv.STATUS = 'Approve'
+THEN TempInv.AutoApproveLoginID
+ELSE @pApprovedBy
+END
+,ApprovedAt = CASE 
+WHEN @pApprovedBy = 0
+AND TempInv.STATUS = 'Approve'
+THEN (@ServerDateTime)
+ELSE NULL
+END
+,ValidatedBy = CASE 
+WHEN TempInv.ValidatedBy > 0
+THEN TempInv.ValidatedBy
+ELSE PINV.ValidatedBy
+END
+,ValidatedAt = CASE 
+WHEN TempInv.ValidatedBy > 0
+THEN (@ServerDateTime)
+ELSE PINV.ValidatedAt
+END
+,ModifiedAt = (@ServerDateTime)
+,IsAbnormal = CASE TempInv.STATUS
+WHEN 'Recheck'
+THEN NULL
+WHEN 'Retest'
+THEN NULL
+ELSE TempInv.IsAbnormal
+END
+,RemarksID = TempInv.RemarksID
+,MedicalRemarks = TempInv.MedicalRemarks
+,ConvReferenceRange = CASE 
+WHEN Isnull(TempInv.ConvReferenceRange, '') = ''
+THEN PINV.ConvReferenceRange
+ELSE TempInv.ConvReferenceRange
+END
+,statustype = Isnull(statustype, CASE TempInv.STATUS
+WHEN 'Recheck'
+THEN 'RC'
+WHEN 'Retest'
+THEN 'RR'
+ELSE NULL
+END)
+,ManualAbnormal = CASE TempInv.STATUS
+WHEN 'Recheck' THEN NULL 
+WHEN 'Retest' THEN NULL
+ELSE TempInv.ManualAbnormal
+END
+,IsAutoAuthorize = CASE TempInv.STATUS
+WHEN 'Recheck' THEN NULL
+WHEN 'Retest' THEN NULL
+ELSE TempInv.IsAutoAuthorize
+END
+--,Test = 'Venky'                      ,RefSuffixText = TempInv.GroupName                                                           
+, 
+PrintableRange = CASE 
+WHEN TempInv.PrintableRange = 'null' 
+THEN 
+'' 
+ELSE TempInv.PrintableRange 
+END, 
+IsAutoValidate = Case TempInv.Status 
+when 'Recheck' then null 
+when 'Retest' then null 
+else TempInv.IsAutoValidate 
+END, 
+IsSensitive = TempInv.IsSensitive 
+FROM   #TempPatientInvestigation PINV 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+and PINV.STATUS <> 'Approve' 
+--  AND TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M   
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and ( PINV.UID = @UID 
+or PINV.AccessionNumber in (select 
+RefAccessionNo 
+from 
+@tblRefAccession 
+) ) 
+AND TempInv.OrgID = pinv.OrgID 
+and Pinv.status not in ( 
+'Retest', 'InActive', 
+'Recheck' 
+) 
+Where  PINV.Patientvisitid = @patientVisitid 
+AND PINV.OrgID = @OrgID 
+UPDATE PINV 
+SET    PINV.ModifiedBy = TempPI.ModifiedBy, 
+PINV.ModifiedAt = TempPI.ModifiedAt, 
+PINV.Status = TempPI.Status, 
+PINV.Reason = TempPI.Reason, 
+PINV.ReportStatus = TempPI.ReportStatus, 
+PINV.ReferenceRange = TempPI.ReferenceRange, 
+PINV.PerformingPhysicainName = 
+TempPI.PerformingPhysicainName, 
+PINV.ApprovedBy = TempPI.ApprovedBy, 
+PINV.ApprovedAt = TempPI.ApprovedAt, 
+PINV.IsAbnormal = TempPI.IsAbnormal, 
+PINV.InvStatusReasonID = TempPI.InvStatusReasonID, 
+PINV.ValidatedBy = TempPI.ValidatedBy, 
+PINV.ValidatedAt = TempPI.ValidatedAt, 
+PINV.RemarksID = TempPI.RemarksID, 
+PINV.MedicalRemarks = TempPI.MedicalRemarks, 
+PINV.statustype = TempPI.statustype, 
+PINV.ConvReferenceRange = TempPI.ConvReferenceRange, 
+PINV.ManualAbnormal = TempPI.ManualAbnormal, 
+PINV.IsAutoAuthorize = TempPI.IsAutoAuthorize, 
+PINV.PrintableRange = TempPI.PrintableRange, 
+PINV.IsAutoValidate = TempPI.IsAutoValidate, 
+PINV.IsSensitive = TempPI.IsSensitive 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   #TempPatientInvestigation TempPI  
+INNER JOIN PatientInvestigation PINV WITH (ROWLOCK)
+ON PINV.PatientInvID = TempPI.PatientInvID 
+and PINV.Status <> 'Approve' 
+/**************Maintain PatientInvestigation_Hist start****************************/ 
+Insert Into [PatientInvestigation_Hist] 
+(PatientVisitID, 
+InvestigationID, 
+InvestigationName, 
+CreatedBy, 
+CreatedAt, 
+ModifiedBy, 
+ModifiedAt, 
+InvestigationMethodID, 
+InvestigationSampleContainerID, 
+SampleID, 
+InvestigationSiteID, 
+IsCompleted, 
+CollectedDateTime, 
+Status, 
+ComplaintId, 
+GroupID, 
+GroupName, 
+Reason, 
+ReportStatus, 
+ReferenceRange, 
+MethodName, 
+IPInvSampleCollectionMasterID, 
+OrgID, 
+WorklistDeletedStatus, 
+PerformingPhysicainName, 
+KitID, 
+KitName, 
+InstrumentID, 
+InstrumentName, 
+Interpretation, 
+PrincipleID, 
+PrincipleName, 
+QCData, 
+PackageID, 
+PackageName, 
+ApprovedBy, 
+PatientInvID, 
+OrderedAt, 
+UID, 
+GroupComment, 
+ApprovedAt, 
+AccessionNumber, 
+IsAbnormal, 
+InvStatusReasonID, 
+ValidatedBy, 
+ValidatedAt, 
+GetCurrentDate, 
+WorklistType, 
+WorklistTypeID, 
+PrintableRange) 
+Select PINV.PatientVisitID, 
+PINV.InvestigationID, 
+PINV.InvestigationName, 
+PINV.CreatedBy, 
+PINV.CreatedAt, 
+PINV.ModifiedBy, 
+PINV.ModifiedAt, 
+PINV.InvestigationMethodID, 
+PINV.InvestigationSampleContainerID, 
+PINV.SampleID, 
+PINV.InvestigationSiteID, 
+PINV.IsCompleted, 
+PINV.CollectedDateTime, 
+PINV.Status, 
+PINV.ComplaintId, 
+PINV.GroupID, 
+PINV.GroupName, 
+PINV.Reason, 
+PINV.ReportStatus, 
+PINV.ReferenceRange, 
+PINV.MethodName, 
+PINV.IPInvSampleCollectionMasterID, 
+PINV.OrgID, 
+PINV.WorklistDeletedStatus, 
+PINV.PerformingPhysicainName, 
+PINV.KitID, 
+PINV.KitName, 
+PINV.InstrumentID, 
+PINV.InstrumentName, 
+PINV.Interpretation, 
+PINV.PrincipleID, 
+PINV.PrincipleName, 
+PINV.QCData, 
+PINV.PackageID, 
+PINV.PackageName, 
+PINV.ApprovedBy, 
+PINV.PatientInvID, 
+PINV.OrderedAt, 
+PINV.UID, 
+PINV.GroupComment, 
+PINV.ApprovedAt, 
+PINV.AccessionNumber, 
+PINV.IsAbnormal, 
+PINV.InvStatusReasonID, 
+PINV.ValidatedBy, 
+PINV.ValidatedAt, 
+( @ServerDateTime ), 
+PINV.WorklistType, 
+PINV.WorklistTypeID, 
+PINV.PrintableRange 
+from   PatientInvestigation PINV 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+and Pinv.Status <> 'Approve' 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+/**************Maintain PatientInvestigation_Hist End****************************/ 
+--and TempInv.AccessionNumber = PINV.AccessionNumber                                                                                 
+--/*Below line is included to insert method, kit when save & home is clicked in result capture - BEGIN*/                               
+--UPDATE PatientInvestigation SET                                                                   
+--InvestigationMethodID = IOM.MethodID,                 
+--MethodName = (Select distinct MethodName from InvestigationMethod where MethodID= IOM.MethodID and OrgID = @orgId and IOM.InvestigationID = Pinv.InvestigationID) ,                                                                       
+--KitID = IOM.KitID,                                                                                                    
+--KitName = (Select distinct KitName from InvKitMaster where KitID= IOM.KitID and OrgID = @orgId and IOM.InvestigationID = Pinv.InvestigationID),                                                                                            
+--InstrumentID = IOM.InstrumentID,                                                           
+--InstrumentName = (Select distinct InstrumentName from InvInstrumentMaster where InstrumentID= IOM.InstrumentID and OrgID = @orgId and IOM.InvestigationID = Pinv.InvestigationID),                                                        
+--Interpretation = IOM.Interpretation,                                                                                  
+--PrincipleID = IOM.PrincipleID,                                                        
+--PrincipleName = (Select distinct PrincipleName from InvPrincipleMaster where PrincipleID = iom.PrincipleID and OrgID = @orgId and IOM.InvestigationID = Pinv.InvestigationID),                                                              
+--QCData = IOM.QCData                                                 
+--From PatientInvestigation Pinv                                                                           
+--INNER JOIN InvestigationOrgMapping IOM on iom.InvestigationID = @pInvestigationId                                                                                                        
+--AND  IOM.OrgID=@orgId                        --and Pinv.PatientVisitID = @pPatientVisitID                           
+--and UID=@UID and Pinv.InvestigationID = @pInvestigationID                              
+--/*Below line is included to insert method, kit when save & home is clicked in result capture - END*/                                                                                    
+--exec pUpdateIpInvSCM @pPatientVisitId, @pSCMID                                                       
+SET @pReturnStatus=0 
+END 
+ELSE 
+BEGIN 
+/**************Maintain PatientInvestigation_Hist start****************************/ 
+Insert Into [PatientInvestigation_Hist] 
+(PatientVisitID, 
+InvestigationID, 
+InvestigationName, 
+CreatedBy, 
+CreatedAt, 
+ModifiedBy, 
+ModifiedAt, 
+InvestigationMethodID, 
+InvestigationSampleContainerID, 
+SampleID, 
+InvestigationSiteID, 
+IsCompleted, 
+CollectedDateTime, 
+Status, 
+ComplaintId, 
+GroupID, 
+GroupName, 
+Reason, 
+ReportStatus, 
+ReferenceRange, 
+MethodName, 
+IPInvSampleCollectionMasterID, 
+OrgID, 
+WorklistDeletedStatus, 
+PerformingPhysicainName, 
+KitID, 
+KitName, 
+InstrumentID, 
+InstrumentName, 
+Interpretation, 
+PrincipleID, 
+PrincipleName, 
+QCData, 
+PackageID, 
+PackageName, 
+ApprovedBy, 
+PatientInvID, 
+OrderedAt, 
+UID, 
+GroupComment, 
+ApprovedAt, 
+AccessionNumber, 
+IsAbnormal, 
+InvStatusReasonID, 
+ValidatedBy, 
+ValidatedAt, 
+GetCurrentDate, 
+WorklistType, 
+WorklistTypeID, 
+PrintableRange) 
+Select PINV.PatientVisitID, 
+PINV.InvestigationID, 
+PINV.InvestigationName, 
+PINV.CreatedBy, 
+PINV.CreatedAt, 
+PINV.ModifiedBy, 
+PINV.ModifiedAt, 
+PINV.InvestigationMethodID, 
+PINV.InvestigationSampleContainerID, 
+PINV.SampleID, 
+PINV.InvestigationSiteID, 
+PINV.IsCompleted, 
+PINV.CollectedDateTime, 
+PINV.Status, 
+PINV.ComplaintId, 
+PINV.GroupID, 
+PINV.GroupName, 
+PINV.Reason, 
+PINV.ReportStatus, 
+PINV.ReferenceRange, 
+PINV.MethodName, 
+PINV.IPInvSampleCollectionMasterID, 
+PINV.OrgID, 
+PINV.WorklistDeletedStatus, 
+PINV.PerformingPhysicainName, 
+PINV.KitID, 
+PINV.KitName, 
+PINV.InstrumentID, 
+PINV.InstrumentName, 
+PINV.Interpretation, 
+PINV.PrincipleID, 
+PINV.PrincipleName, 
+PINV.QCData, 
+PINV.PackageID, 
+PINV.PackageName, 
+PINV.ApprovedBy, 
+PINV.PatientInvID, 
+PINV.OrderedAt, 
+PINV.UID, 
+PINV.GroupComment, 
+PINV.ApprovedAt, 
+PINV.AccessionNumber, 
+PINV.IsAbnormal, 
+PINV.InvStatusReasonID, 
+PINV.ValidatedBy, 
+PINV.ValidatedAt, 
+( @ServerDateTime ), 
+PINV.WorklistType, 
+PINV.WorklistTypeID, 
+PINV.PrintableRange 
+from   PatientInvestigation PINV 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+where  PINV.Status = 'SampleReceived' 
+/**************Maintain PatientInvestigation_Hist End****************************/ 
+UPDATE PINV 
+SET    InvStatusReasonID = TempInv.InvStatusReasonID, 
+Status = TempInv.Status, 
+Reason = CASE 
+WHEN TempInv.Reason = 'null' THEN '' 
+ELSE TempInv.Reason 
+END, 
+ReportStatus = TempInv.ReportStatus, 
+ReferenceRange = CASE 
+WHEN PINV.ReferenceRange LIKE '%<?xml%'
+THEN TempInv.ReferenceRange
+WHEN TempInv.STATUS = 'Validate'
+THEN PINV.ReferenceRange
+WHEN TempInv.ReferenceRange = 'null' 
+THEN 
+'' 
+ELSE PINV.ReferenceRange --TempInv.ReferenceRange 
+END, 
+ModifiedBy = (select LoginID 
+from   @ContextInfo), 
+PerformingPhysicainName = 
+TempInv.PerformingPhysicainName, 
+ApprovedBy = case 
+when TempInv.AuthorizedBy > 0 Then 
+PINV.ApprovedBy 
+Else 
+case 
+when TempInv.ApprovedBy > 0 
+and PINV.status <> 'Approve' 
+Then 
+TempInv.ApprovedBy 
+Else PINV.ApprovedBy 
+End 
+End, 
+AuthorizedBy = case 
+when TempInv.AuthorizedBy > 0 Then 
+TempInv.AuthorizedBy 
+Else PINV.AuthorizedBy 
+End, 
+ApprovedAt = case 
+when TempInv.ApprovedBy > 0 Then ( 
+@ServerDateTime ) 
+Else PINV.ApprovedAt 
+End, 
+ValidatedBy = case 
+when TempInv.ValidatedBy > 0 Then 
+TempInv.ValidatedBy 
+Else PINV.ValidatedBy 
+End, 
+ValidatedAt = case 
+when TempInv.ValidatedBy > 0 Then 
+( @ServerDateTime ) 
+Else PINV.ValidatedAt 
+End, 
+IsAbnormal = case TempInv.Status 
+when 'Recheck' then null 
+when 'Retest' then null 
+else TempInv.IsAbnormal 
+end, 
+RemarksID = Tempinv.RemarksID, 
+MedicalRemarks = TempInv.MedicalRemarks 
+--,Test = 'Venky'                                                                                        
+, 
+ModifiedAt = ( @ServerDateTime ), 
+RefSuffixText = TempInv.GroupName, 
+statustype = Isnull(statustype, case TempInv.Status 
+when 'Recheck' then 'RC' 
+when 'retest' then 'RR' 
+else null 
+end), 
+ConvReferenceRange = Case 
+when 
+Isnull(TempInv.ConvReferenceRange, 
+'') 
+= 
+'' 
+then 
+PINV.ConvReferenceRange 
+Else TempInv.ConvReferenceRange 
+End, 
+ManualAbnormal = case TempInv.Status 
+when 'Recheck' then null 
+when 'Retest' then null 
+else TempInv.ManualAbnormal 
+end, 
+IsAutoAuthorize = case TempInv.Status 
+when 'Recheck' then null 
+when 'Retest' then null 
+else TempInv.IsAutoAuthorize 
+end, 
+PrintableRange = CASE 
+WHEN TempInv.PrintableRange = 'null' 
+THEN 
+'' 
+ELSE TempInv.PrintableRange 
+END, 
+IsAutoValidate = Case TempInv.status 
+when 'Recheck' then null 
+when 'Retest' then null 
+else TempInv.IsAutoValidate 
+END, 
+IsSensitive = TempInv.IsSensitive
+/* BEGIN | NA | Sabari | 20181202 | Created | HOLD */
+,IsReportable=TempInv.IsReportable
+/* END | NA | Sabari | 20181202 | Created | HOLD */ 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   PatientInvestigation PINV WITH (ROWLOCK)
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+-- and TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M    
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+AND ( PINV.UID = @UID 
+or PINV.AccessionNumber in (select 
+RefAccessionNo 
+from 
+@tblRefAccession 
+) ) 
+AND TempInv.OrgID = pinv.OrgID 
+and PINV.Status not in( 'Retest', 'InActive' 
+, 
+'Recheck' 
+) 
+Where  PINV.Patientvisitid = @patientVisitid 
+AND PINV.OrgID = @OrgID 
+/**************Maintain PatientInvestigation_Hist start****************************/ 
+Insert Into [PatientInvestigation_Hist] 
+(PatientVisitID, 
+InvestigationID, 
+InvestigationName, 
+CreatedBy, 
+CreatedAt, 
+ModifiedBy, 
+ModifiedAt, 
+InvestigationMethodID, 
+InvestigationSampleContainerID, 
+SampleID, 
+InvestigationSiteID, 
+IsCompleted, 
+CollectedDateTime, 
+Status, 
+ComplaintId, 
+GroupID, 
+GroupName, 
+Reason, 
+ReportStatus, 
+ReferenceRange, 
+MethodName, 
+IPInvSampleCollectionMasterID, 
+OrgID, 
+WorklistDeletedStatus, 
+PerformingPhysicainName, 
+KitID, 
+KitName, 
+InstrumentID, 
+InstrumentName, 
+Interpretation, 
+PrincipleID, 
+PrincipleName, 
+QCData, 
+PackageID, 
+PackageName, 
+ApprovedBy, 
+PatientInvID, 
+OrderedAt, 
+UID, 
+GroupComment, 
+ApprovedAt, 
+AccessionNumber, 
+IsAbnormal, 
+InvStatusReasonID, 
+ValidatedBy, 
+ValidatedAt, 
+GetCurrentDate, 
+WorklistType, 
+WorklistTypeID, 
+PrintableRange) 
+Select PINV.PatientVisitID, 
+PINV.InvestigationID, 
+PINV.InvestigationName, 
+PINV.CreatedBy, 
+PINV.CreatedAt, 
+PINV.ModifiedBy, 
+PINV.ModifiedAt, 
+PINV.InvestigationMethodID, 
+PINV.InvestigationSampleContainerID, 
+PINV.SampleID, 
+PINV.InvestigationSiteID, 
+PINV.IsCompleted, 
+PINV.CollectedDateTime, 
+PINV.Status, 
+PINV.ComplaintId, 
+PINV.GroupID, 
+PINV.GroupName, 
+PINV.Reason, 
+PINV.ReportStatus, 
+PINV.ReferenceRange, 
+PINV.MethodName, 
+PINV.IPInvSampleCollectionMasterID, 
+PINV.OrgID, 
+PINV.WorklistDeletedStatus, 
+PINV.PerformingPhysicainName, 
+PINV.KitID, 
+PINV.KitName, 
+PINV.InstrumentID, 
+PINV.InstrumentName, 
+PINV.Interpretation, 
+PINV.PrincipleID, 
+PINV.PrincipleName, 
+PINV.QCData, 
+PINV.PackageID, 
+PINV.PackageName, 
+PINV.ApprovedBy, 
+PINV.PatientInvID, 
+PINV.OrderedAt, 
+PINV.UID, 
+PINV.GroupComment, 
+PINV.ApprovedAt, 
+PINV.AccessionNumber, 
+PINV.IsAbnormal, 
+PINV.InvStatusReasonID, 
+PINV.ValidatedBy, 
+PINV.ValidatedAt, 
+( @ServerDateTime ), 
+PINV.WorklistType, 
+PINV.WorklistTypeID, 
+PINV.PrintableRange 
+from   PatientInvestigation PINV  
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+/**************Maintain PatientInvestigation_Hist End****************************/ 
+SET @pReturnStatus=0 
+END 
+DECLARE @ReferVisitID AS BIGINT 
+DECLARE @visitid AS BIGINT 
+SELECT @visitid = PatientVisitID 
+FROM   @pPatientInvTable 
+--select @visitid                                                          
+SELECT @ReferVisitID = refervisitid 
+FROM   patientvisit  
+WHERE  patientvisitid = @visitid 
+IF( Isnull(@ReferVisitID, 0) = 0 ) 
+Begin 
+--INSERT INTO InvestigationQueue(VisitID,UID,OrgID,InvestigationID,Type,Status,AccessionNumber,CreatedAt,CreatedBy)                                                                                        
+--select TempInv.PatientVisitID,@UID,TempInv.OrgID,TempInv.InvestigationID,'INV',TempInv.Status,PINV.AccessionNumber,@ServerDateTime,@pApprovedBy                                                                                        
+--FROM PatientInvestigation PINV                                                                                          
+-- INNER JOIN @pPatientInvTable TempInv on TempInv.InvestigationID = PINV.InvestigationID                                                                                       
+-- AND TempInv.PatientVisitID = PINV.PatientVisitID and PINV.UID = @UID                                                                                          
+-- AND TempInv.OrgID = pinv.OrgID                                                                                         
+-- Where (TempInv.Status ='ReflexTest')                                                      
+INSERT INTO InvestigationQueue 
+(VisitID, 
+UID, 
+OrgID, 
+InvestigationID, 
+Type, 
+Status, 
+AccessionNumber, 
+CreatedAt, 
+CreatedBy,
+Reason) 
+select dISTINCT TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+OI.ID, 
+OI.Type, 
+TempInv.Status, 
+OI.AccessionNumber, 
+@ServerDateTime, 
+@LoginID, 
+TempInv.Reason
+FROM   PatientInvestigation PINV 
+inner join OrderedInvestigations OI 
+on OI.VisitID = PINV.PatientVisitID 
+and OI.AccessionNumber = 
+PINV.AccessionNumber 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+-- and TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M     
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'GRP' 
+Where  TempInv.Status = 'Retest' 
+--and isnull(PINV.statustype,'') not in ('RC')                                                                            
+AND PINV.Status NOT IN ( 'Recheck' ) 
+INSERT INTO InvestigationQueue 
+(VisitID, 
+UID, 
+OrgID, 
+InvestigationID, 
+Type, 
+Status, 
+AccessionNumber, 
+CreatedAt, 
+CreatedBy,
+Reason
+) 
+select Distinct TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+TempInv.InvestigationID, 
+OI.Type, 
+TempInv.Status, 
+PINV.AccessionNumber, 
+@ServerDateTime, 
+@LoginID,
+TempInv.Reason
+FROM   PatientInvestigation PINV 
+inner join OrderedInvestigations OI  
+on OI.VisitID = PINV.PatientVisitID 
+and Oi.AccessionNumber = 
+PINV.AccessionNumber 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+and TempInv.InvestigationID = OI.ID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'INV' 
+Where  TempInv.Status = 'Retest' 
+AND PINV.Status NOT IN ( 'Recheck' ) 
+END 
+IF( Isnull(@ReferVisitID, 0) != 0 ) 
+Begin 
+Declare @TransferredInvestigationQueue As Table 
+( 
+OldVisitID         BigInt, 
+OldUID             nvarchar(255), 
+OldOrgID           Int, 
+OldAccessionNumber BigInt, 
+NewVisitID         BigInt, 
+NewUID             nvarchar(255), 
+NewOrgID           Int, 
+NewAccessionNumber BigInt 
+) 
+Insert into @TransferredInvestigationQueue 
+(OldVisitID, 
+OldUID, 
+OldOrgID, 
+OldAccessionNumber) 
+select dISTINCT TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+OI.AccessionNumber 
+FROM   PatientInvestigation PINV 
+inner join OrderedInvestigations OI 
+on OI.VisitID = PINV.PatientVisitID 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+-- and TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M   
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'GRP' 
+Where  TempInv.Status = 'Retest' 
+--and isnull(PINV.statustype,'') not in ('RC')      
+AND PINV.Status NOT IN ( 'Recheck' ) 
+Insert into @TransferredInvestigationQueue 
+(OldVisitID, 
+OldUID, 
+OldOrgID, 
+OldAccessionNumber) 
+select TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+PINV.AccessionNumber 
+FROM   PatientInvestigation PINV  
+inner join OrderedInvestigations OI 
+on OI.VisitID = PINV.PatientVisitID 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+and TempInv.InvestigationID = OI.ID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'INV' 
+Where  TempInv.Status = 'Retest' 
+AND PINV.Status NOT IN ( 'Recheck' ) 
+Update @TransferredInvestigationQueue 
+Set    NewAccessionNumber = OI.ReferredAccessionNo 
+From   @TransferredInvestigationQueue t 
+Inner join OrderedInvestigations OI  
+On OI.AccessionNumber = t.OldAccessionNumber 
+Where  Isnull(OI.ReferredAccessionNo, 0) > 0 
+and OI.ReferredAccessionNo != '' 
+and OI.OrgID In (select OrgID 
+from   @pPatientInvTable) 
+Update @TransferredInvestigationQueue 
+Set    NewOrgID = OI.OrgID, 
+NewVisitID = OI.VisitID, 
+NewUID = OI.UID 
+From   @TransferredInvestigationQueue t 
+Inner join OrderedInvestigations OI  
+On OI.AccessionNumber = t.NewAccessionNumber 
+where  OI.OrgID Not In (select OrgID 
+from   @pPatientInvTable) 
+INSERT INTO InvestigationQueue 
+(VisitID, 
+UID, 
+OrgID, 
+InvestigationID, 
+Type, 
+Status, 
+AccessionNumber, 
+CreatedAt, 
+CreatedBy) 
+select dISTINCT TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+OI.ID, 
+OI.Type, 
+TempInv.Status, 
+OI.AccessionNumber, 
+@ServerDateTime, 
+@LoginID 
+FROM   PatientInvestigation PINV  
+inner join OrderedInvestigations OI  
+on OI.VisitID = PINV.PatientVisitID 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+-- and TempInv.GroupID = PINV.GroupID  --Commented by Vijayalakshmi.M     
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'GRP' 
+Where  ( TempInv.Status = 'Retest' ) 
+--and isnull(PINV.statustype,'') not in ('RC')                
+AND PINV.Status NOT IN ( 'Recheck' ) 
+INSERT INTO InvestigationQueue 
+(VisitID, 
+UID, 
+OrgID, 
+InvestigationID, 
+Type, 
+Status, 
+AccessionNumber, 
+CreatedAt, 
+CreatedBy) 
+select dISTINCT TempInv.PatientVisitID, 
+@UID, 
+TempInv.OrgID, 
+TempInv.InvestigationID, 
+OI.Type, 
+TempInv.Status, 
+PINV.AccessionNumber, 
+@ServerDateTime, 
+@LoginID 
+FROM   PatientInvestigation PINV  
+inner join OrderedInvestigations OI 
+on OI.VisitID = PINV.PatientVisitID 
+INNER JOIN @pPatientInvTable TempInv 
+on TempInv.InvestigationID = 
+PINV.InvestigationID 
+and TempInv.InvestigationID = OI.ID 
+AND TempInv.PatientVisitID = 
+PINV.PatientVisitID 
+and PINV.UID = @UID 
+AND TempInv.OrgID = pinv.OrgID 
+and OI.Type = 'INV' 
+Where  TempInv.Status = 'Retest' 
+AND PINV.Status NOT IN ( 'Recheck' ) 
+Update t 
+set    OrgID = t1.NewOrgID, 
+UID = t1.NewUID, 
+VisitID = t1.NewVisitID, 
+AccessionNumber = t1.NewAccessionNumber 
+from   InvestigationQueue t WITH (ROWLOCK)
+Inner Join @TransferredInvestigationQueue t1 
+On t.OrgID = t1.OldOrgID 
+and t.UID = t1.OldUID 
+and t.AccessionNumber = 
+t1.OldAccessionNumber 
+and t.VisitID = t1.OldVisitID 
+END 
+--IF not EXISTS (SELECT * FROM PatientInvestigation WHERE UID=@UID)                                               
+--begin                                                                        
+INSERT INTO PatientInvestigation 
+(InvestigationName, 
+GroupID, 
+GroupName, 
+PackageID, 
+PackageName, 
+PatientVisitID, 
+InvestigationID, 
+CreatedBy, 
+CreatedAt, 
+IsCompleted, 
+Status, 
+OrgID, 
+ReferenceRange, 
+UID, 
+AccessionNumber, 
+SampleID, 
+InvestigationMethodID, 
+MethodName, 
+KitID, 
+KitName, 
+InstrumentID, 
+InstrumentName, 
+Interpretation, 
+PrincipleID, 
+PrincipleName, 
+QCData, 
+RefAccessionNo, 
+IsAbnormal, 
+ManualAbnormal, 
+IsAutoAuthorize, 
+InvStatusReasonID, 
+IsSensitive) 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+select distinct pv.InvestigationName, 
+pv.GroupID, 
+pv.GroupName, 
+pv.PackageID, 
+pv.PackageName, 
+pv.PatientVisitID, 
+pv.InvestigationID, 
+pv.CreatedBy, 
+pv.CreatedAt, 
+pv.IsCompleted, 
+'Pending', 
+pv.OrgID, 
+pv.ReferenceRange, 
+pv.UID, 
+pv.AccessionNumber, 
+pv.SampleID, 
+pv.InvestigationMethodID, 
+pv.MethodName, 
+pv.KitID, 
+pv.KitName, 
+pv.InstrumentID, 
+pv.InstrumentName, 
+pv.Interpretation, 
+pv.PrincipleID, 
+pv.PrincipleName, 
+pv.QCData, 
+pv.AccessionNumber, 
+null, 
+null, 
+null, 
+pv.InvStatusReasonID, 
+pv.IsSensitive 
+from   @pPatientInvTable PInv 
+inner join PatientInvestigation pv 
+on PINV.patientvisitid = PV.patientvisitid
+and PInv.InvestigationID = pv.InvestigationID 
+and PInv.GroupID = pv.GroupID 
+where  PInv.Status = 'Recheck' 
+and pv.UID = @UID 
+option(force order) 
+--end                            
+--update OrderedInvestigations                                                                                                                                        
+--SET PerformingPhysicain=@pPerformingPhysician                                                                                                                                    
+--,Status = @pStatus                      
+--WHERE   VisitID=@pPatientVisitId                                                                                                   
+--AND  ID=@pInvestigationId                                                                                        
+--AND  OrgID=@orgId                                
+--AND  Status != 'Completed'   and  [UID]=@UID                                                                             
+--COMMIT TRAN trans                                                                                                                                     
+--   END TRY                                                                                                                                        
+--   BEGIN CATCH                                                                             
+-- ROLLBACK TRAN trans                                                                                                    
+--   END CATCH                                                       
+--------------vijayalaskhmi.M------------------------ 
+-------------For Rule Based Reflex-------------------
+--Update PINV   
+--set    [status] = 'Pending'   
+--From   Patientinvestigation PINV    
+--       Inner join @pPatientInvTable p   
+--               on PINV.Orgid = p.Orgid   
+--                  and PINV.Patientvisitid = p.Patientvisitid   
+--       Inner join @pReflexPatientInvTable rpi   
+--               on ( PINV.Investigationid = rpi.InvestigationID   
+--                     or PINV.GroupID in (select OrgGroupID   
+--                                         from   invorggroup   
+--                       where  AttGroupID = rpi.InvestigationID) )   
+--Where  PINV.status = 'ReflexTest'   
+---------------End vijayalaskhmi.M --------------------------- 
+Declare @tDepentInv as table 
+( 
+DependentInvestigationID bigint, 
+InvestigationID          bigint 
+) 
+insert into @tDepentInv 
+select dp1.DependentInvestigationID, 
+dp1.InvestigationID 
+from   DependentInvestigation dp1  
+inner join (select dp.InvestigationID, 
+dp.GroupID, 
+dp.OrgID 
+from   DependentInvestigation dp  
+inner join @pPatientInvTable p 
+on dp.DependentInvestigationID = 
+p.InvestigationID 
+and dp.OrgID = p.OrgID 
+and dp.GroupID = p.GroupID 
+and dp.DependentType = 
+'AutoComplete' 
+) 
+a 
+on a.InvestigationID = dp1.InvestigationID 
+and a.GroupID = dp1.GroupID 
+and a.OrgID = dp1.OrgID 
+and dp1.DependentType = 'AutoComplete' 
+--Get the investigation with completed status within the group                 
+Declare @tDepentInvComplete as table 
+( 
+InvestigationID bigint, 
+Patientvisitid bigint, 
+Orgid           int, 
+GroupID         bigint 
+) 
+insert into @tDepentInvComplete 
+select te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID 
+from   PatientInvestigation PINV  
+inner join @pPatientInvTable p 
+on PINV.Patientvisitid = p.Patientvisitid 
+and Isnull(PINV.groupid, 0) >= 0 
+inner join @tDepentInv te 
+on te.DependentInvestigationID = PINV.InvestigationID 
+WHERE  Isnull(PINV.StatusType, '') NOT IN ( 'RR', 'RC' ) 
+AND PINV.Status <> 'InActive' 
+group  by te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID 
+having Sum(Case 
+when PINV.[status] = 'Completed' then 0 
+else 1 
+end) = 0 
+--Update the status as completed in patient investigation                                                           
+Update PINV 
+set    [status] = 'Completed' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+From   Patientinvestigation PINV WITH (ROWLOCK) 
+Inner join @tDepentInvComplete tmp 
+on PINV.Groupid = Tmp.groupid 
+and PINV.Investigationid = Tmp.investigationid 
+Where  PINV.Orgid = Tmp.Orgid 
+and PINV.Patientvisitid = tmp.Patientvisitid 
+AND Isnull(PINV.StatusType, '') NOT IN ( 'RR', 'RC' ) 
+AND PINV.Status <> 'InActive' 
+Declare @tFormulaDepentInv as table 
+( 
+DependentInvestigationID bigint, 
+InvestigationID          bigint 
+) 
+insert into @tFormulaDepentInv 
+select dp.DependentInvestigationID, 
+dp.InvestigationID 
+from   DependentInvestigation dp  
+inner join @pPatientInvTable p 
+on dp.InvestigationID = p.InvestigationID 
+and dp.OrgID = p.OrgID 
+and dp.GroupID = p.GroupID 
+and dp.DependentType = 'Formula' 
+where  p.Status in ( 'Completed', 'Validate' ) 
+Declare @tDepentInvStatus as table 
+( 
+InvestigationID bigint, 
+Patientvisitid  bigint, 
+Orgid           int, 
+GroupID         bigint, 
+Status          nvarchar(100), 
+AccessionNumber BIGINT 
+) 
+insert into @tDepentInvStatus 
+select te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID, 
+PINV.[status], 
+PINV.AccessionNumber 
+from   PatientInvestigation PINV  
+inner join @pPatientInvTable p 
+on PINV.Patientvisitid = p.Patientvisitid 
+and Isnull(PINV.groupid, 0) >= 0 
+AND PINV.AccessionNumber = p.AccessionNumber 
+inner join @tFormulaDepentInv te 
+on te.DependentInvestigationID = PINV.InvestigationID 
+WHERE  Isnull(PINV.StatusType, '') NOT IN ( 'RR', 'RC' ) 
+AND PINV.Status <> 'InActive' 
+group  by te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID, 
+PINV.[status], 
+PINV.AccessionNumber 
+having Sum(Case 
+when PINV.[status] in ( 'Pending', 'SampleReceived', 
+'SampleLoaded' 
+) then 
+0 
+else 1 
+end) = 0 
+Update PINV 
+set    [status] = 'Pending' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+From   Patientinvestigation PINV WITH (ROWLOCK) 
+Inner join @tDepentInvStatus tmp 
+on PINV.Groupid = Tmp.groupid 
+and PINV.Investigationid = Tmp.investigationid 
+AND PINV.AccessionNumber = tmp.AccessionNumber 
+Where  PINV.Orgid = Tmp.Orgid 
+and PINV.Patientvisitid = tmp.Patientvisitid 
+AND Isnull(PINV.StatusType, '') NOT IN ( 'RR', 'RC' ) 
+AND PINV.Status <> 'InActive' 
+--------------------------------------                        
+Declare @tDepentInvOfAutoApprove as table 
+( 
+DependentInvestigationID bigint, 
+InvestigationID          bigint 
+) 
+insert into @tDepentInvOfAutoApprove 
+select dp1.DependentInvestigationID, 
+dp1.InvestigationID 
+from   DependentInvestigation dp1 
+inner join (select dp.InvestigationID, 
+dp.GroupID, 
+dp.OrgID 
+from   DependentInvestigation dp 
+inner join @pPatientInvTable p 
+on dp.DependentInvestigationID = 
+p.InvestigationID 
+and dp.OrgID = p.OrgID 
+and dp.GroupID = p.GroupID 
+and dp.DependentType = 
+'AutoApproval' 
+) 
+a 
+on a.InvestigationID = dp1.InvestigationID 
+and a.GroupID = dp1.GroupID 
+and a.OrgID = dp1.OrgID 
+and dp1.DependentType = 'AutoApproval' 
+--Get the investigation with completed status within the group                                  
+Declare @tDepentInvCompleteOfAutoApprove as table 
+( 
+InvestigationID bigint, 
+Patientvisitid  bigint, 
+Orgid           int, 
+GroupID         bigint, 
+DepentInvStatus nvarchar(50), 
+IsAutoAuthorize nvarchar(1), 
+ApprovedBy      BigInt, 
+AccessionNumber BIGINT, 
+statustype      nvarchar(200) 
+) 
+insert into @tDepentInvCompleteOfAutoApprove 
+select te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID, 
+PINV.Status, 
+Isnull(PINV.IsAutoAuthorize, 'N'), 
+PINV.ApprovedBy, 
+PINV.AccessionNumber, 
+PINV.statustype 
+from   PatientInvestigation PINV  
+inner join @pPatientInvTable p 
+on PINV.Patientvisitid = p.Patientvisitid 
+and Isnull(PINV.groupid, 0) >= 0 
+inner join @tDepentInvOfAutoApprove te 
+on te.DependentInvestigationID = PINV.InvestigationID 
+WHERE  Isnull(PINV.StatusType, '') NOT IN ( 'RC' ) 
+AND PINV.Status <> 'InActive' 
+group  by te.InvestigationID, 
+PINV.PatientVisitID, 
+PINV.OrgID, 
+PINV.GroupID, 
+PINV.Status, 
+PINV.IsAutoAuthorize, 
+PINV.ApprovedBy, 
+PINV.AccessionNumber, 
+PINV.statustype 
+having Sum(Case 
+when PINV.[status] = 'Completed' then 0 
+when PINV.[status] = 'Validate' then 0 
+when PINV.[status] = 'Approve' then 0 
+when PINV.[status] = 'Retest' then 0 
+else 1 
+end) = 0 
+--Update the status as completed in patient investigation                                                 
+Update PINV 
+set    [status] = tmp.DepentInvStatus, 
+IsAutoAuthorize = tmp.IsAutoAuthorize, 
+ApprovedBy = tmp.ApprovedBy, 
+statustype = Case 
+When tmp.statustype = 'RR' Then tmp.statustype 
+Else Null 
+End 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+From   Patientinvestigation PINV WITH (ROWLOCK)   
+Inner join @tDepentInvCompleteOfAutoApprove tmp 
+on PINV.Groupid = Tmp.groupid 
+and PINV.Investigationid = Tmp.investigationid 
+AND PINV.AccessionNumber = tmp.AccessionNumber 
+Where  PINV.Orgid = Tmp.Orgid 
+and PINV.Patientvisitid = tmp.Patientvisitid 
+AND Isnull(PINV.StatusType, '') NOT IN ( 'RC' ) 
+AND PINV.Status <> 'InActive' 
+--------------------------------------                       
+----- Authorized by for auto Approved Tests------     
+UPDATE PINV 
+SET    PINV.AuthorizedBy = CASE 
+WHEN IOA.UserID IS NOT NULL THEN 
+IOA.UserID 
+ELSE TMP.AuthorizedBy 
+End 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   PatientInvestigation PINV WITH (ROWLOCK)
+INNER JOIN @pPatientInvTable TMP 
+ON TMP.InvestigationID = PINV.InvestigationID 
+and TMP.GroupID = PINV.GroupID 
+AND TMP.PatientVisitID = PINV.PatientVisitID 
+INNER JOIN InvOrgAuthorization IOA  
+ON PINV.OrgID = IOA.OrgID 
+and PINV.InvestigationID = IOA.InvestigationID 
+and IOA.Type = 'Co-Auth' 
+and Isnull(IOA.IsPrimary, 'N') = 'Y' 
+Where  TMP.IsAutoAuthorize = 'Y' 
+--AND PINV.Status = 'Approve'      
+and TMP.AutoApproveLoginID > 0 
+And Isnull(TMP.AuthorizedBy, 0) = 0 
+END 
+-----The temporary fix for auto approval for random investigations(Anderson)   
+---STart   
+If ( @OrgID = 98 ) 
+begin 
+Update PatientInvestigation WITH (ROWLOCK)
+set    Status = 'Pending' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+from   PatientInvestigation pin  
+inner join @pPatientInvTable pvt 
+on pin.PatientVisitID = pvt.PatientVisitID 
+and pin.InvestigationID = pvt.InvestigationID 
+and pin.OrgID = pvt.OrgID 
+where  pin.Status = 'Approve' 
+and pin.ApprovedBy = 0 
+and pin.OrgID = 98 
+insert into Autoapproveissue 
+(PatientvisitID, 
+OrgID, 
+InvestigationID, 
+AccessionNumber, 
+Createdat, 
+Createdby, 
+TestName) 
+select PatientvisitID, 
+OrgID, 
+InvestigationID, 
+AccessionNumber, 
+dbo.Fn_getserverdate(@ContextInfo), 
+CreatedBy, 
+InvestigationName 
+from   @pPatientInvTable 
+where  status = 'Approve' 
+and approvedby = 0 
+----End   
+End 
+------------------vijayalakshmi.M----------------------------
+------------------For Rule Based Reflex----------------------
+IF EXISTS(SELECT 1 
+FROM   PatientInvestigation P  
+WHERE  P.PatientVisitID = @PatientVisitID 
+AND P.InvestigationID IN(SELECT InvestigationID 
+FROM   @pReflexPatientInvTable) 
+AND P.Status = 'ReflexTest') 
+BEGIN 
+UPDATE PI 
+SET    PI.Status = 'Pending' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   PatientInvestigation PI WITH(ROWlock) 
+WHERE  PatientVisitID = @PatientVisitID 
+AND ( InvestigationID IN(SELECT InstrumentID 
+FROM   @pReflexPatientInvTable) 
+OR GroupID IN(SELECT InstrumentID 
+FROM   @pReflexPatientInvTable) ) 
+END 
+DECLARE @ReflexTempTable AS TABLE 
+( 
+ID                BIGINT, 
+Type              CHAR(20), 
+NAME              VARCHAR(500), 
+VisitID           BIGINT, 
+AccessionNumber   BIGINT, 
+SampleType        CHAR(1), 
+SampleCode        BIGINT, 
+SampleContainerID BIGINT, 
+SampleID          BIGINT 
+) 
+INSERT @ReflexTempTable 
+(ID, 
+Type, 
+NAME, 
+VisitID, 
+AccessionNumber, 
+SampleCode, 
+SampleContainerID, 
+SampleType, 
+SampleID) 
+SELECT PI.InvestigationID, 
+OI.Type, 
+PI.InvestigationName, 
+PI.PatientVisitID, 
+PI.AccessionNumber, 
+PIS.SampleCode, 
+PIS.SampleContainerID, 
+'S', 
+PIS.SampleID 
+FROM   PatientInvestigation PI 
+--select OI.ID,OI.Type,Oi.Name,OI.VisitID,OI.AccessionNumber,PIS.SampleCode,PIS.SampleContainerID,'S',PIS.SampleID             
+--from OrderedInvestigations OI With(nolock)              
+INNER JOIN OrderedInvestigations OI 
+ON OI.VisitID = PI.PatientVisitID 
+AND PI.AccessionNumber = OI.AccessionNumber 
+INNER JOIN @pPatientInvTable P 
+ON P.Patientvisitid = OI.VisitID 
+--and P.AccessionNumber = OI.AccessionNumber            
+INNER JOIN PatientInvSampleMapping PISM 
+ON PISM.VisitID = OI.VisitID 
+AND oi.ID = PISM.ID 
+AND oi.Type = PISM.Type 
+INNER JOIN PatientInvSample (nolocK) pis 
+ON pis.PatientVisitID = pism.VisitID 
+AND pism.SID = pis.SampleID 
+WHERE  PI.Status = 'ReflexTest' 
+--sELECT * FROM @ReflexTempTable                           
+--select VisitNumber,* from PatientVisit where PatientVisitId =24192                           
+DECLARE @notReflexTempTable AS TABLE 
+( 
+ID                BIGINT, 
+Type              CHAR(20), 
+VisitID           BIGINT, 
+SampleCode        BIGINT, 
+SampleContainerID BIGINT, 
+NAME              VARCHAR(250) 
+) 
+INSERT @notReflexTempTable 
+(ID, 
+Type, 
+VisitID, 
+SampleCode, 
+SampleContainerID, 
+NAME) 
+SELECT DISTINCT PI.InvestigationID, 
+pism.Type, 
+PISM.VisitID, 
+pis.SampleCode, 
+PIS.SampleContainerID, 
+OI.NAME 
+FROM   PatientInvSampleMapping pism
+INNER JOIN @pPatientInvTable ref 
+ON pism.VisitID = rEF.PatientVisitID 
+INNER JOIN PatientInvSample pis  
+ON pis.SampleID = pism.SID 
+AND pIS.PatientVisitID = pism.VisitID 
+INNER JOIN OrderedInvestigations OI  
+ON OI.VisitID = PISM.VisitID 
+AND pism.Type = OI.Type 
+AND PISM.ID = OI.ID 
+INNER JOIN PatientInvestigation PI 
+ON PI.PatientVisitID = OI.VisitID 
+AND PI.AccessionNumber = OI.AccessionNumber 
+WHERE  PI.Status <> 'ReflexTest' 
+--select * from @notReflexTempTable                           
+--select * from @ReflexTempTable where SampleCode not in(select SampleCode from @notReflexTempTable)                 
+UPDATE R 
+SET    R.SampleType = 'N' 
+FROM   @ReflexTempTable R 
+WHERE  SampleCode NOT IN(SELECT SampleCode 
+FROM   @notReflexTempTable) 
+--select * from @ReflexTempTable where SampleCode not in(select SampleCode from @notReflexTempTable)                                                                                                 
+UPDATE PINV 
+SET    [status] = 'Pending' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   Patientinvestigation PINV WITH (ROWLOCK) 
+INNER JOIN @pPatientInvTable p 
+ON PINV.Orgid = p.Orgid 
+AND PINV.Patientvisitid = p.Patientvisitid 
+INNER JOIN @pReflexPatientInvTable rpi 
+ON ( PINV.Investigationid = rpi.InvestigationID 
+OR PINV.GroupID IN (SELECT OrgGroupID 
+FROM   invorggroup 
+WHERE  AttGroupID = 
+rpi.InvestigationID) ) 
+INNER JOIN @ReflexTempTable ref 
+ON ref.ID = rpi.InvestigationID 
+AND REF.SampleType = 'S' 
+WHERE  PINV.status = 'ReflexTest' 
+--Select PINV.                           
+--[status] , 'NotGiven'                                                                                      
+----select *                                                  
+--From Patientinvestigation PINV                                             
+--Inner join @pPatientInvTable p on PINV.Orgid = p.Orgid and PINV.Patientvisitid=p.Patientvisitid                                                                                 
+--Inner join @pReflexPatientInvTable rpi on (PINV.Investigationid = rpi.InvestigationID              
+--or PINV.GroupID in (select OrgGroupID from invorggroup where AttGroupID = rpi.InvestigationID))                  
+--INNER JOIN @ReflexTempTable ref ON ref.ID = rpi.InvestigationID     AND REF.SampleType = 'N'                             
+--Where PINV.status ='ReflexTest'               
+UPDATE PINV 
+SET    [status] = 'Not Given' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   Patientinvestigation PINV  
+INNER JOIN @pPatientInvTable p 
+ON PINV.Orgid = p.Orgid 
+AND PINV.Patientvisitid = p.Patientvisitid 
+INNER JOIN @pReflexPatientInvTable rpi 
+ON ( PINV.Investigationid = rpi.InvestigationID 
+OR PINV.GroupID IN (SELECT OrgGroupID 
+FROM   invorggroup 
+WHERE  AttGroupID = 
+rpi.InvestigationID) ) 
+INNER JOIN @ReflexTempTable ref 
+ON ref.ID = rpi.InvestigationID 
+AND REF.SampleType = 'N' 
+WHERE  PINV.status = 'ReflexTest' 
+UPDATE ST 
+SET    St.InvSampleStatusID = 6 
+FROM   SampleTracker  ST WITH (ROWLOCK)
+INNER JOIN @ReflexTempTable R 
+ON R.VisitID = ST.PatientVisitID 
+AND R.SampleID = ST.SampleID 
+AND R.SampleType = 'N' 
+INNER JOIN @pReflexPatientInvTable rpi 
+ON rpi.InvestigationID = R.ID 
+--and RPI.PatientVisitID = R.VisitID          
+--- on 23-08-2016 ---     
+UPDATE PI 
+SET    PI.printableRange = '< 1:80' 
+output inserted.patientinvid,inserted.accessionnumber,inserted.status into @tmp_patinv
+FROM   @pPatientInvTable P 
+INNER JOIN PatientInvestigation PI 
+ON PI.PatientVisitid = P.PatientVisitid 
+AND P.AccessionNumber = PI.AccessionNumber 
+WHERE  PI.InvestigationID IN ( 9349, 9350, 9351, 9352, 
+9454, 9455, 9456, 9457, 
+9459, 9460, 9461 ) 
+AND P.Status IN( 'Approve', 'Completed' ) 
+AND Isnull(PI.printableRange, '') = '' 
+------------------------------End vijayalakshmi.M----------------------------------- 
+/* Code added by T.Suresh for MIS Purpose start here */
+;with cte as
+(
+select row_number() over (partition by patientinvid order by patientinvid) as sno,patientinvid from @tmp_patinv
+)
+delete from cte where sno>1
+Update MPI set modifiedby = PI.modifiedby, modifiedat = @ServerDatetime, [status]  = pi.status, 
+IsAbnormal = PI.IsAbnormal ,ApprovedBy = PI.ApprovedBy,ApprovedAt = PI.ApprovedAt ,ValidatedBy = PI.ValidatedBy ,ValidatedAt = PI.ValidatedAt
+,IsSensitive = PI.IsSensitive
+From @tmp_patinv tmp
+Inner join patientinvestigation PI  on PI.patientinvid = tmp.patientinvid
+Inner join MISPatientinvestigation MPI  on PI.PatientInvID = MPI.PatientInvID
+Where PI.Patientvisitid = @patientVisitid
+Insert into MISPatientinvestigation
+(
+patientinvid,accessionnumber , PatientVisitID ,Orgid ,InvestigationID , InvestigationName , CreatedBy , 
+CreatedAt , ModifiedBy , ModifiedAt , Status , GroupID , GroupName , 
+IsAbnormal ,ApprovedBy,ApprovedAt ,ValidatedBy ,ValidatedAt,
+sampleid , Deptid,IsSensitive,ContainerID
+)
+select
+PI.patientinvid,pi.AccessionNumber,PI.patientvisitid,PI.Orgid , PI.Investigationid,PI.InvestigationName,PI.Createdby,
+@ServerDatetime,PI.modifiedby,@ServerDatetime,pi.status,pi.groupid,Pi.GroupName,
+PI.IsAbnormal ,PI.ApprovedBy,PI.ApprovedAt ,PI.ValidatedBy ,PI.ValidatedAt,
+IOM.SampleCode,IOM.Deptid,PI.IsSensitive,IOM.SampleContainerID
+From @tmp_patinv tmp
+Inner join patientinvestigation PI  on PI.patientinvid = tmp.patientinvid
+left join investigationOrgmapping IOM  on PI.Investigationid = IOM.Investigationid and PI.Orgid = IOM.Orgid
+Left join MISPatientinvestigation MPI  on PI.PatientInvID = MPI.PatientInvID and MPI.patientvisitid = @patientVisitid
+Where PI.Patientvisitid = @patientVisitid and MPI.patientinvid is null
+Insert @tmp_ordinv(accessionnumber)
+Select Distinct accessionNumber From @tmp_patinv where status = 'Completed'
+Update MOI set completedat = @ServerDateTime,Completedby = @LoginID
+From @tmp_ordinv tempo
+Inner join MISOrderedinvestigations MOI  on tempo.accessionnumber = MOI.accessionnumber
+Insert into MISOrderedinvestigationhistory
+(
+AccessionNumber,Visitid,id,type,Name,statusid,status,
+CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName
+)
+Select mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,mord.status,
+@Loginid as CreatedBy,@ServerDatetime as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName
+From @tmp_ordinv tp
+Inner join MISOrderedinvestigations MORD  on tp.Accessionnumber = MORD.Accessionnumber
+Inner join ordtasks tsk  on MORD.status = tsk.status
+Left join MISOrderedinvestigationhistory OH  on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and oh.Createdby = @Loginid
+Where Oh.Accessionnumber is null
+Insert into MISOrderedinvestigationhistory
+(
+AccessionNumber,Visitid,id,type,Name,statusid,status,
+CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName
+)
+Select distinct mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,tp.status,
+@LoginID as CreatedBy,@ServerDateTime as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName
+From @pPatientInvTable tp
+Inner join MISOrderedinvestigations MORD  on tp.Accessionnumber = MORD.Accessionnumber 
+Inner join ordtasks tsk  on tp.status = tsk.status
+Left join MISOrderedinvestigationhistory OH  on tp.Accessionnumber = OH.Accessionnumber 
+where tp.status='Recheck'
+delete from @tmp_ordinv
+Insert into @tmp_ordinv (accessionNumber)
+Select Distinct AccessionNumber from @tmp_patinv where status = 'Co-authorize'
+Update MO Set Coauthorizedat = @serverdatetime,authorizedby = @Loginid
+From MISOrderedinvestigations MO WITH (ROWLOCK)
+Inner join @tmp_ordinv tmp on MO.AccessionNumber = tmp.accessionNumber
+Delete from @tmp_ordinv
+Insert @tmp_ordinv(accessionnumber)
+Select Distinct accessionNumber From @tmp_patinv 
+Update MOI set modifiedat = @ServerDatetime,ValidatedAt = isnull(tp.ValidatedAt,MOI.ValidatedAt),ApprovedAt = isnull(tp.ApprovedAt,MOI.ApprovedAt),
+ValidatedBy= isnull(tp.ValidatedBy,MOI.ValidatedBy),ApprovedBy = isnull(tp.ApprovedBy,MOI.ApprovedBy)
+From MISOrderedinvestigations MOI WITH (ROWLOCK)
+Inner join @tmp_ordinv tmp  on MOI.Accessionnumber = tmp.Accessionnumber
+Cross apply
+(
+Select min(PI.ApprovedBy) as ApprovedBy,Max(PI.ApprovedAt) as ApprovedAt ,min(PI.ValidatedBy) as ValidatedBy ,Max(PI.ValidatedAt) as ValidatedAt from @tmp_patinv tmpPI
+Inner join patientinvestigation PI  on pi.accessionnumber = tmppi.AccessionNumber
+where  tmppi.accessionnumber = tmp.AccessionNumber
+) tp
+Insert Into MISordereddept(AccessionNumber,Deptid)
+Select
+tp.AccessionNumber,tp.Deptid
+From 
+(
+Select distinct MPIS.AccessionNumber,MPIS.Deptid
+From @tmp_ordinv tOrd
+Inner join MIsPatientinvestigation MPIS  on tord.AccessionNumber = MPIS.AccessionNumber
+) tp
+Left join MISordereddept Dpt  on tp.AccessionNumber = Dpt.AccessionNumber and tp.Deptid = dpt.Deptid
+Where Dpt.AccessionNumber is null
+/* Code added by T.Suresh for MIS Purpose end here */
+
+
+   /*BEGIN | NA | MARIYA | Datein 20180312 | M |  Amended TAT notification */  
+
+ IF EXISTS(SELECT 1 FROM @pPatientInvTable TempInv WHERE TempINV.Status IN('Recheck' ,'Reflexwithsamesample'))
+  BEGIN
+
+	  DECLARE @ppatientInvSample [dbo].[PATIENTINVSAMPLECOLLECTED]
+	
+	 
+	 INSERT INTO @ppatientInvSample
+	  (
+		PatientVisitID,
+		SampleID,
+		BarcodeNumber,
+		SampleCode,
+		OrgID,
+		CollectedDateTime
+	  )
+	  SELECT DISTINCT PINV.PatientVisitID,PINV.SampleID
+	  ,PIS.BarcodeNumber,PIS.SampleCode,PINV.OrgID  
+	  ,GETDATE()  --,PIS.CollectedDateTime 
+	  FROM   @pPatientInvTable TempInv
+	  INNER JOIN PatientInvestigation PINV  WITH(NOLOCK) ON TempInv.PatientVisitID = PINV.PatientVisitID					
+														AND TempInv.InvestigationID = PINV.InvestigationID														 
+	  INNER JOIN OrderedInvestigations OI WITH(NOLOCK)  ON --OI.VisitID = PINV.PatientVisitID  AND
+															 OI.AccessionNumber = PINV.AccessionNumber
+	  INNER JOIN PatientInvSampleMapping PINVSM WITH(NOLOCK) ON PINVSM.VisitID = OI.VisitID 
+																AND  PINVSM.ID =  OI.ID  
+																AND  PINVSM.Type =  OI.Type
+	  INNER JOIN PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID =  PINV.PatientVisitID 
+																AND PIS.SampleID=PINVSM.SID
+																AND  PINV.OrgID = PIS.OrgID	
+																AND ISNULL(PIS.ISActive,1) =1		
+	  WHERE TempINV.Status ='Recheck'    
+    
+	
+	 IF EXISTS (SELECT 1 FROM @ppatientInvSample)
+	 BEGIN
+		 
+	  EXEC pUpdateAmendedTAT_Notification @patientVisitid,@ppatientInvSample,@ContextInfo
+     END
+	 
+   END
+       /*END | NA | MARIYA | Datein 20161003 | M | Amended TAT notification*/
+
+DROP TABLE #TempPatientInvestigation
+END TRY
+
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pUpdatePatientInvestigationComplete @pSCMID = '+CAST(@pSCMID  AS VARCHAR)
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH   
+END 
+
+
+

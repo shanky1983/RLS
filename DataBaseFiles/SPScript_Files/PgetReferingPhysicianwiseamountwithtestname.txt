@@ -1,0 +1,28 @@
+CREATE Proc PgetReferingPhysicianwiseamountwithtestname(
+@fdate [DATETIME]=null ,    
+ @tdate [DATETIME] =null,      
+ @pOrgID bigint      
+,@Pparamtype VARCHAR(100)=null    
+,@Pparamvalue VARCHAR(100)=null    
+,@pExcelReportId [INT] = NULL    
+,@pExcelReportName VARCHAR(255) = NULL    
+,@pToExecute VARCHAR(10) = NULL    
+)
+as begin
+
+declare @Temp as Table (ReferingphysicianName varchar(255),VisitDate datetime,VisitNumber varchar(255),PatientName varchar(255),Age Varchar(20),MobileNUmber varchar(20),Email varchar(255),
+PatientAddress varchar(255),BillingAmt int,NetAmount int,Discount int)
+
+insert into @Temp
+select PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name as PatientName,PA.Age,PAD.MobileNumber,PA.EMail,(PAD.Add1+PAD.Add2+PAD.Add3) As PatientAddress,
+Sum(FB.GrossBillValue),Sum(FB.NetValue),Sum(FB.DiscountAmount)
+from Patientvisit  PV (NOLOCK)
+inner join Patient PA (NOLOCK) ON PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+Inner Join PatientAddress PAD with(NOLOCK) ON PAD.PatientID=PA.PatientID and AddressType='P'
+inner join finalbill FB (NOLOCK) on FB.Visitid=PV.PatientVisitID and FB.OrgID=PV.OrgID  
+where PV.orgid=@pOrgID and PV.visitdate between @fdate +' 00:00:00' and @tdate +' 23:59:59' 
+group by PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name,PA.Age,PAD.MobileNUmber,PA.Email,(PAD.Add1+PAD.Add2+PAD.Add3)
+order by PV.VisitNumber
+
+select '123' as Empty,* from @Temp order by VisitNumber
+end

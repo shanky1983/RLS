@@ -1,0 +1,495 @@
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @MetaDataID1 bigint
+	DECLARE @MetaDataID2 bigint
+	DECLARE @MetaDataID3 bigint
+--HoldBoth			
+		IF NOT EXISTS (select * from MetaData where Domain='ClientAction' and LangCode='en-GB' AND Code='HoldBoth' and DisplayText='HoldBoth')
+		BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientAction','HoldBoth','HoldBoth','en-GB',0)
+		END		
+		SELECT @MetaDataID1=MetaDataID FROM MetaData WHERE Domain='ClientAction' AND LangCode='en-GB' AND Code='HoldBoth' and DisplayText='HoldBoth'
+		IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='HoldBoth' )
+		BEGIN
+			INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID1,@MinValue,'en-GB','HoldBoth')
+		END
+--HoldBoth						
+--HoldRegistration	
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientAction' and LangCode='en-GB' AND Code='HoldRegistration' and DisplayText='HoldRegistration')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientAction','HoldRegistration','HoldRegistration','en-GB',0)
+		END
+		SELECT @MetaDataID2=MetaDataID FROM MetaData WHERE Domain='ClientAction' AND LangCode='en-GB' AND Code='HoldRegistration' AND DisplayText='HoldRegistration'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID2 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='HoldRegistration' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID2,@MinValue,'en-GB','HoldRegistration')
+					END
+--HoldRegistration
+--HoldReport
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientAction' and LangCode='en-GB' AND Code='HoldReport' and DisplayText='HoldReport')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientAction','HoldReport','HoldReport','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='ClientAction' AND LangCode='en-GB' AND Code='HoldReport' AND DisplayText='HoldReport'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='HoldReport' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','HoldReport')
+					END
+--HoldReport
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+GO
+
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @MetaDataID1 bigint
+	DECLARE @MetaDataID2 bigint
+	DECLARE @MetaDataID3 bigint
+--Cash			
+		IF NOT EXISTS (select * from MetaData where Domain='ClientPaymentCategory' and LangCode='en-GB' AND Code='CASH' and DisplayText='Cash')
+		BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientPaymentCategory','CASH','Cash','en-GB',0)
+		END		
+		SELECT @MetaDataID1=MetaDataID FROM MetaData WHERE Domain='ClientPaymentCategory' AND LangCode='en-GB' AND Code='CASH' and DisplayText='Cash'
+		IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Cash' )
+		BEGIN
+			INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID1,@MinValue,'en-GB','Cash')
+		END
+--Cash						
+--Cash with Copay	
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientPaymentCategory' and LangCode='en-GB' AND Code='CASHCOPAY' and DisplayText='Cash with Copay')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientPaymentCategory','CASHCOPAY','Cash with Copay','en-GB',0)
+		END
+		SELECT @MetaDataID2=MetaDataID FROM MetaData WHERE Domain='ClientPaymentCategory' AND LangCode='en-GB' AND Code='CASHCOPAY' AND DisplayText='Cash with Copay'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID2 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Cash with Copay' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID2,@MinValue,'en-GB','Cash with Copay')
+					END
+--Cash with Copay
+--Cash with Advance
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientPaymentCategory' and LangCode='en-GB' AND Code='CASHADV' and DisplayText='Cash with Advance')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientPaymentCategory','CASHADV','Cash with Advance','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='ClientPaymentCategory' AND LangCode='en-GB' AND Code='CASHADV' AND DisplayText='Cash with Advance'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Cash with Advance' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','Cash with Advance')
+					END
+--Cash with Advance
+--Credit
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientPaymentCategory' and LangCode='en-GB' AND Code='CREDIT' and DisplayText='Credit')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientPaymentCategory','CREDIT','Credit','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='ClientPaymentCategory' AND LangCode='en-GB' AND Code='CREDIT' AND DisplayText='Credit'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Credit' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','Credit')
+					END
+--Credit
+--Credit with Copay
+		 IF NOT EXISTS (select 1 from MetaData where Domain='ClientPaymentCategory' and LangCode='en-GB' AND Code='CREDITCOPAY' and DisplayText='Credit with Copay')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('ClientPaymentCategory','CREDITCOPAY','Credit with Copay','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='ClientPaymentCategory' AND LangCode='en-GB' AND Code='CREDITCOPAY' AND DisplayText='Credit with Copay'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Credit with Copay' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','Credit with Copay')
+					END
+--Credit with Copay
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+GO
+
+
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @MetaDataID1 bigint
+	DECLARE @MetaDataID2 bigint
+	DECLARE @MetaDataID3 bigint
+--Discount Policy			
+		IF NOT EXISTS (select * from MetaData where Domain='DiscountTaxType' and LangCode='en-GB' AND Code='DCP' and DisplayText='Discount Policy')
+		BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('DiscountTaxType','DCP','Discount Policy','en-GB',0)
+		END		
+		SELECT @MetaDataID1=MetaDataID FROM MetaData WHERE Domain='DiscountTaxType' AND LangCode='en-GB' AND Code='DCP' and DisplayText='Discount Policy'
+		IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Discount Policy' )
+		BEGIN
+			INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID1,@MinValue,'en-GB','Discount Policy')
+		END
+--Discount Policy						
+--TODInvoice	
+		 IF NOT EXISTS (select 1 from MetaData where Domain='DiscountTaxType' and LangCode='en-GB' AND Code='TOD' and DisplayText='TODInvoice')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('DiscountTaxType','TOD','TODInvoice','en-GB',0)
+		END
+		SELECT @MetaDataID2=MetaDataID FROM MetaData WHERE Domain='DiscountTaxType' AND LangCode='en-GB' AND Code='TOD' AND DisplayText='TODInvoice'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID2 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='TODInvoice' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID2,@MinValue,'en-GB','TODInvoice')
+					END
+--TODInvoice
+--VODInvoice
+		 IF NOT EXISTS (select 1 from MetaData where Domain='DiscountTaxType' and LangCode='en-GB' AND Code='TOV' and DisplayText='VODInvoice')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('DiscountTaxType','TOV','VODInvoice','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='DiscountTaxType' AND LangCode='en-GB' AND Code='TOV' AND DisplayText='VODInvoice'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='VODInvoice' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','VODInvoice')
+					END
+--VODInvoice
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+GO
+
+
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @MetaDataID1 bigint
+	DECLARE @MetaDataID2 bigint
+	DECLARE @MetaDataID3 bigint
+--All			
+		IF NOT EXISTS (select * from MetaData where Domain='RegistrationType' and LangCode='en-GB' AND Code='All' and DisplayText='All')
+		BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('RegistrationType','All','All','en-GB',0)
+		END		
+		SELECT @MetaDataID1=MetaDataID FROM MetaData WHERE Domain='RegistrationType' AND LangCode='en-GB' AND Code='All' and DisplayText='All'
+		IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='All' )
+		BEGIN
+			INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID1,@MinValue,'en-GB','All')
+		END
+--All						
+--B2B	
+		 IF NOT EXISTS (select 1 from MetaData where Domain='RegistrationType' and LangCode='en-GB' AND Code='B2B' and DisplayText='B2B')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('RegistrationType','B2B','B2B','en-GB',0)
+		END
+		SELECT @MetaDataID2=MetaDataID FROM MetaData WHERE Domain='RegistrationType' AND LangCode='en-GB' AND Code='B2B' AND DisplayText='B2B'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID2 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='B2B' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID2,@MinValue,'en-GB','B2B')
+					END
+--B2B
+--B2C
+		 IF NOT EXISTS (select 1 from MetaData where Domain='RegistrationType' and LangCode='en-GB' AND Code='B2C' and DisplayText='B2C')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('RegistrationType','B2C','B2C','en-GB',0)
+		END
+		SELECT @MetaDataID3=MetaDataID FROM MetaData WHERE Domain='RegistrationType' AND LangCode='en-GB' AND Code='B2C' AND DisplayText='B2C'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID3 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='B2C' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID3,@MinValue,'en-GB','B2C')
+					END
+--B2C	
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+GO
+
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @MetaDataID1 bigint
+	DECLARE @MetaDataID2 bigint
+--Client Access					
+		IF NOT EXISTS (select * from MetaData where Domain='SpecialPrevileges' and LangCode='en-GB' AND Code='1' and DisplayText='Client Access')
+		BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('SpecialPrevileges','1','Client Access','en-GB',0)
+		END		
+		SELECT @MetaDataID1=MetaDataID FROM MetaData WHERE Domain='SpecialPrevileges' AND LangCode='en-GB' AND Code='1' and DisplayText='Client Access'
+		IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Client Access' )
+		BEGIN
+			INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID1,@MinValue,'en-GB','Client Access')
+		END
+--Client Access						
+--Remote Registration	
+		 IF NOT EXISTS (select 1 from MetaData where Domain='SpecialPrevileges' and LangCode='en-GB' AND Code='2' and DisplayText='Remote Registration')
+				 BEGIN
+					INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+					VALUES ('SpecialPrevileges','2','Remote Registration','en-GB',0)
+		END
+		SELECT @MetaDataID2=MetaDataID FROM MetaData WHERE Domain='SpecialPrevileges' AND LangCode='en-GB' AND Code='2' AND DisplayText='Remote Registration'
+					IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID2 and OrgID=@MinValue and LangCode='en-GB' and DisplayText='Remote Registration' )
+					BEGIN
+						INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText) values (@MetaDataID2,@MinValue,'en-GB','Remote Registration')
+					END
+--Remote Registration	
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+GO
+
+--TabMaster Table
+--Client Master: Basic Details Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMBasic')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMBasic','Basic Details',1)
+END
+--Client Master: Communication Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMCommunication')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMCommunication','Communication',2)
+END
+--Client Master: Notification Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMNotification')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMNotification','Notification',3)
+END
+--Client Master: Report Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMReport')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMReport','Report',4)
+END
+--Client Master: Commercial Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMCommercial')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMCommercial','Commercial',5)
+END
+--Client Master: Credit Control Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMCredit')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMCredit','Credit Control',6)
+END
+--Client Master: Attributes Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMAttributes')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMAttributes','Attributes',7)
+END
+--Client Master: Documents Tab
+IF NOT EXISTS (select 1 from TabMaster where Type='TAB' and Code='tabCMDocuments')
+BEGIN
+INSERT INTO TabMaster(Type,Code,Name,SequenceNo) VALUES ('TAB','tabCMDocuments','Documents',8)
+END
+
+
+GO
+
+
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+	DECLARE @RoleID bigint
+	DECLARE @TabMasterID1 bigint
+	DECLARE @TabMasterID2 bigint
+	DECLARE @TabMasterID3 bigint
+	DECLARE @TabMasterID4 bigint
+	DECLARE @TabMasterID5 bigint
+	DECLARE @TabMasterID6 bigint
+	DECLARE @TabMasterID7 bigint
+	DECLARE @TabMasterID8 bigint
+	SELECT @RoleID=RoleID FROM Role WHERE RoleName='Administrator' AND OrgID=@MinValue
+--Tab: Basic Details default tab
+	Select @TabMasterID1=TabMasterID from TabMaster where Type='TAB' and Code='tabCMBasic'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID1 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID1,@MinValue,@RoleID,1,1)
+	END
+--Tab: Communication
+	Select @TabMasterID2=TabMasterID from TabMaster where Type='TAB' and Code='tabCMCommunication'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID2 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID2,@MinValue,@RoleID,1,0)
+	END
+--Tab: Notification 
+	Select @TabMasterID3=TabMasterID from TabMaster where Type='TAB' and Code='tabCMNotification'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID3 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID3,@MinValue,@RoleID,1,0)
+	END
+--Tab: Report 
+	Select @TabMasterID4=TabMasterID from TabMaster where Type='TAB' and Code='tabCMReport'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID4 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID4,@MinValue,@RoleID,1,0)
+	END	
+--Tab: Commercial 
+	Select @TabMasterID5=TabMasterID from TabMaster where Type='TAB' and Code='tabCMCommercial'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID5 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID5,@MinValue,@RoleID,1,0)
+	END	
+--Tab: Credit Control 
+	Select @TabMasterID6=TabMasterID from TabMaster where Type='TAB' and Code='tabCMCredit'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID6 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID6,@MinValue,@RoleID,1,0)
+	END
+--Tab: Attributes
+	Select @TabMasterID7=TabMasterID from TabMaster where Type='TAB' and Code='tabCMAttributes'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID7 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID7,@MinValue,@RoleID,1,0)
+	END	
+--Tab: Documents
+	Select @TabMasterID8=TabMasterID from TabMaster where Type='TAB' and Code='tabCMDocuments'
+	IF NOT EXISTS (select 1 from TabRole where TabMasterID=@TabMasterID8 and RoleId=@RoleID)
+	BEGIN
+	INSERT INTO TabRole(TabMasterID,OrgID,RoleId,HasAccess,Isdefault) VALUES (@TabMasterID8,@MinValue,@RoleID,1,0)
+	END	
+			
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+
+
+
+GO
+
+
+GO
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+		 DECLARE @config INT
+		 SELECT @config= (SELECT max(ConfigKeyID)+1 FROM ConfigKeyMaster)
+		 IF NOT EXISTS ( SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='RateDocumentUpload')
+		 BEGIN
+		 INSERT INTO ConfigKeyMaster (ConfigKeyID,ConfigKey,DisplayText,IsInternal) VALUES (@config,'RateDocumentUpload','Rate Document Upload Details','Y')
+		 END
+		 SELECT @config=ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='RateDocumentUpload'
+		 IF NOT EXISTS ( SELECT * FROM ConfigOrgMaster Where OrgID=@MinValue and ConfigKeyID=@config and ConfigValue='F:\UploadFileSample')
+		 BEGIN
+		 INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedBy,CreatedAt) VALUES (@config,'F:\UploadFileSample',@MinValue,236,GETDATE())
+		 END					
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+GO
+If EXISTS ( SELECT 1 FROM AddressType where TypeName='Bill To')
+BEGIN
+UPDATE AddressType SET TypeName ='Invoice Send To' where TypeName='Bill To'
+END
+If EXISTS ( SELECT 1 FROM AddressType where TypeName='Ship To')
+BEGIN
+UPDATE AddressType SET TypeName ='Report Send To' where TypeName='Ship To'
+END
+GO
+CREATE TABLE #TempOrgID ( OrgID int )
+INSERT INTO #TempOrgID 
+SELECT OrganizationID from Organization 
+DECLARE @MinValue int 
+DECLARE @MaxValue int 
+SET @MinValue=(SELECT MIN(OrgID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(OrgID) FROM #TempOrgID) 
+
+WHILE @MinValue <= @MaxValue 
+BEGIN
+	IF EXISTS(SELECT OrganizationID FROM Organization WHERE OrganizationID=@MinValue) 
+	BEGIN
+		IF NOT EXISTS ( SELECT 1 FROM EmployerDeptMaster where Code='ACCHOLDER'AND OrgID=@MinValue)
+		BEGIN
+			INSERT INTO EmployerDeptMaster (Code,EmpDeptName,OrgID,CreatedBy,CreatedAt)
+			select 'ACCHOLDER','ACCOUNT HOLDER',@MinValue,236,GETDATE()
+		END						
+	END
+SET @MinValue = @MinValue + 1 
+END
+drop table #TempOrgID
+GO
+
+
+
+
+

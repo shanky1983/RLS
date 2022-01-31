@@ -1,0 +1,115 @@
+Begin tran
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx?&RCP=Y'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'APISMS','Y','RSMS','Notify','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,Subject,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'Dear Customer, Thank you for choosing Reliance MedLab - Your Health Partner. Your registered PID is {PatintNumber}. We acknowledge receipt of Rs. {ReceivedAmt} for VID {VisitNumber} dated {Reg_Date}. T&C apply. For assistance, please call us on 1800 889 2444. Take Care. Team Reliance MedLab.','RSMS_P','TAT',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','Notify','N',@CreatedAt,@CreatedBy
+END
+
+/** **/
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'APISMS','Y','RSMS','Notify','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,Subject,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'Dear Customer, Thank you for choosing Reliance MedLab - Your Health Partner. Your registered PID is {PatintNumber}. We acknowledge receipt of Rs. {ReceivedAmt} for VID {VisitNumber} dated {Reg_Date}. T&C apply. For assistance, please call us on 1800 889 2444. Take Care. Team Reliance MedLab.','RSMS_P','TAT',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='APISMS' AND Type='Notify'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='RSMS_P'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','Notify','N',@CreatedAt,@CreatedBy
+END
+
+/***/

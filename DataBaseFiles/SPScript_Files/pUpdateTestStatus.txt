@@ -1,0 +1,1089 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pUpdateTestStatus]  @pUDT         [dbo].[OrderedInvestigation] READONLY,   
+                                           @pOrgid       [int],   
+                                           @returnStatus [int] OUTPUT,   
+                                           @ContextInfo  [UDT_Context] READONLY   
+WITH EXECUTE AS OWNER   
+AS   
+  BEGIN   
+      SET TRANSACTION ISOLATION LEVEL SERIALIZABLE   
+      SET NOCOUNT ON;   
+  
+      BEGIN TRY   
+          DECLARE @EMsg      nvarchar(4000),   
+                  @ELine     int,   
+                  @Eproc     nvarchar(128),   
+                  @ESEVERITY int,   
+                  @sptrace   varchar(8000)   
+  
+          SET @returnStatus=-1   
+  
+          DECLARE @Createdat DATETIME= (SELECT   
+                  dbo.fn_GetServerDate(@ContextInfo))   
+    DECLARE @OrgAddressId bigint=0  
+    SELECT @OrgAddressId=OrgAddressID from @ContextInfo  
+    set @OrgAddressId=isnull(@OrgAddressId,0)  
+          Declare @VisitID bigint=0   
+          /* Code added by T.Suresh for MIS Purpose start here */   
+          declare @tmp_ordinv as table   
+            (   
+               accessionnumber bigint   
+            )   
+          declare @tmp_patinv as table   
+            (   
+               patientinvid bigint   
+            )   
+          declare @tmp_invv as table   
+            (   
+               investigationvalueid bigint,   
+               status               nvarchar(50)   
+            )   
+          declare @Loginid    bigint,   
+                  @serverdate datetime   
+  
+          SELECT @ServerDate = dbo.Fn_getserverdate(@ContextInfo)   
+  
+          Select @Loginid = Loginid   
+          from   @contextinfo   
+  
+          Declare @pGUId Varchar(500)   
+  
+          /* Code added by T.Suresh for MIS Purpose end here */   
+          select @VisitID = visitid,   
+                 @pGUId = UID   
+          from   @pUDT   
+  
+          DECLARE @pClientID BIGINT   
+  
+          SELECT @pClientID = Max(ClientID)   
+          FROM   VisitClientMapping VCM   
+          WHERE  VCM.OrgID = @pOrgid   
+                 AND VisitID = @VisitID   
+                 AND Isnull(IsActive, 'Y') = 'Y'   
+  
+          --added by sudha     
+          Update VG   
+          set    VG.Interpretation = IOIM.Interpretation,   
+                 VG.ModifiedBy = P.ModifiedBy,   
+                 VG.ModifiedAt = Getdate()   
+          from   @pUDT P   
+                 inner join Patientinvestigation PIN   
+                         on P.ReferralID = PIN.Accessionnumber   
+                            AND P.Visitid = PIN.PAtientVisitID   
+                            and P.Orgid = PIN.ORgid   
+                 --inner join invorginterpretationmapping IOIM    
+                 left join invorginterpretationmapping IOIM   
+                        on IOIM.IdentityID = PIN.GroupID   
+                           and IOIM.Interpretation <> ''   
+                           and IOIM.IdentityType = 'GRP'   
+                 --inner join VisitGroupDetails VG On Vg.visitid=P.Visitid      
+                 left join VisitGroupDetails VG WITH (ROWLOCK)   
+                        On Vg.visitid = P.Visitid   
+                           AND VG.ORggroupid = PIN.GroupID   
+                           AND VG.Type = 'GRP'   
+                           AND VG.Gender = IOIM.Gender   
+  
+          Update VG   
+          set    VG.Interpretation = IOIM.Interpretation,   
+                 VG.ModifiedBy = P.ModifiedBy,   
+                 VG.ModifiedAt = Getdate()   
+          from   @pUDT P   
+                 inner join Orderedinvestigations OI   
+                         on P.ReferralID = OI.Accessionnumber   
+                            AND P.Visitid = OI.VisitID   
+                            and P.Orgid = OI.Orgid   
+                 --inner join changed to be leftjoin By sudha      
+                 --inner join invorginterpretationmapping IOIM    
+                 left join invorginterpretationmapping IOIM   
+                        on IOIM.IdentityID = OI.PKGID   
+                           and IOIM.Interpretation <> ''   
+                 --inner join VisitGroupDetails VG On Vg.visitid=P.Visitid    
+                 left join VisitGroupDetails VG WITH (ROWLOCK)   
+                        On Vg.visitid = P.Visitid   
+                           AND VG.ORggroupid = OI.PKGID   
+                           AND VG.Type = 'PKG'   
+                           AND VG.Gender = IOIM.Gender   
+  
+          --ended by sudha     
+          Declare @OrdInvInterpretation table   
+            (   
+               RNK            int identity(1, 1),   
+               PatientVisitid Bigint,   
+               ID             Bigint,   
+               Type           Nvarchar(50),   
+               Orgid          int,   
+               InvName        Nvarchar(500),   
+               Gender         Nvarchar(50),   
+               --Age Nvarchar(100),         
+               AgeOperator    Nvarchar(100),   
+               AgeFrom        Int,   
+               AgeTo          int,   
+               interpretation Nvarchar(MAX)   
+            )   
+          Declare @OrdInvInterpretationFinal table   
+            (   
+               PatientVisitid Bigint,   
+               ID             Bigint,   
+               Type           Nvarchar(50),   
+               Orgid          int,   
+               InvName        Nvarchar(500),   
+               Gender         Nvarchar(50),   
+               --Age Nvarchar(100),         
+               AgeOperator    Nvarchar(100),   
+               AgeFrom        Int,   
+               AgeTo          int,   
+               interpretation Nvarchar(MAX),   
+               IsActive       Char(1) default(1)   
+            )   
+  
+          Insert into @OrdInvInterpretation   
+                      (PatientVisitid,   
+                       ID,   
+                       Type,   
+                       Orgid,   
+                       InvName,   
+                       Gender,   
+                       AgeOperator,   
+                       AgeFrom,   
+                       AgeTo,   
+                       interpretation)   
+          SELECT OI.VisitID AS PatientVisitID,   
+                 OI.ID      AS InvestigationID,   
+                 OI.Type,   
+                 OI.OrgID,   
+                 OI.Name    AS InvestigationName,   
+                 IOIM.Gender,   
+                 AgeOperator,   
+                 AgeFrom,   
+                 AgeTo,   
+                 IOIM.Interpretation   
+          FROM   @pUDT OI   
+                 INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)   
+                         ON IOM.InvestigationID = OI.ID   
+                            AND IOM.OrgID = OI.OrgID   
+                 inner join InvOrgInterpretationMapping IOIM WITH (NOLOCK)   
+                         on IOIM.IdentityID = IOM.InvestigationID   
+                            and IOIM.OrgID = IOM.OrgID   
+                            and IOIM.IdentityType = 'INV'   
+                            and isnull(IOIM.Interpretation, '') <> ''   
+                            and IOIM.IsActive = 'Y'   
+          WHERE  OI.Type = 'INV'   
+                 AND OI.VisitID = @VisitID   
+                 AND OI.OrgID = @pOrgid   
+                 AND OI.UID = @pGUId   
+          UNION ALL   
+          SELECT DISTINCT OI.VisitID          AS PatientVisitID,   
+                          IOM.InvestigationID AS InvestigationID,   
+                          'INV'               AS Type,   
+                          OI.OrgID,   
+                          IOM.DisplayText     AS InvestigationName,   
+                          IOIM.Gender,   
+                          AgeOperator,   
+                          AgeFrom,   
+                          AgeTo,   
+                          IOIM.Interpretation   
+          FROM   @pUDT OI   
+                 INNER JOIN InvGroupMaster IGM WITH (NOLOCK)   
+                         ON IGM.GroupID = OI.ID   
+                            AND IGM.Type = OI.Type   
+                 INNER JOIN InvOrgGroup IOG WITH (NOLOCK)   
+                         ON IGM.GroupID = IOG.AttGroupID   
+    AND IOG.OrgID = OI.OrgID   
+                 INNER JOIN InvGroupMapMaster IGMM WITH (NOLOCK)   
+                         ON IGMM.GroupID = IOG.OrgGroupID   
+                 INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)   
+                         ON IOM.InvestigationID = IGMM.InvestigationID   
+                            AND IOM.OrgID = OI.OrgID   
+                 INNER JOIN InvestigationMaster IM WITH (NOLOCK)   
+                         ON IM.InvestigationID = IOM.InvestigationID   
+                 inner join InvOrgInterpretationMapping IOIM WITH (NOLOCK)   
+                         on IOIM.IdentityID = IOM.InvestigationID   
+                            and IOIM.OrgID = IOM.OrgID   
+                            and IOIM.IdentityType = 'INV'   
+                            and isnull(IOIM.Interpretation, '') <> ''   
+                            and IOIM.IsActive = 'Y'   
+          WHERE  OI.Type = 'GRP'   
+                 AND OI.VisitID = @VisitID   
+                 AND OI.OrgID = @pOrgid   
+                 AND OI.UID = @pGUId   
+                 AND ISNULL(IGMM.Active, 'Y') = 'Y'   
+          UNION ALL   
+          SELECT DISTINCT OI.VisitID          AS PatientVisitID,   
+                          IOM.InvestigationID AS InvestigationID,   
+                          'INV'               AS Type,   
+                          OI.OrgID,   
+                          IOM.DisplayText     AS InvestigationName,   
+                          IOIM.Gender,   
+                          AgeOperator,   
+                          AgeFrom,   
+                          AgeTo,   
+                          IOIM.Interpretation   
+          FROM   @pUDT OI   
+                 INNER JOIN InvGroupMaster IGM WITH (NOLOCK)   
+                         ON IGM.GroupID = OI.ID   
+                            AND IGM.Type = OI.Type   
+                 INNER JOIN InvOrgGroup IOG WITH (NOLOCK)   
+                         ON IGM.GroupID = IOG.AttGroupID   
+                            AND IOG.OrgID = OI.OrgID   
+                 INNER JOIN InvGroupMapMaster IGMM WITH (NOLOCK)   
+                         ON IGMM.GroupID = IOG.OrgGroupID   
+                            AND IGMM.Parent = 'Y'   
+                 INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK)   
+                         ON IOG1.OrgGroupID = IGMM.InvestigationID   
+                            AND IOG1.OrgID = OI.OrgID   
+                 INNER JOIN InvGroupMapMaster IGMM1 WITH (NOLOCK)   
+                         ON IGMM1.GroupID = IOG1.OrgGroupID   
+                 INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)   
+                         ON IOM.InvestigationID = IGMM1.InvestigationID   
+                            AND IOM.OrgID = OI.OrgID   
+                 INNER JOIN InvDeptMaster IDM WITH (NOLOCK)   
+                         ON IDM.DeptID = IOM.DeptID   
+                            AND IDM.OrgID = IOM.OrgID   
+                 INNER JOIN InvestigationMaster IM WITH (NOLOCK)   
+                         ON IM.InvestigationID = IOM.InvestigationID   
+                 inner join InvOrgInterpretationMapping IOIM WITH (NOLOCK)   
+                         on IOIM.IdentityID = IOM.InvestigationID   
+                            and IOIM.OrgID = IOM.OrgID   
+                            and IOIM.IdentityType = 'INV'   
+                            and isnull(IOIM.Interpretation, '') <> ''   
+                            and IOIM.IsActive = 'Y'   
+          WHERE  OI.Type = 'GRP'   
+                 AND OI.VisitID = @VisitID   
+                 AND OI.OrgID = @pOrgid   
+                 AND OI.UID = @pGUId   
+                 AND ISNULL(IGMM.Active, 'Y') = 'Y'   
+                 AND ISNULL(IGMM1.Active, 'Y') = 'Y'   
+                 AND ISNULL(IDM.Display, 'Y') = 'Y'   
+  
+          --Select * from @OrdInvInterpretation         
+          DECLARE @Gender    NVARCHAR(100),   
+                  @PatientID Bigint,   
+                  @Age       Nvarchar(100)   
+  
+          Select @PatientID = Patientid   
+          from   Patientvisit   
+          where  Patientvisitid = @VisitID   
+  
+          SELECT @Gender = Case   
+                             when p.SEX = 'M' then 'Male'   
+   When p.SEX = 'F' then 'Female'   
+                             Else p.SEX   
+                           END,   
+                 @Age = P.Age   
+          FROM   dbo.Patient p   
+          WHERE  p.PatientID = @PatientID   
+                 AND p.OrgID = @pOrgid   
+  
+          --Select @PatientID as patientid,@Gender As Gender         
+          Declare @PVisitid1   Bigint,   
+                  @INVID       Bigint,   
+                  @GenderType  Nvarchar(100),   
+                  @AgeType     Nvarchar(100),   
+                  @AgeFrom     int,   
+                  @AgeTo       int,   
+                  @AgeOPerator Nvarchar(100)   
+          Declare @MinRNo int=1,   
+                  @MaxRNo INT   
+  
+          SElect @MaxRNo = Count(*)   
+          from   @OrdInvInterpretation   
+  
+          While ( @MinRNo <= @MaxRNo )   
+            Begin   
+                --Select * from @tempIDFinal         
+                Select @PVisitid1 = PatientVisitid,   
+                       @INVID = ID,   
+                       @GenderType = Gender,   
+                       @AgeFrom = AgeFrom,   
+                       @AgeTo = AgeTo,   
+                       @AgeOPerator = AgeOperator   
+                From   @OrdInvInterpretation   
+                where  RNK = @MinRNo   
+  
+                --select @Gender as Gender ,@GenderType as GenderType,@INVID ,@MinRowNo as MinRowNO         
+                IF exists (Select 1   
+                           from   @OrdInvInterpretation   
+                           where  ID = @INVID   
+                                  and Gender = @Gender   
+                                  and PatientVisitid = @PVisitid1   
+                                  and Type = 'INV'   
+                                  and RNK = @MinRNo)   
+                  Begin   
+                      --Select '1'         
+                      Insert into @OrdInvInterpretationFinal   
+                                  (PatientVisitid,   
+                                   ID,   
+                                   Type,   
+                                   Orgid,   
+                                   InvName,   
+                                   Gender,   
+                                   AgeOperator,   
+                                   AgeFrom,   
+                                   AgeTo,   
+                                   interpretation)   
+                      Select PatientVisitid,   
+                             ID,   
+                             Type,   
+                             Orgid,   
+                             InvName,   
+                             Gender,   
+                             AgeOperator,   
+                             AgeFrom,   
+                             AgeTo,   
+                             interpretation   
+                      From   @OrdInvInterpretation   
+                      where  ID = @INVID   
+                             and Gender = @Gender   
+                             and PatientVisitid = @PVisitid1   
+                             and Type = 'INV'   
+                  END   
+                ELSE   
+                  BEGIN   
+                      --Select '2'         
+                      --set @Gender='Both'         
+                      Insert into @OrdInvInterpretationFinal   
+                                  (PatientVisitid,   
+                                   ID,   
+                                   Type,   
+                                   Orgid,   
+                                   InvName,   
+                                   Gender,   
+                                   AgeOperator,   
+                                   AgeFrom,   
+                                   AgeTo,   
+                                   interpretation)   
+                      Select PatientVisitid,   
+                             ID,   
+                             Type,   
+                             Orgid,   
+   InvName,   
+                             Gender,   
+                             AgeOperator,   
+            AgeFrom,   
+         AgeTo,   
+                             interpretation   
+                      From   @OrdInvInterpretation   
+                      where  ID = @INVID   
+                             and Gender = 'Both'   
+                             and PatientVisitid = @PVisitid1   
+                             and Type = 'INV'   
+                  END   
+  
+                Set @MinRNo=@MinRNo + 1   
+            END   
+  
+          --Select * from @OrdInvInterpretationFinal         
+          INSERT INTO InvestigationStatusHistory   
+                      (PatientVisitID,   
+                       InvestigationID,   
+                       InvestigationName,   
+                       Type,   
+                       ModifiedBy,   
+                       modifiedat,   
+                       UID,   
+                       OrgID,   
+                       OrginalStatus,   
+                       AlteredStatus,   
+                       ApprovedBy,   
+                       Reason)   
+          SELECT VisitID,   
+                 ID,   
+                 Name,   
+                 Type,   
+                 ModifiedBy,   
+                 @Createdat,   
+                 UID,   
+                 OrgID,   
+                 (Select Status   
+                  from   OrderedInvestigations   
+                  where  ID = UDT.ID   
+                         and Type = UDT.Type   
+                         and VisitID = UDT.VisitID   
+                         and UID = UDT.UID),   
+                 Status,   
+                 UDT.CreatedBy,   
+                 UDT.RefPhyName   
+          FROM   @pUDT UDT   
+  
+          UPDATE PV   
+          SET    PV.StatusType = NULL   
+          FROM   PatientInvestigation PV WITH (ROWLOCK)   
+                 INNER JOIN @pUDT loc   
+                         ON PV.PatientVisitID = loc.VisitID   
+                            AND PV.OrgID = @pOrgid   
+          WHERE  loc.ReferralID = pv.AccessionNumber   
+                 AND PV.UID = loc.UID   
+                 AND PV.Status = 'Retest'   
+                 AND ISNULL(PV.StatusType, '') = 'RR'   
+  
+          UpDate InvestigationQueue   
+          SET    InvestigationQueue.Status = loc.Status   
+          from   InvestigationQueue IQ WITH (ROWLOCK)   
+                 INNER JOIN @pUDT loc   
+                         on IQ.VisitID = loc.VisitID   
+                            AND IQ.OrgID = @pOrgid   
+                            AND IQ.AccessionNumber = loc.ReferralID   
+  
+          IF exists (select 1   
+                     from   @pUDT   
+                     where  Status IN ( 'Cancel' ))   
+            Begin   
+                Update OI   
+                set    OI.PreviousStatus = OI.Status   
+                from   OrderedInvestigations OI WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on OI.VisitID = loc.VisitID   
+                                  AND OI.OrgID = @pOrgid   
+                                  AND OI.ID = loc.ID   
+                                  AND OI.AccessionNumber = loc.ReferralID   
+  
+                Update PINV   
+                set    PINV.PreviousStatus = PINV.Status   
+                from   PatientInvestigation PINV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on PINV.PatientVisitID = loc.VisitID   
+                                  AND PINV.OrgID = @pOrgid   
+                                  AND PINV.AccessionNumber = loc.ReferralID   
+  
+                Update INV   
+                set    INV.PreviousStatus = INV.Status   
+                from   OrderedInvestigations OI   
+                       INNER JOIN @pUDT loc   
+                               on OI.VisitID = loc.VisitID   
+                                  AND OI.OrgID = @pOrgid   
+                       inner join PatientInvestigation PINV WITH (ROWLOCK)   
+                               on PINV.AccessionNumber = OI.AccessionNumber   
+                              and PINV.PatientVisitID = OI.VisitID   
+                          and PINV.UID = OI.UID   
+                      inner join InvestigationValues INV WITH (ROWLOCK)   
+                               on INV.PatientVisitID = PINV.PatientVisitID   
+                                  and INV.UID = PINV.UID   
+                                  and INV.InvestigationID = PINV.InvestigationID   
+                                  and INV.GroupID = PINV.GroupID   
+                                  AND OI.ID = loc.ID   
+                                  AND OI.AccessionNumber = loc.ReferralID   
+            End   
+  
+          IF exists (select 1   
+                     from   @pUDT   
+                     where  Status IN ( 'Uncancel' ))   
+            Begin   
+                Update OI   
+                set    OI.Status = OI.PreviousStatus   
+                from   OrderedInvestigations OI WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on OI.VisitID = loc.VisitID   
+                                  AND OI.OrgID = @pOrgid   
+                                  AND OI.ID = loc.ID   
+                                  AND OI.AccessionNumber = loc.ReferralID   
+                                  And OI.Status = 'Cancel'   
+  
+                Update PINV   
+                set    PINV.Status = PINV.PreviousStatus   
+                from   PatientInvestigation PINV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on PINV.PatientVisitID = loc.VisitID   
+                                  AND PINV.OrgID = @pOrgid   
+                                  AND PINV.AccessionNumber = loc.ReferralID   
+                                  And PINV.Status = 'Cancel'   
+  
+                Update INV   
+                set    INV.Status = INV.PreviousStatus   
+                from   OrderedInvestigations OI   
+                       INNER JOIN @pUDT loc   
+                               on OI.VisitID = loc.VisitID   
+                                  AND OI.OrgID = @pOrgid   
+                       inner join PatientInvestigation PINV   
+                               on PINV.AccessionNumber = OI.AccessionNumber   
+                                  and PINV.PatientVisitID = OI.VisitID   
+                                  and PINV.UID = OI.UID   
+                       inner join InvestigationValues INV WITH (ROWLOCK)   
+                               on INV.PatientVisitID = PINV.PatientVisitID   
+                                  and INV.UID = PINV.UID   
+                                  and INV.InvestigationID = PINV.InvestigationID   
+                                  and INV.GroupID = PINV.GroupID   
+                                  AND OI.ID = loc.ID   
+                                  AND OI.AccessionNumber = loc.ReferralID   
+                                  And INV.Status = 'Cancel'   
+  
+                SET @returnStatus=0   
+  
+                RETURN @returnStatus   
+            End   
+  
+            
+          UpDate OrderedInvestigations   
+          SET    OrderedInvestigations.ResCaptureLoc = loc.ReferedToLocation,   
+                 OrderedInvestigations.ModifiedBy = loc.ModifiedBy,   
+                 OrderedInvestigations.Status = loc.Status   
+                 /* BEGIN | NA | Sabari | 03032019 | Created | InvestigationResultDeflagging */   
+                 ,   
+                 OrderedInvestigations.PreviousStatus = CASE   
+                                                          WHEN   
+                 loc.Status = 'ResultDeflag'   
+                  OR loc.Status =   
+                     'ResultDeflags'   
+                                                        THEN 'ResultRectified'   
+                                                          ELSE NULL   
+                                                        END   
+          /* END | NA | Sabari | 03032019 | Created | InvestigationResultDeflagging */   
+          output inserted.AccessionNumber   
+          into @tmp_ordinv   
+   from   OrderedInvestigations OI WITH (ROWLOCK)   
+ INNER JOIN @pUDT loc   
+                         on OI.VisitID = loc.VisitID   
+                            AND OI.OrgID = @pOrgid   
+                            AND OI.ID = loc.ID   
+                            AND OI.AccessionNumber = loc.ReferralID   
+  
+          IF EXISTS (select 1   
+                     from   @pUDT   
+                     where  Status NOT IN ( 'Approve', 'PartiallyApproved' ))   
+            Begin   
+                update PatientInvestigation   
+                set    PatientInvestigation.Status = loc.Status   
+                       /* BEGIN | NA | Sabari | 03032019 | Created | InvestigationResultDeflagging */  
+                       ,   
+                       PatientInvestigation.Reason = CONCAT(   
+                       ISNUll(PV.Reason, ''),   
+                                                     + '-' + loc.RefPhyName)   
+                /* END | NA | Sabari | 03032019 | Created | InvestigationResultDeflagging */   
+                output inserted.Patientinvid   
+                into @tmp_patinv   
+                from   PatientInvestigation PV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on PV.PatientVisitID = loc.VisitID   
+                                  and PV.OrgID = @pOrgid   
+                Where  loc.ReferralID = pv.AccessionNumber   
+                       and PV.UID = loc.UID   
+            End   
+          else   
+            Begin   
+                update PatientInvestigation   
+                set    PatientInvestigation.Status = loc.Status,   
+                       ApprovedBy = loc.ModifiedBy,   
+                       ApprovedAt = @Createdat   
+                output inserted.Patientinvid   
+                into @tmp_patinv   
+                from   PatientInvestigation PV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on PV.PatientVisitID = loc.VisitID   
+                                  and PV.OrgID = @pOrgid   
+                Where  loc.ReferralID = pv.AccessionNumber   
+                       and PV.UID = loc.UID   
+            End   
+  
+          -- Patient Age Or Gender changed  if test Status <> Paid            
+          update PatientInvestigation WITH (ROWLOCK)   
+          set    PatientInvestigation.Status = loc.Status,   
+                 Patientinvestigation.ReferenceRange = CASE   
+                 WHEN   
+                 Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN   
+                 IORM.ReferenceRange   
+                                                         ELSE IOM.ReferenceRange   
+                                                       END,   
+                 Patientinvestigation.Investigationname = IOM.Displaytext,   
+                 Patientinvestigation.Investigationmethodid = IOM.MethodID,   
+                 --Added for updating Investigationname and Method   
+                 Patientinvestigation.Methodname = IM.MethodName,   
+                 Patientinvestigation.Interpretation =   
+                 Isnull(IOM.Interpretation, '')   
+          output inserted.Patientinvid   
+          into @tmp_patinv   
+          from   PatientInvestigation PV   
+                 INNER JOIN @pUDT loc   
+                         on PV.PatientVisitID = loc.VisitID   
+                            and PV.OrgID = @pOrgid   
+                 INNER JOIN InvestigationOrgMapping IOM   
+                         ON PV.InvestigationID = IOM.InvestigationID   
+                            AND IOM.OrgID = PV.OrgID   
+                 LEFT JOIN InvOrgReferenceMapping IORM   
+                        ON IORM.ClientID = @pClientID   
+                           AND IORM.InvestigationID = IOM.InvestigationID   
+                 Left join investigationmethod IM   
+                        on IOM.Methodid = IM.Methodid   
+                           and IM.orgid = IOM.orgid   
+                 LEFT JOIN @OrdInvInterpretationFinal ORDF   
+                        on ORDF.ID = pv.InvestigationID   
+                    and ORDF.PatientVisitid = pv.PatientVisitID   
+                           and ORDF.Type = 'INV'   
+        Where  PV.InvestigationID = IOM.InvestigationID   
+                 AND loc.ReferralID = pv.AccessionNumber   
+                 and PV.UID = loc.UID   
+                 AND loc.Status = 'Cancel'   
+          -- AND PV.Status != 'Pending'            
+  
+          -----  END---------------------------------------------------------------------------           
+          declare @type as nvarchar(50)   
+  
+          select @type = type   
+          from   @pUDT   
+  
+          IF ( @type = 'PKG' )   
+            BEGIN   
+                update InvestigationValues   
+                set    InvestigationValues.Status = loc.Status   
+                output inserted.investigationvalueid,   
+                       inserted.status   
+                into @tmp_invv   
+                from   InvestigationValues IV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on IV.PatientVisitID = loc.VisitID   
+                                  and IV.Orgid = loc.OrgID   
+                                  and IV.PackageID = loc.ID   
+                                  and IV.UID = loc.UID   
+                WHERE  loc.Type = 'PKG'   
+            END   
+                             
+          IF( @type = 'GRP' )   
+            BEGIN   
+                update InvestigationValues   
+                set    InvestigationValues.Status = loc.Status   
+                output inserted.investigationvalueid,   
+                       inserted.status   
+                into @tmp_invv   
+                from   InvestigationValues IV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on IV.PatientVisitID = loc.VisitID   
+                                  and IV.Orgid = loc.OrgID   
+                       INNER JOIN PatientInvestigation PV   
+                               ON pv.accessionnumber = loc.referralid   
+                                  and pv.investigationid = iv.investigationid   
+                                  and loc.VisitID = PV.PatientVisitID   
+                                  AND loc.OrgID = PV.OrgID   
+                       INNER JOIN InvOrgGroup IOG   
+                               ON IOG.AttGroupID = loc.ID   
+                                  and IV.UID = loc.UID   
+                where  loc.Type = 'GRP'   
+  
+                UPDATE InvestigationValues   
+                set    InvestigationValues.Status = loc.status   
+                output inserted.investigationvalueid,   
+                       inserted.status   
+                into @tmp_invv   
+                FROM   InvestigationValues PV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on PV.PatientVisitID = loc.VisitID   
+                                  and PV.OrgID = @pOrgid   
+                       INNER JOIN PatientInvestigation Pinv   
+                               ON Pinv.accessionnumber = loc.referralid   
+                                  and Pinv.investigationid = PV.investigationid   
+                                  and loc.VisitID = Pinv.PatientVisitID   
+                                  AND loc.OrgID = Pinv.OrgID   
+                Where  PV.GroupID in (select DIStinct igm.InvestigationID   
+                                      FROM   PatientInvestigation PV   
+                                             INNER JOIN @pUDT loc   
+                                                     on   
+                                             PV.PatientVisitID = loc.VisitID   
+                                             and PV.OrgID = @pOrgid   
+                                             inner join InvOrgGroup IOG   
+                                                     on IOG.OrgGroupID =   
+                                                        PV.GroupID   
+                                                        and   
+                                             loc.ID = iog.AttGroupID   
+       --INNER JOIN @pInvestigationID pv on PV.InvestigationID = iog.AttGroupID    
+                                             inner join InvGroupMapMaster IGM   
+                                                     on IGM.GroupID = PV.GroupID   
+                                                        and   
+                                             igm.GroupID = PV.GroupID   
+                                                        and igm.Parent = 'Y'   
+                                      WHERE  loc.TYPE = 'GRP'   
+                                             and PV.UID = loc.UID)   
+            END   
+  
+          if( @type = 'INV' )   
+            begin   
+                update InvestigationValues   
+                set    InvestigationValues.Status = loc.Status   
+                output inserted.investigationvalueid,   
+                       inserted.status   
+                into @tmp_invv   
+                from   InvestigationValues IV WITH (ROWLOCK)   
+                       INNER JOIN @pUDT loc   
+                               on IV.PatientVisitID = loc.VisitID   
+                                  and IV.Orgid = loc.OrgID   
+                                  and IV.InvestigationID = loc.ID   
+                                  and IV.UID = loc.UID   
+                                  and IV.GroupID = 0   
+                WHERE  loc.Type = 'INV'   
+            end   
+  
+          UPDATE P   
+          SET    P.patientHistoryID = 0   
+          from   PatientVisit P WITH (ROWLOCK)   
+                 INNER JOIN PatientInvestigation PV   
+                         ON P.PatientVisitId = PV.PatientVisitID   
+                            AND P.OrgID = PV.OrgID   
+                 INNER JOIN @pUDT loc   
+                         on PV.PatientVisitID = loc.VisitID   
+                            and PV.OrgID = @pOrgid   
+                            AND P.PatientVisitId = Loc.VisitID   
+          Where  P.PatientVisitId = PV.PatientVisitID   
+                 AND loc.ReferralID = pv.AccessionNumber   
+                 and PV.UID = loc.UID   
+                 AND loc.Status = 'Cancel'   
+  
+          --Sample Transfer           
+          Declare @pVisitID as BigInt   
+          Declare @RefVisitID as bigint   
+  
+          Select @pVisitID = VisitID   
+          from   @pUDT   
+  
+          Select @RefVisitID = ReferVisitID   
+          from   PatientVisit WITH (NOLOCK)   
+          where  PatientVisitId = @pVisitID   
+  
+          IF( ISNULL(@RefVisitID, 0) <> 0 )   
+            BEGIN   
+                DECLARE @tblAccessionNo as table   
+                  (   
+                     AccessionNo bigint,   
+                     Status      nvarchar(255),   
+                     ID          bigint,   
+                     Type        nvarchar(15),   
+                     VisitID     bigint,   
+                     RefVisitID  bigint,   
+                     UID         nvarchar(255)   
+                  )   
+  
+                INSERT @tblAccessionNo   
+                       (Status,   
+                        AccessionNo,   
+                        ID,   
+                        Type,   
+                        VisitID,   
+                        RefVisitID)   
+                SELECT STATUS,   
+                       ReferredAccessionNo,   
+                       ID,   
+                       Type,   
+                       VisitID,   
+                       @RefVisitID   
+                FROM   OrderedInvestigations WITH (NOLOCK)   
+                WHERE  referredAccessionNo in(SELECT AccessionNumber   
+                                              from   
+                       OrderedInvestigations WITH (NOLOCK)   
+                                              where  VisitID = @RefVisitID)   
+  
+                UPdate @tblAccessionNo   
+                set    UID = OI.UID   
+                from   @tblAccessionNo tbl   
+                       inner join OrderedInvestigations OI   
+                               on OI.AccessionNumber = tbl.AccessionNo   
+  
+                UPDATE OrderedInvestigations   
+                set    Status = tbl.Status   
+                output inserted.AccessionNumber   
+                into @tmp_ordinv   
+                from   OrderedInvestigations ORD WITH (ROWLOCK)   
+                       inner join @tblAccessionNo tbl   
+                               on tbl.AccessionNo = ORD.AccessionNumber   
+  
+                Update PatientInvestigation   
+                set    Status = tbl.Status   
+                output inserted.patientinvid   
+                into @tmp_patinv   
+                from   PatientInvestigation PIV WITH (ROWLOCK)   
+                       inner join @tblAccessionNo tbl   
+                               on tbl.RefVisitID = PIV.PatientVisitID   
+                                  and tbl.ID = PIV.InvestigationID   
+                where  Type = 'INV'   
+                       and PIV.UID = tbl.UID   
+  
+                Update PatientInvestigation   
+                set    Status = tbl.Status   
+                output inserted.patientinvid   
+                into @tmp_patinv   
+                from   PatientInvestigation PIV WITH (ROWLOCK)   
+                       inner join @tblAccessionNo tbl   
+                               on tbl.RefVisitID = PIV.PatientVisitID   
+                       Inner join PatientVisit PV   
+                               ON PV.PatientVisitId = tbl.RefVisitID   
+                       inner join InvOrgGroup IOG   
+                               on tbl.ID = IOG.AttGroupID   
+                                  AND IOG.OrgID = PV.OrgID   
+                                  and PIV.GroupID = IOG.OrgGroupID   
+                                  and PIV.UID = tbl.UID   
+                where  Type = 'GRP'   
+  
+                UPdate PatientInvestigation   
+                set    Status = TBL1.Status   
+                output inserted.patientinvid   
+                into @tmp_patinv   
+                from   PatientInvestigation PIV WITH (ROWLOCK)   
+                       inner join (Select distinct IGM.InvestigationID,   
+                                                   tbl.Status,   
+                                                   tbl.ID,   
+                                                   tbl.UID,   
+                                                   tbl.RefVisitID   
+                                   from   PatientInvestigation PIV WITH (NOLOCK)   
+                                          inner join @tblAccessionNo tbl   
+                                                  on tbl.RefVisitID =   
+                                                     PIV.PatientVisitID   
+                                          Inner join PatientVisit PV WITH (   
+                                                     NOLOCK)   
+                                                  ON PV.PatientVisitId =   
+                                                     tbl.RefVisitID   
+                                          inner join InvOrgGroup IOG WITH (   
+                                                     NOLOCK)   
+                                                  on tbl.ID = IOG.AttGroupID   
+                                                     AND IOG.OrgID = PV.OrgID   
+                                          inner join InvGroupMapMaster IGM WITH   
+                                                     (   
+                                                     NOLOCK)   
+                                                  on IGM.GroupID =   
+                                                     IOG.OrgGroupID   
+                                                     and   
+                                          PIV.GroupID = IOG.OrgGroupID   
+                                                     and IGM.Parent = 'Y'   
+                                                     AND IGM.Active <> 'N'   
+                                                     and PIV.UID = tbl.UID   
+                                   where  Type = 'GRP') as TBL1   
+                               on TBL1.InvestigationID = PIV.GroupID   
+                 and PIV.UID = TBL1.UID   
+                                  and PIV.PatientVisitID = TBL1.RefVisitID   
+            END   
+  
+          --if exists (select 1   
+          --           from   notifications WITH (NOLOCK)   
+          --           where  IdentityID = @VisitID   
+          --                  and orgid = @pOrgid)   
+          --  begin   
+          --      if exists(select 1   
+          --                from   orderedinvestigations WITH (NOLOCK)   
+          --                where  visitid = @VisitID   
+          --                       and orgid = @pOrgid   
+          --                       and status = 'Approve')   
+          --        begin   
+          --            update notifications WITH (ROWLOCK)   
+          --            set    status = ''   
+          --            where  IdentityID = @VisitID   
+          --                   and orgid = @pOrgid   
+  
+          --            delete from reportsnapshot   
+          --            where  visitid = @VisitID   
+          --                   and orgid = @pOrgid   
+  
+          --            insert into NoticiationHist   
+          --                        (VisitID,   
+          --                         OrgID,   
+          --                         Comments,   
+          --                         Createdat,   
+          --                         Notificationid)   
+          --            select @VisitID,   
+          --                   @pOrgid,   
+          --                   'StatusChanges',   
+          --                   Getdate(),   
+          --                   NotificationID   
+          --            from   notifications   
+          --            where  IdentityID = @VisitID   
+          --                   and orgid = @pOrgid   
+          --                   and ActionType in ( 'Pdf', 'ROUNDBPDF' )   
+          --        ENd   
+          --      Else   
+          --        Begin   
+          --            update notifications WITH (ROWLOCK)   
+          --            set    status = 'DIFFERED'   
+          --            where  IdentityID = @VisitID   
+          --                   and orgid = @pOrgid   
+  
+          --            delete from reportsnapshot   
+          --            where  visitid = @VisitID   
+          --                   and orgid = @pOrgid   
+  
+          --            insert into NoticiationHist   
+          --                        (VisitID,   
+          --                         OrgID,   
+          --                         Comments,   
+          --                         Createdat,   
+          --                         Notificationid)   
+          --            select @VisitID,   
+          --                   @pOrgid,   
+          --                   'StatusChangesDIFFERED',   
+          --                   Getdate(),   
+          --                   NotificationID   
+          --            from   notifications WITH (NOLOCK)   
+          --            where  IdentityID = @VisitID   
+          --                   and orgid = @pOrgid   
+          --                   and ActionType in ( 'Pdf', 'ROUNDBPDF' )   
+          --        ENd   
+          --  end   
+          --/*Code added by T.Suresh for MIS Purpose Start here */   
+          --;   
+    /*-------------- Code for Notification Entry -----------------------*/  
+  
+   Declare @batchId int  
+            select @batchId=Max(batchid) from PatientInvestigationStatuforInt(nolock)  
+            if(@batchId is null)  
+                set @batchId=1  
+            else  
+               set @batchId=@batchId+1  
+  
+            Insert into PatientInvestigationStatuforInt(PatientinvId,Status,visitid,BatchId)  
+   select tp.Patientinvid,'Cancel',pin.PatientVisitID,@batchId from @tmp_patinv tp   
+   inner join PatientInvestigation pin on tp.patientinvid=pin.PatientInvID  
+  
+--select Distinct PISM.Barcode,PISM.VisitID,PISM.OrgID ,@batchId,PV.OrgAddressID,P.ExternalPatientNumber,IOM.deptid from OrderedInvestigations OI (nolock)  
+--inner join PatientInvSampleMapping PISM (nolock) on OI.VisitID=PISM.VisitID  and OI.ID=PISM.ID and OI.OrgID=PISM.OrgID  
+--Inner Join PatientInvestigation PI (nolock) on Pi.AccessionNumber=Oi.AccessionNumber  
+--inner join InvestigationOrgMapping IOM (nolock) on IOM.InvestigationID =PI.InvestigationID and IOM.OrgID=PI.OrgID  
+--Inner join SampleTracker  ST (nolock) on ST.PatientVisitID=PISM.VisitID and ST.SampleID=PISM.SID and ST.InvSampleStatusID=1  
+--Inner join Patientvisit PV(Nolock) on PV.PatientVisitId=ST.PatientVisitID and PV.OrgID=ST.OrgID  
+--Inner join Patient P (nolock) on P.PatientID=PV.PatientID and P.OrgID=PV.OrgID  
+--where OI.Status in ('SampleCollected')  and ST.CreatedAt>getdate()-2 and datediff(minute, ST.CreatedAt, getdate())>=30   
+  
+declare @templateid int  
+select @templateid =TemplateID from Notificationtemplate where TemplateName='CancelTest' and TemplateType='Email'  
+  
+Insert into NotificationAction(  
+TemplateId,  
+BatchId,  
+Status,  
+OrgID,  
+OrgAddressID,  
+CreatedAt,  
+Visitid,  
+EmailCC,  
+EmailBCCTo,  
+DeptId,  
+EmailTo)  
+select distinct @templateid,@batchId,'',@pOrgid,@OrgAddressId,getdate(),visitid,'santhoshkumar.m@attunelive.com','santhoshkumar.m@attunelive.com',0,  
+STUFF(  
+                 (SELECT ';' + Email FROM NotificationEmailID T where   T.OrgID=@pOrgid and T.Type='CancelTest' FOR XML PATH ('')), 1, 1, ''  
+               )   
+ from PatientInvestigationStatuforInt PSN  
+Inner join NotificationEmailID NE (nolock) on  NE.OrgID=@pOrgid and NE.Type='CancelTest' where BatchID=@batchId  
+      
+  /* -------------End Code for Notification Entry */  
+          ;with cteo   
+               as (select row_number()   
+                            over (   
+                              partition by accessionnumber   
+                              order by accessionnumber) as sno,   
+                          accessionnumber   
+                   from   @tmp_Ordinv)   
+          delete from cteO   
+          where  sno > 1;   
+  
+      ;   
+          with cteP   
+               as (select row_number()   
+                            over (   
+                              partition by patientinvid   
+                              order by patientinvid) as sno,   
+                          patientinvid   
+                   from   @tmp_patinv)   
+          delete from cteP   
+          where  sno > 1;   
+  
+      ;   
+          with cteV   
+               as (select row_number()   
+                            over (   
+                              partition by investigationvalueid   
+                            order by investigationvalueid) as sno,   
+                          investigationvalueid   
+                   from   @tmp_invv)   
+          delete from cteV   
+          where  sno > 1;   
+  
+          UPdate MIS   
+          Set    status = OI.status,   
+                 modifiedby = @Loginid,   
+                 Modifiedat = @CreatedAt,   
+                 ResCaptureLoc = OI.ResCaptureLoc   
+          From   @tmp_ordinv tmp   
+                 Inner join orderedinvestigations OI   
+                         on tmp.accessionNumber = OI.accessionnumber   
+                 Inner join MISOrderedinvestigations MIS WITH (ROWLOCK)   
+                         on OI.accessionnumber = MIS.accessionnumber   
+          Where  OI.Visitid = @Visitid   
+  
+          Insert into MISOrderedinvestigationhistory   
+                      (AccessionNumber,   
+                       Visitid,   
+                       id,   
+                       type,   
+                       Name,   
+                       statusid,   
+                       status,   
+                       CreatedBy,   
+                       CreatedAt,   
+                       ReferralID,   
+                       ResCaptureLoc,   
+                       PkgID,   
+                       PkgName)   
+          Select mOrd.AccessionNumber,   
+                 mord.Visitid,   
+                 mord.id,   
+                 mord.type,   
+                 mord.Name,   
+                 tsk.seq     as statusid,   
+                 mord.status,   
+                 @Loginid    as CreatedBy,   
+                 @ServerDate as CreatedAt,   
+                 mord.ReferralID,   
+                 mord.ResCaptureLoc,   
+                 mord.PkgID,   
+                 mord.PkgName   
+          From   @tmp_ordinv tp   
+                 Inner join MISOrderedinvestigations MORD   
+                         on tp.Accessionnumber = MORD.Accessionnumber   
+                 Inner join ordtasks tsk   
+                         on MORD.status = tsk.status   
+  
+          --Left join MISOrderedinvestigationhistory OH  on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and oh.Createdby= @Loginid  
+          --Where Oh.Accessionnumber is null   
+          update MISP   
+          set    status = PI.status,   
+                 modifiedat = @serverdate,   
+                 ApprovedAt = PI.ApprovedAt,   
+                 ApprovedBy = PI.ApprovedBy,   
+                 Modifiedby = @Loginid   
+          From   @tmp_patinv t   
+                 Inner join MISpatientinvestigation MISP WITH (ROWLOCK)   
+                         on MISP.Patientinvid = t.Patientinvid   
+                 Inner join patientinvestigation PI   
+                         on MISP.patientinvid = PI.Patientinvid   
+          Where  MISP.PatientVisitid = @Visitid   
+  
+          update MISV   
+          Set    status = t.status,   
+                 modifiedat = @serverdate,   
+                 Modifiedby = @Loginid   
+          From   @tmp_invv t   
+                 Inner join MISinvestigationvalues MISV WITH (ROWLOCK)   
+                         on t.investigationvalueid = MISV.investigationvalueid   
+  
+          --Where IV.Patientvisitid = @Visitid   
+          /*Code added by T.Suresh for MIS Purpose Start here */   
+          SET @returnStatus=0   
+  
+          RETURN @returnStatus   
+      END TRY   
+  
+      BEGIN CATCH   
+          SELECT @EMsg = Error_Message(),   
+                 @ELine = Error_Line(),   
+                 @Eproc = Error_procedure(),   
+                 @ESEVERITY = Error_SEVERITY(),   
+                 @sptrace = 'pUpdateTestStatus @pOrgid = '   
+                            + Cast(@pOrgid AS VARCHAR)   
+                            + '@returnStatus = '   
+                            + Cast(@returnStatus AS VARCHAR)   
+  
+          exec usp_insert_errorinfo   
+            @EMsg,   
+            @ELine,   
+            @Eproc,   
+            @Eseverity,   
+            @sptrace;   
+      END CATCH   
+  END   
+  
+  
+  

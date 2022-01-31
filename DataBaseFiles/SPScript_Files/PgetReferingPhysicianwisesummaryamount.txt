@@ -1,0 +1,27 @@
+CREATE Proc PgetReferingPhysicianwisesummaryamount(
+@fdate [DATETIME]=null ,    
+ @tdate [DATETIME] =null,      
+ @pOrgID bigint      
+,@Pparamtype VARCHAR(100)=null    
+,@Pparamvalue VARCHAR(100)=null    
+,@pExcelReportId [INT] = NULL    
+,@pExcelReportName VARCHAR(255) = NULL    
+,@pToExecute VARCHAR(10) = NULL    
+)
+as begin
+select '123' as Empty,PV.ReferingphysicianName,Count(PatientVisitID) as NoOfVisits,SUM(GrossBillValue) as BillingAmt,AVG(GrossBillValue) AVGofBillingAMT,SUM(NetValue) As NetAmount,
+AVG(NetValue) as AVGofNetAmount,SUM(Isnull(DiscountAmount,0)) as Discount,AVG(Isnull(DiscountAmount,0)) as AVGofDiscount
+,RP.PhysicianCode
+,CASE WHEN RPC.Category='----select-----' THEN '' ELSE RPC.Category END AS 'Category'
+,C.CategoryName  AS 'RefFeecategory'
+,ERM.Name AS 'Sales Executive - Name'
+from Patientvisit  PV (NOLOCK)
+inner join finalbill FB (NOLOCK) on FB.Visitid=PV.PatientVisitID and FB.OrgID=PV.OrgID
+LEFT JOIN ReferingPhysician RP WITH (NOLOCK) ON RP.ReferingPhysicianID=PV.ReferingPhysicianID AND RP.OrgID=PV.OrgID
+LEFT JOIN ReferingPhyCategoryMapping RPC WITH (NOLOCK) ON RP.ReferingPhysicianID=RPC.ReferingPhysicianID
+LEFT JOIN Category C WITH (NOLOCK) ON RP.RefFeeCategoryid=C.CategoryID
+LEFT JOIN EmployeeRegMaster ERM WITH (NOLOCK) ON ERM.EmpID=RP.ContactPersonID AND ERM.OrgID=RP.ContactPersonID
+where PV.orgid=@pOrgID and PV.visitdate between @fdate +' 00:00:00' and @tdate +' 23:59:59' 
+group by ReferingphysicianName,PhysicianCode,Category,CategoryName,ERM.Name
+order by ReferingphysicianName 
+end

@@ -1,0 +1,80 @@
+/****** Object:  StoredProcedure [dbo].[pGetStockUsageReport]    Script Date: 09/12/2015 17:24:00 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE pGetStockUsageReport                   
+ @pFrom [datetime],      
+ @pTo [datetime],      
+ @pProductName [nvarchar](100),      
+ @pOrgID [int],      
+ @pOrgAddressID [int],      
+ @FromLocationID [int],      
+ @ToLocationID [int],      
+ @ContextInfo [dbo].[UDT_Context] READONLY                                 
+WITH EXECUTE AS OWNER                                  
+AS Begin                          
+                        
+Set Nocount On                                
+                                
+Declare @Orgid int,@orgname varchar(255) = ''                                                                                
+ select @Orgid = @pOrgId                                
+                         
+                              
+  /*Added on ASG Start*/                                          
+                                           
+ declare @Orgid_List as  table( ID int identity(1,1),orgid int,Orgname varchar(255))                                          
+ declare @Parent_Orgid int,@Check_Org varchar(5)                                          
+              
+              
+ --Test the Cenario                                          
+ --update @ContextInfo set AdditionalInfo='All'                                          
+               
+ select @Check_Org=AdditionalInfo from @ContextInfo where AdditionalInfo='All'                                       
+               
+ if(@Check_Org='All')                                          
+ Begin                                               
+                         
+           --set @pOrgID=null              
+               
+ select @Parent_Orgid=ParentOrgID from Organization where OrgID=@orgid                                
+ insert into @Orgid_List(orgid,Orgname )                                
+ select   o.OrgID,                                                     
+ Add2+case when isnull(Add2,'') = '' then '' else ' - ' end +City                                                      
+ From Organization O with(nolock)                                                      
+ Inner join Organizationaddress OA with(nolock) on O.OrgID = OA.OrgID                                                      
+ Where o.ParentOrgID=@Parent_Orgid                                
+                                                                             
+End                                    
+    --else                    
+  Else                                
+begin                             
+                             
+insert into @Orgid_List(orgid,Orgname)                                
+select  o.OrgID,                                                     
+ Add2+case when isnull(Add2,'') = '' then '' else ' - ' end +City                                                      
+ From Organization O(nolock)                                                      
+ Inner join Organizationaddress OA (nolock) on O.OrgID = OA.OrgID                                                      
+ Where o.OrgID=  @orgid                                 
+end                                 
+                        
+ SELECT @pFrom=CONVERT(DATETIME,@pFrom+ '00:00:00')                                      
+  SELECT @pTo=CONVERT(DATETIME,@pTo+'23:59:59:998')                                   
+select O.OrgDisplayName as ProductKey,l.LocationName,sf.StockOutFlowDate as InvoiceDate,p.ProductName,sf.BatchNo,convert(varchar,sf.ExpiryDate,103) as ExpiryDate,sum(isnull(quantity,0))as Quantity,          
+s.Description as Comment from                           
+StockOutFlowDetails sf with(nolock) inner join StockOutFlow s with(nolock) on s.StockOutFlowID=sf.StockOutFlowID                           
+inner join products p  with(nolock)on sf.ProductID=p.ProductID                          
+ inner join ProductLocationMapping pl with(nolock) on pl.ProductID=p.ProductID and sf.LocationID=pl.LocationID                      
+ inner join locations l  with(nolock)on l.LocationID=sf.LocationID    
+ inner join Organization O with(nolock)on O.OrgID=l.OrgID         
+ inner join StockOutFlowTypes sft with(nolock)on sft.StockOutFlowTypeId=s.StockOutFlowTypeID                                 
+where sf.OrgID in (select orgid from @Orgid_List) and sft.StockOutFlowType='Stock Usage' and --sf.LocationID=@pLocationID and                 
+ CONVERT(date,sf.createdat) between CONVERT(date,@pFrom )and CONVERT(date,@pTo )                         
+ group by O.OrgDisplayName,l.LocationName,sf.StockOutFlowDate,p.ProductName,sf.BatchNo,sf.ExpiryDate,s.Description                       
+                 
+    SET NOCOUNT OFF                        
+               
+               
+ END 
+ GO

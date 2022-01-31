@@ -1,0 +1,33 @@
+--commit
+begin tran
+DECLARE @ReportID INT 
+	DECLARE @OrgID int
+	DECLARE @RoleID bigint
+	SELECT @OrgID=OrgID FROM organization WHERE Name='RLS-Gorakhpur' --and OrgID=202
+	IF NOT EXISTS(SELECT 1 FROM reportexcelsp WHERE  name='pGetIntegrationReport' and Description='Integration Report' and OrgID=@OrgID)
+	BEGIN
+	   Insert into reportexcelsp(Name,Description,orgID,ReportGroupID)
+	   SELECT 'pGetIntegrationReport','Integration Report',@OrgID,6
+	   SELECT @ReportID=ID FROM reportexcelsp WHERE  name='pGetIntegrationReport' and Description='Integration Report' and OrgID=@OrgID
+	END
+	ElSE
+	BEGIN
+		SELECT @ReportID=ID FROM reportexcelsp WHERE  name='pGetIntegrationReport' and Description='Integration Report' and OrgID=@OrgID
+	END
+	IF NOT EXISTS(SELECT 1 FROM ReportExcelMaster WHERE  Excelname='pGetIntegrationReport' and ReportName='Integration Report' and sp=@ReportID)
+	BEGIN
+	   Insert into ReportExcelMaster(Excelname,ReportName,SP,IsActive,Parametertype)
+	   SELECT 'Integration Report','Integration Report',@ReportID,1,'ShowDateRangePopup'
+	   SELECT @ReportID=ID FROM ReportExcelMaster WHERE  Excelname='Integration Report' and ReportName='Integration Report' and sp=@ReportID
+	END
+	ELSE
+	BEGIN
+	 SELECT @ReportID=ID FROM ReportExcelMaster WHERE  Excelname='Integration Report' and ReportName='Integration Report' and sp=@ReportID
+	END
+	SELECT @RoleID = RoleID FROM ROLE WHERE OrgID = @OrgID and RoleName = 'Administrator' AND LangCode='en-GB'
+	IF NOT EXISTS(SELECT 1 FROM ReportExcelRoleMapping WHERE ReportID=@ReportID and RoleID=@RoleID)
+	BEGIN
+	INSERT INTO ReportExcelRoleMapping (ReportID,RoleID,IsActive,CreatedAt)
+	SELECT @ReportID,@RoleID,1,GETDATE() 
+	END
+	GO

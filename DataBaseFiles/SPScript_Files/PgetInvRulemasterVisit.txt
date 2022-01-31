@@ -1,0 +1,105 @@
+CREATE proc PgetInvRulemasterVisit
+@visitid bigint,
+@InvestigationID bigint,
+@pOrgID INT,
+@InvType varchar(50),
+@ContextInfo [UDT_Context] READONLY  
+AS
+Begin
+        
+		declare @patientGender nchar(2)
+		declare @patientAge nvarchar(50)
+
+		select @patientGender=Sex,@patientAge=Age from patient P 
+		Inner Join Patientvisit PV (nolock) on P.patientid=PV.patientid
+		where PV.patientvisitid=@visitid and PV.orgid=@pOrgID
+
+		if(@InvType='GRP')
+		begin
+		select @InvestigationID =AttGroupID from invorggroup where orggroupid=@InvestigationID 
+		End
+
+		Create table #tempRuleMaster
+		(
+		RuleMasterId	int,
+		RuleTypeID	int,
+		InvestigationID	bigint,
+		PostTriggerFunctionId	int,
+		PostTriggerFunction	varchar(200),
+		InvRemarksValue	nvarchar(max),
+		OrgId	int,
+		InvestigationName	nvarchar(400),
+		Code varchar(200)
+		)
+
+		Create table #tempTestRuleMaster
+		(
+		TestResultsRuleId	int,
+		RuleMasterId	int,
+		ComponentName	varchar(200),
+		ResultInvestigationID	bigint,
+		ResultInvestigation	nvarchar(max),
+		ResultType	nvarchar(200),
+		ResultOptr	nvarchar(40),
+		ResultValue1	nvarchar(1000),
+		Resultvalue2 nvarchar(1000),
+		LogicalOperator varchar(20),
+		ResultValue nvarchar(1000),
+		RemarksId int
+		)
+
+	     insert into #tempRuleMaster
+		select RuleMasterId,RuleTypeID,InvestigationID,PostTriggerFunctionId,PostTriggerFunction,InvRemarksValue,OrgId,InvestigationName,MD.Code
+		 from InvRuleMaster IR
+		 Inner Join metadata MD on IR.RuleTypeID=MD.metadataid where investigationid=@InvestigationID and orgid=@pOrgID and InvType=@InvType  and IsActive=1
+
+		 select * from #tempRuleMaster
+
+		 select PatientAgeGenderRuleId,PAG.RuleMasterId,ComponentName,case when Gender = 'Male'then 'M' when Gender = 'Female' then 'F'else Gender end as Gender ,SubCategory,AgeType,AgeOptr,AgeValue1,Agevalue2,LogicalOperator,@patientGender as PatientGender,@patientAge as Age 
+		 ,isnull(PAG.RemarksId,0) as RemarksId from PatientAgeGenderRule PAG (nolock)
+		 Inner Join InvRuleMaster IR (nolock) on IR.RuleMasterId=PAG.RuleMasterId  where IR.investigationid=@InvestigationID and IR.InvType=@InvType and IR.orgid=@pOrgID  and PAG.IsActive=1 and IR.IsActive=1
+
+		 insert into #tempTestRuleMaster
+		 select TestResultsRuleId,TR.RuleMasterId,ComponentName,ResultInvestigationID,ResultInvestigation,ResultType,ResultOptr,ResultValue1,Resultvalue2,LogicalOperator,isnull(IV.Value,'0') as ResultValue ,isnull(TR.RemarksId,0) as RemarksId from TestResultsRule TR
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=TR.RuleMasterId 
+		 left Join Investigationvalues IV (nolock) on IV.patientvisitid=@visitid and IV.orgid=@pOrgID and IV.Investigationid=TR.ResultInvestigationID
+		 where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and TR.IsActive=1 and IR.IsActive=1
+
+		 update T set T.ResultInvestigation=T.ResultInvestigation+'^'+isnull(PI.Isabnormal,'N') from  #tempTestRuleMaster T
+		 inner join patientinvestigation PI (nolock) on PI.Investigationid=T.ResultInvestigationID and PI.patientvisitid=@visitid and PI.orgid=@pOrgID 
+
+		 select * from #tempTestRuleMaster
+
+		 select MachineErrorRuleId,ME.RuleMasterId,ComponentName,ErrorCode,LogicalOperator,isnull(ME.RemarksId,0) as RemarksId  from MachineErrorRule ME
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=ME.RuleMasterId where IR.investigationid=@InvestigationID and IR.InvType=@InvType and IR.orgid=@pOrgID  and ME.IsActive=1 and IR.IsActive=1
+
+		 Create table #temp
+			(
+			RemarksId int,
+			InvRemarksValue nvarchar(Max)
+			)
+			insert into #temp
+			select  PAG.RemarksId,RemarksText from InvRuleMaster IR(nolock)
+		 Inner Join PatientAgeGenderRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join Remarks M(nolock) on M.RemarksID=PAG.RemarksId
+		 where  IR.investigationid=@InvestigationID and IR.InvType=@InvType and IR.orgid=@pOrgID and IR.IsActive=1
+		 
+
+		 insert into #temp
+			select  PAG.RemarksId,RemarksText from InvRuleMaster IR(nolock)
+		 Inner Join TestResultsRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join Remarks M(nolock) on M.RemarksID=PAG.RemarksId
+		 where  IR.investigationid=@InvestigationID and IR.InvType=@InvType and IR.orgid=@pOrgID and IR.IsActive=1
+		
+		 insert into #temp
+			select  PAG.RemarksId,RemarksText from InvRuleMaster IR(nolock)
+		 Inner Join MachineErrorRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join Remarks M(nolock) on M.RemarksID=PAG.RemarksId
+		 where  IR.investigationid=@InvestigationID and IR.InvType=@InvType and IR.orgid=@pOrgID and IR.IsActive=1
+		 
+		   select distinct RemarksId,InvRemarksValue from #temp
+		   drop table #temp
+		  
+	
+End
+

@@ -1,0 +1,1525 @@
+/****** Object:  StoredProcedure [dbo].[Pssrsinvoiceprintingreport_Index]    Script Date: 4/6/2019 3:22:18 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+--ALTER PROCEDURE [dbo].[Pssrsinvoiceprintingreport_copay] (@pInvoiceID   BIGINT,     
+--exec [Pssrsinvoiceprintingreport_Magnus_Infy] @pInvoiceID=1685,@pOrgID=228,@OrgAddressID=433,@pClientID=0,@InvoiceType=N'Draft'         
+CREATE PROCEDURE [dbo].[Pssrsinvoiceprintingreport_Index] (@pInvoiceID   BIGINT,      
+@pOrgID       BIGINT,      
+@OrgAddressID BIGINT,      
+@pClientID    BIGINT,      
+@InvoiceType  NVARCHAR(20),@ContextInfo [dbo].[UDT_Context] READONLY )      
+AS      
+BEGIN      
+-- EXEC pSSRSInvoicePrintingReport @pInvoiceID=34057,@pOrgID=67,@OrgAddressID=104,@pClientID=2391          
+DECLARE @ClientID BIGINT      
+DECLARE @configKeyID INT      
+DECLARE @ConfigValue NVARCHAR(50)      
+DECLARE @ServiceCode AS TABLE      
+(      
+ServiceCode NVARCHAR(50),      
+ID          INT      
+)      
+DECLARE @ClientTable TABLE      
+(      
+ClientID           BIGINT,      
+OnBehalfOfClientID BIGINT      
+)      
+IF( @InvoiceType = 'Draft' )      
+BEGIN      
+IF( @pClientID = 0 )      
+SELECT @ClientID = ClientID      
+FROM   InvoiceDraft      
+WHERE  InvoiceID = @pInvoiceID      
+AND OrgID = @pOrgID      
+ELSE      
+SET @ClientID=@pClientID      
+--select @ClientID                                             
+SELECT @configKeyID = ConfigKeyID      
+FROM   ConfigKeyMaster      
+WHERE  ConfigKey = 'BillPrintControl'      
+SELECT @ConfigValue = ConfigValue      
+FROM   ConfigOrgMaster      
+WHERE  ConfigKeyID = @configKeyID      
+AND OrgID = @pOrgID      
+IF @ConfigValue = 'QuatumBillPrint.ascx'      
+BEGIN      
+INSERT INTO @ServiceCode      
+SELECT CMS.codename     ServiceCode,      
+cm.IdentifyingID ID      
+FROM   BillingDetails BD      
+INNER JOIN CodeMapper Cm      
+ON CM.IdentifyingID = BD.FeeId      
+AND CM.IdentifyingType = 'Investigations'      
+INNER JOIN CodeMaster CMS      
+ON Cms.CodeMasterID = CM.CodeMasterID      
+INNER JOIN CodingSchemeOrgMapping CSO      
+ON CSO.CodeTypeID = CMS.CodeSchemeID      
+AND CSo.OrgID = @pOrgID      
+AND CSO.IsPrimary = 'Y'      
+WHERE  BD.FinalBillID IN(SELECT FinalBillID      
+FROM   InvoiceDraftDetails      
+WHERE  InvoiceID = @pInvoiceID)      
+AND FeeType = 'INV'      
+AND BD.OrgID = @pOrgID      
+UNION      
+SELECT CMS.codename   ServiceCode,      
+IVG.attGroupID ID      
+FROM   BillingDetails BD      
+INNER JOIN InvOrgGroup IVG      
+ON ivg.Attgroupid = BD.Feeid      
+AND BD.orgid = @pOrgID      
+INNER JOIN CodeMapper Cm      
+ON CM.IdentifyingID = IVG.Orggroupid      
+AND CM.IdentifyingType IN ( 'GRP', 'PKG' )      
+INNER JOIN CodeMaster CMS      
+ON Cms.CodeMasterID = CM.CodeMasterID      
+INNER JOIN CodingSchemeOrgMapping CSO      
+ON CSO.CodeTypeID = CMS.CodeSchemeID      
+AND CSo.OrgID = @pOrgID      
+AND CSO.IsPrimary = 'Y'      
+WHERE  BD.FinalBillID IN(SELECT FinalBillID      
+FROM   InvoiceDraftDetails      
+WHERE  InvoiceID = @pInvoiceID)      
+AND FeeType IN ( 'GRP', 'PKG' )      
+AND BD.OrgID = @pOrgID      
+END      
+--declare  @pToDate smalldatetime                                                              
+--declare  @pFromDate smalldatetime                   
+--select @pToDate= (select ToDate from Invoice  WHERE InvoiceID = @pInvoiceID)                               
+--select @pFromDate=(select FromDate from Invoice  WHERE InvoiceID = @pInvoiceID)                                                                             
+--select @pToDate = DateAdd(MINUTE,1439,@pToDate)                                      
+INSERT INTO @ClientTable      
+(ClientID)      
+SELECT C.ClientID      
+FROM   ClientMaster C      
+WHERE  C.ClientID = @ClientID      
+AND C.OrgID = @pOrgID      
+--INSERT INTO @ClientTable (OnBehalfOfClientID)                                                               
+--select OnBehalfOfClientID from visitclientmapping where ClientID=@ClientID  AND ORGID=@pOrgID                                      
+-- AND CONVERT(nvarchar,CreatedAt,103) BETWEEN @pFromDate AND @pToDate                                      
+--and ISNULL(OnBehalfOfClientID,0)!=0                                                          
+--IF EXISTS(SELECT CT.ClientID FROM @ClientTable CT INNER JOIN VisitClientMapping VCM ON VCM.OnBehalfOfClientID=CT.ClientID AND VCM.OrgID=@pOrgID                                                          
+--AND CONVERT(nvarchar,VCM.CreatedAt,103) BETWEEN @pFromDate AND @pToDate)                                                          
+--BEGIN                                             
+-- UPDATE T1 SET T1.OnBehalfOfClientID=T2.OnBehalfOfClientID FROM  @ClientTable T1                                                                            
+-- INNER JOIN VisitClientMapping T2 ON T1.ClientID=T2.OnBehalfOfClientID WHERE T1.ClientID!=0              
+-- END                                                                                           
+DECLARE @General NVARCHAR(2)      
+IF EXISTS(SELECT CM.ClientID      
+FROM   ClientMaster CM      
+INNER JOIN VisitClientMapping VCM      
+ON VCM.ClientID = CM.ClientID      
+INNER JOIN InvoiceDraftDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND ID.InvoiceID = @pInvoiceID      
+WHERE  CM.ClientCode = 'GENERAL'      
+AND VCM.OrgID = @pOrgID      
+AND CM.ClientID = @ClientID)      
+BEGIN      
+SELECT @General = 'Y'      
+END      
+ELSE      
+BEGIN      
+SELECT @General = 'N'      
+END      
+IF @ClientID = 0      
+BEGIN      
+INSERT INTO @ClientTable      
+(OnBehalfOfClientID)      
+SELECT TOP 1 VCM.OnBehalfOfClientID      
+FROM   VisitClientMapping VCM      
+INNER JOIN InvoiceDraftDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.OnBehalfOfClientID = ID.ClientID      
+WHERE  VCM.ClientID = @ClientID      
+AND VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+ELSE IF @General = 'N'      
+BEGIN      
+INSERT INTO @ClientTable      
+(OnBehalfOfClientID)      
+SELECT TOP 1 VCM.OnBehalfOfClientID      
+FROM   VisitClientMapping VCM      
+INNER JOIN InvoiceDraftDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.OnBehalfOfClientID = ID.ClientID      
+WHERE  VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+ELSE      
+BEGIN      
+INSERT INTO @ClientTable      
+(ClientID)      
+SELECT TOP 1 VCM.ClientID      
+FROM   VisitClientMapping VCM      
+INNER JOIN InvoiceDraftDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.ClientID = ID.ClientID      
+WHERE  VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+DECLARE @TypeBill NVARCHAR(50)      
+SELECT @TypeBill = ILP.Type      
+FROM   InvoiceLookup ILP      
+INNER JOIN VisitClientMapping VCM      
+ON VCM.OnBehalfOfClientID = ILP.RaisedToClient      
+AND ILP.BillNo = VCM.FinalBillID      
+INNER JOIN InvoiceDraftDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND ID.InvoiceID = @pInvoiceID      
+WHERE  VCM.OnBehalfOfClientID = (SELECT TOP 1 OnBehalfOfClientID      
+FROM   @ClientTable      
+WHERE  OnBehalfOfClientID IS NOT NULL)      
+AND ILP.Type = 'TP'      
+AND ILP.InvoiceStatus IN( 'Completed', 'APPROVED' )      
+--RETURN                                                       
+IF( Isnull(@TypeBill, '') = '' )      
+SET @TypeBill='BILL'      
+END      
+ELSE      
+BEGIN      
+IF( @pClientID = 0 )      
+SELECT @ClientID = ClientID      
+FROM   Invoice WITH (NOLOCK)      
+WHERE  InvoiceID = @pInvoiceID      
+AND OrgID = @pOrgID      
+ELSE      
+SET @ClientID=@pClientID      
+SELECT @configKeyID = ConfigKeyID      
+FROM   ConfigKeyMaster WITH (NOLOCK)      
+WHERE  ConfigKey = 'BillPrintControl'      
+SELECT @ConfigValue = ConfigValue      
+FROM   ConfigOrgMaster WITH (NOLOCK)      
+WHERE  ConfigKeyID = @configKeyID      
+AND OrgID = @pOrgID      
+IF @ConfigValue = 'QuatumBillPrint.ascx'      
+BEGIN      
+INSERT INTO @ServiceCode      
+SELECT CMS.codename     ServiceCode,      
+cm.IdentifyingID ID      
+FROM   BillingDetails BD WITH (NOLOCK)      
+INNER JOIN CodeMapper Cm WITH (NOLOCK)      
+ON CM.IdentifyingID = BD.FeeId      
+AND CM.IdentifyingType = 'Investigations'      
+INNER JOIN CodeMaster CMS WITH (NOLOCK)      
+ON Cms.CodeMasterID = CM.CodeMasterID      
+WHERE  BD.FinalBillID IN(SELECT FinalBillID      
+FROM   InvoiceDetails WITH (NOLOCK)      
+WHERE  InvoiceID = @pInvoiceID)      
+AND FeeType = 'INV'      
+--and BD.OrgID=@pOrgID                                
+UNION      
+SELECT CMS.codename   ServiceCode,      
+IVG.attGroupID ID      
+FROM   BillingDetails BD WITH (NOLOCK)      
+INNER JOIN InvOrgGroup IVG WITH (NOLOCK)      
+ON ivg.Attgroupid = BD.Feeid      
+AND BD.orgid = @pOrgID      
+INNER JOIN CodeMapper Cm WITH (NOLOCK)      
+ON CM.IdentifyingID = IVG.Orggroupid      
+AND CM.IdentifyingType IN ( 'GRP', 'PKG' )      
+INNER JOIN CodeMaster CMS WITH (NOLOCK)      
+ON Cms.CodeMasterID = CM.CodeMasterID      
+WHERE  BD.FinalBillID IN(SELECT FinalBillID      
+FROM   InvoiceDetails WITH (NOLOCK)      
+WHERE  InvoiceID = @pInvoiceID)      
+AND FeeType IN ( 'GRP', 'PKG' )      
+--and BD.OrgID=@pOrgID                                                                    
+END      
+DECLARE @pToDate SMALLDATETIME      
+DECLARE @pFromDate SMALLDATETIME      
+--select @pToDate= (select ToDate from Invoice  WHERE InvoiceID = @pInvoiceID)                                      
+--select @pFromDate=(select FromDate from Invoice  WHERE InvoiceID = @pInvoiceID)                                              
+SELECT @pFromDate = FromDate,      
+@pToDate = ToDate      
+FROM   Invoice WITH (NOLOCK)      
+WHERE  InvoiceID = @pInvoiceID      
+AND Orgid = @pOrgID      
+SELECT @pToDate = Dateadd(MINUTE, 1439, @pToDate)      
+INSERT INTO @ClientTable      
+(ClientID)      
+VALUES      (@ClientID)      
+--select C.ClientID from ClientMaster C  WITH (NOLOCK) where C.ClientID = @ClientID and C.OrgID=@pOrgID                                                                                                            
+INSERT INTO @ClientTable      
+(OnBehalfOfClientID)      
+SELECT OnBehalfOfClientID      
+FROM   visitclientmapping WITH (NOLOCK)      
+WHERE  ClientID = @ClientID      
+AND ORGID = @pOrgID      
+AND CONVERT(NVARCHAR, CreatedAt, 103) BETWEEN @pFromDate AND @pToDate      
+AND Isnull(OnBehalfOfClientID, 0) != 0      
+--IF EXISTS(SELECT CT.ClientID            
+--          FROM   @ClientTable CT            
+--                 INNER JOIN VisitClientMapping VCM WITH (NOLOCK)            
+--                         ON VCM.OnBehalfOfClientID = CT.ClientID            
+--                            AND VCM.OrgID = @pOrgID            
+--                            AND CONVERT(nvarchar, VCM.CreatedAt, 103) BETWEEN @pFromDate AND @pToDate)            
+--  BEGIN            
+UPDATE T1      
+SET    T1.OnBehalfOfClientID = T2.OnBehalfOfClientID      
+FROM   @ClientTable T1      
+INNER JOIN VisitClientMapping T2 WITH (NOLOCK)      
+ON T1.ClientID = T2.OnBehalfOfClientID      
+AND T2.OrgID = @pOrgID      
+AND CONVERT(NVARCHAR, T2.CreatedAt, 103) BETWEEN @pFromDate AND @pToDate      
+WHERE  T1.ClientID != 0      
+--END            
+--RETURN          
+--IF EXISTS(SELECT CM.ClientID FROM ClientMaster CM  WITH (NOLOCK)                                            
+--INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON VCM.ClientID=CM.ClientID                                                                                
+--INNER JOIN InvoiceDetails ID  WITH (NOLOCK)ON ID.FinalBillID=VCM.FinalBillID AND ID.InvoiceID=@pInvoiceID                                                                        
+--WHERE CM.ClientCode='GENERAL' AND VCM.OrgID=@pOrgID and CM.ClientID=@ClientID                                                            
+--)                                             
+IF EXISTS(SELECT CM.ClientID      
+FROM   ClientMaster CM WITH (NOLOCK)      
+WHERE  CM.ClientCode = 'GENERAL'      
+AND CM.ClientID = @ClientID      
+AND CM.OrgID = @pOrgID)      
+BEGIN      
+SELECT @General = 'Y'      
+END      
+ELSE      
+BEGIN      
+SELECT @General = 'N'      
+END      
+IF @ClientID = 0      
+BEGIN      
+INSERT INTO @ClientTable      
+(OnBehalfOfClientID)      
+SELECT TOP 1 VCM.OnBehalfOfClientID      
+FROM   VisitClientMapping VCM WITH (NOLOCK)      
+INNER JOIN InvoiceDetails ID WITH (NOLOCK)      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.OnBehalfOfClientID = ID.ClientID      
+WHERE  VCM.ClientID = @ClientID      
+AND VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+ELSE IF @General = 'N'      
+BEGIN      
+INSERT INTO @ClientTable      
+(OnBehalfOfClientID)      
+SELECT TOP 1 VCM.OnBehalfOfClientID      
+FROM   VisitClientMapping VCM WITH (NOLOCK)      
+INNER JOIN InvoiceDetails ID WITH (NOLOCK)      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.OnBehalfOfClientID = ID.ClientID      
+WHERE  VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+ELSE      
+BEGIN      
+INSERT INTO @ClientTable      
+(ClientID)      
+SELECT TOP 1 VCM.ClientID      
+FROM   VisitClientMapping VCM WITH (NOLOCK)      
+INNER JOIN InvoiceDetails ID WITH (NOLOCK)      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND VCM.ClientID = ID.ClientID      
+WHERE  VCM.OrgID = @pOrgID      
+AND ID.InvoiceID = @pInvoiceID      
+END      
+SELECT @TypeBill = ILP.Type      
+FROM   InvoiceLookup ILP      
+INNER JOIN VisitClientMapping VCM      
+ON VCM.OnBehalfOfClientID = ILP.RaisedToClient      
+AND ILP.BillNo = VCM.FinalBillID      
+INNER JOIN InvoiceDetails ID      
+ON ID.FinalBillID = VCM.FinalBillID      
+AND ID.InvoiceID = @pInvoiceID      
+WHERE  VCM.OnBehalfOfClientID = (SELECT TOP 1 OnBehalfOfClientID      
+FROM   @ClientTable      
+WHERE  OnBehalfOfClientID IS NOT NULL)      
+AND ILP.Type = 'TP'      
+AND ILP.InvoiceStatus IN( 'Completed', 'APPROVED' )      
+IF( Isnull(@TypeBill, '') = '' )      
+SET @TypeBill='BILL'      
+END      
+CREATE TABLE #TempInvoiceDet      
+(      
+OrgID          INT,      
+FinalBillID    BIGINT,      
+BillNumber     NVARCHAR(55),      
+ExternalPatientNumber NVARCHAR(55),      
+VisitNumber    NVARCHAR(55),      
+FromDate       DATETIME,      
+Name           NVARCHAR(255),     
+TestCode     NVARCHAR(50),  
+FEEDESCRIPTION NVARCHAR(500),      
+BILLEDAMOUNT   DECIMAL(18, 2),      
+GROSSAMOUNT    DECIMAL(18, 2),      
+COLLCHRG       DECIMAL(18, 2),      
+GROSSTOTAL     DECIMAL(18, 2),      
+Remarks        NVARCHAR(500),      
+Zone           NVARCHAR(255),      
+IsTaxable      NVARCHAR(50),      
+ServiceCode    NVARCHAR(255),      
+Perphyname     NVARCHAR(255),      
+Code           NVARCHAR(50),      
+Rate           DECIMAL(18, 2),      
+SAPCODE        NVARCHAR(50),      
+Priority       INT,      
+ClientID       BIGINT,      
+InvoiceNo      NVARCHAR(255),      
+InvoiceDate    DATETIME,      
+PhysicianName  NVARCHAR(255),  
+BillingDetailsId Bigint     
+)      
+-- SELECT @TypeBill=ILP.Type FROM InvoiceLookup ILP  WITH (NOLOCK)                                            
+-- INNER JOIN VisitClientMapping VCM  WITH (NOLOCK)ON VCM.OnBehalfOfClientID=ILP.RaisedToClient                                                       
+-- AND ILP.BillNo=VCM.FinalBillID                                            
+--  INNER JOIN InvoiceDetails ID WITH (NOLOCK) ON ID.FinalBillID=VCM.FinalBillID AND ID.InvoiceID=@pInvoiceID                                                                                  
+--WHERE VCM.OnBehalfOfClientID=(SELECT top 1 OnBehalfOfClientID FROM @ClientTable where OnBehalfOfClientID is not null)                                          
+-- AND ILP.Type='TP' AND ILP.InvoiceStatus IN('Completed','APPROVED')                                                                                  
+--RETURN                                                                                
+IF (@InvoiceType='Draft')      
+begin      
+SELECT @pFromDate = FromDate,@pToDate =ToDate      
+FROM invoicedraft WITH (NOLOCK)      
+WHERE InvoiceID = @pInvoiceID      
+AND Orgid = @pOrgID      
+end      
+IF( @InvoiceType = 'Draft' )      
+BEGIN      
+IF( @TypeBill <> 'TP' )      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT DISTINCT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                            AS FromDate,      
+P.Name                                                                                                 AS Name,   
+tView.[TCODE] as Code,     
+--ISNULL(CMS.SCode+' - ','')+''+                                          
+BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.Amount))                                                  AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount))                                            AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount)) > 0 --then                                                                                                                   
+--Case when SUM(convert(decimal(18,2),BD.Quantity * BD.ActualAmount) - convert(decimal(18,2),BD.Quantity * BD.Amount))>0                                                                                                                
+THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.Amount))      
+--  Else 0.00 End                                                                                                              
+ELSE 0.00      
+END                                                                                                    AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.ActualAmount))                                                          AS 'GROSSTOTAL',      
+---AD.Address1 as AttributeDetail,                              
+---AD.City as ItemType,                              
+Isnull(CM.Termsconditions, '')                                                                         AS Remarks,      
+MV.Locality_Code                  AS 'Zone',      
+Isnull(CM.ServiceTaxNo, '')                                                                        IsTaxable,      
+Isnull(CM.PanNo, '')                                                                                   AS ServiceCode,      
+CM.ClientName                                                                                          AS Perphyname,      
+CM.ClientCode                                                                                          Code,      
+F.NetValue                                                                                             AS Rate,      
+--AD.EmailID as ProductKey,                                                                                                                    
+CM.SapCode                                                                                             AS SAPCODE,      
+0                                                                                                      Priority,      
+VCM.ClientID                                                                                           ClientID,      
+I.InvoiceNumber                                                                                        InvoiceNo,      
+I.CreatedAt                                                                                            InvoiceDate,      
+Isnull(PV.PhysicianName, '')                                                                           AS PhysicianName,  
+BD.BillingDetailsId   
+--ISNULL(SC.ServiceCode,'') AS Tcode,                                                              
+--ISNULL(AVD.ApprovalNo,'') as PolicyNo                                            
+FROM   InvoiceDraft I WITH(NOLOCK)      
+INNER JOIN InvoiceDraftDetails ID WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND ID.Status = 'APPROVED'      
+INNER JOIN FinalBill F WITH(NOLOCK)      
+ON F.FInalBillID = ID.FInalBillID      
+--AND I.OrgID=F.OrgID                                          
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND F.OrgID = VCM.OrgID      
+INNER JOIN ClientMaster CM      
+ON VCM.ClientID = CM.ClientID      
+AND F.OrgID = CM.OrgID --AND  I.OrgID=CM.InvoiceOrgID                                   
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      AND BD.OrgID = F.OrgID      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+--LEFT JOIN AddressDetails AD  WITH(NOLOCK) ON CM.ClientID=AD.ReferenceID AND AD.OrgID=F.OrgID                               
+--AND AD.IsCommunication='Y' AND AD.AddressTypeID in (1,2)                                           
+LEFT JOIN Localities MV      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+AND MV.OrgID = F.OrgID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+LEFT JOIN [dbo].[View_Tests671_Test] tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.OrgID = @pOrgID      
+AND I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceClientID = @ClientID      
+AND ARD.AmtRefundID IS NULL      
+--AND Isnull(VCM.IsCopay, 'N') <> 'Y'      
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+F.NetValue,      
+--AD.Address1,AD.City,                                                                                                                                  
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+--AD.AddressTypeID ,                                                                                                                                                           
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+--AD.EmailID,                                                       
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.NAME,      
+CM.ZonalID,      
+CM.SapCode,      
+MV.Locality_Code,      
+VCM.ClientID,      
+I.CreatedAt,      
+I.InvoiceNumber,      
+PV.PhysicianName,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID ,  
+BD.BillingDetailsId     
+UNION      
+SELECT DISTINCT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,      
+CMS.SCode Code,  
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+--'' ItemType,                              
+--'' AttributeDetail,                              
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                            PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+--'' ProductKey,                              
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                             ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName ,0 as BillingDetailsId     
+FROM   InvoiceDraft I WITH(NOLOCK)      
+INNER JOIN InvoiceDraftDetails ID WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND ID.Status = 'APPROVED'      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON I.ClientID = CM.InvoiceClientID      
+AND I.OrgID = CM.InvoiceOrgID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CM.InvoiceClientId      
+AND ICM.OrgID = CM.OrgID      
+INNER JOIN GeneralBillingItems GBI WITH (NOLOCK)      
+ON GBI.RateID = ICM.RateId      
+AND CM.OrgID = GBI.OrgID      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+AND CM.OrgID = GBM.OrgID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+AND CM.OrgID = CMS.OrgID      
+AND CM.InvoiceClientID = CMS.ClientId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND I.OrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+ELSE      
+BEGIN      
+IF ( @pClientID = 0      
+OR @General = 'Y' )      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT DISTINCT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                              AS FromDate,      
+P.Name                                                                                                   AS Name,      
+tView.[TCODE] as Code,   
+Isnull(CMS.SCode+' - ', '') + ''      
++ BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                     AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL( 18, 2), BD.Quantity * BD.TransferAmount
+  
+     
+     
+))      
+ELSE 0.00      
+END      
+ELSE 0.00      
+END                                                                                                      AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.TransferAmount))                                                          AS 'GROSSTOTAL',      
+---AD.Address1 as AttributeDetail,                              
+--AD.City as ItemType,                              
+CM.Termsconditions                                                                                       AS Remarks,      
+MV.Locality_Code                                                                                         AS 'Zone',      
+CM.ServiceTaxNo IsTaxable,      
+CM.PanNo         AS ServiceCode,      
+CM.ClientName                                    AS Perphyname,      
+CM.ClientCode                                                                                Code,      
+I.NetValue                                                                                               AS Rate,      
+---AD.EmailID as ProductKey,                                                                                                                        
+CM.SapCode                                                                                               AS SAPCODE,      
+0                                                                                                        Priority,      
+VCM.OnBehalfOfClientID                                                                                   ClientID,      
+I.InvoiceNumber                                                                                          InvoiceNo,      
+I.CreatedAt                                                                                              InvoiceDate,      
+Isnull(RP.PhysicianName, '')                                                                             AS PhysicianName,      
+Isnull(SC.ServiceCode, '')                                                                               AS Tcode,      
+Isnull(AVD.ApprovalNo, '')                                                                               AS PolicyNo      
+FROM   FinalBill F WITH(NOLOCK)      
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND VCM.OrgID = F.OrgID      
+INNER JOIN InvoiceDraftDetails ID WITH(NOLOCK)      
+ON ID.FinalBillID = F.FinalBillID      
+INNER JOIN InvoiceDraft I WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND I.OrgID = @pOrgID      
+LEFT JOIN ClientMaster CM      
+ON VCM.OnBehalfOfClientID = CM.InvoiceClientID      
+LEFT JOIN Localities MV      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      
+AND BD.OrgID = F.OrgID      
+LEFT JOIN ClientMappingService CMS WITH(NOLOCK)      
+ON CMS.FeeID = BD.FeeId      
+--AND VCM.OnBehalfOfClientID=CMS.ClientId                   
+AND I.InvoiceID = @pInvoiceID      
+AND CMS.ReferenceType = 'SC'      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN AdditionalVisitDetails AVD WITH(NOLOCK)      
+ON F.VisitID = AVD.PatientVisitId      
+--and Pv.OrgID = @pOrgID                                                           
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+--left JOIN AddressDetails AD  WITH(NOLOCK) ON VCM.OnBehalfOfClientID=AD.ReferenceID                    
+LEFT JOIN ReferingPhysician RP WITH(NOLOCK)      
+ON RP.ReferingPhysicianID = PV.ReferingPhysicianID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN [dbo].[View_Tests671_Test] tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND ID.Status = 'APPROVED'      
+--AND F.OrgID=@pOrgID                              
+--AND AD.IsCommunication='Y' AND AD.AddressTypeID in (1,2)                                                                                                                 
+AND CM.InvoiceClientID IN( @ClientID, 0 )      
+AND ARD.AmtRefundID IS NULL      
+--AND Isnull(VCM.IsCopay, 'N') <> 'Y'      
+-- AND BD.BillingDetailsID NOT IN( select BillingDetailsID from AmountRefundDetails where BillStatus='CANCELLED')                                             
+--OR                                                                        
+--AND VCM.ClientID=0--VCM.OnBehalfOfClientID IN(SELECT OnBehalfOfClientID FROM @ClientTable)         
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+I.NetValue,      
+--AD.Address1,AD.City,                                                                                    
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+--AD.AddressTypeID ,                                                                                                                                                                 
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+--AD.EmailID,                                                                                                                              
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.Name,      
+CM.ZonalID,      
+CMS.SCode,      
+CM.SapCode,      
+MV.Locality_Code,      
+AVD.ApprovalNo,      
+VCM.OnBehalfOfClientID,      
+I.CreatedAt,      
+I.InvoiceNumber,      
+RP.PhysicianName,      
+SC.ServiceCode,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID      
+UNION      
+SELECT DISTINCT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,     
+CMS.SCode Code,   
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+--'' ItemType,'' AttributeDetail,                              
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                            PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+--'' ProductKey,                              
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                             ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName,      
+''                            AS Tcode,      
+''                            AS PolicyNo      
+FROM   GeneralBillingItems GBI WITH (NOLOCK)      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON CM.InvoiceClientID = CMS.ClientId      
+INNER JOIN InvoiceDraft I WITH (NOLOCK)      
+ON I.ClientID = CM.InvoiceClientID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CMS.ClientId      
+AND GBI.RateID = ICM.RateId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceOrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+ELSE      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                              AS FromDate,      
+P.Name                                                                                                   AS Name,      
+tView.[TCODE] as Code,   
+Isnull(CMS.SCode+' - ', '') + ''      
++ BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD .Quantity * BD.TransferAmount
+  
+    
+      
+))      
+ELSE 0.00      
+END      
+ELSE 0.00      
+END                  AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.TransferAmount))                                                          AS 'GROSSTOTAL',      
+AD.Address1      AS AttributeDetail,      
+AD.City                                                                                                  AS ItemType,      
+CM.Termsconditions                                                                                       AS Remarks,      
+MV.Locality_Code                                                                                         AS 'Zone',      
+CM.ServiceTaxNo                                                                                          IsTaxable,      
+CM.PanNo                                                                                                 AS ServiceCode,      
+CM.ClientName                                                                                            AS Perphyname,      
+CM.ClientCode                                                                                            Code,      
+I.NetValue                                                                                               AS Rate,      
+AD.EmailID                                                                                               AS ProductKey,      
+CM.SapCode                                                                                               AS SAPCODE,      
+0                                                                                                        Priority,      
+VCM.ClientID                                                                                             ClientID,      
+I.InvoiceNumber                                                                                          InvoiceNo,      
+I.CreatedAt                                                                                              InvoiceDate,      
+Isnull(RP.PhysicianName, '')                                                                             AS PhysicianName,      
+Isnull(SC.ServiceCode, '')                                                                               AS Tcode,      
+Isnull(AVD.ApprovalNo, '')                                                                               AS PolicyNo      
+FROM   FinalBill F WITH(NOLOCK)      
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND F.OrgID = VCM.OrgID      
+INNER JOIN InvoiceDraftDetails ID WITH(NOLOCK)      
+ON ID.FinalBillID = F.FinalBillID      
+INNER JOIN InvoiceDraft I WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND I.OrgID = @pOrgID      
+LEFT JOIN ClientMaster CM WITH(NOLOCK)      
+ON VCM.ClientID = CM.ClientID      
+AND CM.OrgID = F.OrgID      
+LEFT JOIN Localities MV WITH(NOLOCK)      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      
+AND BD.OrgID = F.OrgID      
+LEFT JOIN ClientMappingService CMS WITH(NOLOCK)      
+ON CMS.FeeID = BD.FeeId      
+AND VCM.OnBehalfOfClientID = CMS.ClientId      
+AND I.InvoiceID = @pInvoiceID      
+AND CMS.ReferenceType = 'SC'      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN AdditionalVisitDetails AVD WITH(NOLOCK)      
+ON F.VisitID = AVD.PatientVisitId      
+--and Pv.OrgID = @pOrgID                                                            
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+LEFT JOIN AddressDetails AD WITH(NOLOCK)      
+ON VCM.OnBehalfOfClientID = AD.ReferenceID      
+LEFT JOIN ReferingPhysician RP WITH(NOLOCK)      
+ON RP.ReferingPhysicianID = PV.ReferingPhysicianID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN [dbo].[View_Tests671_Test] tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND ID.Status = 'APPROVED'      
+-- AND F.OrgID=@pOrgID                
+AND AD.IsCommunication = 'Y'      
+AND AD.AddressTypeID IN ( 1, 2 )      
+AND CM.InvoiceClientID = @ClientID      
+AND VCM.ClientID != 0      
+AND ARD.AmtRefundID IS NULL      
+--AND BD.BillingDetailsID NOT IN( select BillingDetailsID from AmountRefundDetails where BillStatus='CANCELLED') --VCM.OnBehalfOfClientID IN(SELECT OnBehalfOfClientID FROM @ClientTable)                                                         
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+I.NetValue,      
+AD.Address1,      
+AD.City,      
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+AD.AddressTypeID,      
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+AD.EmailID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.Name,      
+CM.ZonalID,      
+CMS.SCode,      
+CM.SapCode,      
+MV.Locality_Code,      
+AVD.ApprovalNo,      
+VCM.ClientID,      
+I.CreatedAt,      
+I.InvoiceNumber,      
+RP.PhysicianName,      
+SC.ServiceCode,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID      
+UNION      
+SELECT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,   
+CMS.SCode Code,     
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+''                            ItemType,      
+''                            AttributeDetail,      
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                            PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+''                            ProductKey,      
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                             ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName,      
+''                            AS Tcode,      
+''                            AS PolicyNo      
+FROM   GeneralBillingItems GBI WITH (NOLOCK)      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON CM.ClientID = CMS.ClientId      
+INNER JOIN InvoiceDraft I WITH (NOLOCK)      
+ON I.ClientID = CM.ClientID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CMS.ClientId      
+AND GBI.RateID = ICM.RateId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceOrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+END      
+END      
+ELSE      
+BEGIN      
+IF( @TypeBill <> 'TP' )      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT DISTINCT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                            AS FromDate,      
+P.Name                                                                                                 AS Name,      
+tView.[TCODE] as Code,   
+--ISNULL(CMS.SCode+' - ','')+''+                                          
+BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.Amount))                                                  AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount))                                            AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount)) > 0 --then                                                       
+--Case when SUM(convert(decimal(18,2),BD.Quantity * BD.ActualAmount) - convert(decimal(18,2),BD.Quantity * BD.Amount))>0                                                                                                                 
+THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.ActualAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.Amount))      
+--  Else 0.00 End                                                                                                              
+ELSE 0.00      
+END                                                                                                    AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.ActualAmount))                                                          AS 'GROSSTOTAL',      
+---AD.Address1 as AttributeDetail,                              
+---AD.City as ItemType,                              
+Isnull(CM.Termsconditions, '')                                                                         AS Remarks,      
+MV.Locality_Code                                                                                       AS 'Zone',      
+Isnull(CM.ServiceTaxNo, '')                                                                            IsTaxable,      
+Isnull(CM.PanNo, '')                                                                                   AS ServiceCode,      
+CM.ClientName                                                                                          AS Perphyname,      
+CM.ClientCode                                                                                          Code,      
+F.NetValue                                                                                             AS Rate,      
+--AD.EmailID as ProductKey,                                                                                                                    
+CM.SapCode                                                                                             AS SAPCODE,      
+0                                                                                                      Priority,      
+VCM.ClientID                                                                                           ClientID,      
+I.InvoiceNumber                                                                                        InvoiceNo,      
+I.CreatedAt                                                                                            InvoiceDate,      
+Isnull(PV.PhysicianName, '')                                                                           AS PhysicianName,  
+BD.BillingDetailsId     
+--ISNULL(SC.ServiceCode,'') AS Tcode,                                                              
+--ISNULL(AVD.ApprovalNo,'') as PolicyNo                                            
+FROM   Invoice I WITH(NOLOCK)      
+INNER JOIN InvoiceDetails ID WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND ID.Status = 'APPROVED'      
+INNER JOIN FinalBill F WITH(NOLOCK)      
+ON F.FInalBillID = ID.FInalBillID      
+--AND I.OrgID=F.OrgID                                          
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND F.OrgID = VCM.OrgID      
+INNER JOIN ClientMaster CM      
+ON VCM.ClientID = CM.ClientID      
+AND F.OrgID = CM.OrgID --AND  I.OrgID=CM.InvoiceOrgID                                   
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      
+AND BD.OrgID = F.OrgID      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+--LEFT JOIN AddressDetails AD  WITH(NOLOCK) ON CM.ClientID=AD.ReferenceID AND AD.OrgID=F.OrgID                               
+--AND AD.IsCommunication='Y' AND AD.AddressTypeID in (1,2)                                           
+LEFT JOIN Localities MV      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+AND MV.OrgID = F.OrgID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+LEFT JOIN [dbo].View_Tests671_Test tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.OrgID = @pOrgID      
+AND I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceClientID = @ClientID      
+AND ARD.AmtRefundID IS NULL      
+--AND Isnull(VCM.IsCopay, 'N') <> 'Y'      
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+F.NetValue,      
+--AD.Address1,AD.City,                                                                                                                                  
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+--AD.AddressTypeID ,                                                                                                                                                           
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+--AD.EmailID,                                                       
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.Name,      
+CM.ZonalID,      
+CM.SapCode,      
+MV.Locality_Code,      
+VCM.ClientID,      
+I.CreatedAt,      
+I.InvoiceNumber,      
+PV.PhysicianName,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID,  
+BD.BillingDetailsId      
+UNION      
+SELECT DISTINCT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,      
+CMS.SCode as Code,  
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+--'' ItemType,                              
+--'' AttributeDetail,                              
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                            PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+--'' ProductKey,                              
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                          ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName   ,0 as  BillingDetailsID  
+FROM   Invoice I WITH(NOLOCK)      
+INNER JOIN InvoiceDetails ID WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND ID.Status = 'APPROVED'      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON I.ClientID = CM.InvoiceClientID      
+AND I.OrgID = CM.InvoiceOrgID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CM.InvoiceClientId      
+AND ICM.OrgID = CM.OrgID      
+INNER JOIN GeneralBillingItems GBI WITH (NOLOCK)      
+ON GBI.RateID = ICM.RateId      
+AND CM.OrgID = GBI.OrgID      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+AND CM.OrgID = GBM.OrgID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+AND CM.OrgID = CMS.OrgID      
+AND CM.InvoiceClientID = CMS.ClientId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND I.OrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+ELSE      
+BEGIN      
+IF ( @pClientID = 0      
+OR @General = 'Y' )      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT DISTINCT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                              AS FromDate,      
+P.Name                                                                           AS Name,     
+tView.[TCODE] as Code,    
+Isnull(CMS.SCode+' - ', '') + ''      
++ BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                   AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL( 18, 2), BD.Quantity * BD.TransferAmount
+  
+    
+      
+))      
+ELSE 0.00      
+END      
+ELSE 0.00      
+END                                                                                                      AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.TransferAmount))                                                          AS 'GROSSTOTAL',      
+---AD.Address1 as AttributeDetail,                              
+--AD.City as ItemType,                       
+CM.Termsconditions                                                                                       AS Remarks,      
+MV.Locality_Code                                                                                         AS 'Zone',      
+CM.ServiceTaxNo                                                                                          IsTaxable,      
+CM.PanNo                                                                                                 AS ServiceCode,      
+CM.ClientName                                                                                            AS Perphyname,      
+CM.ClientCode                                                                                            Code,      
+I.NetValue                                                                                               AS Rate,      
+---AD.EmailID as ProductKey,                                                                                                                        
+CM.SapCode                                                                                               AS SAPCODE,      
+0                                                                                                        Priority,      
+VCM.OnBehalfOfClientID                                                                                   ClientID,      
+I.InvoiceNumber                                                          InvoiceNo,      
+I.CreatedAt                                                                                              InvoiceDate,      
+Isnull(RP.PhysicianName, '')                                                                             AS PhysicianName,      
+Isnull(SC.ServiceCode, '')                                                                               AS Tcode,      
+Isnull(AVD.ApprovalNo, '')                                                                               AS PolicyNo      
+FROM   FinalBill F WITH(NOLOCK)      
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND VCM.OrgID = F.OrgID      
+INNER JOIN InvoiceDetails ID WITH(NOLOCK)      
+ON ID.FinalBillID = F.FinalBillID      
+INNER JOIN Invoice I WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND I.OrgID = @pOrgID      
+LEFT JOIN ClientMaster CM      
+ON VCM.OnBehalfOfClientID = CM.InvoiceClientID      
+LEFT JOIN Localities MV      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      
+AND BD.OrgID = F.OrgID      
+LEFT JOIN ClientMappingService CMS WITH(NOLOCK)      
+ON CMS.FeeID = BD.FeeId      
+--AND VCM.OnBehalfOfClientID=CMS.ClientId       
+AND I.InvoiceID = @pInvoiceID      
+AND CMS.ReferenceType = 'SC'      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN AdditionalVisitDetails AVD WITH(NOLOCK)      
+ON F.VisitID = AVD.PatientVisitId      
+--and Pv.OrgID = @pOrgID                                                           
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+--left JOIN AddressDetails AD  WITH(NOLOCK) ON VCM.OnBehalfOfClientID=AD.ReferenceID                                                                 
+LEFT JOIN ReferingPhysician RP WITH(NOLOCK)      
+ON RP.ReferingPhysicianID = PV.ReferingPhysicianID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN [dbo].[View_Tests671_Test] tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND ID.Status = 'APPROVED'      
+--AND F.OrgID=@pOrgID                              
+--AND AD.IsCommunication='Y' AND AD.AddressTypeID in (1,2)                                                                                                                 
+AND CM.InvoiceClientID IN( @ClientID, 0 )      
+AND ARD.AmtRefundID IS NULL      
+--AND Isnull(VCM.IsCopay, 'N') <> 'Y'      
+-- AND BD.BillingDetailsID NOT IN( select BillingDetailsID from AmountRefundDetails where BillStatus='CANCELLED')                                          
+--OR                                                                        
+--AND VCM.ClientID=0--VCM.OnBehalfOfClientID IN(SELECT OnBehalfOfClientID FROM @ClientTable)                                                                
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+I.NetValue,      
+--AD.Address1,AD.City,                                                                                    
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+--AD.AddressTypeID ,                                                                                                                                                                 
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+--AD.EmailID,                                                                                                                              
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.Name,      
+CM.ZonalID,      
+CMS.SCode,      
+CM.SapCode,      
+MV.Locality_Code,      
+AVD.ApprovalNo,      
+VCM.OnBehalfOfClientID,      
+I.CreatedAt,      
+I.InvoiceNumber,      
+RP.PhysicianName,      
+SC.ServiceCode,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID      
+UNION      
+SELECT DISTINCT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,      
+CMS.SCode as Code,  
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+--'' ItemType,'' AttributeDetail,                              
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                   PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+--'' ProductKey,                              
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                             ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName,      
+''                            AS Tcode,      
+''                            AS PolicyNo      
+FROM   GeneralBillingItems GBI WITH (NOLOCK)      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON CM.InvoiceClientID = CMS.ClientId      
+INNER JOIN Invoice I WITH (NOLOCK)      
+ON I.ClientID = CM.InvoiceClientID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CMS.ClientId      
+AND GBI.RateID = ICM.RateId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceOrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+ELSE      
+BEGIN      
+INSERT INTO #TempInvoiceDet      
+SELECT F.OrgID,      
+F.FinalBillID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt                                                                                        AS FromDate,      
+P.Name                                                                                              AS Name,   
+tView.[TCODE] as Code,      
+Isnull(CMS.SCode+' - ', '') + ''      
++ BD.FeeDescription + CASE WHEN Isnull(tView.[TCODE], '')<>'' THEN ' (' + tView.[TCODE] +')' ELSE '' END AS 'FEEDESCRIPTION',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'BILLEDAMOUNT',      
+Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount))                                            AS 'GROSSAMOUNT',      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN      
+CASE      
+WHEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)) > 0 THEN Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount) - CONVERT(DECIMAL(18, 2), BD.Quantity * BD.TransferAmount)
+  
+    
+      
+)      
+ELSE 0.00      
+END      
+ELSE 0.00      
+END                                                                                                      AS 'COLLCHRG',      
+Avg(CONVERT(DECIMAL(18, 2), BD.TransferAmount))                                                          AS 'GROSSTOTAL',      
+AD.Address1                                                                                              AS AttributeDetail,      
+AD.City                                                                                                  AS ItemType,      
+CM.Termsconditions                                                                                       AS Remarks,      
+MV.Locality_Code                                                                                         AS 'Zone',      
+CM.ServiceTaxNo                                                                                          IsTaxable,      
+CM.PanNo                                                                                                 AS ServiceCode,      
+CM.ClientName                                                                                            AS Perphyname,      
+CM.ClientCode                                                                                            Code,      
+I.NetValue                                                                                               AS Rate,      
+AD.EmailID                                                                                               AS ProductKey,      
+CM.SapCode         AS SAPCODE,      
+0                                                                                                        Priority,      
+VCM.ClientID                                                                                             ClientID,      
+I.InvoiceNumber                                                                                          InvoiceNo,      
+I.CreatedAt                                                                                              InvoiceDate,      
+Isnull(RP.PhysicianName, '')                                                                             AS PhysicianName,      
+Isnull(SC.ServiceCode, '')                                                                               AS Tcode,      
+Isnull(AVD.ApprovalNo, '')                                                                               AS PolicyNo      
+FROM   FinalBill F WITH(NOLOCK)      
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK)      
+ON VCM.FinalBillID = F.FinalBillID      
+AND F.OrgID = VCM.OrgID      
+INNER JOIN InvoiceDetails ID WITH(NOLOCK)      
+ON ID.FinalBillID = F.FinalBillID      
+INNER JOIN Invoice I WITH(NOLOCK)      
+ON I.InvoiceID = ID.InvoiceID      
+AND I.OrgID = @pOrgID      
+LEFT JOIN ClientMaster CM WITH(NOLOCK)      
+ON VCM.ClientID = CM.ClientID      
+AND CM.OrgID = F.OrgID      
+LEFT JOIN Localities MV WITH(NOLOCK)      
+ON MV.Locality_ID = CM.ZonalID      
+AND MV.Type = 'ZONE'      
+INNER JOIN BillingDetails BD WITH(NOLOCK)      
+ON BD.FinalBillID = F.FinalBillID      
+AND BD.OrgID = F.OrgID      
+LEFT JOIN ClientMappingService CMS WITH(NOLOCK)      
+ON CMS.FeeID = BD.FeeId      
+AND VCM.OnBehalfOfClientID = CMS.ClientId      
+AND I.InvoiceID = @pInvoiceID      
+AND CMS.ReferenceType = 'SC'      
+INNER JOIN PatientVisit PV WITH(NOLOCK)      
+ON F.VisitID = pv.PatientVisitId      
+AND Pv.OrgID = F.OrgID      
+INNER JOIN AdditionalVisitDetails AVD WITH(NOLOCK)      
+ON F.VisitID = AVD.PatientVisitId      
+--and Pv.OrgID = @pOrgID                                                            
+INNER JOIN Patient P WITH(NOLOCK)      
+ON P.PatientID = PV.PatientID      
+AND P.OrgID = F.OrgID      
+LEFT JOIN AmountRefundDetails ARD WITH(NOLOCK)      
+ON ARD.BillingDetailsID = BD.BillingDetailsID      
+AND ARD.OrgID = F.OrgID      
+AND ARD.BillStatus = 'CANCELLED'      
+AND ARD.createdat <= @pToDate      
+LEFT JOIN AddressDetails AD WITH(NOLOCK)      
+ON VCM.OnBehalfOfClientID = AD.ReferenceID      
+LEFT JOIN ReferingPhysician RP WITH(NOLOCK)      
+ON RP.ReferingPhysicianID = PV.ReferingPhysicianID      
+LEFT JOIN @ServiceCode SC      
+ON SC.ID = BD.FeeId      
+LEFT JOIN [dbo].[View_Tests671_Test] tView      
+ON tView.[ACRPID] = BD.FeeID      
+AND tView.[AType] = BD.FeeType      
+AND tView.OrgID = F.OrgID      
+AND tView.codeschemeid IN (SELECT codetypeid      
+FROM   codingSchemeOrgMapping      
+WHERE  orgId = F.OrgID      
+AND isprimary = 'Y')      
+AND Isnull(tView.Tcode, '') <> ''      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND ID.Status = 'APPROVED'      
+-- AND F.OrgID=@pOrgID                               
+AND AD.IsCommunication = 'Y'      
+AND AD.AddressTypeID IN ( 1, 2 )      
+AND CM.InvoiceClientID = @ClientID      
+AND VCM.ClientID != 0      
+AND ARD.AmtRefundID IS NULL      
+--AND BD.BillingDetailsID NOT IN( select BillingDetailsID from AmountRefundDetails where BillStatus='CANCELLED') --VCM.OnBehalfOfClientID IN(SELECT OnBehalfOfClientID FROM @ClientTable)                                                         
+GROUP  BY F.FinalBillID,      
+BD.FeeDescription,      
+BD.Quantity,      
+BD.FeeType,      
+Amount,      
+I.NetValue,      
+AD.Address1,      
+AD.City,      
+CM.Termsconditions,      
+CM.ServiceTaxNo,      
+CM.PanNo,      
+AD.AddressTypeID,      
+CM.ClientName,      
+CM.ClientCode,      
+F.NetValue,      
+AD.EmailID,      
+F.BillNumber,      
+P.ExternalPatientNumber,      
+PV.VisitNumber,      
+F.CreatedAt,      
+P.Name,      
+CM.ZonalID,      
+CMS.SCode,      
+CM.SapCode,      
+MV.Locality_Code,      
+AVD.ApprovalNo,      
+VCM.ClientID,      
+I.CreatedAt,     
+I.InvoiceNumber,      
+RP.PhysicianName,      
+SC.ServiceCode,      
+tView.[TCODE],      
+F.OrgID,      
+F.FinalBillID      
+UNION      
+SELECT GBI.OrgID,      
+-1,      
+''                            BillNumber,      
+'' ExternalPatientNumber,      
+''                            VisitID,      
+dbo.Fn_getserverdate(@ContextInfo)                     FromDate,      
+''                            Name,    
+CMS.SCode as Code,    
+Isnull(CMS.SCode+' - ', '') + ' '      
++ GBM.GenBillName             FeeDescription,      
+GBI.Rate                      BILLEDAMOUNT,      
+GBI.IPAmount                  GROSSAMOUNT,      
+CONVERT(DECIMAL(18, 2), 0.00) COLLCHRG,      
+CONVERT(DECIMAL(18, 2), 0.00) GROSSTOTAL,      
+''                            ItemType,      
+''                            AttributeDetail,      
+''                            Remarks,      
+''                            Zone,      
+''                            IsTaxable,      
+''                            ServiceCode,      
+''                            PerPhyname,      
+''                            Code,      
+CONVERT(DECIMAL(18, 2), 0.00) Rate,      
+''                            ProductKey,      
+CM.SapCode                    SAPCODE,      
+ICM.Priority                  Priority,      
+0                             ClientID,      
+I.InvoiceNumber               InvoiceNo,      
+I.CreatedAt                   InvoiceDate,      
+''                            AS PhysicianName,      
+''                            AS Tcode,      
+''                            AS PolicyNo      
+FROM   GeneralBillingItems GBI WITH (NOLOCK)      
+INNER JOIN GeneralBillingMaster GBM WITH (NOLOCK)      
+ON GBI.GenBillID = GBM.GenBillID      
+INNER JOIN ClientMappingService CMS WITH (NOLOCK)      
+ON CMS.FeeID = GBM.GenBillID      
+INNER JOIN ClientMaster CM WITH (NOLOCK)      
+ON CM.ClientID = CMS.ClientId      
+INNER JOIN Invoice I WITH (NOLOCK)      
+ON I.ClientID = CM.ClientID      
+INNER JOIN InvClientMaster ICM WITH (NOLOCK)      
+ON ICM.ClientID = CMS.ClientId      
+AND GBI.RateID = ICM.RateId      
+WHERE  I.InvoiceID = @pInvoiceID      
+AND CM.InvoiceOrgID = @pOrgID      
+AND ICM.Priority = 1      
+END      
+END      
+END     
+  
+delete T from #TempInvoiceDet T   
+Inner join Amountrefunddetails ARD on T.FinalBillID=Ard.FinalBillID and T.billingdetailsid=ARD.billingdetailsid   
+where ARD.BillStatus='CANCELLED'  
+  
+SELECT ROW_NUMBER ()over(order by FEEDESCRIPTION)  as RowID,count(TestCode) as Qty,
+TestCode,    
+FEEDESCRIPTION,      
+BILLEDAMOUNT,
+count(TestCode) * BILLEDAMOUNT as Total
+FROM   #TempInvoiceDet WITH(NOLOCK)      
+group by TestCode,FEEDESCRIPTION,BILLEDAMOUNT
+DROP TABLE #TempInvoiceDet      
+END      
+
+
+--exec [Pssrsinvoiceprintingreport_Index] @pInvoiceID=1685,@pOrgID=228,@OrgAddressID=433,@pClientID=0,@InvoiceType=N'Draft' 
+
+
+GO

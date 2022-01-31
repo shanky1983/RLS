@@ -1,0 +1,966 @@
+
+CREATE PROCEDURE [dbo].[pInsertSampleCollectionfromDeptID] @pSampleTracker                   
+[dbo].[UDDinsertSampleTrack] READONLY,                   
+@ContextInfo                   
+[UDT_Context] READONLY                   
+WITH EXECUTE AS OWNER                   
+AS                   
+BEGIN                   
+Set nocount ON                   
+Declare @ServerDate Datetime                   
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))                  
+DECLARE @pLocationId BIGINT                  
+/* Code added by T.Suresh Start here */                  
+/* Code added by T.Suresh for MIS Purpose start here */                  
+Declare @tmp_sample as table (sampleid bigint)                  
+Declare @tmp_tracker as table (SampleTrackerID int)                  
+declare @tmp_ordinv as table(accessionnumber bigint)                  
+declare @tmp_patinv as table(patientinvid bigint,status nvarchar(50))                  
+Declare @Loginid bigint                  
+declare @tmp_ordhis as table(accessionnumber bigint,status varchar(50))                  
+Select @Loginid = Loginid from @ContextInfo                  
+/* Code added by T.Suresh for MIS Purpose end here */                  
+/* Code added by T.Suresh end here */                  
+SELECT @pLocationId = LocationID                  
+FROM   @ContextInfo           
+
+          
+
+/* BEGIN | NA | Sabari | 21052019 | Created | UATIssues */  
+--Below blog commeted for sampletracker duplicate insert skip while reject in sample searh sample collect               
+--INSERT INTO SampleTracker                  
+--(PatientVisitID,                   
+--SampleID,                   
+--InvSampleStatusID,                   
+--DeptID,                   
+--Reason,                   
+--CreatedBy,                   
+--CreatedAt,                   
+--ModifiedBy,                   
+--ModifiedAt,                   
+--OrgID,                   
+--CollectedIn)                        
+--SELECT DISTINCT PIV.PatientVisitID,                
+--st.SampleID,                
+--st.InvSampleStatusID,                
+--st.DeptID,                
+--st.Reason,                
+--st.CreatedBy,                
+--@ServerDate,                
+--st.ModifiedBy,                
+--@ServerDate,                
+--PIV.OrgID,                
+--CASE                
+--WHEN st.InvSampleStatusID = 4 THEN (SELECT OrgAddressID                
+--FROM                 
+--  PatientVisit WITH(NOLOCK)                
+--  WHERE                 
+--   PatientVisitID = PIV.PatientVisitID)                
+--ELSE st.CollectedIn                
+--END AS CollectedIn                
+--FROM   @pSampleTracker st                
+--inner join PatientInvSample PIV WITH(NOLOCK)  on PIV.SampleID=ST.SampleID         
+--where st.InvSampleStatusID = 4 
+/* END | NA | Sabari | 21052019 | Created | UATIssues */  
+              
+/* Below line is included to insert into patientinvsample and mapping for receieve sample steps  */                  
+DECLARE @Patientvisitid bigint                   
+Declare @OrgID int                   
+DECLARE @pLoginID bigint                   
+Select @pLoginID = LoginId                   
+from   @ContextInfo                   
+SELECT TOP 1 @Patientvisitid = PatientVisitID,                   
+@OrgID = OrgID                   
+FROM   @pSampleTracker                   
+Declare @UID nvarchar(max)
+select top 1 @UID=uid from Orderedinvestigations where visitid=@Patientvisitid
+Insert into PatientInvSample                   
+(PatientVisitID,                   
+SampleCode,                   
+OrgID,                   
+SampleContainerID,                   
+BarcodeNumber,                   
+UID,                 
+CreatedAt,                   
+SampleRelationshipID,                   
+CollectedLocID,                   
+CreatedBy,                  
+CollectedDateTime)                   
+output inserted.sampleid into @tmp_sample       
+select distinct PV.PatientVisitId,                   
+Ps.SampleCode,                   
+PV.OrgID,                   
+Ps.SampleContainerID,                   
+ps.BarcodeNumber,                   
+@UID,                   
+Getdate(),                   
+ps.SampleID,                
+ps.CollectedLocID,                   
+@pLoginID,                  
+Ps.CollectedDateTime                   
+from   PatientInvSample Ps WITH(NOLOCK)                   
+inner join PatientVisit PV WITH(NOLOCK)                   
+ON pv.ReferVisitID = Ps.PatientVisitID                   
+Inner Join @pSampleTracker st                
+ON st.SampleID = ps.SampleID                  
+where  PV.PatientVisitId = @Patientvisitid                   
+and Ps.recorgid = @OrgID  
+
+if exists(select 1 from @tmp_sample)
+Begin
+INSERT INTO SampleTracker                
+(PatientVisitID,                 
+SampleID,                 
+InvSampleStatusID,                 
+DeptID,                 
+Reason,                 
+CreatedBy,                 
+CreatedAt,                 
+ModifiedBy,                 
+ModifiedAt,                 
+OrgID,                 
+CollectedIn)                 
+output inserted.SampleTrackerID into @tmp_tracker  
+              
+SELECT DISTINCT ST.PatientVisitID,              
+PIV.SampleID,              
+st.InvSampleStatusID,              
+st.DeptID,              
+st.Reason,              
+st.CreatedBy,              
+@ServerDate,              
+st.ModifiedBy,              
+@ServerDate,              
+ST.OrgID,              
+CASE              
+WHEN st.InvSampleStatusID = 4 THEN (SELECT OrgAddressID              
+FROM               
+  PatientVisit WITH(NOLOCK)              
+  WHERE               
+   PatientVisitID = ST.PatientVisitID)              
+ELSE st.CollectedIn              
+END AS CollectedIn              
+FROM   @pSampleTracker st 
+inner join PatientInvSample PIVs WITH(NOLOCK)  on PIVs.SampleID=ST.SampleID   
+inner join PatientInvSample PIV WITH(NOLOCK)  on PIV.PatientVisitID=ST.PatientVisitID and PIVs.SampleCode=PIV.SampleCode and PIVs.BarcodeNumber=PIV.BarcodeNumber
+Inner join @tmp_sample T on T.sampleid=PIV.SampleID
+
+INSERT INTO SampleTracker                
+(PatientVisitID,                 
+SampleID,                 
+InvSampleStatusID,                 
+DeptID,                 
+Reason,                 
+CreatedBy,                 
+CreatedAt,                 
+ModifiedBy,                 
+ModifiedAt,                 
+OrgID,                 
+CollectedIn)  
+SELECT DISTINCT PIV.PatientVisitID,              
+PIV.SampleID,              
+st.InvSampleStatusID,              
+st.DeptID,              
+st.Reason,              
+st.CreatedBy,              
+@ServerDate,              
+st.ModifiedBy,              
+@ServerDate,              
+PIV.OrgID,              
+CASE              
+WHEN st.InvSampleStatusID = 4 THEN (SELECT OrgAddressID              
+FROM               
+  PatientVisit WITH(NOLOCK)              
+  WHERE               
+   PatientVisitID = ST.PatientVisitID)              
+ELSE st.CollectedIn              
+END AS CollectedIn              
+FROM   @pSampleTracker st 
+inner join PatientInvSample PIV WITH(NOLOCK)  on PIV.SampleID=ST.SampleID   
+where st.InvSampleStatusID=4
+ End
+ Else
+ Begin
+ INSERT INTO SampleTracker                
+(PatientVisitID,                 
+SampleID,                 
+InvSampleStatusID,                 
+DeptID,                 
+Reason,                 
+CreatedBy,                 
+CreatedAt,                 
+ModifiedBy,                 
+ModifiedAt,                 
+OrgID,                 
+CollectedIn)                 
+output inserted.SampleTrackerID into @tmp_tracker                
+SELECT DISTINCT ST.PatientVisitID,              
+st.SampleID,              
+st.InvSampleStatusID,              
+st.DeptID,              
+st.Reason,              
+st.CreatedBy,              
+@ServerDate,              
+st.ModifiedBy,              
+@ServerDate,              
+ST.OrgID,              
+CASE              
+WHEN st.InvSampleStatusID = 4 THEN (SELECT OrgAddressID              
+FROM               
+  PatientVisit WITH(NOLOCK)              
+  WHERE               
+   PatientVisitID = ST.PatientVisitID)              
+ELSE st.CollectedIn              
+END AS CollectedIn              
+FROM   @pSampleTracker st             
+
+ End
+Insert into PatientInvSampleMapping                   
+(VisitID,                   
+OrgID,                   
+SampleID,                   
+ID,                   
+Type,                   
+UID,                   
+Barcode,                   
+CreatedAt,                   
+SID,
+AccessionNumber)                   
+select distinct PV.PatientVisitId,                   
+PV.OrgID,                   
+PM.SampleID,                   
+PM.ID,                   
+PM.Type,                   
+OI.UID,                   
+PM.Barcode,                   
+OI.CreatedAt,                   
+ps.SampleID,
+OI.AccessionNumber                   
+from   PatientInvSampleMapping PM WITH(NOLOCK)                   
+inner join PatientVisit PV WITH(NOLOCK)                   
+ON pv.ReferVisitID = PM.VisitID                   
+Inner Join PatientInvSample ps WITH(NOLOCK)                   
+On ps.SampleRelationshipID = pm.SID                   
+Inner Join @pSampleTracker st                   
+ON ps.SampleRelationshipID = st.SampleID                   
+Inner Join OrderedInvestigations OI WITH(NOLOCK)                   
+ON OI.VisitID = Pv.PatientVisitId                   
+where  PV.PatientVisitId = @Patientvisitid                   
+and OI.ID = PM.ID                   
+AND OI.Status Not In( 'Retest' ) and  isnull(PM.barcode,'0')!='0'    
+
+DECLARE @SRFInsert TABLE (VisitID BIGINT,SRFID NVARCHAR(250))
+
+insert into PatientHistoryAttribute(Patientvisitid,AttributeValueName,CreatedAt,CreatedBy,InvID)
+output inserted.Patientvisitid,inserted.AttributeValueName into @SRFInsert
+select ST.PatientVisitID,ST.Remarks,@ServerDate,@Loginid,IOM.InvestigationID from @pSampleTracker ST
+Inner join PatientInvestigation PIS(nolock) on PIS.PatientVisitID=ST.PatientVisitID and PIS.Orgid=@OrgID
+Inner join investigationorgmapping IOM (nolock) on IOM.Investigationid=PIS.Investigationid and 
+IOM.abbcode='SRF' and IOM.Orgid=@OrgID
+where isnull(ST.Remarks,'')!=''
+
+insert into PatientHistoryAttribute(Patientvisitid,AttributeValueName,CreatedAt,CreatedBy,InvID)
+output inserted.Patientvisitid,inserted.AttributeValueName into @SRFInsert
+select distinct PV.ReferVisitID,ST.Remarks,@ServerDate,@Loginid,IOM.InvestigationID from @pSampleTracker ST
+Inner Join patientvisit PV (nolock) on ST.Patientvisitid=PV.Patientvisitid
+Inner join PatientInvestigation PIS(nolock) on PIS.PatientVisitID=ST.PatientVisitID and PIS.Orgid=@OrgID
+Inner join investigationorgmapping IOM (nolock) on  IOM.Investigationid=PIS.Investigationid and
+ IOM.abbcode='SRF'  and IOM.Orgid=@OrgID
+where isnull(ST.Remarks,'')!='' and PV.ReferVisitID is not null
+UPDATE PV
+SET PV.SRFID=ISNULL(ST.SRFID,'')
+FROM  patientvisit PV (nolock)
+INNER JOIN @SRFInsert ST
+ON ST.VisitId=PV.Patientvisitid
+WHERE ISNULL(PV.SRFID,'')=''
+-------------Commented by santhosh             
+--INSERT INTO SampleTracker                   
+--(PatientVisitID,                   
+--SampleID,                   
+--InvSampleStatusID,                   
+--DeptID,                   
+--Reason,                   
+--CreatedBy,                   
+--CreatedAt,                   
+--ModifiedBy,                   
+--ModifiedAt,                   
+--OrgID,                   
+--CollectedIn)                   
+--output inserted.sampletrackerid into @tmp_tracker                  
+--SELECT DISTINCT st.PatientVisitID,                  
+--ps.SampleID,                  
+--st.InvSampleStatusID,                  
+--st.DeptID,                  
+--st.Reason,                  
+--st.CreatedBy,                  
+--@ServerDate,                  
+--st.ModifiedBy,                  
+--@ServerDate,                  
+--st.OrgID,              
+--CASE                  
+--WHEN st.InvSampleStatusID = 4 THEN (SELECT OrgAddressID                  
+--FROM                    
+-- PatientVisit WITH(NOLOCK)                  
+-- WHERE                   
+--  PatientVisitID = st.PatientVisitID)                  
+--else st.CollectedIn                   
+--end as CollectedIn                   
+--from   SampleTracker st WITH(NOLOCK)                   
+--Inner Join PatientInvSample ps WITH(NOLOCK)                   
+--On ps.PatientVisitID = st.PatientVisitId                   
+--AND Ps.SampleRelationshipID = st.SampleID                   
+--where  Ps.PatientVisitId = @Patientvisitid    
+---------------------Santhosh End-----------               
+/* above line is included to insert into patientinvsample and mapping for receieve sample steps  */                  
+--update OrderedInvestigations set Status = 'SampleReceived'                                                                                                   
+--where VisitID = (select distinct st.PatientVisitID from @pSampleTracker st)                
+--and OrgID = (select distinct st.OrgID from @pSampleTracker st)                                                                                       
+--and ResCaptureLoc =(select distinct st.CollectedIn from @pSampleTracker st)   
+Declare @pCount int                   
+IF EXISTS(SELECT 1                  
+FROM   PatientInvSampleMapping PIS WITH(NOLOCK)                  
+INNER JOIN PatientInvSample PS WITH(NOLOCK)                  
+ON PS.PatientVisitID = PIS.VisitID                  
+INNER JOIN @pSampleTracker st                  
+ON st.SampleID = PS.SampleID                  
+AND PS.SampleCode = PIS.SampleID                  
+AND PIS.VisitID = st.PatientVisitID                  
+INNER JOIN PatientVisit PV (NOLOCK)                  
+ON PV.PatientVisitID = ST.PatientVisitID             
+AND ST.OrgId = PV.OrgID                  
+--AND PS.Recorgid = st.OrgID                  
+)                  
+BEGIN                  
+DECLARE @pOrderedInvtoTransfer AS TABLE                  
+(                  
+RowNo               INT IDENTITY (1, 1),                  
+VisitID             BIGINT,                  
+AccessionNumber     nvarchar(255),                  
+ID                  BIGINT,                  
+Type                nvarchar(50),                  
+ProcessingAddressId BIGINT                  
+)                  
+INSERT INTO @pOrderedInvtoTransfer              
+(VisitID,                  
+AccessionNumber,                  
+ID,                  
+Type,                  
+ProcessingAddressId)                  
+SELECT DISTINCT OI.VisitID,                  
+OI.AccessionNumber,                  
+OI.ID,                  
+OI.Type,                  
+ILM.ProcessingAddressId                  
+FROM   OrderedInvestigations OI (nolock)                  
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                  
+ON pis.ID = OI.ID                  
+INNER JOIN PatientInvSample PS WITH(NOLOCK)                  
+ON PS.PatientVisitID = PIS.VisitID                  
+AND PIS.VisitID = OI.VisitID                  
+AND PIS.OrgID = OI.OrgID                  
+--AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN @pSampleTracker st                  
+ON st.SampleID = PS.SampleID                  
+--AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN InvestigationLocationMapping ILM (NOLOCK)                  
+ON ILM.InvestigationID = OI.ID                  
+AND ILM.FeeType = OI.Type                  
+AND Isnull(ILM.Type, '') = ''                  
+AND ILM.OrgID = OI.OrgID                  
+AND ILM.LocationID = @pLocationId                  
+WHERE  OI.RescaptureLoc = @pLocationId                  
+AND OI.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','Yet to Receive' )                  
+AND ILM.ProcessingAddressId <> @pLocationId              
+    
+UPDATE OI                  
+SET    OI.ResCaptureLoc = TT.ProcessingAddressId,                  
+OI.Status = 'Yet to Transfer'                  
+output inserted.accessionnumber into @tmp_ordinv                  
+FROM   @pOrderedInvtoTransfer TT                  
+INNER JOIN OrderedInvestigations OI (NOLOCK)                  
+ON TT.AccessionNumber = OI.AccessionNumber                  
+AND TT.ID = OI.ID                  
+AND TT.Type = OI.Type                  
+UPDATE PI                  
+SET    PI.Status = 'Yet to Transfer'                  
+output inserted.patientinvid,inserted.status into @tmp_patinv                  
+FROM   @pOrderedInvtoTransfer TT                  
+INNER JOIN PatientInvestigation PI (NOLOCK)                  
+ON TT.AccessionNumber = PI.AccessionNumber                  
+UPDATE OI                  
+SET    OI.STATUS = CASE                  
+WHEN IST.InvSampleStatusDesc = 'Received' THEN 'SampleReceived'                  
+ELSE IST.InvSampleStatusDesc                  
+END,                  
+OI.ResCaptureLoc = CASE                  
+WHEN ST.InvSampleStatusID = 4 THEN (                  
+SELECT                  
+ OrgAddressID                  
+ FROM                    
+  PatientVisit (nolock)                  
+  WHERE                   
+   PatientVisitID = st.PatientVisitID)                  
+ELSE st.CollectedIn                  
+END,         
+OI.ReferralID = dbo.[Fn_getoutsourcelocation](OI.OrgID,                  
+ OI.ID,                  
+  OI.Type,                   
+  @ContextInfo)                  
+output inserted.accessionnumber into @tmp_ordinv                  
+FROM   OrderedInvestigations OI (nolock)                  
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                  
+ON pis.ID = OI.ID                  
+INNER JOIN PatientInvSample PS WITH(NOLOCK)                  
+ON PS.PatientVisitID = PIS.VisitID                  
+AND PIS.VisitID = OI.VisitID                  
+AND PIS.OrgID = OI.OrgID   and PIS.sid=PS.SampleID               
+--AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN @pSampleTracker ST                  
+ON ST.SampleID = PS.SampleID                  
+--AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                  
+WHERE  OI.RescaptureLoc = @pLocationId                  
+AND OI.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','SampleReceived','Yet to Receive' )   
+             
+--------Update Status in Parent Org by santhosh-----------------            
+UPDATE OI                  
+SET    OI.STATUS = CASE                  
+WHEN IST.InvSampleStatusDesc = 'Received' THEN 'SampleReceived'                  
+ELSE IST.InvSampleStatusDesc                  
+END,                  
+OI.ResCaptureLoc = CASE                  
+WHEN ST.InvSampleStatusID = 4 THEN (                  
+SELECT                  
+ OrgAddressID                  
+ FROM                    
+  PatientVisit (nolock)                  
+  WHERE                   
+   PatientVisitID = st.PatientVisitID)                  
+ELSE st.CollectedIn                  
+END,                  
+OI.ReferralID = dbo.[Fn_getoutsourcelocation](OI.OrgID,                  
+ OI.ID,                  
+  OI.Type,                   
+  @ContextInfo)                            
+FROM @pSampleTracker ST                  
+inner join PatientInvSample PIV WITH(NOLOCK)  on PIV.SampleID=ST.SampleID             
+inner join OrderedInvestigations OI (nolock) on piv.patientvisitid = OI.visitid                
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                  
+ON pis.ID = OI.ID  and  PIV.PatientVisitID = PIS.VisitID  and PIV.SampleCode = PIS.SampleID  and PIS.SID=PIV.SampleID            
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                   
+WHERE OI.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','SampleReceived' ,'Rejected','Yet to Receive')          
+and ST.InvSampleStatusID = 4               
+            
+            
+-------End Santhosh---------------------------              
+--AND tbl.InvSampleStatusID NOT IN (4,13)                            
+--update PI set PI.Status=(Case When OI.Status='Received' then 'SampleReceived'                                               
+--Else OI.Status End) FROM  PatientInvestigation PI                                           
+--INNER JOIN OrderedInvestigations OI ON OI.AccessionNumber=PI.AccessionNumber and OI.VisitID = PI.PatientVisitID  and OI.OrgID = PI.OrgID                                                
+--INNER JOIN PatientInvSample PS on PS.SampleCode = PI.SampleID and PS.PatientVisitID = PI.PatientVisitID AND PS.OrgID = PI.OrgID                                                 
+--inner join @pSampleTracker st on PS.SampleID=ST.SampleID and st.PatientVisitID=oi.VisitID                                              
+--inner join InvSampleStatusmaster ISS on ISS.InvSampleStatusID=St.InvSampleStatusID                                               
+--where st.PatientVisitID=oi.VisitID and st.OrgID=oi.OrgID                               
+--      and PI.InvestigationID=oi.ID                     
+UPDATE PINV 
+SET    PINV.Status = CASE                  
+WHEN IST.InvSampleStatusDesc = 'Received' THEN 'SampleReceived'                  
+ELSE IST.InvSampleStatusDesc                  
+END                  
+output inserted.patientinvid,inserted.status into @tmp_patinv                  
+FROM   @pSampleTracker ST                  
+INNER JOIN PatientInvSampleMapping PISM (NOLOCK)                  
+ON ST.PatientVisitID = PISM.VisitID                  
+AND ST.SampleID = PISM.SID                  
+INNER JOIN OrderedInvestigations OI (NOLOCK)                  
+ON ST.PatientVisitID = OI.VisitID                  
+AND ST.OrgID = OI.OrgID  and PISM.ID=OI.ID and PISM.Type=OI.Type               
+INNER JOIN PatientInvestigation PINV (nolock)                  
+ON OI.AccessionNumber = PINV.AccessionNumber                  
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                  
+WHERE  OI.RescaptureLoc = @pLocationId                  
+AND OI.Status IN ( 'SampleTransferred', 'SampleCollected', 'SampleReceived', 'Paid','Rejected','Yet to Receive' )                  
+AND PINV.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','Yet to Receive' )                  
+--Update PatientInvestigation SET STATUS = 'SampleReceived'                                                        
+--where AccessionNumber in(                                                         
+--SELECT AccessionNumber FROM                                
+--OrderedInvestigations  OI                                                                                                  
+--INNER JOIN PatientInvSampleMapping PIS on pis.ID = OI.ID                                                                                                  
+--INNER JOIN PatientInvSample PS on PS.PatientVisitID = PIS.VisitID                                                                                                
+--AND PIS.VisitID = OI.VisitID                                                              
+--and PIS.OrgID = OI.OrgID   and PS.SampleCode = PIS.SampleID                               
+--WHERE ISNULL(ResCaptureLoc,(SELECT DISTINCT st.CollectedIn from @pSampleTracker st))                                                                             
+--=(SELECT DISTINCT st.CollectedIn from @pSampleTracker st)                                                                                                   
+--and PS.SampleID in (SELECT DISTINCT st.SampleID from @pSampleTracker st)                                                             
+--and OI.Status not in('Pending','Approve','Cancel','Completed','SampleTransferred','Retest','Validate','PartiallySampleTransfer'))                              
+--and STATUS not in ('Validate','Approve')                                          
+END                   
+ELSE                   
+BEGIN                   
+deCLARE @TBLiD AS TABLE                   
+(                   
+iD   BIGINT,                   
+TYPE nvarchar(25),          
+InvSampleStatusDesc  nvarchar(25)                     
+)                   
+INSERT @TBLiD                   
+SELECT PM.ID,                   
+PM.Type,InvSampleStatusDesc                   
+FROM   PatientInvSample PIS WITH(NOLOCK)                   
+INNER JOIN @pSampleTracker p                   
+on p.SampleID = PIS.SampleID                   
+inner join PatientInvSampleMapping PM WITH(NOLOCK)                   
+on 
+--PM.SampleID = PIS.SampleCode  
+PM.SID=PIS.sampleID                 
+and PM.VisitID = PIS.PatientVisitID           
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = p.InvSampleStatusID                  
+--UPDATE OrderedInvestigations                   
+--    set    Status = 'SampleReceived',                   
+--           ReferralID =                   
+--dbo.[fn_getOutSourceLocation](ORD.OrgID, ORD.ID, ORD.Type, @ContextInfo)          
+--    FROM   OrderedInvestigations ORD (nolock)                   
+--           INNER JOIN @TBLiD TBLid                   
+--      ON TBLid.ID = ORD.ID                   
+--                      AND TBLid. TYPE = ORD.Type                   
+--    WHERE  VisitID = (select distinct st.PatientVisitID                   
+--                      from   @pSampleTracker st)                   
+--           AND OrgID = (select distinct st.OrgID                   
+--                        from   @pSampleTracker st)                   
+--           AND ISNULL(ResCaptureLoc, (SELECT DISTINCT st.CollectedIn                   
+--                                      from   @pSampleTracker st)) IN                   
+--                   (select distinct st.CollectedIn                   
+--                    from   @pSampleTracker st)               
+--           and ORD.Status in ('SampleTransferred','SampleCollected','Paid')                  
+--UPDATE PatientInvestigation                  
+--SET    Status = 'SampleReceived'                  
+--WHERE  AccessionNumber IN (SELECT AccessionNumber                  
+--                           FROM   OrderedInvestigations ORD (nolock)                  
+--                                  INNER JOIN @TBLiD TBLid                  
+--                                          ON TBLid.ID = ORD.ID                  
+--                                             AND TBLid. TYPE = ORD.Type                  
+--                           WHERE  VisitID = (SELECT DISTINCT st.PatientVisitID                  
+--                                           FROM   @pSampleTracker st)                  
+--                                  AND OrgID = (SELECT DISTINCT st.OrgID                  
+--                                               FROM   @pSampleTracker st)                  
+--                                  AND Isnull(ResCaptureLoc, (SELECT DISTINCT st.CollectedIn                  
+--                                                             FROM   @pSampleTracker st)) IN (SELECT DISTINCT st.CollectedIn                  
+--                                                                                             FROM   @pSampleTracker st)                  
+--                                  AND ORD.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid', 'SampleReceived' ))                  
+--       --AND tbl.InvSampleStatusID NOT IN (4,13)                                             
+--       AND STATUS IN ( 'SampleTransferred', 'SampleCollected', 'Paid' )            
+            
+UPDATE ORD                  
+SET    ORD.Status = CASE                
+WHEN TBLid.InvSampleStatusDesc = 'Received' THEN 'SampleReceived'                
+ELSE TBLid.InvSampleStatusDesc End,                  
+ORD.ReferralID = dbo.[Fn_getoutsourcelocation](ORD.OrgID,                   
+ORD.ID,                   
+ORD.Type,                   
+@ContextInfo)                  
+output inserted.accessionnumber into @tmp_ordinv       
+FROM   @pSampleTracker ST                  
+INNER JOIN OrderedInvestigations ORD (nolock)                  
+ON ORD.VisitID = ST.PatientVisitID                  
+AND ORD.OrgID = ST.OrgID                  
+INNER JOIN @TBLiD TBLid                  
+ON TBLid.ID = ORD.ID                  
+AND TBLid. TYPE = ORD.Type                  
+WHERE  ORD.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','Rejected','Yet to Receive' )                  
+AND ORD.ResCaptureLoc = @pLocationId        
+           
+--------------santhosh-----------          
+UPDATE OI                  
+SET    OI.STATUS = CASE                  
+WHEN IST.InvSampleStatusDesc = 'Received' THEN 'SampleReceived'                  
+ELSE IST.InvSampleStatusDesc                  
+END,                  
+OI.ResCaptureLoc = CASE                  
+WHEN ST.InvSampleStatusID = 4 THEN (                  
+SELECT   
+ OrgAddressID                  
+ FROM                    
+PatientVisit (nolock)                  
+  WHERE     
+   PatientVisitID = st.PatientVisitID)                  
+ELSE st.CollectedIn                  
+END,                  
+OI.ReferralID = dbo.[Fn_getoutsourcelocation](OI.OrgID,                  
+ OI.ID,                  
+  OI.Type,                   
+  @ContextInfo)                             
+FROM @pSampleTracker ST                  
+inner join PatientInvSample PIV WITH(NOLOCK)  on PIV.SampleID=ST.SampleID             
+inner join OrderedInvestigations OI (nolock) on piv.patientvisitid = OI.visitid                
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                  
+ON pis.ID = OI.ID  and  PIV.PatientVisitID = PIS.VisitID  and PIV.SampleCode = PIS.SampleID  and PIS.SID=PIV.SampleID            
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                   
+WHERE OI.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','SampleReceived','Rejected','Yet to Receive' ) and      
+ST.InvSampleStatusID = 4                   
+                 
+UPDATE PI                  
+SET    PI.Status = 'SampleReceived'                  
+output inserted.patientinvid,Inserted.status into @tmp_patinv                  
+FROM   @pSampleTracker ST                  
+INNER JOIN OrderedInvestigations ORD (nolock)                  
+ON ORD.VisitID = ST.PatientVisitID                  
+AND ORD.OrgID = ST.OrgID                  
+INNER JOIN @TBLiD TBLid                  
+ON TBLid.ID = ORD.ID                  
+AND TBLid. TYPE = ORD.Type                  
+INNER JOIN PatientInvestigation PI (NOLOCK)                  
+ON ORD.AccessionNumber = PI.AccessionNumber                  
+AND ORD.VisitID = PI.PatientVisitID                  
+AND ORD.OrgId = PI.OrgID                  
+WHERE  ORD.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid', 'SampleReceived','Yet to Receive' )                  
+AND PI.Status IN ( 'SampleTransferred', 'SampleCollected', 'Paid','Yet to Receive' )                  
+AND ORD.ResCaptureLoc = @pLocationId                  
+END                  
+/******Outsource changes for collection centre to processing centre by vinothini start***/                  
+if  exists(select 1                   
+from orderedinvestigations oi                   
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                  
+ON pis.ID = OI.ID                  
+INNER JOIN PatientInvSample PS WITH(NOLOCK)                  
+ON PS.PatientVisitID = PIS.VisitID                  
+AND PIS.VisitID = OI.VisitID                  
+AND PIS.OrgID = OI.OrgID                  
+AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN @pSampleTracker ST                  
+ON ST.SampleID = PS.SampleID                  
+AND PS.SampleCode = PIS.SampleID                  
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                  
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                  
+WHERE   OI.RescaptureLoc = @pLocationId  and oi.referralID <>-1 )                  
+begin                  
+Declare @TSampleID as Table ( SampleID int)                
+
+Insert into  @TSampleID   
+Select  Distinct ST.SampleID        
+from   orderedinvestigations oi                   
+INNER JOIN PatientInvSampleMapping PIS WITH(NOLOCK)                   
+ON pis.ID = OI.ID                   
+INNER JOIN PatientInvSample PS WITH(NOLOCK)                   
+ON PS.PatientVisitID = PIS.VisitID                   
+AND PIS.VisitID = OI.VisitID                   
+AND PIS.OrgID = OI.OrgID                   
+AND PS.SampleCode = PIS.SampleID and PIS.SID=PS.SampleID                   
+INNER JOIN @pSampleTracker ST                   
+ON ST.SampleID = PS.SampleID                   
+AND PS.SampleCode = PIS.SampleID                   
+INNER JOIN InvSampleStatusmaster IST WITH(NOLOCK)                   
+ON IST.InvSampleStatusID = ST.InvSampleStatusID                   
+WHERE  OI.RescaptureLoc = @pLocationId                   
+and oi.referralID <>- 1                   
+order  by ST.SampleID desc                   
+
+IF EXISTS (SELECT 1 FROM @TSampleID)                
+begin                   
+insert into SampleTracker                   
+(PatientVisitID,                   
+SampleID,            
+InvSampleStatusID,                   
+DeptID,                   
+Reason,                   
+CreatedBy,                   
+CreatedAt,                   
+ModifiedBy,                   
+ModifiedAt,                   
+OrgID,                   
+CollectedIn)                   
+output inserted.sampletrackerid into @tmp_tracker                  
+SELECT DISTINCT st.PatientVisitID,                   
+                 
+st.SampleID,
+12,                   
+st.DeptID,                   
+st.Reason,                   
+st.CreatedBy,                   
+@ServerDate,                   
+st.ModifiedBy,                   
+@ServerDate,                   
+st.OrgID,                   
+st.CollectedIn                   
+FROM   @pSampleTracker st                   
+             
+where  st.SampleID in (SELECT SampleID from  @TSampleID   )
+end                   
+Update OI                   
+set    Status = 'OutSource'                   
+output inserted.accessionnumber into @tmp_ordinv                  
+from   orderedinvestigations OI                   
+inner join @pSampleTracker PST                   
+on PST.PatientVisitID = OI.VisitID                   
+and PST.OrgID = OI.OrgID                   
+inner join patientInvSamplemapping PIV                   
+on PIV.VisitID = OI.VisitID                   
+and PIV.OrgID = OI.OrgID                   
+AND PIV.ID = OI.ID                   
+and PIV.Type = OI.Type                   
+and PIV.SID = PST.SampleID                   
+inner join SampleTracker ST                   
+on ST.SampleID = PIV.SID                   
+and ST.InvSampleStatusID = 12                   
+Where OI.ReferralID<>-1 ---and                     
+end                  
+/******Outsource changes for collection centre to processing centre by vinothini end***/                  
+/***Org to Org - Status Updation***/                  
+Declare @RefVisitID as bigint                   
+Select @RefVisitID = ReferVisitID                   
+from   PatientVisit (nolock)                   
+where  PatientVisitId = (select distinct PatientVisitID                   
+from   @pSampleTracker)                   
+IF( ISNULL(@RefVisitID, 0) <> 0 )                   
+-- IF EXISTS (SELECT * FROM OrderedInvestigations where VisitID=@RefVisitID and Status='SampleTransferred')                                              
+BEGIN                   
+DECLARE @tblAccessionNo as table                   
+(                   
+AccessionNo bigint,                   
+Status      nvarchar(255)                   
+)        
+                 
+INSERT @tblAccessionNo                   
+(Status,                   
+AccessionNo)                   
+SELECT STATUS,                   
+ReferredAccessionNo                   
+FROM   OrderedInvestigations WITH(NOLOCK)                   
+WHERE  referredAccessionNo in(SELECT AccessionNumber                   
+FROM                    
+ OrderedInvestigations WITH(NOLOCK                  
+  )                  
+  WHERE                    
+  VisitID = @RefVisitID                  
+AND Status = 'SampleTransferred')                  
+and OrderedInvestigations.Status <> 'Paid'       
+AND OrderedInvestigations.Status<> 'Yet to Receive'     
+      
+                  
+UPDATE OrderedInvestigations                   
+set    Status = tbl.Status                   
+output inserted.accessionnumber into @tmp_ordinv                  
+from   OrderedInvestigations ORD (nolock)                   
+inner join @tblAccessionNo tbl                   
+on tbl.AccessionNo = ORD.AccessionNumber         
+                
+UPDATE PatientInvestigation                   
+set    Status = tbl.Status                   
+output inserted.patientinvid,inserted.status into @tmp_patinv                  
+from   PatientInvestigation PI (nolock)                   
+inner join @tblAccessionNo tbl                   
+on tbl.AccessionNo = PI.AccessionNumber                   
+/** Updating Old UID for New Tests in Org to Org Transfer*/                  
+DECLARE @xPatientVisitID BIGINT                  
+SELECT @xPatientVisitID = (SELECT DISTINCT PatientVisitID                  
+FROM   @pSampleTracker)                  
+DECLARE @XOldUID nvarchar (255)                  
+SELECT @XOldUID = (SELECT TOP 1 UID                  
+FROM   OrderedInvestigations (nolock)                  
+WHERE  OrgId = @OrgID                  
+AND VisitID = @xPatientVisitID                  
+ORDER  BY CreatedAt ASC)                  
+UPDATE OI                  
+SET    OI.UID = @XOldUID                  
+output inserted.accessionnumber into @tmp_ordinv                  
+FROM   OrderedInvestigations OI(NOLOCK)                  
+WHERE OI.OrgId = @OrgID                  
+AND OI.VisitID = @xPatientVisitID                  
+AND OI.UID <> @XOldUID                  
+UPDATE PI                  
+SET    PI.UID = @XOldUID                  
+output inserted.patientinvid,inserted.status into @tmp_patinv                  
+FROM   PatientInvestigation PI(NOLOCK)                  
+WHERE  PI.OrgId = @OrgID                  
+AND PI.PatientVisitID = @xPatientVisitID                  
+AND PI.UID <> @XOldUID                  
+UPDATE PIS                  
+SET    PIS.UID = @XOldUID                  
+output inserted.sampleid into @tmp_sample                  
+FROM   PatientInvSample PIS(NOLOCK)                  
+WHERE  PIS.OrgId = @OrgID                  
+AND PIS.PatientVisitID = @xPatientVisitID                  
+AND PIS.UID <> @XOldUID                  
+UPDATE PISM                  
+SET    PISM.UID = @XOldUID                  
+FROM   PatientInvSampleMapping PISM(NOLOCK)                  
+WHERE  PISM.OrgID = @OrgID                  
+AND PISM.VisitID = @xPatientVisitID                  
+AND PISM.UID <> @XOldUID                  
+/********End********/                  
+--------------------Updtae status='Recived' patientinvestigation   ---                      
+UPDATE PINV                   
+set Status = tbl.Status                                                                                      
+output inserted.patientinvid,inserted.status into @tmp_patinv                  
+from PatientInvestigation PINV  (nolock)                                                      
+Inner join @tblAccessionNo  tbl                   
+on tbl.AccessionNo = PINV.AccessionNumber                        
+END                   
+/* Code added by T.Suresh for MIS Purpose start here */                  
+;with cte as                   
+(                  
+Select row_number() over (partition by sampleid order by sampleid) as sno,sampleid  from @tmp_sample                  
+)                  
+delete from cte where sno>1                  
+Update MPIS set barcodeNumber = PIS.BarcodeNumber, CollectedDateTime = PIS.CollectedDateTime,                  
+RecSampleLocID = PIS.RecSampleLocID,CollectedLocID = PIS.CollectedLocID, modifiedat = @serverdate , Modifiedby = PIS.modifiedby              ,SampleRelationshipID= PIS.SampleRelationshipID                  
+From @tmp_sample ts                  
+Inner join patientinvsample PIS (nolock) on ts.sampleid = pis.SampleID                  
+Inner join MISPatientinvsample MPIS (nolock) on PIS.Sampleid = MPIS.Sampleid                  
+--select * From @tmp_sample--suresh                  
+Insert into mispatientinvsample                  
+(                  
+Sampleid, AccessionNumber, SampleCode, SampleDesc,                  
+CollectedDateTime, RecSampleLocID, CollectedLocID, Createdby,                  
+Createdat, modifiedby, modifiedat,BarcodeNumber,PatientVisitID,SampleRelationshipID                  
+)       
+Select                  
+PIS.Sampleid, ORD.AccessionNumber, PIS.SampleCode, PIS.SampleDesc,                  
+PIS.CollectedDateTime, PIS.RecSampleLocID, PIS.CollectedLocID, PIS.Createdby,                  
+@ServerDate, PIS.modifiedby, @ServerDate,PIS.BarcodeNumber,PIS.PatientVisitID,PIS.SampleRelationshipID                  
+From @tmp_sample ts                  
+Inner join patientinvsample PIS (nolock) on ts.sampleid = pis.SampleID                  
+Inner join PatientInvSampleMapping PISM (nolock) on PIS.Sampleid = PISM.SID                  
+Inner join Orderedinvestigations ORD (nolock) on PISM.Visitid = ORD.Visitid and PISM.ID = ORD.ID and PISM.Type = ORD.Type                  
+left join MISPatientinvsample MPIS (nolock) on PIS.Sampleid = MPIS.Sampleid                  
+Where MPIS.Sampleid is null                  
+;with cteO as                   
+(                  
+Select row_number() over (partition by accessionnumber order by accessionnumber) as sno,accessionnumber  from @tmp_ordinv                  
+)                  
+delete from cteO where sno>1                  
+;with cteP as                   
+(                  
+Select row_number() over (partition by patientinvid order by patientinvid) as sno,patientinvid  from @tmp_patinv                  
+)                  
+delete from cteP where sno>1                  
+;with ctet as                   
+(                  
+Select row_number() over (partition by sampletrackerid order by sampletrackerid) as sno,sampletrackerid  from @tmp_tracker                  
+)                  
+delete from ctet where sno>1                  
+Update MORD set status = ORD.status, modifiedat = @serverdate, ResCaptureLoc = ord.ResCaptureLoc,ReferralID = ord.ReferralID                  
+From @tmp_ordinv tp                  
+Inner join Orderedinvestigations ORD (nolock) on ORD.AccessionNumber = tp.AccessionNumber                  
+Inner join MISOrderedinvestigations MORD (nolock) on ORD.accessionNumber = MORD.accessionNumber                  
+Insert into MISOrderedinvestigationhistory                  
+(       
+AccessionNumber,Visitid,id,type,Name,statusid,status,                  
+CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName                  
+)                  
+Select mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,mord.status,                  
+@Loginid as CreatedBy,@ServerDate as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName                  
+From @tmp_ordinv tp                  
+Inner join MISOrderedinvestigations MORD (nolock) on tp.Accessionnumber = MORD.Accessionnumber                  
+Inner join ordtasks tsk (nolock) on MORD.status = tsk.status                  
+Left join MISOrderedinvestigationhistory OH (nolock) on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and oh.CreatedBy = @Loginid                  
+Where Oh.Accessionnumber is null                  
+Update MISO  set Receivedat = isnull(ST.Createdat,MISO.Receivedat),modifiedat = @serverdate,receivedby = @Loginid                  
+--output inserted.AccessionNumber,'SampleReceived' as status into @tmp_ordhis                  
+From @tmp_tracker tk                  
+Inner join sampletracker ST (nolock) on tk.Sampletrackerid = ST.Sampletrackerid                  
+Inner join MISPatientinvsample MPIS (nolock) on ST.Sampleid = MPIS.Sampleid                  
+Inner join MISorderedinvestigations MISO (nolock) ON MPIS.AccessionNumber = MISO.AccessionNumber                  
+Where st.InvSampleStatusID = 3                  
+update MPI Set status = tp.status          
+from Mispatientinvestigation MPI (nolock)                  
+Inner join @tmp_patinv tp on MPI.patientinvid = tp.patientinvid                  
+/* Code added by T.Suresh for MIS Purpose end here */        
+
+/* BiDirectional Barcode Details Start | VEL | */
+
+ IF EXISTS( SELECT 1 FROM ConfigOrgMaster COM 
+ INNER JOIN ConfigKeyMaster CKM ON COM.ConfigKeyID=CKM.ConfigKeyID 
+ WHERE COM.OrgID=@OrgID AND CKM.ConfigKey='IsEnableBidirectionalBarcode' )
+ BEGIN
+	       EXEC pInsertBidirectionalBarcodeTestDetails @Patientvisitid,@OrgID,'APP'  
+ END 
+
+ /* BiDirectional Barcode Details End | VEL | */
+          
+/* LabCode changes for RLS Org -- Start */
+
+DECLARE @LabcodeConfig CHAR(1);
+ SELECT @LabcodeConfig = COM.ConfigValue
+ FROM ConfigOrgMaster COM
+ INNER JOIN ConfigKeyMaster CKM ON COM.ConfigKeyID = CKM.ConfigKeyID
+ AND CKM.ConfigKey = 'NeedLabCodeforTest'
+ AND COM.OrgID = @OrgID
+
+if(@LabcodeConfig = 'Y')
+BEGIN
+IF EXISTS(SELECT 1                  
+FROM   PatientInvSampleMapping PIS WITH(NOLOCK)                  
+INNER JOIN @pSampleTracker st                  
+ON  PIS.SID=st.SampleID                
+AND PIS.VisitID = st.PatientVisitID
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=PIS.ID 
+and LCP.Type=PIS.Type   and LCP.ORgID=PIS.ORgID                   
+INNER JOIN PatientVisit PV (NOLOCK)                  
+ON PV.PatientVisitID = ST.PatientVisitID             
+AND ST.OrgId = PV.OrgID AND St.InvSampleStatusID=3                 
+)
+BEGIN
+DECLARE @LabcodeGeneration UDTLabCodeForTest
+
+Insert into @LabcodeGeneration (ID,Type,Accessionnumber)
+SELECT PIS.ID,PIS.Type,PIS.AccessionNumber FROM   PatientInvSampleMapping PIS WITH(NOLOCK)                  
+INNER JOIN @pSampleTracker st                  
+ON st.SampleID = PIS.SID                  
+AND PIS.VisitID = st.PatientVisitID  
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=PIS.ID and LCP.Type=PIS.Type   and LCP.ORgID=PIS.ORgID           
+INNER JOIN PatientVisit PV (NOLOCK)                  
+ON PV.PatientVisitID = ST.PatientVisitID             
+AND ST.OrgId = PV.OrgID AND St.InvSampleStatusID=3
+
+exec pGetLabCodeforTests @LabcodeGeneration,@OrgID
+
+END
+
+if Exists(select 1 from PatientInvSampleMapping PM WITH(NOLOCK)                   
+inner join PatientVisit PV WITH(NOLOCK)                   
+ON pv.ReferVisitID = PM.VisitID                   
+Inner Join PatientInvSample ps WITH(NOLOCK)                   
+On ps.SampleRelationshipID = pm.SID                   
+Inner Join @pSampleTracker st                   
+ON ps.SampleRelationshipID = st.SampleID                   
+Inner Join OrderedInvestigations OI WITH(NOLOCK)                   
+ON OI.VisitID = Pv.PatientVisitId    
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=OI.ID 
+and LCP.Type=OI.Type   and LCP.ORgID=OI.ORgID                      
+where  PV.PatientVisitId = @Patientvisitid                   
+and OI.ID = PM.ID                   
+AND OI.Status Not In( 'Retest' ) and st.InvSamplestatusID=3)
+BEGIN
+DECLARE @LabcodeGenerationTransfer UDTLabCodeForTest
+
+Insert into @LabcodeGenerationTransfer (ID,Type,Accessionnumber)
+select OI.ID,OI.Type,OI.AccessionNumber from PatientInvSampleMapping PM WITH(NOLOCK)                   
+inner join PatientVisit PV WITH(NOLOCK)                   
+ON pv.ReferVisitID = PM.VisitID                   
+Inner Join PatientInvSample ps WITH(NOLOCK)                   
+On ps.SampleRelationshipID = pm.SID                   
+Inner Join @pSampleTracker st                   
+ON ps.SampleRelationshipID = st.SampleID                   
+Inner Join OrderedInvestigations OI WITH(NOLOCK)                   
+ON OI.VisitID = Pv.PatientVisitId    
+Inner Join LabcodePattern LCP (Nolock) on LCP.ID=OI.ID 
+and LCP.Type=OI.Type   and LCP.ORgID=OI.ORgID                      
+where  PV.PatientVisitId = @Patientvisitid                   
+and OI.ID = PM.ID                   
+AND OI.Status Not In( 'Retest' ) and st.InvSamplestatusID=3
+
+exec pGetLabCodeforTests @LabcodeGenerationTransfer,@OrgID
+END
+
+END
+/* LabCode changes for RLS Org -- END */
+END 
+
+
+
+

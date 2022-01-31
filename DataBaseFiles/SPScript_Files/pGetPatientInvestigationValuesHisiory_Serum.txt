@@ -1,0 +1,273 @@
+CREATE PROCEDURE [dbo].[pGetPatientInvestigationValuesHisiory_Serum] @patientVisitID [BIGINT],  
+                                                               @orgID          [INT],  
+                                                               @PatternID      [BIGINT],  
+                                                               @InvID          [BIGINT],  
+                                                               @ContextInfo    [UDT_CONTEXT] READONLY  
+WITH EXECUTE AS OWNER  
+AS  
+  BEGIN  
+      DECLARE @LanguageCode NVARCHAR(20)  
+ 
+      SELECT @LanguageCode = LanguageCode  
+      FROM   @ContextInfo  
+ 
+      if( isnull(@LanguageCode, '') = '' )  
+        Begin  
+            set @LanguageCode='en-GB'  
+        End  
+ 
+      DECLARE @TempInvStatus TABLE  
+        (  
+           status      NVARCHAR(100),  
+           DisplayText NVARCHAR(255)  
+        )  
+ 
+      IF NOT EXISTS(SELECT 1  
+                    FROM   InvestigationStatus WITH(NOLOCK)  
+                    WHERE  Orgid = @OrgID)  
+        BEGIN  
+            INSERT INTO @TempInvStatus  
+                        (status,DisplayText)  
+            SELECT Invsts.Status,  
+                   ISO.DisplayText  
+            FROM   InvestigationStatus Invsts WITH(NOLOCK)  
+                   INNER JOIN InvStatusOrgMapping ISO WITH(NOLOCK)  
+                           ON ISO.status = Invsts.Status  
+                              AND Isnull(ISO.LangCode, 'en-GB') = @LanguageCode  
+                              AND ISO.OrgID = @orgID  
+            WHERE  Invsts.Orgid IS NULL  
+        END  
+      ELSE  
+        BEGIN  
+            INSERT INTO @TempInvStatus  
+                        (status,DisplayText)  
+            SELECT Invsts.Status,  
+                   ISO.DisplayText  
+            FROM   InvestigationStatus Invsts WITH(NOLOCK)  
+                   INNER JOIN InvStatusOrgMapping ISO WITH(NOLOCK)  
+                           ON ISO.status = Invsts.Status  
+                              AND Isnull(ISO.LangCode, 'en-GB') = @LanguageCode  
+                              AND ISO.OrgID = @orgID  
+            WHERE  Invsts.Orgid = @OrgID  
+        END  
+ 
+      DECLARE @IsExternalVisit NVARCHAR(40)  
+ 
+      SELECT @IsExternalVisit = COm.ConfigValue  
+      FROM   ConfigOrgMaster COM WITH(NOLOCK)  
+             INNER JOIN ConfigKeyMaster CKM WITH(NOLOCK)  
+                     ON COM.ConfigKeyID = CKM.ConfigKeyID  
+      WHERE  CKM.ConfigKey = 'ExternalVisitSearch'  
+             AND COM.OrgID = @orgID  
+ 
+      DECLARE @PatientID BIGINT  
+ 
+      SELECT @PatientID = PatientID  
+      FROM   Patientvisit WITH(NOLOCK)  
+      WHERE  PatientVisitId = @patientVisitID  
+             AND OrgID = @orgID  
+ 
+      CREATE TABLE #valuetbl  
+        (  
+           PatInvID          INT IDENTITY(1, 1),  
+           CreatedAt         DATETIME,  
+           ConvValue         NVARCHAR(3),  
+           VisitID           NVARCHAR(50),  
+           InvestigationID   BIGINT,  
+           InvestigationName NVARCHAR(300),  
+           ReferenceRange    NVARCHAR(MAX),  
+           Value             NVARCHAR(MAX),  
+           UOMCode           NVARCHAR(250),  
+           Reason            NVARCHAR(250),  
+           PatientVisitID    NVARCHAR(100),  
+           UID               NVARCHAR(300),  
+           Status            NVARCHAR(100),  
+           PatientInvID      NVARCHAR(100),  
+           Name              NVARCHAR(Max),  
+           KitID             BIGINT,  
+           KitName           NVARCHAR(255),  
+           InstrumentID      BIGINT,  
+           InstrumentName    NVARCHAR(255),  
+           DisplayStatus     NVARCHAR(255)  
+        )  
+ 
+      INSERT #valuetbl  
+      SELECT DISTINCT IV.CreatedAt,  
+                      'N',  
+                      CASE  
+                        WHEN @IsExternalVisit = 'Y' THEN  
+                          CASE  
+                            WHEN Isnull(CONVERT(NVARCHAR, Pv.ExternalVisitID), '') = '' THEN CONVERT(NVARCHAR, pv.PatientVisitId)  
+                            ELSE CONVERT(NVARCHAR, Pv.ExternalVisitID)  
+                END  
+                        ELSE CONVERT(NVARCHAR, PV.VisitNumber)  
+                      --Convert(nvarchar,pv.VisitNumber )                                                                    
+                      END                                                  AS VisitID,  
+                      PI.InvestigationID,  
+                      PI.InvestigationName,  
+                      PI.ReferenceRange,  
+                      IV.Value,  
+                      CONVERT(NVARCHAR, CONVERT(DATETIME, IV.CreatedAt, 1))AS UOMCode,  
+                      PI.Reason,  
+                      PV.PatientVisitId                                    PatientVisitID,  
+                      IV.UID,  
+                      IV.Status,  
+                      --Convert(nvarchar,PI.PatientInvID)PatientInvID,                        
+                      0                                                    AS PatientInvID,  
+                      IV.Name,  
+                      PI.KitID,  
+                      IKM.KitName,  
+                      PI.InstrumentID,  
+                      IIM.InstrumentName,  
+                      Isnull(Invsts.DisplayText, IV.Status)                AS DisplayStatus  
+      FROM   Patientvisit PV WITH(nolock)  
+             INNER JOIN PatientInvestigation PI WITH(nolock)  
+                     ON PI.PatientVisitID = PV.PatientVisitId  
+                        AND PI.InvestigationID = @InvID  
+             INNER JOIN InvestigationValues IV WITH(nolock)  
+                     ON IV.InvestigationID = PI.InvestigationID  
+                        AND IV.PatientVisitID = PI.PatientVisitID  
+                        AND Isnull(pi.statustype, '') = Isnull(iv.statustype, '')  
+                        AND IV.UID = PI.UID  
+             LEFT JOIN InvestigationOrgMapping IOM WITH(nolock)  
+                    ON IOM.OrgID = PI.OrgID  
+                       AND IOM.InvestigationID = PI.InvestigationID  
+             LEFT JOIN DeviceIntegrationOrgMapping DIO WITH(nolock)  
+                    ON IV.DeviceID = DIO.DeviceID  
+                       AND DIO.OrgID = @orgID  
+             LEFT JOIN InvKitMaster IKM WITH(nolock)  
+                    ON IKM.OrgID = PI.OrgID  
+                       AND IKM.KitID = PI.KitID  
+             LEFT JOIN InvInstrumentMaster IIM WITH(nolock)  
+                    ON IIM.OrgID = PI.OrgID  
+                       AND IIM.InstrumentID = DIO.InstrumentID  
+             INNER JOIN @TempInvStatus InvSts  
+                     ON InvSts.status = IV.Status  
+      --INNER JOIN PatternMapping PM ON PM.InvestigationID=IV.InvestigationID                                                    
+      WHERE  PV.PatientID = @PatientID  
+             AND PV.OrgID IN (SELECT SharingOrgId  
+                              FROM   TrustedOrgDetails WITH(NOLOCK)  
+                              WHERE  LoggedOrgID = @orgID)  
+             AND Isnull(IV.DeviceID, '') = ''  
+      -- AND PM.PatternID=@PatternID                                      
+      UNION  
+      SELECT DISTINCT Isnull(IVH.ModifiedAt, IVH.CreatedAt),  
+                      'Y',  
+                      CASE  
+                        WHEN @IsExternalVisit = 'Y' THEN  
+                          CASE  
+                            WHEN Isnull(CONVERT(NVARCHAR, Pv.ExternalVisitID), '') = '' THEN CONVERT(NVARCHAR, pv.PatientVisitId)  
+                            ELSE CONVERT(NVARCHAR, PV.VisitNumber)  
+                          END  
+                        ELSE CONVERT(NVARCHAR, pv.VisitNumber)  
+                      END                                                                           AS VisitID,  
+                      PI.InvestigationID,  
+                      PI.InvestigationName,  
+                      PI.ReferenceRange,  
+                      IVH.Value,  
+                      CONVERT(NVARCHAR, CONVERT(DATETIME, Isnull(IVH.ModifiedAt, IVH.CreatedAt), 1))AS UOMCode,  
+                      PI.Reason,  
+                      PV.PatientVisitId                       PatientVisitID,  
+                      IVH.UID,  
+                      IVH.Status,  
+                      0                                                                             AS PatientInvID,  
+                      IVH.Name,  
+                      PI.KitID,  
+                      IKM.KitName,  
+                      PI.InstrumentID,  
+                      IIM.InstrumentName,  
+                      Isnull(Invsts.DisplayText, IVH.Status)                                        AS DisplayStatus  
+      FROM   Patientvisit PV WITH(nolock)  
+             INNER JOIN PatientInvestigation PI WITH(nolock)  
+                     ON PI.PatientVisitID = PV.PatientVisitId  
+                        AND PI.InvestigationID = @InvID  
+             INNER JOIN InvestigationValues IV WITH(nolock)  
+                     ON IV.InvestigationID = PI.InvestigationID  
+                        AND IV.PatientVisitID = PI.PatientVisitID  
+                        AND Isnull(pi.statustype, '') = Isnull(iv.statustype, '')  
+                        AND IV.UID = PI.UID  
+             INNER JOIN InvestigationValueHistory IVH WITH(nolock)  
+                     ON IVH.InvestigationID = PI.InvestigationID  
+                        AND IVH.PatientVisitID = PI.PatientVisitID  
+                        AND IVH.UID = PI.UID  
+             LEFT JOIN InvestigationOrgMapping IOM WITH(nolock)  
+                    ON IOM.OrgID = PI.OrgID  
+                       AND IOM.InvestigationID = PI.InvestigationID  
+             LEFT JOIN DeviceIntegrationOrgMapping DIO WITH(nolock)  
+                    ON IVH.DeviceID = DIO.DeviceID  
+                       AND DIO.OrgID = IVH.Orgid  
+             LEFT JOIN InvKitMaster IKM WITH(nolock)  
+                    ON IKM.OrgID = PI.OrgID  
+                       AND IKM.KitID = PI.KitID  
+             LEFT JOIN InvInstrumentMaster IIM WITH(nolock)  
+                    ON IIM.OrgID = PI.OrgID  
+                       AND IIM.InstrumentID = DIO.InstrumentID  
+             INNER JOIN @TempInvStatus InvSts  
+                     ON InvSts.status = PI.Status  
+      WHERE  PV.PatientID = @PatientID  
+             AND PV.OrgID IN (SELECT SharingOrgId  
+                              FROM   TrustedOrgDetails WITH(NOLOCK)  
+                              WHERE  LoggedOrgID = @orgID) -- AND PM.PatternID=@PatternID                                      
+             AND Isnull(IVH.DeviceID, '') != ''  
+ 
+      SELECT *  
+      FROM   #valuetbl  
+ 
+      UPDATE I  
+      SET    I.PatientInvID = --Convert(nvarchar,P.PatientInvID) +'^0'            
+             CONVERT(NVARCHAR, PatInvID)  
+      FROM   #valuetbl I  
+             INNER JOIN PatientInvestigation P WITH(NOLOCK)  
+                     ON I.PatientVisitID = P.PatientVisitID  
+                        AND I.InvestigationID = P.InvestigationID  
+      WHERE  I.ConvValue = 'N'  
+ 
+      UPDATE I  
+      SET    I.PatientInvID = --Convert(nvarchar,P.PatientInvID)+            
+             CONVERT(NVARCHAR, PatInvID)  
+      FROM   #valuetbl I  
+             INNER JOIN PatientInvestigation P WITH(NOLOCK)  
+                     ON I.PatientVisitID = P.PatientVisitID  
+                        AND I.InvestigationID = P.InvestigationID  
+      WHERE  I.ConvValue = 'Y'  
+ 
+      --select * from #valuetbl            
+      --return              
+      --Modified By Prasanna.S                      
+      --select distinct * from #valuetbl   Order by PatientInvID asc                                    
+      IF EXISTS(SELECT DISTINCT PatientInvID,  
+                                Count(PatientInvID)  
+                FROM   #valuetbl  
+                GROUP  BY PatientInvID  
+                HAVING Count(PatientInvID) > 1)  
+        BEGIN  
+            --Select distinct VisitID,InvestigationID,InvestigationName,ReferenceRange,UOMCode,Reason,PatientVisitID,UID,Status,PatientInvID,                              
+            --(Select ST1.Name +'~'+ ST1.Value  + '^' AS [text()] From #valuetbl ST1 Where ST1.PatientInvID = ST2.PatientInvID ORDER BY ST1.PatientVisitID For XML PATH ('')) Value,                                            
+            --KitName,InstrumentName,DisplayStatus as DisplayStatus                                              
+            --from #valuetbl ST2 ORDER BY PatientVisitID                        
+            SELECT DISTINCT ConvValue,  
+                            VisitID,  
+                            InvestigationID,  
+                            InvestigationName,  
+                            ReferenceRange,  
+                            UOMCode,  
+                            Reason,  
+                            PatientVisitID,  
+                            UID,  
+                            Status,  
+                            PatientInvID,  
+                            ST2.Value,  
+                            KitName,  
+                            InstrumentName,  
+                            DisplayStatus AS DisplayStatus,  
+                            CreatedAt  
+            FROM   #valuetbl ST2  
+            ORDER  BY CreatedAt  
+        END  
+      ELSE  
+        SELECT DISTINCT *  
+        FROM   #valuetbl  
+        ORDER  BY CreatedAt  
+ 
+      DROP TABLE #valuetbl  
+  END  

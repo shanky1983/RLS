@@ -1,0 +1,63 @@
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[PatientInBound]')
+BEGIN
+  CREATE SYNONYM ERPPatientInBound
+  FOR LIS_PDT_Integration.dbo.PatientInBound
+END 
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[PatientInBound_Hist]')
+BEGIN
+  CREATE SYNONYM ERPPatientInBound_Hist
+  FOR LIS_PDT_Integration.dbo.PatientInBound_Hist
+END 
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[booking]')
+BEGIN
+  CREATE SYNONYM ERPbooking
+  FOR LIS_PDT_Integration.dbo.booking
+END 
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCLiveLocation]')
+BEGIN
+  CREATE SYNONYM ERPHCLiveLocation
+  FOR LIS_PDT_Integration.dbo.HCLiveLocation
+END
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCBookingInBound]')
+BEGIN
+  CREATE SYNONYM ERPHCBookingInBound
+  FOR LIS_PDT_Integration.dbo.HCBookingInBound
+END
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCBookingInBound_HIST]')
+BEGIN
+  CREATE SYNONYM ERPHCBookingInBound_HIST
+  FOR LIS_PDT_Integration.dbo.HCBookingInBound_HIST
+END
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCPaymentDetailsInBound]')
+BEGIN
+  CREATE SYNONYM ERPHCPaymentDetailsInBound
+  FOR LIS_PDT_Integration.dbo.HCPaymentDetailsInBound
+END
+GO
+
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCTestInBound]')
+BEGIN
+  CREATE SYNONYM ERPHCTestInBound
+  FOR LIS_PDT_Integration.dbo.HCTestInBound
+END
+GO
+
+IF NOT EXISTS(SELECT * FROM SYS.SYNONYMS WHERE base_object_name = '[LIS_PDT_Integration].[dbo].[HCTestSampleInBound]')
+BEGIN
+  CREATE SYNONYM ERPHCTestSampleInBound
+  FOR LIS_PDT_Integration.dbo.HCTestSampleInBound
+END 
+GO

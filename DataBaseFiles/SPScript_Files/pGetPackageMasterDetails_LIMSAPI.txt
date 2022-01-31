@@ -1,0 +1,235 @@
+--EXEC pGetPackageMasterDetails_LIMSAPI @pOrgCode='LIMSAPI',@Page=1,@Size=1
+CREATE PROCEDURE pGetPackageMasterDetails_LIMSAPI(
+	@pOrgCode NVARCHAR(100),
+	@TestCode NVARCHAR(100),
+	@Page INT,
+    @Size INT
+  
+	)
+	WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50)
+
+DECLARE @MaxRecordCount INT
+ DECLARE @MaxCountReached BIT
+ DECLARE @TotalRecords INT
+
+
+ SELECT @MaxRecordCount=MaximumRecordCount 
+ FROM APIConfiguration 
+ WHERE SPName='pGetPackageMasterDetails_LIMSAPI'
+
+ IF @Size > @MaxRecordCount
+ BEGIN
+    SET @Size = @MaxRecordCount
+    SET @MaxCountReached=1
+ END
+
+
+	CREATE TABLE #Temp_PackageDetails
+	(
+		PkgCode nvarchar(50),
+		PkgName nvarchar(1000),
+		PkgType nvarchar(50),
+		PKGGender Nvarchar(50),
+		PkgStatus Nvarchar(10),	
+		TestCode nvarchar(50),
+		TestName nvarchar(1000),
+		Type nvarchar(50),
+		Gender nvarchar(50),
+		SampleID int,
+		SampleName nvarchar(250),
+		ContainerID int,
+		ContainerName nvarchar(250),
+		SampleContainerColour nvarchar(100),
+		DepartmentName nvarchar(100),
+		DepartmentID int,
+		Status Nvarchar(50)  default  '',
+	    GroupCode NVARCHAR(100),
+	    GroupName NVARCHAR(1000),
+		GroupID BIGINT,
+		GroupGender NVARCHAR(100) ,
+		PkgID BIGINT,
+		CreatedAt DATETIME,
+		UpdatedAt DATETIME
+	)
+	CREATE TABLE #Temp_GrpPackage
+	(
+		PkgCode nvarchar(50),
+		PkgName nvarchar(1000),
+		PkgType nvarchar(50),
+		PKGGender Nvarchar(50),
+		PkgStatus Nvarchar(10),	
+		TestCode nvarchar(50),
+		TestName nvarchar(1000),
+		Type nvarchar(50),
+		Gender nvarchar(50),
+		SampleID int,
+		SampleName nvarchar(250),
+		ContainerID int,
+		ContainerName nvarchar(250),
+		SampleContainerColour nvarchar(100),
+		DepartmentName nvarchar(100),
+		DepartmentID int,
+		Status Nvarchar(50)  default '',
+		GroupCode NVARCHAR(100),
+		GroupName NVARCHAR(1000),
+		GroupID BIGINT,
+		GroupGender NVARCHAR(100),
+		GroupStatus NVARCHAR(100) default '',
+		PkgID BIGINT,
+		CreatedAt DATETIME,
+		UpdatedAt DATETIME
+	)
+	CREATE TABLE #Temp_Package
+	(
+	PkgCode nvarchar(50),
+	PkgName nvarchar(1000),
+	PkgType nvarchar(50),
+	PKGGender Nvarchar(50),
+	PkgStatus Nvarchar(10),	
+	TestCode nvarchar(50),
+	TestName nvarchar(1000),
+	Type nvarchar(50),
+	Gender nvarchar(50),
+	SampleID int,
+	SampleName nvarchar(250),
+	ContainerID int,
+	ContainerName nvarchar(250),
+	SampleContainerColour nvarchar(100),
+	DepartmentName nvarchar(100),
+	DepartmentID int,
+	Status Nvarchar(50),
+	PkgID BIGINT,
+	AttGroupID BIGINT,
+	OrgGroupID BIGINT,
+	OrgID INT,
+	Price DECIMAL(18,2),
+	CreatedAt DATETIME,
+	UpdatedAt DATETIME
+	)
+
+	IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+	 
+
+	SELECT @TotalRecords = COUNT(1) 
+	FROM InvOrgGroup  IOG   
+	INNER JOIN INvgroupMaster IG (NOLOCK) ON IOG.AttgroupID=IG.GroupID AND IG.Type='PKG'
+	WHERE IOG.Orgid=@pOrgID AND (IOG.TestCode=@TestCode OR @TestCode='')
+
+	INSERT INTO #Temp_Package (PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus,PkgID,AttGroupID,OrgGroupID ,OrgID ,CreatedAt,UpdatedAt)	
+	SELECT IOG.TestCode ,IOG.DisplayText,'PKG', Case when IOG.Gender= 'F' then 'Female' when IOG.Gender='M' then 'Male' when ISNULL(IOG.Gender,'B')='B' then 'Both' END,
+		   CASE WHEN IOG.Status IN ('Y','A') THEN 'Active' ELSE 'InActive' END ,OrgGroupID,AttGroupID,OrgGroupID ,IOG.OrgID,IOG.CreatedAt,IOG.ModifiedAt
+	FROM InvOrgGroup  IOG   
+	INNER JOIN INvgroupMaster IG (NOLOCK) ON IOG.AttgroupID=IG.GroupID AND IG.Type='PKG'
+	WHERE IOG.Orgid=@pOrgID  AND  ISNULL(IOG.ISIntegrationPKG,0)=0
+	AND (IOG.TestCode=@TestCode OR @TestCode='')
+	 ORDER BY IOG.OrgGroupID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY      
+	   
+
+	    UPDATE TR set TR.Price=IRC.Rate 
+		FROM #Temp_Package TR 
+		INNER JOIN InvGroupMaster IGM ON  IGM.GroupID=TR.AttGroupID
+		INNER JOIN InvOrgGroup IOG  ON IOG.AttGroupID=IGM.GroupID  and IOG.Orgid=TR.OrgID
+		INNER JOIN InvRateMaster  IRC ON IRC.ID=IOG.OrgGroupID 
+		INNER JOIN RateMaster R (NOLOCK) ON R.OrgID=TR.OrgID AND R.RateCode='GENERAL'
+
+	; WITH pkgdet     
+                       AS (
+SELECT Cast(GRP.AttGroupID AS BIGINT) AS     
+                                  ParentAttGroupID,     
+                                  Cast(GRP.OrgGroupID AS BIGINT) AS     
+                                  ParentOrgGroupID,     
+                                  PM.ID                          AS ChildGroupID     
+                           FROM   #Temp_Package GRP (nolock)     
+                                  LEFT JOIN InvPackageMapping PM (nolock)     
+                                         ON GRP.OrgGroupID = PM.PackageID     
+                                            AND PM.Type = 'GRP'     
+                                            AND Isnull(PM.Active, 'A') IN( 'A',     
+                                                'Y' )     
+								  UNION ALL     
+                           SELECT PKGDET.ParentOrgGroupID              AS     
+                                  ParentAttGroupID,     
+                                  PKGDET.ParentOrgGroupID              AS     
+                                  ParentOrgGroupID,     
+                                  Cast(IGMM.InvestigationID AS BIGINT) AS     
+                                  ChildGroupID     
+                          FROM  PKGDET  
+                                  INNER JOIN InvGroupMapMaster IGMM (nolock)     
+                                          ON PKGDET.ChildGroupID = IGMM.GroupID     
+                                             AND IGMM.Parent = 'Y'     
+                                             AND Isnull(IGMM.Active, 'Y') = 'Y'
+											 )  
+											  
+ 				 		    
+	 INSERT INTO #Temp_GrpPackage (PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus ,TestCode ,TestName,Type ,Gender,SampleID ,SampleName,ContainerID,ContainerName,
+	SampleContainerColour ,DepartmentName ,DepartmentID, Status,GroupID,PkgID,CreatedAt,UpdatedAt) 
+
+	SELECT PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus, 
+	IOM.TestCode,Replace(IOM.DisplayText,'''', ''''''),'INV',ISNULL(IOM.Gender,'Both'),ISM.SampleCode,ISM.SampleDesc,iSC.SampleContainerID,ISC.ContainerName,ISNULL(ISC.ContainerColor ,'')
+	,IDM.DeptName,IDM.DeptID,CASE WHEN IOM.ISActive='Y' THEN 'Active' ELSE 'InActive' END ,IGM.GroupID,Tp.PkgID,IOM.CreatedAt,IOM.ModifiedAt
+	FROM PKGDET   PKGDET
+    INNER JOIN #Temp_Package TP  ON PKGDET.ParentOrgGroupID =TP.OrgGroupID   
+	INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON PKGDET.ChildGroupID=IGM.GroupID   AND IGM.Active='Y'
+	INNER JOIN InvestigationOrgMapping IOM on IOM.InvestigationID=IGM.InvestigationID and IOM.OrgID=@pOrgID 
+	INNER JOIN InvSampleMaster ISM on ISM.SampleCode=IOM.SampleCode and IOM.OrgID=ISM.OrgID AND ISM.Langcode='en-GB'
+	INNER JOIN InvestigationSampleContainer ISC on ISC.SampleContainerID=IOM.SampleContainerID and ISC.ORgID=IOM.OrgID AND ISC.Langcode='en-GB'
+	INNER JOIN InvDeptMaster IDM On IDM.DeptID=IOM.DeptID and IDM.OrgID=IOM.OrgID AND IDM.Langcode='en-GB'
+	WHERE TP.Orgid=@pOrgID
+	 
+
+	UPDATE T
+	SET T.GroupCode=IG.TestCode,
+	    T.GroupName=IOG.DisplayText,
+		T.GroupGender=Case when IOG.Gender= 'F' then 'Female' when IOG.Gender='M' then 'Male' when ISNULL(IOG.Gender,'B')='B' then 'Both' END
+	FROM #Temp_GrpPackage T
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON T.GroupID=IOG.OrgGroupID
+	INNER JOIN InvGroupMaster IG (NOLOCK) ON IG.GroupID=IOG.AttGroupID 
+	WHERE IOG.OrgID=@pOrgID 
+
+	INSERT INTO #Temp_PackageDetails (PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus ,TestCode ,TestName,Type ,Gender,SampleID ,SampleName,ContainerID,ContainerName,
+	SampleContainerColour ,DepartmentName ,DepartmentID, Status,PkgID,GroupID,CreatedAt,UpdatedAt) 
+	SELECT IOG.TestCode ,Replace(IOG.DisplayText,'''', ''''''),'PKG', Case when IOG.Gender= 'F' then 'Female' when IOG.Gender='M' then 'Male' when ISNULL(IOG.Gender,'B')='B' then 'Both' END,
+		   CASE WHEN IOG.Status='Y' THEN 'Active' ELSE 'InActive' END,
+	IOM.TestCode,IOM.DisplayText,'INV',ISNULL(IOM.Gender,'Both'),ISM.SampleCode,ISM.SampleDesc,iSC.SampleContainerID,ISC.ContainerName,ISNULL(ISC.ContainerColor ,'')
+	,IDM.DeptName,IDM.DeptID,CASE WHEN IOM.ISActive='Y' THEN 'Active' ELSE 'InActive' END ,Tp.PkgID,0,IOM.CreatedAt,IOM.ModifiedAt
+	FROM InvOrgGroup  IOG 
+	INNER JOIN #Temp_Package TP ON IOG.OrgGroupID=TP.PKGID
+	INNER JOIN InvPackageMapping IPM on IPM.PackageID=IOG.OrgGroupID and IPM.Type='INV' AND IPM.active='A'
+	INNER JOIN InvestigationOrgMapping IOM on IOM.InvestigationID=IPM.ID and IOM.OrgID=@pOrgID 
+	INNER JOIN InvSampleMaster ISM on ISM.SampleCode=IOM.SampleCode and IOM.OrgID=ISM.OrgID AND ISM.Langcode='en-GB'
+	INNER JOIN InvestigationSampleContainer ISC on ISC.SampleContainerID=IOM.SampleContainerID and ISC.ORgID=IOM.OrgID  AND ISC.Langcode='en-GB'
+	INNER JOIN InvDeptMaster IDM On IDM.DeptID=IOM.DeptID and IDM.OrgID=IOM.OrgID AND IDM.Langcode='en-GB'
+	WHERE IOG.Orgid=@pOrgID --and ISNULL(IOG.ISIntegrationPKG,0)=1
+	 
+	SELECT * FROM #Temp_Package
+
+	SELECT PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus ,TestCode ,TestName,Type ,Gender,SampleID ,SampleName,ContainerID,ContainerName,
+	SampleContainerColour ,DepartmentName ,DepartmentID, Status,GroupName,GroupCode,GroupGender,PkgID,GroupID,CreatedAt,UpdatedAt FROM #Temp_GrpPackage 
+	UNION
+	SELECT PkgCode,PkgName,PkgType ,PKGGender ,PkgStatus ,TestCode ,TestName,Type ,Gender,SampleID ,SampleName,ContainerID,ContainerName,
+	SampleContainerColour ,DepartmentName ,DepartmentID, Status,GroupName,GroupCode,GroupGender,PkgID,GroupID,CreatedAt,UpdatedAt FROM #Temp_PackageDetails
+	
+	 SELECT @TotalRecords as TotalRecords, cast(CEILING(CAST(@TotalRecords AS DECIMAL) / @Size) as Int) as TotalPages,
+            @MaxRecordCount as AllowableRecordCount
+	DROP TABLE #Temp_Package
+	DROP TABLE #Temp_GrpPackage
+	DROP TABLE  #Temp_PackageDetails
+END
+
+
+
+
+

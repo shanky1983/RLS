@@ -1,0 +1,226 @@
+--/****** Object:  StoredProcedure [dbo].[pGetCultureReport]    Script Date: 10/29/2011 14:00:03 ******/                
+CREATE PROCEDURE [dbo].[pGetCultureReportV2QM] --148412,892617,4,76                                                 
+(                                                  
+ @pVisitID bigint,                                                    
+ @InvestigationID bigint,                                                    
+ @TemplateID int,                                                    
+ @OrgID int                                                    
+)                                                    
+AS                                                    
+BEGIN                                                    
+ SET NOCOUNT ON;                                                    
+DECLARE @idoc int                                                    
+DECLARE @doc nvarchar(MAX)                                                    
+DECLARE @delimiter nchar(1)                                                    
+                                                    
+SET @delimiter = ','                              
+                          
+DECLARE @tblInvestigationValues TABLE                                                         
+(                                                        
+ [InvestigationValueID] [bigint], [Name] [nvarchar](500) NULL, [Value] [nvarchar](max) NULL, [InvestigationID] [bigint] NULL, [GroupID] [int] NULL,                                                         
+ [PatientVisitID] [bigint] NULL, [UOMID] [int] NULL, [Status] [nvarchar](max) NULL, [CreatedBy] [bigint] NULL, [CreatedAt] [datetime] NULL,                                                         
+ [ModifiedBy] [bigint] NULL, [ModifiedAt] [datetime] NULL, [UOMCode] [nvarchar](50) NULL, [GroupName] [nvarchar](255) NULL, [Orgid] [int] NULL,                                                          
+ [IPInvSampleCollectionMasterID] [bigint] NULL, [PackageID] [int] NULL, [PackageName] [nvarchar](255), [SequenceNo] [int], [UID] [nvarchar](255)                                                        
+)                                                        
+                                                        
+DECLARE  @tblPatientInvestigation TABLE                                                  
+(                                                  
+ [PatientVisitID] [bigint], [InvestigationID] [bigint], [InvestigationName] [nvarchar](250), [CreatedBy] [bigint], [CreatedAt] [datetime],                                                  
+ [ModifiedBy] [bigint], [ModifiedAt] [datetime], [InvestigationMethodID] [bigint], [InvestigationSampleContainerID] [int], [SampleID] [int],                                                  
+ [InvestigationSiteID] [int], [IsCompleted] [nchar](1), [CollectedDateTime] [datetime], [Status] [nvarchar](100), [ComplaintId] [int], [GroupID] [int],                                                  
+ [GroupName] [nvarchar](250), [Reason] [nvarchar](250), [ReportStatus] [nvarchar](255), [ReferenceRange] [nvarchar](max), [MethodName] [nvarchar](255),                                                  
+ [IPInvSampleCollectionMasterID] [bigint], [OrgID] [int], [WorklistDeletedStatus] [nvarchar](50), [PerformingPhysicainName] [nvarchar](500),                                                  
+ [KitID] [bigint], [KitName] [nvarchar](255), [InstrumentID] [bigint], [InstrumentName] [nvarchar](255), [Interpretation] [nvarchar](max),                                                  
+ [PrincipleID] [bigint], [PrincipleName] [nvarchar](255),[QCData] [nvarchar](max), [PackageID] [int], [PackageName] [nvarchar](255),                                                  
+ [ApprovedBy] [bigint], [PatientInvID] [bigint], [OrderedAt] [datetime], [UID] [nvarchar](255), [GroupComment] [nvarchar](255),                                                   
+ [ApprovedAt] [datetime], [AccessionNumber] [bigint], [IsAbnormal] [nvarchar](80), [MedicalRemarks] [nvarchar](max)                         
+)                     
+       
+--DECLARE @tblResultSelectID Table (AccessionNo bigint)            
+--INSERT INTO @tblResultSelectID (AccessionNo)                                    
+--SELECT item from fnSplit(@InvestigationID,',')                       
+                                                        
+                            
+DECLARE @tblOrdPerfOrgGrpInvDtls Table (                                                        
+   OrderedOrgID int,                                                         
+   PerformedOrgID int,                                                        
+   AttuneGroupID int,                                                         
+   InvType nvarchar(10),                                                         
+   PerformedOrgGroupID int,                                                         
+   PerformedOrgUID nvarchar(max),                                                        
+   OrderedOrgGroupID int,                                                        
+   OrderedOrgUID nvarchar(max))                                                        
+                                                        
+                                                        
+DECLARE @tblAffectedVisits Table (VisitID bigint, OrgID bigint)                                                        
+                                                                                                                                  
+DECLARE @tblResultSelectID Table (InvestigationID bigint)                                                                                                                                 
+                         
+INSERT INTO @tblResultSelectID (InvestigationID)                                                                                                 
+SELECT @InvestigationID                          
+                                                                                                                                                       
+ DECLARE @tblResultSelectUID Table (UID nvarchar(255))                         
+ INSERT INTO @tblResultSelectUID (UID)                                                                              
+ SELECT DISTINCT OI.UID                                                                                                                                             
+ FROM OrderedInvestigations OI                                                                                          
+ INNER JOIN @tblResultSelectID trs ON OI.ID = trs.InvestigationID                                                                                   
+ WHERE OI.VisitID = @pVisitID AND OI.OrgID = @OrgID                                                                            
+                        
+DECLARE @tblreportmapping Table (InvestigationID nvarchar(300),TemplateID INT,Orgid INT)          
+          INSERT INTO @tblreportmapping          
+          exec pGetInvestigationTemplate  @pVisitID,@OrgID       
+                        
+INSERT INTO @tblAffectedVisits                                                        
+                        
+SELECT @pVisitID, @OrgID                                                        
+UNION                                                        
+SELECT PatientVisitID, OrgID from PatientVisit where ReferVisitID=@pVisitID                                                        
+                        
+--Select * from @tblAffectedVisits                        
+                        
+INSERT INTO @tblInvestigationValues                                                        
+SELECT top 1 [InvestigationValueID], [Name] + ' ' + (CASE WHEN IOA.IsNABL='Y' THEN '<b>*</b>' ELSE '' END) + ' ' + (CASE WHEN IOA.IsCAP ='Y' THEN '<b>#</b>' ELSE '' END) AS [Name],                
+  [Value], INV1.[InvestigationID] AS InvestigationID, [GroupID], [PatientVisitID], [UOMID], [Status], [CreatedBy], [CreatedAt],                                                         
+  [ModifiedBy], [ModifiedAt], [UOMCode], [GroupName], INV1.[Orgid], [IPInvSampleCollectionMasterID], [PackageID], [PackageName], [SequenceNo],                                 
+  [UID] FROM InvestigationValues INV1                         
+  INNER JOIN @tblAffectedVisits v2 ON INV1.PatientVisitID=v2.VisitID                                                      
+  LEFT JOIN InvestigationOrgAttributes IOA ON IOA.OrgID=INV1.Orgid AND IOA.InvestigationID=INV1.InvestigationID      
+  WHERE INV1.Orgid=@OrgID AND INV1.InvestigationID=@InvestigationID Order by InvestigationValueID DESC                     
+--Select dbo.Fn_getserverdate(@ContextInfo)                       
+INSERT INTO @tblPatientInvestigation                                                  
+SELECT top 1 [PatientVisitID],PINV1.[InvestigationID],[InvestigationName],[CreatedBy],[CreatedAt],[ModifiedBy],[ModifiedAt],[InvestigationMethodID],                                                  
+ [InvestigationSampleContainerID],[SampleID],[InvestigationSiteID],[IsCompleted],[CollectedDateTime],[Status],[ComplaintId],                                                  
+[GroupID],[GroupName],[Reason],[ReportStatus],[ReferenceRange],[MethodName],[IPInvSampleCollectionMasterID],PINV1.[OrgID],[WorklistDeletedStatus],                                                  
+[PerformingPhysicainName],[KitID],[KitName],[InstrumentID],[InstrumentName],[Interpretation],[PrincipleID],[PrincipleName],[QCData],                                                  
+[PackageID],[PackageName],[ApprovedBy],[PatientInvID],[OrderedAt],[UID],[GroupComment],[ApprovedAt], [AccessionNumber], [IsAbnormal], [MedicalRemarks]                                                 
+FROM PatientInvestigation PINV1      
+INNER JOIN @tblAffectedVisits v2 ON PINV1.PatientVisitID=v2.VisitID                                                                                                
+INNER JOIN @tblResultSelectID tbl ON tbl.InvestigationID = PINV1.InvestigationID      
+WHERE PINV1.Orgid=@OrgID ORDER BY CreatedAt DESC                                                                                         
+                          
+INSERT INTO @tblOrdPerfOrgGrpInvDtls (OrderedOrgID,PerformedOrgID,AttuneGroupID, InvType, PerformedOrgGroupID)                                                        
+SELECT @OrgID, OA.OrgID, OI.ID, OI.Type,                                                        
+  CASE                                                        
+   WHEN OI.Type='GRP' THEN IOG.OrgGroupID                                            
+   ELSE OI.ID                                                        
+  END                                     
+FROM OrderedInvestigations OI                                                         
+  INNER JOIN OrganizationAddress OA ON OI.ResCaptureLoc=OA.AddressID                                                        
+  LEFT JOIN  InvOrgGroup IOG ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OA.OrgID                                                        
+WHERE OI.VisitID=@pVisitID                                                         
+                          
+                                                          
+--Select * from @tblOrdPerfOrgGrpInvDtls                        
+Update T SET T.OrderedOrgGroupID=IOG.OrgGroupID                                                        
+FROM @tblOrdPerfOrgGrpInvDtls T INNER JOIN InvOrgGroup IOG ON T.AttuneGroupID=IOG.AttGroupID AND IOG.OrgID=@OrgID                                                      
+WHERE T.InvType!='INV'                                                         
+                                                        
+Update T SET T.PerformedOrgUID=OI.UID                                                        
+FROM @tblOrdPerfOrgGrpInvDtls T INNER JOIN OrderedInvestigations OI ON T.PerformedOrgID=OI.OrgID                                                        
+  AND T.AttuneGroupID=OI.ID and t.InvType = OI.Type                                                        
+  INNER JOIN @tblResultSelectID TRS ON TRS.InvestigationID=OI.ID                                                        
+  INNER JOIN @tblAffectedVisits TAV ON TAV.VisitID=OI.VisitID AND TAV.OrgID=T.PerformedOrgID                                                        
+                                                        
+                                                        
+Update T SET T.OrderedOrgUID=OI.UID                                                        
+FROM @tblOrdPerfOrgGrpInvDtls T                                                         
+  INNER JOIN OrderedInvestigations OI ON T.OrderedOrgID=OI.OrgID AND T.AttuneGroupID=OI.ID and OI.VisitID=@pVisitID                                                        
+  INNER JOIN @tblAffectedVisits TAV ON TAV.VisitID=OI.VisitID AND TAV.OrgID=T.OrderedOrgID                                                        
+                                                        
+Update @tblOrdPerfOrgGrpInvDtls SET PerformedOrgUID=OrderedOrgUID WHERE OrderedOrgID=PerformedOrgID                                                    
+                                                        
+--SELECT * FROM @tblOrdPerfOrgGrpInvDtls                                                        
+--Select * from @tblInvestigationValues                                                           
+                                                 
+                                     
+                                                          
+IF(1 < (Select Count(1) FROM @tblAffectedVisits))                                                        
+BEGIN                                  
+print 'eelse'                                              
+ --UPDATE T SET PatientVisitID=@pVisitID, Orgid=@OrgID, GroupID=T1.OrderedOrgGroupID, UID=T1.OrderedOrgUID                                                      
+ --FROM @tblInvestigationValues T                                                       
+ --  INNER JOIN @tblOrdPerfOrgGrpInvDtls T1 ON T.UID=T1.PerformedOrgUID AND T.GroupID=T1.PerformedOrgGroupID                                                       
+ --WHERE T1.InvType!='INV'                                                      
+                                                      
+ UPDATE T SET PatientVisitID=@pVisitID, Orgid=@OrgID, UID=T1.OrderedOrgUID                                                      
+ FROM @tblInvestigationValues T                                          
+   INNER JOIN @tblOrdPerfOrgGrpInvDtls T1 ON T.UID=T1.PerformedOrgUID AND T.InvestigationID=T1.PerformedOrgGroupID                                                       
+ WHERE T1.InvType='INV'                    
+END                                                                                       
+                        
+DECLARE @tblHeader Table                                                    
+(                
+ InvestigationID bigint,                                                    
+ InvestigationName nvarchar(500),               
+ ReportStatus nvarchar(500),                
+ SampleName nVARCHAR(500),               
+ ClinicalHistory nvarchar(max) ,               
+ Gross nvarchar(MAX),                                                                           
+ CultureReport nvarchar(MAX),                   
+ ResistanceDetected nvarchar(MAX),                   
+ ColonyCount nvarchar(MAX),          
+ OrganismIsolated nvarchar(max)                   
+)                                                    
+                                                   
+                          
+Declare @Temp Table                                                      
+(                                                     
+ PatientVisitID bigint,                         
+ InvestigationID bigint,                                                     
+ InvestigationName nvarchar(255),                                                     
+ ReportName nvarchar(255),                                                     
+ TemplateID int,                                                    
+ ReportStatus nvarchar(255),                                                           
+ MedicalRemarks nvarchar(max)             
+)                                                     
+insert into @Temp                                                     
+                                                    
+    SELECT piv.PatientVisitID,piv.InvestigationID                                                     
+    ,piv.InvestigationName     
+    ,ISNULL (im.reporttemplatename,                                                     
+    (SELECT Reporttemplatename                                                     
+    FROM InvReportMaster                                                     
+    WHERE IsDefault='Y' AND OrgID = @OrgID)) AS ReportName                                                     
+    ,ISNULL(im.templateid,                                                     
+    (SELECT TemplateID from InvReportMaster                             
+    WHERE IsDefault='Y' AND OrgID = @OrgID))AS TemplateID ,piv.ReportStatus, piv.MedicalRemarks                                                    
+    FROM @tblPatientInvestigation piv                                                     
+    INNER JOIN @tblreportmapping irm ON irm.investigationid = piv.InvestigationID                        
+    INNER JOIN invreportmaster im ON im.templateid = irm.templateid and im.OrgID =  @OrgID                                                   
+    WHERE piv.PatientVisitID=@pVisitID                                                    
+    AND piv.OrgID=@OrgID                         
+                                       
+                                                    
+SET @doc = (SELECT TOP 1 Value FROM @tblInvestigationValues  invValues                                                    
+   inner join @Temp tmp on tmp.InvestigationID = invValues.InvestigationID                          
+   and tmp.PatientVisitID =invValues.PatientVisitID                                                     
+   where  tmp.TemplateID=@TemplateID                                                  
+   and invValues.Orgid=@OrgID Order by InvestigationValueID DESC)                                                    
+                                                                        
+EXEC sp_xml_preparedocument @idoc OUTPUT, @doc                                                    
+                                                    
+INSERT INTO @tblHeader(InvestigationID,InvestigationName,ReportStatus,SampleName,ClinicalHistory,Gross,CultureReport,ResistanceDetected,ColonyCount,OrganismIsolated)                                                    
+SELECT *                                        
+FROM   OPENXML (@idoc, '/InvestigationResults/InvestigationDetails')                                                    
+WITH  (                
+  InvestigationID BIGINT 'InvestigationID' ,                                                    
+  InvestigationName nvarchar(500) 'InvestigationName',                                                    
+  ReportStatus  nvarchar(500) 'ReportStatus',                                                    
+  SampleName  nvarchar(500) 'SampleName',                                                    
+  ClinicalHistory nvarchar(MAX) 'ClinicalHistory',                                           
+  Gross nvarchar(MAX) 'Gross',                                           
+  CultureReport nvarchar(MAX) 'CultureReport',                                           
+  ResistanceDetected nvarchar(MAX) 'ResistanceDetected',    
+  ColonyCount nvarchar(MAX) 'ColonyCount',      
+  OrganismIsolated nvarchar(max) 'OrganismIsolated'                                           
+      )                                                 
+                                                    
+SELECT DISTINCT TH.InvestigationID,TH.InvestigationName,TH.ReportStatus,TH.SampleName,TH.ClinicalHistory,TH.Gross,TH.CultureReport,'' as Comments                
+   ,TMP.MedicalRemarks,PINV.Interpretation,TH.ResistanceDetected,TH.ColonyCount,TH.OrganismIsolated AS OrganismName,PINV.GroupName FROM @tblHeader TH              
+   INNER JOIN @tblPatientInvestigation PINV ON PINV.InvestigationID=TH.InvestigationID                                                   
+   LEFT JOIN @Temp TMP ON TMP.InvestigationID=TH.InvestigationID            
+END
+
+
+
+

@@ -1,0 +1,31 @@
+CREATE PROC [dbo].[PgetTestHistoryFieldDetails]    (    @ReferenceID BIGINT,    
+                                                 @ReferenceType VARCHAR(200), 
+                                                 @TestType      VARCHAR(200), 
+                                                 @ContextInfo   [UDT_CONTEXT] 
+readonly) 
+AS 
+  BEGIN 
+      Declare @OrgId INT 
+	  Declare @LangCode NVARCHAR(50)='en-GB'
+      set @OrgId=(Select OrgID 
+                  from   @ContextInfo) 
+      set @LangCode=(Select ISNULL(LanguageCode,'en-GB') 
+                  from   @ContextInfo) 
+      IF( @ReferenceType = 'TEST' ) 
+        BEGIN 
+            Select CF.FieldName          as LabelName, 
+                   CF.ControlType        as ControlType, 
+                   CF.DataType           as ControlConstraints, 
+                   ISNULL(CF.Domain, '') as Domain 
+            from   [ClientAttributesFields] CF 
+            where  ReferenceID = @ReferenceID 
+                   AND ReferenceType = @ReferenceType 
+                   AND TestType = @TestType 
+                   and CF.OrgID = @OrgId 
+				   and ISNULL(LanguageCode,'en-GB')=ISNULL(@LangCode,'en-GB')
+        END 
+  END 
+
+
+
+

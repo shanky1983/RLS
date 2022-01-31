@@ -1,0 +1,282 @@
+
+
+--drop proc pInsertBulkBookingDetails
+CREATE Proc [dbo].[pInsertBulkBookingDetails] (@PBookingDet   TT_UDTSaveBookingDetail Readonly,
+                                                    @ContextInfo    [UDT_Context] READONLY,
+                                                    @returnstatus   [bigint] output)
+AS
+  BEGIN
+      SET NOCOUNT ON
+
+     
+      DECLARE @ConRoleID BIGINT, @PatientID BIGINT, @PatientNumber VARCHAR(100), @CreatedbyId BIGINT, @UserId BIGINT
+	  DECLARE @pBookingID BIGINT, @LocationID BIGINT,  @CityID BIGINT,  @CityName VARCHAR(50), @StateID BIGINT,  
+				@StateName VARCHAR(50), @CountryID BIGINT,   @Dispatchvalue VARCHAR(20) = 'M'
+
+	  DECLARE @PrevAutoID INT 
+	  DECLARE @L_TestLoop INT, @L_TestingCount INT, @L_CreatedBy VARCHAR(100) , @L_SampleCollectedDate DATETIME
+	  DECLARE @L_TestCodes VARCHAR(100),@L_TestName VARCHAR(100),@L_TestType VARCHAR(100),@L_Fee INT, @L_ID  INT, @L_InvestigationID INT, @L_OrgId INT
+	  DECLARE @L_PatientNumber VARCHAR(50), @L_PatientName VARCHAR(50), @L_Location VARCHAR(50)
+
+
+	  							 /* Rate Id & Rate Updation*/
+      Declare @LLoop               int = 1,
+              @TCount             int = 0,
+              @LOrgId             int,
+              @LClientId          Bigint,
+              @LFeeId             bigint,
+              @LFeeDesc           NVARCHAR(255),
+              @LFeeType           NVARCHAR(15),
+              @LRateId            bigint,
+              @LRate          DECIMAL(18, 2),
+              @LTocde             NVARCHAR(10),
+              @LVisitID           bigint,
+              @LRemarks           NVARCHAR(255),
+              @LActualAmount      DECIMAL(18, 2),
+              @LCollectedDatetime DATETIME,
+              @LIsDiscountable    NVARCHAR(3)
+
+
+
+      SELECT @ConRoleID = RoleID
+      FROM   @ContextInfo
+
+    DECLARE @DateNow DATETIME =dbo.Fn_getserverdate(@ContextInfo)
+      DECLARE @Loop    int = 1,
+              @l_Count int = 0
+      DECLARE @SourceType VARCHAR(100)
+              SET @SourceType = 'Home Collection Bulk'     
+			                       
+      DECLARE @Tbl_BookingDetail AS TABLE
+        (
+          
+           BookingID			VARCHAR(100),
+           PatientNumber		VARCHAR(100),
+		   PatientName			VARCHAR(100),
+           Location             NVARCHAR(60),
+		   TestRequested		NVARCHAR(1000)
+        )
+      
+
+    DECLARE @CampDetailList AS TABLE
+        (
+			[AutoID]	INT IDENTITY(1,1),
+			[Id] int NULL,
+			[SlNo] [varchar](20),
+			[OrgName] [varchar](60) NULL,
+			[OrgLocation] [varchar](1000) NULL,
+			[BookingDate] [varchar](20),
+			[PatientNumber] [varchar](100) NULL,
+			[Title] [varchar](50) NULL,
+			[PatientName] [varchar](100) NULL,
+			[DOB] [varchar](20),
+			[Age] [varchar](20) NULL,
+			[AgeType] [varchar](20) NULL,
+			[Sex] [varchar](20) NULL,
+			[Pincode] [varchar](20) NULL,
+			[Location] [varchar](1000) NULL,
+			[CollectionAddress] [varchar](1000) NULL,
+			[CollectionDate] [varchar](20),
+			[Technician] [varchar](100) NULL,
+			[TestCodes] [nvarchar](max) NULL,
+			[Discount] [varchar](20) NULL,
+			[ClientCode] [varchar](100) NULL,
+			[MobileNo] [varchar](100) NULL,
+			[EmailID] [varchar](100) NULL,
+			[DispatchMode] [varchar](100) NULL,
+			[RefDocName] [varchar](100) NULL,
+			[Remarks] [varchar](max) NULL,	
+			[Salutation] [varchar](50) NULL,
+			[CreatedBy] [varchar](20) NULL,
+			[CreatedbyId] [varchar](20) NULL,
+			[ClientID] [varchar](20),
+			[LocationID] [varchar](20) ,
+			[ErrorStatus] [varchar](20),
+			[OrgID] [varchar](20) NULL,
+			[SCollectedBy] [varchar](20) NULL,
+			[ErrorDesc] [varchar](max) NULL,
+			[TestCode] [varchar](1000) NULL,
+			[TestType] [varchar](1000) NULL,
+			[FeeId] [varchar](20) NULL,
+			[OrgLocationID] [varchar](20) NULL
+        )
+
+        
+      INSERT INTO @CampDetailList
+                  ( 
+					Id,OrgName,SlNo,OrgLocation,BookingDate,PatientNumber,Title,PatientName,DOB,Age,AgeType,Sex,Pincode,Location,CollectionAddress,CollectionDate,
+					Technician,Discount,ClientCode,MobileNo,EmailId,DispatchMode,Remarks,RefDocName,CreatedBy,CreatedbyId,ClientID,LocationID,Salutation,ErrorStatus,
+					OrgID,SCollectedBy,TestCodes,ErrorDesc,TestCode,TestType,FeeId,OrgLocationID)
+      SELECT Id,OrgName,SlNo,OrgLocation,BookingDate,PatientNumber,Title,PatientName,DOB,Age,AgeType,Sex,Pincode,Location,CollectionAddress,CollectionDate,
+					Technician,Discount,ClientCode,MobileNo,EmailId,DispatchMode,Remarks,RefDocName,CreatedBy,CreatedbyId,ClientID,LocationID,Salutation,ErrorStatus,
+					OrgID,SCollectedBy,TestCodes,ErrorDesc,TestCode,TestType,FeeId,OrgLocationID
+      FROM   @PBookingDet
+      ORDER  BY ID
+
+	  SET @PrevAutoID =0
+	   set @LRate=0
+       set @LRateId=0
+
+      SELECT @l_Count = (SELECT Max(Cast(ID AS INT)) FROM @CampDetailList)
+    
+      WHILE @Loop <= @l_Count
+        BEGIN        
+
+		 IF EXISTS(SELECT 1 from  @CampDetailList WHERE ID <> @PrevAutoID AND AutoID = @Loop)
+		 BEGIN
+			 BEGIN TRY
+               BEGIN TRAN 
+				
+				SELECT @PatientNumber = PatientNumber, @CreatedbyId= CreatedbyId, @LocationID =LocationID  FROM @CampDetailList WHERE  AutoID = @Loop
+
+				
+				SET @Dispatchvalue = 'M'
+
+				IF( @LocationID > 0 )    
+				BEGIN 
+					SELECT @CityID =  CityID FROM  Location L WHERE L.LocationID = @LocationID
+					SELECT @CityName = CityName , @StateID = StateID FROM City WHERE CityID = @CityID
+					SELECT @StateName = StateName, @CountryID = CountryID FROM State WHERE StateID = @StateID
+
+				END
+
+			
+				IF( @PatientNumber <> '' )    
+				BEGIN    
+					SELECT @PatientID = PatientID
+					FROM   Patient    
+					WHERE  PatientNumber =     @PatientNumber
+				END 
+
+				IF( @CreatedbyId > 0 )    
+				BEGIN    
+					SELECT @UserID =  UserID
+					FROM   users    
+					WHERE  LoginID =  @CreatedbyId
+				END
+				
+			
+
+
+				INSERT INTO Bookings    
+							( TokenNumber,TITLECode,PatientName,SEX,DOB, Age,EMail,  ClientID,  SourceType,    
+							 OrgID, CreatedBy,CreatedAt,PatientID,OrgAddressID,CollectionAddress,    
+							 UserID, CollectionTime, BookingOrgID,BookingStatus,
+							 City,PhoneNumber,PatientNumber,state,pincode,stateid,cityid,    
+							 [Dispatchvalue], CountryID,[ClientCode],[Remarks], Discount, RefPhysicianName
+							 )  
+					SELECT   
+					  DISTINCT 0, Salutation, PatientName, Sex, DOB,    
+					   Age +'' + AgeType, EmailID,  ClientID,
+					   @SourceType,OrgID,    
+					   CreatedByID, GETDATE(),    
+					   @PatientID,  OrgLocationID, CollectionAddress, @UserID,CollectionDate, 
+					   OrgLocationID,                    
+					   case when @UserID > 0 AND @SourceType = 'Home Collection Bulk' then 'A' else '' end,                 
+					   @CityName, MobileNo, PatientNumber, 
+					   @StateName, pincode,@StateID,@CityID, @Dispatchvalue, @CountryID,ClientCode, Remarks	, Discount	, RefDocName		  
+					FROM   @CampDetailList WHERE AutoID = @Loop
+
+
+					SELECT @pBookingID = Scope_identity()  
+
+	
+					SELECT @L_ID = ID  From  @CampDetailList Where  AutoID = @Loop
+
+					Select @L_TestLoop = MIN(AutoID) From  @CampDetailList Where  ID = @L_ID
+
+                    Select @L_TestingCount = MAX(AutoID) From @CampDetailList Where  ID = @L_ID
+
+						  WHILE @L_TestLoop <= @L_TestingCount
+							BEGIN
+							
+								SELECT @L_TestCodes = TestCodes,@L_TestName = TestCode, @L_TestType = TestType, @L_Fee = FeeId, @L_OrgId = OrgId ,
+								@L_CreatedBy = CreatedByID, @L_SampleCollectedDate = CollectionDate,
+								@L_PatientNumber = PatientNumber, @L_PatientName = PatientName, @L_Location=  Location, @LClientId = ClientId
+								FROM @CampDetailList WHERE AutoID = @L_TestLoop
+
+								select @L_InvestigationID = InvestigationID from InvestigationOrgMapping  where TestCode = @L_TestCodes AND OrgId = @L_OrgId
+
+
+
+								exec pGetBillingItemsDetails_Bulk
+								  @pOrgID=@L_OrgId,
+								  @pFeeID=@L_Fee,
+								  @pFeeType=@L_TestType,
+								  @pDescription='',
+								  @pClientID=@LClientId,
+								  @pVisitID=@LVisitID OUTPUT,
+								  @pRemarks=@LRemarks OUTPUT,
+								  @PActualAmount=@LActualAmount OUTPUT,
+								  @pCollectedDatetime=@L_SampleCollectedDate,
+								  @PlocationName=N'',
+								  @pRateId=@LRateId OUTPUT,
+								  @pRate=@LRate OUTPUT,
+								  @pIsDiscountable=@LIsDiscountable OUTPUT,
+								  @ContextInfo=@ContextInfo
+
+								INSERT INTO PreOrderedInvestigations    
+										(  QuotationId,ID,Name,Type, Status, OrgID,    
+											 CreatedBy, CreatedAt, SampleCollectedTime, AmtReceived )   
+					 
+								SELECT  @pBookingID,  @L_InvestigationID, @L_TestName, @L_TestType, 'Ordered', @L_OrgId,  
+										 @L_CreatedBy,GETDATE(), @L_SampleCollectedDate , @LRate 
+				
+								SET @L_TestLoop = @L_TestLoop +1 
+
+
+							END
+
+
+			SELECT  @PrevAutoID = ID FROM @CampDetailList WHERE  AutoID = @Loop
+			  						
+			INSERT INTO	 @Tbl_BookingDetail (BookingID, PatientNumber, PatientName, Location)
+				SELECT @pBookingID,@L_PatientNumber, @L_PatientName,@L_Location 
+				
+				UPDATE p 
+						SET p.GrossAmount = t.sumPrice, NetAmount = t.sumPrice
+						FROM Bookings AS p
+						INNER JOIN
+							(
+								SELECT QuotationId, SUM(AmtReceived) sumPrice
+								FROM PreOrderedInvestigations
+								WHERE QuotationId = @pBookingID
+								GROUP BY QuotationId 
+							) t
+							ON t.QuotationId = p.BookingID
+						WHERE BookingID = @pBookingID
+						
+		    COMMIT TRAN
+
+          END TRY
+
+          BEGIN CATCH
+                ROLLBACK TRAN
+
+                          UPDATE @CampDetailList 
+						  SET  errorStatus = 1, ErrorDesc = ERROR_MESSAGE ()
+						  Where  ID = @Loop
+
+                      INSERT INTO ErrorLog (ErrorLine, ErrorDesc, ObjectName, CreatedAt)
+                      Select ERROR_LINE(),ERROR_MESSAGE (),'PInsertBulkBooking', @DateNow
+
+           END CATCH
+
+
+	     END
+
+		    SET @Loop  = @Loop + 1 
+      
+      END
+
+		
+			   SELECT @returnstatus = COUNT(BookingID) FROM @Tbl_BookingDetail
+
+			   SELECT BookingID, PatientNumber, PatientName, Location,TestRequested   FROM @Tbl_BookingDetail
+
+			   DELETE @CampDetailList
+			   DELETE @Tbl_BookingDetail
+
+  END
+
+

@@ -1,0 +1,25 @@
+CREATE Proc [dbo].[pgetDynamictabledatavalue]
+( @OrgID int,
+@pVisitID Bigint,
+@GroupID Bigint,
+@INVID int
+)
+--RETURNS nvarchar(50)
+AS
+BEGIN
+Declare @Temp Table([Type] nvarchar(max), Value nvarchar(max), RowNo int, ColumnNo int, ColumnCount int)
+DECLARE @docHandle int                                  
+DECLARE @xmlDocument nvarchar(max) 
+set @xmlDocument=(select Value from InvestigationValues where Value like '<InvestigationResults><Item%' and PatientVisitID=@pVisitID and GroupID=@GroupID and InvestigationID=@INVID)
+EXEC sp_xml_preparedocument @docHandle OUTPUT, @xmlDocument 
+insert into @Temp 
+SELECT * FROM OPENXML(@docHandle, N'/InvestigationResults/Item',1)  WITH ([Type] nvarchar(max), Value nvarchar(max), RowNo int, ColumnNo int, ColumnCount int)            
+--union all
+--select 'Table1' as Type,HeaderName,0,row_number() over (order by (select NULL)),0 as ColumnCount from TabularPatternConfigurationMaster(NOLOCK) where orgid=@OrgID and investigationid=@INVID
+--declare @ColumnCount int
+--set @ColumnCount=(select top 1 ColumnCount from @Temp )
+--declare @Value varchar(100)
+--set @Value =(select Value from @Temp  where columnno=2)
+select Value from @Temp  where columnno=2
+--RETURN(@Value);
+END

@@ -1,0 +1,32 @@
+CREATE PROCEDURE [dbo].[pBulkInsertBillSupplyNoUpdate] (
+	@ContextInfo [UDT_CONTEXT] readonly
+	,@pStageBillSupply UDTClientSupplyDetails readonly,
+	@DuplicateCount INT OUTPUT
+	,@InsertedCount INT OUTPUT
+	)
+AS
+BEGIN
+	DECLARE @createdby BIGINT
+	DECLARE @OrgId BIGINT
+	DECLARE @OrgName NVARCHAR(max)
+
+	SELECT @createdby = loginid
+		,@OrgId = orgid
+		,@OrgName = orgname
+	FROM @ContextInfo
+
+	Update CBS Set CBS.Isprocessed=1 from ClientbillSupplyDetails CBS
+	Inner Join @pStageBillSupply SBS on SBS.ClientCode=CBS.ClientCode and CBS.OrgID=@OrgId
+
+	Insert into ClientbillSupplyDetails (ClientCode,OrgID,CreatedAT,CreatedBy,IsProcessed,BillofSupplyNumber,InvoiceAmount,SONo,DateofBill,AttuneInvNo)
+	select ClientCode,@OrgId,GETDATE(),@createdby,0,BillofSupplyNumber,InvoiceAmount,SONo,DateofBill,AttuneInvNo
+	
+	
+
+	from @pStageBillSupply
+
+	END
+
+
+
+

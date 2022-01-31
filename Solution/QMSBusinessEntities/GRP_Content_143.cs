@@ -1,0 +1,89 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Attune.Podium.BusinessEntities
+{
+	public class GRP_Content_143
+	{
+		#region Fields
+
+		private string lAB=String.Empty;
+		private string gROUP_CODE=String.Empty;
+		private string tEST_CODE=String.Empty;
+		private string tEST_NAME=String.Empty;
+		private float tEST_SEQUENCE_NO=0.0F;
+		private string type=String.Empty;
+		private long orggroupid=0;
+
+		#endregion
+
+		#region Properties
+		/// <summary>
+		/// Gets or sets the LAB value.
+		/// </summary>
+		public string LAB
+		{
+			get { return lAB; }
+			set { lAB = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the GROUP_CODE value.
+		/// </summary>
+		public string GROUP_CODE
+		{
+			get { return gROUP_CODE; }
+			set { gROUP_CODE = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the TEST_CODE value.
+		/// </summary>
+		public string TEST_CODE
+		{
+			get { return tEST_CODE; }
+			set { tEST_CODE = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the TEST_NAME value.
+		/// </summary>
+		public string TEST_NAME
+		{
+			get { return tEST_NAME; }
+			set { tEST_NAME = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the TEST_SEQUENCE_NO value.
+		/// </summary>
+		public float TEST_SEQUENCE_NO
+		{
+			get { return tEST_SEQUENCE_NO; }
+			set { tEST_SEQUENCE_NO = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the Type value.
+		/// </summary>
+		public string Type
+		{
+			get { return type; }
+			set { type = value; }
+		}
+
+		/// <summary>
+		/// Gets or sets the Orggroupid value.
+		/// </summary>
+		public long Orggroupid
+		{
+			get { return orggroupid; }
+			set { orggroupid = value; }
+		}
+
+
+		#endregion
+}
+}

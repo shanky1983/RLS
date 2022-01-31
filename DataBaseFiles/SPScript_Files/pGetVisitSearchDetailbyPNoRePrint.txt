@@ -1,0 +1,1176 @@
+CREATE PROCEDURE [dbo].[pGetVisitSearchDetailbyPNoRePrint] @pPatientNo        [nvarchar](32),
+                                                         @PatientName       [nvarchar](50),
+                                                         @MobileNumber      [nvarchar](20),
+                                                         @pFromDate         [nvarchar](35),
+                                                         @pToDate           [nvarchar](35),
+                                                         @CurrentOrgID      [INT],
+                                                         @pOrgIDs           [dbo].[GETORGIDS] READONLY,
+                                                         @pSearchType       [nvarchar](10),
+                                                         @pLabNo            [nvarchar](32),
+                                                         @pLocationID       nvarchar(2000),
+                                                         @ClientID          [BIGINT],
+                                                         @pVisitType        [INT],
+                                                         @WardName          [nvarchar](255),
+                                                         @Status            [nvarchar](100),
+                                                         @priority          [INT],
+                                                         @DeptID            [INT],
+                                                         @ReferringPhyID    [INT],
+                                                         @ReferringorgID    [BIGINT],
+                                                         @TrustedOrgActions [dbo].[TRUSTEDORGACTIONS] READONLY,
+                                                         @pVisitNo          [nvarchar](100),
+                                                         @pTestID           [BIGINT],
+                                                         @pTestType         [nvarchar](20),
+                                                         @pZoneID           nvarchar(2000),
+                                                         @pHubID            nvarchar(2000),
+                                                         @pCourierBoyId     [BIGINT],
+                                                         @pDespatchMode     [dbo].[UDTDISPATCHMODE] READONLY,
+                                                         @ContextInfo       [UDT_CONTEXT] READONLY,
+                                                         @startRowIndex     INT,
+                                                         @pageSize          INT,
+                                                         @totalRows         INT OUTPUT,
+                                                         @Preference        nvarchar(20),
+                                                         @IsPrintAll        nvarchar(5),
+                                                         @PrintLocationID   [BIGINT],
+                                                         @IsColrPrint       NVARCHAR(5),  
+                                                         @IPOPNumber        NVARCHAR(35),  
+                                                         @PatientPayType    NVARCHAR(35),  
+                                                         @PatientStatus     NVARCHAR(35) ,
+							                             @IsPrint	Nvarchar(35),
+														 @ReportType VARCHAR(10) 
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      SET NOCOUNT ON
+
+      IF( Len(@pToDate) < 12 )
+        BEGIN
+            SET @pToDate = CONVERT(nvarchar, Dateadd(d, 1, @pToDate), 103)
+        END
+
+      IF ( @IsColrPrint = 'N' )
+        SET @IsColrPrint=''
+
+      IF( Len(@PatientName) > 0 )
+        SET @PatientName = '''%' + @PatientName + '%'''
+
+      IF (@pFromDate = '01/01/2001 00:00:00'  and isnull(@IPOPNumber,'')=''   )
+        BEGIN
+            SELECT @pFromDate = CONVERT(nvarchar, dbo.Fn_getserverdate(@ContextInfo)-2, 103)
+                   + ' 00:00:00'
+        END
+
+      IF( @PatientName != ''
+           OR @MobileNumber != ''
+           OR @pPatientNo != ''
+           OR @pVisitNo != ''
+           OR @ReferringPhyID != 0 )
+        BEGIN
+            SET @pFromDate = '01/01/2001 00:00:00'
+            SET @pToDate= CONVERT(nvarchar, dbo.Fn_getserverdate(@ContextInfo)+1, 103)
+                          + ' 00:00:00'
+      END
+
+      DECLARE @RoleID BIGINT
+
+      /**********************/
+      CREATE TABLE #TblLocationID
+        (
+           LocationID BIGINT
+        )
+
+      CREATE TABLE #tblHubID
+        (
+           HubID BIGINT
+        )
+
+      CREATE TABLE #tblZoneID
+        (
+           ZoneID BIGINT
+        )
+
+      INSERT INTO #TblLocationID
+                  (LocationID)
+      SELECT DISTINCT item
+      FROM   Fnsplit(@pLocationID, ',')
+
+      INSERT INTO #tblHubID
+                  (HubID)
+      SELECT DISTINCT item
+      FROM   Fnsplit(@pHubID, ',')
+
+      INSERT INTO #tblZoneID
+                  (ZoneID)
+      SELECT DISTINCT item
+      FROM   Fnsplit(@pZoneID, ',')
+
+      /**********************/
+      SELECT @RoleID = RoleID
+      FROM   @ContextInfo
+
+      DECLARE @OnBehalfClientID BIGINT
+
+      IF( (SELECT TOP 1 RoleName
+           FROM   Role WITH (NOLOCK)
+           WHERE  RoleID = @RoleID
+                  AND OrgID = @CurrentOrgID) = 'Client CustomerCare' )
+        BEGIN
+            DECLARE @ClientName nvarchar(50)
+
+            SELECT @OnBehalfClientID = ClientID
+            FROM   ClientMaster WITH (NOLOCK)
+            WHERE  CollectionCenterID IN (SELECT LocationID
+                                          FROM   #TblLocationID)
+
+            --SELECT @ClientName=Location FROM OrganizationAddress where AddressID=@pLocationID                                                                                                                                                               
+
+
+            --SELECT @OnBehalfClientID=ClientID from ClientMaster where ClientName= @ClientName 
+            --SELECT @pLocationID = -1
+            INSERT INTO #TblLocationID
+            SELECT AddressID
+            FROM   OrganizationAddress
+            WHERE  OrgID = @CurrentOrgID
+
+            SELECT @ClientID = @OnBehalfClientID
+        --SELECT @pLocationID                                                                                                                                         
+        --SELECT @ClientID                                                                                                       
+        END
+
+      DECLARE @select NVARCHAR(max)
+      DECLARE @where NVARCHAR(max)
+      DECLARE @query NVARCHAR(max),
+              @query1 NVARCHAR(max),
+              @Joinquery NVARCHAR(max)
+      DECLARE @OrgIDs NVARCHAR(max)
+      DECLARE @ClientIDs NVARCHAR(MAX)
+      DECLARE @DispatchMode NVARCHAR(max)
+      DECLARE @DispatchCout INT
+      DECLARE @StatusIn NVARCHAR(max)
+      DECLARE @DueStatus NVARCHAR(max) =''
+      DECLARE @SClientId BIGINT
+
+      SELECT @DispatchCout = Count(*)
+      FROM   @pDespatchMode
+
+      IF ( @DispatchCout > 0 )
+        BEGIN
+            SELECT @DispatchMode = COALESCE('' + @DispatchMode + '' +',', '')
+                                   + '''' + DispatchValue + ''''
+            FROM   @pDespatchMode
+        END
+      ELSE
+        BEGIN
+            SELECT @DispatchMode = NULL
+        END
+
+      --IF( @pLocationID = -1 )            
+      --  SET @pLocationID = NULL            
+      IF( @ClientID = -1 )
+SET @ClientID = NULL
+
+      IF( @pVisitType = -1 )
+        SET @pVisitType = NULL
+
+      IF( @WardName = '' )
+        SET @WardName = NULL
+
+      IF( @Status = '' )
+        BEGIN
+            SET @Status = 'Pending'',''Completed'',''Reject'',''Validate'',''Approve'',''PartiallyApproved'
+        END
+
+      IF @DeptID = 0
+        SET @DeptID=NULL
+
+ IF ( @ReferringPhyID = 0 )
+        SET @ReferringPhyID=NULL
+
+      IF ( @ReferringorgID = 0 )
+        SET @ReferringorgID=NULL
+
+      IF ( @pTestID = 0 )
+        SET @pTestID=NULL
+
+      IF ( @pTestType = '' )
+        SET @pTestType=NULL
+
+      --IF ( @pZoneID = 0 )            
+      --  SET @pZoneID=NULL            
+      --IF ( @pHubID = 0 )            
+      --  SET @pHubID=NULL 
+      IF ( @PrintLocationID = -1 )
+        SET @PrintLocationID=NULL
+
+      IF ( @pCourierBoyId = 0 )
+        SET @pCourierBoyId=NULL
+
+      DECLARE @OrgGrpID BIGINT
+
+      CREATE TABLE #PList
+        (
+           URNO                  nvarchar(50),
+           URNofId               BIGINT,
+           URNTypeId             BIGINT,
+           PatientNumber         nvarchar(32),
+           PatientName           nvarchar(255),
+           PatientVisitId        BIGINT,
+           PatientID             BIGINT,
+           VisitDate             DATETIME,
+           Location              nvarchar(255),
+           PhysicianName         nvarchar(60),
+           PhoneNumber           nvarchar(50),
+           OrgID        INT,
+           Age                   nvarchar(20),
+           ExternalVisitID       nvarchar(255),
+           EMail                 NVARCHAR(100),
+           OrganizationName      nvarchar(255),
+           ReferingPhysicianName nvarchar(100),
+           VisitNumber           nvarchar(50),
+           ClientName            nvarchar(100),
+           IsPrintAll            nchar(1) DEFAULT(''),
+           PrintedTime           DATETIME,
+           Zone                  nvarchar(700),
+           IsColorPrint          nchar(1) DEFAULT(''),
+	   PriorityName  nvarchar(max),  
+	    SpecialityName  nvarchar(max)  
+
+        )
+
+		CREATE TABLE #ReprintPList
+        (
+           URNO                  nvarchar(50),
+           URNofId               BIGINT,
+           URNTypeId             BIGINT,
+           PatientNumber         nvarchar(32),
+           PatientName           nvarchar(255),
+           PatientVisitId        BIGINT,
+           PatientID             BIGINT,
+           VisitDate             DATETIME,
+           Location              nvarchar(255),
+           PhysicianName         nvarchar(60),
+           PhoneNumber           nvarchar(50),
+           OrgID        INT,
+           Age                   nvarchar(20),
+           ExternalVisitID       nvarchar(255),
+           EMail                 NVARCHAR(100),
+           OrganizationName      nvarchar(255),
+           ReferingPhysicianName nvarchar(100),
+           VisitNumber           nvarchar(50),
+           ClientName            nvarchar(100),
+           IsPrintAll            nchar(1) DEFAULT(''),
+           PrintedTime           DATETIME,
+           Zone                  nvarchar(700),
+           IsColorPrint          nchar(1) DEFAULT(''),
+	    PriorityName  nvarchar(max),
+	    SpecialityName  nvarchar(max)  
+
+        )
+
+      CREATE CLUSTERED INDEX C_Tmp
+        ON #pList (PatientID, PatientVisitId)
+
+      DECLARE @condition nvarchar(max)=''
+
+      SELECT @OrgIDs = LoggedOrgID
+      FROM   @TrustedOrgActions
+
+      --print   @OrgIDs                                                                                                           
+      SELECT @OrgIDs = COALESCE ( @OrgIDs + ',', '')
+                       + CONVERT(nvarchar, TOD.SharingOrgID)
+      FROM   TrustedOrgDetails TOD WITH (NOLOCK)
+             INNER JOIN TrustedOrgActions TOA WITH (NOLOCK)
+                     ON TOA.TrustedOrgDetailsID = TOD.TrustedOrgDetailsID
+             INNER JOIN @TrustedOrgActions T
+                     ON TOD.LoggedOrgID = T.LoggedOrgID
+                        AND TOA.RoleID = T.RoleID
+                        AND TOA.IdentifyingType = T.IdentifyingType
+                        AND TOA.IdentifyingActionID = T.IdentifyingActionID
+
+      DECLARE @countchk nvarchar(max)=''
+      DECLARE @Notin nvarchar(max)=''
+
+      IF( @Status = 'Approve' )
+        BEGIN
+            SET @condition=''
+        END
+
+      IF ( @pSearchType = 'RPT'
+          OR @pSearchType = 'RPTCHK' )
+        BEGIN
+            DECLARE @GetDate nvarchar(50)
+
+            SELECT @GetDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+
+            IF( @Status = 'Non Printed' )
+              BEGIN
+                  SELECT @query = '  SELECT
+ DISTINCT(P.URNO),             
+ F.FinalBillID,                                                                         
+ P.URNTypeId,                                                                         
+ P.PatientNumber,                                                                         
+ P.Name as PatientName,                                                                      
+ PV.PatientVisitId,                                        
+ P.PatientID,                                                            
+ PV.VisitDate,                                      
+ OA.Location,                                           
+ PV.OrgID,                                                                        
+ p.sex +''/''+ p.Age    AS Age,                  
+ PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,                                                                        
+ PV.ReferingPhysicianName,                     
+ PV.VisitNumber,                            
+ CM.ClientName,                                                                        
+ '''' as PrintedTime ,  
+  
+ Stuff(   (select '',''+ OI.Name from OrderedInvestigations OI  with (nolock)  where OI.visitid=pv.patientvisitid and OI.status in(''Approve'')for xml path('''')),1,1,'''') as ApprovedTests,  
+ Stuff(   (select '',''+OI.Name from OrderedInvestigations  OI with (nolock) where OI.visitid=pv.patientvisitid and OI.status  in(''Rejected'','' Recollect'', ''Notgiven'', ''cancel'','' pending'','' completed'', ''validate'',''PartiallyApproved'',''SampleReceived'',''Retest'',''SampleCollected'')for xml path('''')),1,1,'''')  
+  
+ as PendingTests  
+ FROM Patient P WITH (NOLOCK)                                                                        
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID                   
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=Vm.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID 
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID                                                                       
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(PV.PatientVisitId as nvarchar(15)) and N.Category=''Report'' AND N.ActionType=''ROUNDBPDF'' AND N.Status=''Completed''   AND N.OrgID=P.OrgID                                           
+ INNER JOIN ReportSnapshot RS With (NOLOCK) ON RS.VisitID = PV.PatientVisitID                                   
+ AND RS.NotificationID=N.NotificationID                                                                 
+ LEFT JOIN PRINTSnapshot PS With (NOLOCK)ON PS.VisitID = PV.PatientVisitID                                          
+  AND Rs.Seq_Num=Ps.Seq_Num AND Ps.Category=''roundbprint''  AND PS.OrgID=P.OrgID '
+  IF(@DispatchCout >0)
+  BEGIN
+  SELECT @query=@query+ 'left join PatientDisPatchDetails PDD on PDD.VisitID= PV.PatientVisitID and PDD.Orgid=PV.OrgID' 
+  END
+
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on                                   
+ --PI.status in (''approve'',''PartiallyApproved'') and 
+ PI.AccessionNumber = OI.AccessionNumber 
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = PI.OrgID '
+
+SELECT @query1 = ' WHERE    P.OrgID IN (' + @OrgIDs  
+                                   + ')'                                                                           
++ case when ISNULL(@PatientPayType,'')='' then 
+' AND PI.ApprovedAt between '''  
+        + @pFromDate + ''' AND ''' + @pToDate + ''''  
+                                   + ' /*AND CM.ReportPrintdate<=PI.ApprovedAt*/ '   
+           ELSE  
+            'AND PV.DischargedDT  between '''  
+        + @pFromDate + ''' AND ''' + @pToDate + ''' '  
+                                   + ' /*AND CM.ReportPrintdate<=PI.ApprovedAt*/' END  
+              +    
+ ' AND PS.VisitID is  NULL    AND Isnull(cm.CustomerType,0) != 681                 
+ AND ISNULL(VM.IsActive,''Y'')=''Y'''
+ if(@DispatchCout >0)
+
+					begin 
+
+					select @query1=@query1+'and PDD.DispatchValue='+@DispatchMode
+
+                    end
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+                  ELSE
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    --SELECT @query=@query+@query1 
+                    END
+              END
+            ELSE IF( @Status = 'Printed' )
+              BEGIN
+                  SELECT @query = '                                                          
+ Select                                                                         
+ DISTINCT(P.URNO),                                                                     
+ 0,                 
+ P.URNTypeId,                                                                         
+ P.PatientNumber,                              
+ P.Name as PatientName,            
+ PV.PatientVisitId,            
+ P.PatientID,               
+ PV.VisitDate,                            
+ OA.Location,                                                                         
+ PV.OrgID,                                                                        
+ p.sex +''/''+ p.Age    AS Age,                                                                         
+ PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,                                                                        
+ PV.ReferingPhysicianName,                              
+ PV.VisitNumber,                                                                        
+ CM.ClientName,                                                                            
+ MAX(ps.createdat) as  PrintedTime                                                                             
+ FROM Patient P WITH (NOLOCK)                                       
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID                                                                        
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=VM.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID 
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID                                                                        
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(PV.PatientVisitId as nvarchar(15)) and N.Category=''Report'' AND N.ActionType=''ROUNDBPDF'' AND N.Status=''Completed''  AND N.OrgID=P.OrgID                                    
+ INNER JOIN ReportSnapshot RS With (NOLOCK) ON RS.VisitID = PV.PatientVisitID AND RS.NotificationID=N.NotificationID                
+ INNER JOIN PRINTSnapshot PS With (NOLOCK)ON PS.VisitID = PV.PatientVisitID                                         
+ AND RS.Seq_Num=Ps.Seq_Num                              
+ AND Ps.Category=''roundbprint''  AND PS.OrgID=P.OrgID '
+
+  if(@DispatchCout >0)
+  begin
+
+  select @query=@query+ 'left join PatientDisPatchDetails PDD on PDD.VisitID= PV.PatientVisitID and PDD.Orgid=PV.OrgID' 
+
+  end
+
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  AND OI.OrgID=P.OrgID                                        
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on              
+ --PI.status in (''approve'',''PartiallyApproved'') and 
+ PI.AccessionNumber = OI.AccessionNumber and PI.PatientVisitID=OI.VisitID and PI.OrgID =P.OrgID                                                                                                 
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = P.OrgID  '
+
+                  SELECT @query1 = ' WHERE   P.OrgID IN ('
+                                   + @OrgIDs
+                                   + ')             
+
+ AND PS.VisitID is NOT NULL                          
+ AND ISNULL(VM.IsActive,''Y'')=''Y'''
+
+                  IF( @pSearchType = 'RPT' )
+                    BEGIN
+                        SELECT @query1 = @query1 + case when Isnull(@PatientPayType,'')='' Then  
+       '  AND PI.ApprovedAt between '''  
+                                         + @pFromDate + ''' AND ''' + @pToDate + ''''  
+                                         + '/* AND CM.ReportPrintdate<=PI.ApprovedAt*/  '  
+           ELSE  
+            '  AND PV.DischargedDT between '''  
+                                         + @pFromDate + ''' AND ''' + @pToDate + ''''  
+                                         + '/* AND CM.ReportPrintdate<=PI.ApprovedAt*/  '  
+          END  
+                    END  
+                  ELSE IF( @pSearchType = 'RPTCHK' )
+                    BEGIN
+                        SELECT @query1 = @query1 + '  AND ps.createdat between '''
+                                         + @pFromDate + ''' AND ''' + @pToDate + ''''
+                                         + '/* AND CM.ReportPrintdate<=ps.CreatedAt */ '
+                    END
+
+					if(@DispatchCout >0)
+
+					begin 
+
+					select @query1=@query1+'and PDD.DispatchValue='+@DispatchMode
+
+                    end
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+                  ELSE
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    --SELECT @query= @query+@query1                                                                    
+                    END
+              END
+            ELSE IF ( @Status = 'ERROR' )
+              BEGIN
+                  SELECT @query = '  Select          
+
+ DISTINCT(P.URNO),             
+ 0,             
+ P.URNTypeId,          
+ P.PatientNumber,           
+ P.Name as PatientName,          
+ PV.PatientVisitId,             
+ P.PatientID,               
+ PV.VisitDate,            
+ OA.Location,             
+ PV.OrgID,           
+ P.sex +''/''+ P.Age  AS Age,          
+ PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,              
+ PV.ReferingPhysicianName,           
+ PV.VisitNumber,           
+ CM.ClientName,                
+
+ '''' as PrintedTime             
+
+ FROM Patient P WITH (NOLOCK)         
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID           
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=VM.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID          
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(PV.PatientVisitId as nvarchar(15)) and N.Category=''Report''    
+ AND N.ActionType=''ROUNDBPRINT'' AND N.Status=''ERROR''  AND N.OrgID=P.OrgID'
+
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  AND OI.OrgID=P.OrgID          
+
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on           
+ --PI.status in (''approve'',''PartiallyApproved'') and 
+ PI.AccessionNumber = OI.AccessionNumber and PI.PatientVisitID=OI.VisitID AND PI.OrgID =P.OrgID           
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = P.OrgID '
+
+                  SELECT @query1 = ' WHERE  P.OrgID IN (' + @OrgIDs  
+                                   + ')     '  
+           + Case When isnull(@PatientPayType,'') ='' Then  
+           'AND PI.ApprovedAt between '''  
+                                   + @pFromDate + ''' AND ''' + @pToDate  
+                                   + '''    ' Else  
+                 'AND PV.DischargedDT between '''  
+                                   + @pFromDate + ''' AND ''' + @pToDate  
+                                   + '''    '   End                                                              
+           +  
+                
+ ' AND Isnull(cm.CustomerType,0) != 681       
+
+ AND ISNULL(VM.IsActive,''Y'')=''Y'''
+                                   + '/* AND CM.ReportPrintdate<=PI.ApprovedAt*/ '
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+                  ELSE
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    --SELECT @query=@query+@query1                                                              
+                    END
+              END
+        END
+      ELSE IF ( @pSearchType = 'BILL'
+            OR @pSearchType = 'BILLCHK' )
+        BEGIN
+            SELECT @GetDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+
+            IF( @Status = 'Non Printed' )
+              BEGIN
+                  SELECT @query = '  Select             
+
+ DISTINCT(P.URNO),                                                                     
+ F.FinalBillID,                                                                      
+ P.URNTypeId,                                    
+ P.PatientNumber,                                                                         
+ P.Name as PatientName,                                                                         
+ PV.PatientVisitId,                                                                        
+ P.PatientID,                      
+ PV.VisitDate,                                                                         
+ OA.Location,                                                                         
+ PV.OrgID,                                                                
+ p.sex +''/''+ p.Age    AS Age,                                                            
+ PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,                                                       
+ PV.ReferingPhysicianName,       
+ PV.VisitNumber,                                                                 
+ CM.ClientName,                                                                        
+ '''' as PrintedTime                                              
+ FROM Patient P WITH (NOLOCK) 
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID                                                                        
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=VM.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID 
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID                                                                        
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(F.FinalBillID as nvarchar(15)) and N.Category=''BILL'' AND N.ActionType=''PDF'' AND N.Status=''Completed''  AND N.OrgID=P.OrgID                                                        
+ INNER JOIN InvoiceSnapshot RS With (NOLOCK) ON  RS.NotificationID=N.NotificationID  AND RS.type=''Bill''                                                                      
+ LEFT JOIN PRINTSnapshot PS With (NOLOCK)ON PS.VisitID = F.FinalBillID                                         
+ --AND N.NotificationID=Ps.NotificationID                                         
+ AND Ps.Category=''billprint''  AND PS.OrgID=P.OrgID '
+
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  AND OI.OrgID=P.OrgID                                                                                 
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on PI.AccessionNumber = OI.AccessionNumber and PI.PatientVisitID=OI.VisitID and PI.OrgID =P.OrgID                                                                                                  
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = P.OrgID  '
+
+                  SELECT @query1 = ' WHERE   P.OrgID IN ('
+                                   + @OrgIDs + ')        
+
+ AND F.CreatedAt between '''
+                                   + @pFromDate + ''' AND ''' + @pToDate
+                                   + '''                               
+ AND PS.VisitID is  NULL                                              
+ AND ISNULL(VM.IsActive,''Y'')=''Y'''
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+  ELSE
+                    BEGIN
+                        --SELECT @query= @query+@Joinquery+@query1                                                                  
+SELECT @query = @query + @query1
+                    END
+              END
+            ELSE IF( @Status = 'Printed' )
+              BEGIN
+                  SELECT @query = '                                                                     
+ Select                                                      
+ DISTINCT(P.URNO),                                   
+ F.FinalBillID,                            
+ P.URNTypeId,                                                                         
+ P.PatientNumber,                                                                         
+ P.Name as PatientName,                                                                     
+ PV.PatientVisitId,                                                                        
+ P.PatientID,                                                             
+ PV.VisitDate,                                                                         
+ OA.Location,                               
+ PV.OrgID,                                                                        
+ p.sex +''/''+ p.Age    AS Age,                                                                         
+ PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,                                                         
+ PV.ReferingPhysicianName,                                                                        
+ PV.VisitNumber,                                   
+ CM.ClientName,                                                     
+ ps.createdat  as PrintedTime             
+ FROM Patient P WITH (NOLOCK)                                                                
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID                                                                        
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=VM.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID 
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID                                       
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(F.FinalBillID as nvarchar(15)) and N.Category=''BILL'' AND N.ActionType=''PDF'' AND N.Status=''Completed''   AND N.OrgID=P.OrgID                                                       
+ INNER JOIN InvoiceSnapshot RS With (NOLOCK) ON  RS.NotificationID=N.NotificationID  AND RS.type=''Bill''                                                                      
+ INNER JOIN PRINTSnapshot PS With (NOLOCK)ON PS.VisitID = F.FinalBillID                                         
+ --AND N.NotificationID=Ps.NotificationID                                         
+ AND Ps.Category=''billprint'' AND PS.OrgID=P.OrgID '
+
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  AND OI.OrgID=P.OrgID                                          
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on PI.AccessionNumber = OI.AccessionNumber and PI.PatientVisitID=OI.VisitID and PI.OrgID =P.OrgID                                                                 
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = P.OrgID  '
+
+                  SELECT @query1 = ' WHERE   P.OrgID IN ('
+                                   + @OrgIDs
+                                   + ')                                                                                         
+ AND PS.VisitID is NOT  NULL                                 
+ AND ISNULL(VM.IsActive,''Y'')=''Y'''
+
+                  IF( @pSearchType = 'BILL' )
+                    BEGIN
+                        SELECT @query1 = @query1 + '  AND F.createdat between '''
+                                         + @pFromDate + ''' AND ''' + @pToDate + ''''
+                    END
+                  ELSE IF( @pSearchType = 'BILLCHK' )
+                    BEGIN
+                        SELECT @query1 = @query1 + '  AND ps.createdat between '''
+                                         + @pFromDate + ''' AND ''' + @pToDate + ''''
+                    END
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+                  ELSE
+                    BEGIN
+                        --SELECT @query= @query+@Joinquery+@query1                                                                  
+                        SELECT @query = @query + @query1
+                    END
+              END
+            ELSE IF( @STATUS = 'ERROR' )
+              BEGIN
+                  SELECT @query = '  Select             
+ DISTINCT(P.URNO), F.FinalBillID,P.URNTypeId,            
+ P.PatientNumber,P.Name as PatientName,PV.PatientVisitId,                                                                        
+ P.PatientID, PV.VisitDate,OA.Location,PV.OrgID,                                                                
+ p.sex +''/''+ p.Age    AS Age,PV.ExternalVisitID,P.EMail ,O.Name As OrganizationName,       
+ PV.ReferingPhysicianName, PV.VisitNumber, CM.ClientName,'''' as PrintedTime       
+ FROM Patient P WITH (NOLOCK)      
+ INNER JOIN PatientVisit PV WITH (NOLOCK)  on PV.PatientID = P.PatientID AND P.Status = ''A'' and p.OrgID =PV.OrgID       
+ LEFT JOIN FinalBill F WITH (NOLOCK) ON PV.PatientVisitId =F.VisitID 
+ INNER JOIN VisitClientMapping VM WITH (Nolock) ON pv.PatientVisitId = VM.VisitID 
+ INNER join ClientMaster CM With (NOLOCK) on CM.ClientID=VM.ClientID AND Cm.OrgID=Vm.Orgid
+ INNER JOIN OrganizationAddress OA WITH (Nolock) on OA.AddressID=PV.OrgAddressID 
+ INNER JOIN Organization  O WITH (NOLOCK)ON PV.OrgID=O.OrgID                     
+ INNER JOIN Notifications N WITH (NOLOCK) ON N.IdentityID=cast(F.FinalBillID as nvarchar(15)) and N.Category=''BILL'' AND N.ActionType=''BILLPRINT''               
+ AND N.Status=''ERROR'' AND N.OrgID=P.OrgID'
+                  IF ( @MobileNumber IS NOT NULL
+                       AND @MobileNumber != '' )
+                    BEGIN
+                        SELECT @query = @query
+                                        + '  INNER JOIN PatientAddress PA WITH (Nolock) ON P.PatientID = PA.PatientID  '
+                    END
+
+                  SELECT @Joinquery = ' INNER JOIN OrderedInvestigations OI  WITH (Nolock) on OI.VisitID=PV.PatientVisitID  AND OI.OrgID=P.OrgID                                                                    
+ INNER JOIN PatientInvestigation PI WITH (NOLOCK) on PI.AccessionNumber = OI.AccessionNumber and PI.PatientVisitID=OI.VisitID and PI.OrgID =P.OrgID                                                 
+ INNER JOIN InvestigationOrgMapping IOM WITH (Nolock) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID = P.OrgID  '
+                  SELECT @query1 = ' WHERE  P.OrgID IN ('
+                                   + @OrgIDs + ') AND F.CreatedAt between '''
+                                   + @pFromDate + ''' AND ''' + @pToDate
+                                   + '''AND ISNULL(VM.IsActive,''Y'')=''Y'''
+
+                  IF ( @DeptID > 0 )
+                    BEGIN
+                        SELECT @query = @query + @Joinquery + @query1
+                    END
+                  ELSE
+                    BEGIN
+                        --SELECT @query= @query+@Joinquery+@query1                                                                  
+                        SELECT @query = @query + @query1
+                    END
+              END
+        END
+    
+      IF EXISTS (SELECT 1
+                 FROM   #TblLocationID
+                 WHERE  LocationID > 0)
+        BEGIN
+            SELECT @query += ' AND PV.OrgAddressID IN (
+            SELECT LocationID FROM #TblLocationID
+            ) '
+        END
+
+      IF( @ClientID IS NOT NULL )
+        BEGIN
+            IF( @ClientIDs IS NOT NULL )
+              BEGIN
+                  SELECT @query += ' AND  VM.ClientID IN(' + @ClientIDs + ') '
+              END
+            ELSE
+              BEGIN
+                  SELECT @query += ' AND  VM.ClientID = ISNULL('
+                                   + CONVERT(nvarchar, @ClientID)
+                                   + ', VM.ClientID) '
+              END
+        END
+
+      IF( @ClientIDs IS NOT NULL )
+        BEGIN
+            IF( @ClientID IS NOT NULL )
+              BEGIN
+                  SELECT @query += ' AND  VM.ClientID = ISNULL('
+                                   + CONVERT(nvarchar, @ClientID)
+                                   + ', VM.ClientID) '
+              END
+            ELSE
+              BEGIN
+                  SELECT @query += ' AND  VM.ClientID IN(' + @ClientIDs + ') '
+             END
+        END
+
+      IF ( @pVisitType IS NOT NULL )
+        SELECT @query += 'AND PV.VisitType = ISNULL('
+                         + CONVERT(nvarchar, @pVisitType)
+                         + ' , pv.VisitType) '
+
+      IF ( @DeptID IS NOT NULL )
+        SELECT @query += 'AND IOM.DeptID=ISNULL('
+                         + CONVERT(nvarchar, @DeptID) + ',IOM.DeptID)'
+
+      IF ( @ReferringPhyID IS NOT NULL )
+        SELECT @query += 'AND PV.ReferingPhysicianID=ISNULL('
+                         + CONVERT(nvarchar, @ReferringPhyID)
+                         + ',PV.ReferingPhysicianID)'
+
+      --IF ( @pZoneID IS NOT NULL )            
+      --  SELECT @query += 'AND CM.ZonalID=ISNULL('            
+      --                   + CONVERT(nvarchar, @pZoneID) + ',CM.ZonalID)'        
+      IF EXISTS(SELECT ZoneID
+                FROM   #tblZoneID
+                WHERE  ZoneID IS NOT NULL)
+        BEGIN
+            SELECT @query += ' AND CM.ZonalID IN (SELECT ZoneID FROM #tblZoneID) '
+        END
+
+      --IF ( @pHubID IS NOT NULL )            
+      --  SELECT @query += 'AND CM.HubID=ISNULL('            
+      --                   + CONVERT(nvarchar, @pHubID) + ',CM.HubID)'   
+      IF EXISTS (SELECT HubID
+                 FROM   #tblHubID
+                 WHERE  HubID IS NOT NULL)
+        BEGIN
+            SELECT @query += ' AND CM.HubID IN (           
+
+                         SELECT HubID FROM #tblHubID)  '
+        END
+
+      IF ( @PrintLocationID IS NOT NULL )
+        SELECT @query += 'AND CM.PrintOrgAddressID=ISNULL('
+                         + CONVERT(nvarchar, @PrintLocationID)
+                         + ',CM.PrintOrgAddressID)'
+
+      --select @query                                                                                 
+      IF ( @ReferringorgID IS NOT NULL )
+        SELECT @query += 'AND PV.HospitalID=ISNULL('
+                         + CONVERT(nvarchar, @ReferringorgID)
+                         + ',PV.HospitalID)'
+
+      --DECLARE @Dispatchstring nvarchar(max)
+
+      --SELECT @Dispatchstring = 'AND D.Dispatchvalue IN (' + @DispatchMode
+
+      --                         + ') '
+
+      IF( @pTestType = 'INV' )
+        BEGIN
+            SELECT @query += 'AND PI.InvestigationID=ISNULL('
+                             + CONVERT(nvarchar, @pTestID)
+                             + ',PI.InvestigationID)'
+        END
+
+      IF( @pTestType = 'GRP' )
+        BEGIN
+            SELECT @OrgGrpID = Max(OrgGroupID)
+            FROM   InvOrgGroup WITH (NOLOCK)
+            WHERE  AttGroupID = @pTestID
+                   AND OrgID = @CurrentOrgID
+
+            SELECT @query += 'AND PI.GroupID=ISNULL('
+                             + CONVERT(nvarchar, @OrgGrpID) + ',PI.GroupID)'
+        END
+
+      IF( @pTestType = 'PKG' )
+        BEGIN
+            SELECT @OrgGrpID = OrgGroupID
+            FROM   InvOrgGroup WITH (NOLOCK)
+            WHERE  AttGroupID = @pTestID
+                   AND OrgID = @CurrentOrgID
+
+            SELECT @query += 'AND PI.PackageID=ISNULL('
+                             + CONVERT(nvarchar, @OrgGrpID)
+                             + ',PI.PackageID)'
+        END
+
+   --   IF ( @DispatchCout > 0 )
+
+   --     BEGIN
+
+   --         SELECT @query += @Dispatchstring
+
+			--select @query
+
+			--return
+
+   --     END
+
+      SELECT @where = ''
+
+      IF ( @MobileNumber IS NOT NULL
+           AND @MobileNumber != '' )
+        SELECT @where = @where + ' AND (PA.LandLineNumber='''
+                        + @MobileNumber + ''''
+                        + ' OR PA.MobileNumber=''' + @MobileNumber
+                        + ''')'
+
+      IF ( @PatientName IS NOT NULL
+           AND @Patientname != '' )
+        --select  @w                                                                          
+        --select @where                                                
+        SELECT @where = @where + ' AND P.Name like ' + @PatientName
+
+      IF ( @pPatientNo IS NOT NULL
+           AND @pPatientNo != '' )
+        BEGIN
+            SELECT @where = @where + '  AND P.PatientNumber = '''
+                            + CONVERT(nvarchar, @pPatientNo) + ''''
+        END
+
+      IF( @pVisitNo IS NOT NULL
+          AND @pVisitNo <> '' )
+        BEGIN
+            SELECT @where = @where + '  AND PV.VisitNumber = '''
+                            + CONVERT(nvarchar, @pVisitNo) + ''''
+        END
+
+      IF EXISTS(SELECT cm.configvalue  
+                FROM   configkeymaster ck  
+                       INNER JOIN configorgmaster cm  
+                               ON cm.configkeyid = ck.configkeyid  
+                WHERE  cm.orgid = @CurrentOrgID  
+                       AND ck.configkey = 'TPAPrint' and cm.configvalue='Y')  
+        BEGIN  
+            IF ( Isnull(@IPOPNumber, '') <> '' )  
+              BEGIN  
+                  SELECT @Where = @where + ' And PV.PreviousLabNumber='''  
+                                  + @IPOPNumber + ''''  
+              END  
+  
+            IF( Isnull(@PatientPayType, '') <> '' )  
+              BEGIN  
+                  SELECT @Where = @Where + ' And PV.TPAName='''  
+                                  + @PatientPayType + '''  and ISNULL(PV.ICDCodeStatus,'''')=''P'' '      
+              END  
+  
+            IF( Isnull(@PatientStatus, '') <> '' )  
+              BEGIN  
+                  SELECT @where = @where + ' And PV.WardNo like ''' + '%'  
+                                  + @PatientStatus + '%' + ''''  
+              END  
+        END  
+  
+      IF( ( @pSearchType = 'RPT'
+             OR @pSearchType = 'RPTCHK' )
+          AND @Status = 'Printed' )
+        BEGIN
+            SELECT @where = @where + ' GROUP BY
+P.URNO,P.URNTypeId,P.PatientNumber,P.Name,PV.PatientVisitId,P.PatientID, PV.VisitDate,OA.Location,PV.OrgID,P.sex,P.Age,PV.ExternalVisitID,P.EMail ,O.Name, 
+PV.ReferingPhysicianName,PV.VisitNumber,CM.ClientName'
+        END
+
+      --Print @where                                                          
+      -- SELECT ( @query + @where )            
+
+      INSERT #PList
+             (URNO,
+              URNofId,
+              URNTypeId,
+              PatientNumber,
+              PatientName,
+              PatientVisitId,
+              PatientID,
+              VisitDate,
+              Location,
+              --PhysicianName,                                                           
+              --PhoneNumber,                                                                         
+              OrgID,
+              Age,
+              ExternalVisitID,
+              EMail,
+              OrganizationName,
+              ReferingPhysicianName,
+              VisitNumber,
+              ClientName,
+              PrintedTime,  
+     PriorityName ,  
+     SpecialityName  )    
+      EXEC (@query + @where)
+
+      --      PRINT ( @query + @where )                
+      --color print                    
+      UPDATE #PList
+      SET    IsColorPrint = ''
+
+      UPDATE P
+      SET    P.IsColorPrint = 'Y'
+      FROM   #PList P
+             INNER JOIN orderedinvestigations oi WITH (nolock)
+                     ON p.PatientVisitId = oi.VisitId
+             INNER JOIN InvestigationOrgMapping IOM (nolock)
+                     ON OI.ID = IOM.InvestigationID
+                        AND OI.Type = 'INV'
+                        AND IOM.IsColorPrint = 'Y'
+                        AND IOM.OrgID = @CurrentOrgID
+
+      UPDATE P
+      SET    P.IsColorPrint = 'Y'
+      FROM   #PList P
+             INNER JOIN orderedinvestigations oi WITH (nolock)
+                     ON p.PatientVisitId = oi.VisitId
+             INNER JOIN InvOrgGroup IOG (nolock)
+                     ON OI.ID = IOG.AttGroupID
+                        AND OI.Type = 'GRP'
+                        AND IOG.IsColorPrint = 'Y'
+                        AND IOG.OrgID = @CurrentOrgID
+
+      IF ( @pSearchType = 'RPTCHK'
+           AND @IsColrPrint = '' )
+        BEGIN
+            UPDATE #PList
+            SET    IsColorPrint = @IsColrPrint
+        END
+
+      -----------                    
+      IF( @IsPrintAll = 'Y' )
+        BEGIN
+            UPDATE #PList
+            SET    IsPrintAll = 'Y'
+        END
+      ELSE
+        BEGIN
+            IF ( @pSearchType = 'RPT'
+                  OR @pSearchType = 'RPTCHK' )
+              BEGIN
+                  UPDATE P
+                  SET    P.IsPrintAll = 'Y'
+                  FROM   #PList P
+                         INNER JOIN VisitClientMapping VCM WITH (NOLOCK)
+                                 ON P.PatientVisitID = VCM.VisitID
+                         INNER JOIN ClientAttributesDetails CAD WITH (NOLOCK)
+                                 ON VCM.ClientID = CAD.ClientID
+                                    AND CAD.OrgID = @CurrentOrgID
+                  WHERE  CAD.AttributesID = 20
+                         AND Isnull(CAD.value, 'Y') = 'Y'
+
+                  UPDATE P
+                  SET    P.Zone = L.Locality_Value + ' (' + L.lOCALITY_CODE + ')'
+                  FROM   #PList p
+                         INNER JOIN VisitClientMapping VCM WITH (NOLOCK)
+                                 ON P.PatientVisitID = VCM.VisitID
+                         INNER JOIN ClientMaster CM (nolock)
+                                 ON VCM.ClientID = CM.ClientID
+                         INNER JOIN Localities L (nolock)
+                                 ON CM.ZonalID = L.Locality_ID
+                  WHERE  VCM.IsActive IS NULL
+              END
+            ELSE
+              BEGIN
+                  UPDATE P
+                  SET    P.IsPrintAll = 'Y'
+                  FROM   #PList P
+                         INNER JOIN VisitClientMapping VCM WITH (NOLOCK)
+                                 ON P.PatientVisitID = VCM.VisitID
+                         INNER JOIN ClientAttributesDetails CAD WITH (NOLOCK)
+                                 ON VCM.ClientID = CAD.ClientID
+                                    AND CAD.OrgID = @CurrentOrgID
+                  WHERE  CAD.AttributesID = 21
+                         AND Isnull(CAD.value, 'Y') = 'Y'
+              END
+        END
+
+		IF(@ReportType='FAR')
+		BEGIN
+		 
+		        INSERT INTO #ReprintPList(URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,
+PhysicianName,PhoneNumber,OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName)
+				SELECT Distinct URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,
+PhysicianName,PhoneNumber,Temp.OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName FROM #PList Temp
+				INNER JOIN Notifications N WITH (NOLOCK) ON Temp.PatientVisitID=N.Identityid AND Temp.OrgID=N.OrgID
+				WHERE N.ActionType='ROUNDBPDF' AND N.Status='Completed' AND ISNULL(N.ReportType,'Interim')='final'
+		END
+		ELSE IF(@ReportType='PARA')
+		BEGIN
+		   INSERT INTO #ReprintPList(URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+            VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName)
+		    SELECT Distinct URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,Temp.OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+         VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName FROM #PList Temp
+			INNER JOIN Notifications N WITH (NOLOCK) ON Temp.PatientVisitID=N.Identityid AND Temp.OrgID=N.OrgID
+			INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON Temp.PatientVisitID=OI.VisitID AND Temp.OrgID=OI.OrgID
+			WHERE N.ActionType='ROUNDBPDF' AND 
+N.Status='Completed' AND ISNULL(N.ReportType,'Interim')='Interim' 
+AND OI.Status IN ('Pending','SampleReceived','SampleCollected','OutSource','Completed','Validate','PartiallyCompleted','PartiallyApproved','PartiallyV
+alidated','Yet to Transfer')
+		END
+		ELSE IF(@ReportType='PARB')
+		BEGIN
+		    INSERT INTO #ReprintPList(URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+             VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName)
+		    SELECT Distinct URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,Temp.OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+             VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName FROM #PList Temp
+			INNER JOIN Notifications N WITH (NOLOCK) ON Temp.PatientVisitID=N.Identityid AND Temp.OrgID=N.OrgID
+			INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON Temp.PatientVisitID=OI.VisitID AND Temp.OrgID=OI.OrgID
+			WHERE N.ActionType='ROUNDBPDF' AND N.Status='Completed' AND ISNULL(N.ReportType,'Interim')='Interim' AND OI.Status IN ('Not given','Rejected','Retest','Recheck','Reflexwithnewsample','Reflexwithsamesample')
+		END
+		ELSE
+		BEGIN 
+		    INSERT INTO #ReprintPList(URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+             VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName)
+			SELECT Distinct URNO,URNofId,URNTypeId,PatientNumber,PatientName,PatientVisitId,PatientID,VisitDate,Location,PhysicianName,PhoneNumber,OrgID,Age,ExternalVisitID,EMail,OrganizationName,ReferingPhysicianName,
+            VisitNumber,ClientName,IsPrintAll,PrintedTime,Zone,IsColorPrint,PriorityName,SpecialityName FROM #PList Temp
+		END
+      -------------                                                                          
+      SELECT DISTINCT @totalRows = Count(*)
+      FROM   #ReprintPList
+      WHERE  Isnull(IsPrintAll, 'N') = 'Y'
+             AND IsColorPrint = @IsColrPrint
+
+      SET ROWCOUNT 0
+
+      IF @startRowIndex = -1
+        SET @startRowIndex = 0
+
+      IF @pageSize = -1
+        SET @pageSize = 0
+
+      IF ( @pageSize > -1
+           AND @startRowIndex > -1 )
+        BEGIN
+            SET @startRowIndex = ( ( @startRowIndex - 1 ) * @pageSize ) + 1
+
+        IF @startRowIndex = 0
+              SET @startRowIndex = 1
+        END
+
+      IF ( @pageSize = -1
+           AND @startRowIndex = -1 )
+        BEGIN
+            SET ROWCOUNT 0
+        END
+      ELSE
+        BEGIN
+            SET ROWCOUNT @pageSize
+        END
+
+		
+
+      --REPLACE(CONVERT(nvarchar(11),dbo.Fn_getserverdate(@ContextInfo), 103),' ','-')+REPLACE(RIGHT(CONVERT(nvarchar(16), dbo.Fn_getserverdate(@ContextInfo), 120),6),':',':')                                                                        
+      SELECT *
+      FROM   (SELECT Row_number()
+                       OVER(
+                         ORDER BY VisitDate DESC)                                        AS Rowid,
+                     URNO,
+                     URNofId,
+                     URNTypeId,
+                     PatientNumber,
+                     PatientName,
+                     PatientVisitId,
+					 ExternalVisitID,
+                     PatientID,
+                     VisitDate,
+                     Replace(CONVERT(nvarchar(9), VisitDate, 103), ' ', '-')
+                     + Replace(RIGHT(CONVERT(nvarchar(19), VisitDate, 100), 9), ':', ':') AS ICDCodeStatus,
+                     Location,
+                     PhysicianName,
+                     PhoneNumber,
+                     OrgID,
+                     Age                                                                 AS PatientAge,
+                     EMail,
+                     OrganizationName,
+                     ReferingPhysicianName,
+                     VisitNumber,
+                     ClientName,
+                     Isnull(Zone, '')                                                    AS Zone,
+                     CASE
+                       WHEN PrintedTime = '' THEN ''
+                       ELSE Replace(CONVERT(nvarchar(9), PrintedTime, 103), ' ', '-')
+                            + Replace(RIGHT(CONVERT(nvarchar(19), PrintedTime, 100), 9), ':', ':')
+                     END                                                                 AS TPAName,
+      PriorityName ,  
+     SpecialityName    
+              FROM   #ReprintPList
+              WHERE  Isnull(IsPrintAll, 'N') = 'Y'
+                     AND IsColorPrint = @IsColrPrint) AS t
+      WHERE
+        --Rowid>=@first_id                                                                                                                                                                
+        Rowid >= @startRowIndex
+      ORDER  BY VisitDate DESC
+
+      DROP TABLE #PList
+	  DROP TABLE #ReprintPList
+      DROP TABLE #tblZoneID
+      DROP TABLE #tblHubID
+      DROP TABLE #TblLocationID
+
+      --SELECT ( @query + @where )
+  END
+
+

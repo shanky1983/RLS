@@ -1,0 +1,959 @@
+CREATE PROCEDURE pGetBookingsDatawithSample_LIMSAPI (@pUserID    BIGINT,
+                                                    @pDateRange DATETIME,
+                                                    @pOrgCode   NVARCHAR(100))
+AS
+  BEGIN
+      -- exec pGetBookingsDatawithSample_LIMSAPI '0','20201218','AttuneDemo'
+
+      DECLARE @pLocationID INT,
+              @RateCount   INT
+      DECLARE @pFdate DATETIME,
+              @pTdate DATETIME
+      DECLARE @pOrgID     INT = NULL,
+              @pOrgAddrID INT = NULL;
+      DECLARE @CodeTypeID INT,
+              @chkFeeType NVARCHAR(20),
+              @pFeeType   NVARCHAR(20),
+              @pFeeID     INT
+
+      SELECT @pFdate = CONVERT(DATE, @pDateRange),
+             @pTdate = Dateadd(ss, -1, Dateadd(dd, 1, @pFdate))
+
+      IF EXISTS(SELECT 1
+                FROM   integrationtypemaster
+                WHERE  integrationtypename = @pOrgCode)
+        BEGIN
+            SELECT @pOrgID = VOM.attuneorgid,
+                   @pOrgAddrID = VOA.attuneorgaddressid
+            FROM   integrationtypemaster ITM WITH(nolock)
+                   INNER JOIN vendororgmapping VOM WITH(nolock)
+                           ON ITM.integrationtypeid = VOM.vendorid
+                   INNER JOIN vendororgaddressmapping VOA WITH(nolock)
+                           ON VOA.vendorid = VOM.vendorid
+            WHERE  ITM.integrationtypename = @pOrgCode
+        END
+
+      IF @pUserID = 0
+          OR @pUserID = -1
+        SET @pUserID = ''
+
+      CREATE TABLE #inventorycount
+        (
+           bookingid BIGINT,
+           invcount  INT
+        )
+
+      CREATE TABLE #tempbookings
+        (
+           BookingID            BIGINT,
+           Salutation           NVARCHAR(10),
+           NAME                 NVARCHAR(150),
+           Gender               NVARCHAR(10),
+           Age                  NVARCHAR(30),
+           DateofBirth          DATETIME,
+           Address              NVARCHAR(500),
+           City                 NVARCHAR(75),
+           State                NVARCHAR(150),
+           Country              NVARCHAR(150),
+           PostalCode           NVARCHAR(10),
+           MobileNumber         NVARCHAR(30),
+           Email                NVARCHAR(100),
+           SampleCollectionTime DATETIME,
+           DispatchType         NVARCHAR(100),
+           TotalGrossAmount     DECIMAL(18, 2),
+           DueAmount            DECIMAL(18, 2),
+           PaymentStatus        NVARCHAR(50),
+           Status               NVARCHAR(50),
+           samplecode           INT,
+           samplecontainerid    INT,
+           testcode             NVARCHAR(100),
+           inventorycount       INT,
+           userid               NVARCHAR(15),
+           clientcode           NVARCHAR(25),
+           discountamount       DECIMAL(18, 2),
+           comments             NVARCHAR(225),
+           discountid           BIGINT,
+           locationid           INT,
+           isprocessed          NVARCHAR(5)
+        )
+
+      DECLARE @Type      NVARCHAR(20) = NULL,
+              @ID        BIGINT = NULL,
+              @BookingId BIGINT = NULL,
+	      @RateID    BIGINT = NULL
+
+      CREATE TABLE #testinfo
+        (
+           sno       SMALLINT IDENTITY(1, 1),
+           id        BIGINT,
+           type      NVARCHAR(20),
+           bookingid BIGINT,
+	   rateID    BIGINT
+        )
+
+      DECLARE @Loop  INT = 1,
+              @Count INT = 0
+
+      CREATE TABLE #tempinvpaging
+        (
+           investigationid   BIGINT,
+           testcode          NVARCHAR(50),
+           testname          NVARCHAR(max),
+           type              NVARCHAR(20),--(INV,GRP, PKG) ,
+           orgid             INT,
+           gender            NVARCHAR(20),
+           deptid            INT,
+           samplecode        INT,
+           samplecontainerid INT,
+           status            NVARCHAR(50),
+	   BookingID         BIGINT,
+	   rateID            BIGINT
+        )
+
+      CREATE TABLE #tempgrppaging
+        (
+           attgroupid  BIGINT,
+           orggroupid  BIGINT,
+           testcode    NVARCHAR(50),
+           type        NVARCHAR(20),--(INV,GRP, PKG) ,
+           orgid       INT,
+           displaytext NVARCHAR(1000),
+           status      NVARCHAR(20),
+           gender      NVARCHAR(20),
+	   BookingID   BIGINT,
+	   rateID      BIGINT
+        )
+
+      CREATE TABLE #temppkgpaging
+        (
+           displaytext NVARCHAR(1000),
+           attgroupid  BIGINT,
+           orggroupid  BIGINT,
+           testcode    NVARCHAR(50),
+           type        NVARCHAR(10),
+           orgid       INT,
+           status      NVARCHAR(20),
+           gender      NVARCHAR(20),
+	   BookingID   BIGINT,
+	   rateID     BIGINT
+        )
+
+      CREATE TABLE #testsampledetails
+        (
+           packageid            BIGINT,
+           packagename          NVARCHAR(3000),
+           testcode             NVARCHAR(3000),
+           testid               BIGINT,
+           testname             NVARCHAR(3000),
+           type                 NVARCHAR(100),
+           sampleid             INT,
+           samplecode           NVARCHAR(1000),
+           samplename           NVARCHAR(1000),
+           samplecontainerid    INT,
+           containername        NVARCHAR(255),
+           samplecontainercolor NVARCHAR(100),
+		   BookingID            BIGINT
+        )
+
+       CREATE TABLE #temp_result
+        (
+           investigationid       BIGINT,
+           testcode              NVARCHAR(50),
+           testname              NVARCHAR(1000),
+           type                  NVARCHAR(20),
+           gender                NVARCHAR(20),
+           investigationname     NVARCHAR(100),
+           invtestcode           NVARCHAR(100),
+           invinvestigationid    BIGINT,
+           inv_investigationname NVARCHAR(100),
+           sampleid              INT,
+           samplecode            NVARCHAR(100),
+           samplename            NVARCHAR(100),
+           samplecontainerid     INT,
+           containername         NVARCHAR(255),
+           samplecontainercolor  NVARCHAR(100),
+           price                 DECIMAL(18, 2),
+           grpprice              DECIMAL(18, 2),
+           pkgprice              DECIMAL(18, 2),
+           departmentid          INT,
+           deparmentname         NVARCHAR(255),
+           status                NVARCHAR(10),
+           orgid                 BIGINT,
+           invstatus             NVARCHAR(1000),
+	   bookingid             BIGINT,
+	   ordertype             NVARCHAR(20),
+	   rateID                BIGINT
+        )
+
+      INSERT #testinfo
+             (id,
+              type,
+              bookingid,
+	      rateID)
+      SELECT PO.id,
+             PO.type,
+             BI.bookingid,
+	     ISNULL(BI.RateID,0)
+      FROM   bookings BI
+             INNER JOIN preorderedinvestigations PO
+                     ON PO.quotationid = Bi.bookingid
+      WHERE BI.OrgID = @pOrgID
+	       AND BI.BookingStatus in ('A')
+	       AND ( BI.collectiontime >= @pFdate
+                    AND BI.createdat < @pTdate )
+             AND BI.sourcetype = 'Home Collection'
+             AND ( userid = @pUserID
+                        OR @pUserID = '' )
+      
+	SELECT @Count = Count(1)  
+    FROM   #Testinfo  
+  
+      WHILE @loop <= @Count  
+        BEGIN  
+            SELECT @ID = NULL,  
+                   @TYPE = NULL 
+  
+            SELECT @ID = ID,	
+                   @Type = Type,
+		   @BookingId=BookingId,
+		   @RateID = rateID
+            FROM   #Testinfo  
+            WHERE  Sno = @Loop 
+
+	 IF (@Type = 'INV')
+	 BEGIN
+               ---- Get INV Data ------
+                  INSERT INTO #tempinvpaging
+                              (investigationid,
+                               testcode,
+                               testname,
+                               type,
+                               orgid,
+                               gender,
+                               deptid,
+                               samplecode,
+                               samplecontainerid,
+                               status,
+			       bookingid,
+			       rateID)
+                  SELECT investigationid,
+                         Isnull(investigationcode, testcode),
+                         displaytext,
+                         'INV',
+                         orgid,
+                         gender,
+                         deptid,
+                         samplecode,
+                         samplecontainerid,
+                         CASE
+                           WHEN Isnull(isactive, 'Y') = 'Y' THEN 'Active'
+                           ELSE 'Inactive'
+                         END AS IsActive,
+			 tmp.bookingid,
+			 Tmp.rateID
+                  FROM   investigationorgmapping IOM WITH(nolock)
+				  INNER JOIN #testinfo Tmp 
+							  ON IOM.investigationid = Tmp.ID AND Tmp.Type = 'INV'
+                  WHERE  IOM.orgid = @pOrgID
+                  ORDER  BY investigationid
+
+                  INSERT #temp_result
+                         (investigationid,
+                          testcode,
+                          testname,
+                          type,
+                          gender,
+                          investigationname,
+                          samplecode,
+                          samplename,
+                          samplecontainerid,
+                          containername,
+                          samplecontainercolor,
+                          departmentid,
+                          deparmentname,
+                          status,
+                          orgid,
+                          invtestcode,
+                          invinvestigationid,
+                          invstatus,
+			  bookingid,
+			  ordertype,
+			  rateID)
+                  SELECT DISTINCT IOM.investigationid,
+                                  testcode,
+                                  IOM.testname,
+                                  'INV',
+                                  gender,
+                                  IOM.testname,
+                                  ISM.samplecode,
+                                  ISM.sampledesc,
+                                  ISC.samplecontainerid,
+                                  ISC.containername,
+                                  ISC.containercolor,
+                                  IOM.deptid DepartmentID,
+                                  IDM.deptname,
+                                  IOM.status,
+                                  IOM.orgid,
+                                  IOM.testcode,
+                                  IOM.investigationid,
+                                  IOM.status,
+				  IOM.bookingid,
+				  @Type,
+				  IOM.rateID
+                  FROM   #tempinvpaging IOM (nolock)
+                         INNER JOIN invdeptmaster IDM
+                                 ON IDM.deptid = IOM.deptid
+                                    AND IDM.langcode = 'en-GB'
+                                    AND IDM.orgid = IOM.orgid
+                         INNER JOIN invsamplemaster ISM (nolock)
+                                 ON IOM.samplecode = ISM.samplecode
+                                    AND ISM.orgid = IOM.orgid
+                         LEFT JOIN investigationsamplecontainer ISC (nolock)
+                                 ON IOM.samplecontainerid =
+                                    ISC.samplecontainerid
+                                    AND ISC.orgid = IOM.orgid
+                  WHERE  IOM.orgid = @pOrgID
+
+                  INSERT INTO #testsampledetails
+                              (packageid,
+                               packagename,
+                               testcode,
+                               testid,
+                               type,
+                               testname,
+                               sampleid,
+                               samplecode,
+                               samplename,
+                               samplecontainerid,
+                               containername,
+                               samplecontainercolor,
+			       bookingid)
+                  SELECT DISTINCT investigationid,
+                                  testname,
+                                  testcode,
+                                  investigationid,
+                                  'INV',
+                                  IOM.testname,
+                                  ISM.samplecode,
+                                  ISM.samplecode,
+                                  ISM.sampledesc,
+                                  ISC.samplecontainerid,
+                                  ISC.containername,
+                                  ISC.containercolor,
+								  IOM.bookingid
+                  FROM   #tempinvpaging IOM (nolock)
+                         INNER JOIN invdeptmaster IDM
+                                 ON IDM.deptid = IOM.deptid
+                                    AND IDM.langcode = 'en-GB'
+                                    AND IDM.orgid = IOM.orgid
+                         INNER JOIN invsamplemaster ISM (nolock)
+                                 ON IOM.samplecode = ISM.samplecode
+                                    AND ISM.orgid = IOM.orgid
+                         LEFT JOIN investigationsamplecontainer ISC (nolock)
+                                 ON IOM.samplecontainerid =
+                                    ISC.samplecontainerid
+                                    AND ISC.orgid = IOM.orgid
+                  WHERE  IOM.orgid = @pOrgID
+
+                  UPDATE tr
+                  SET    tr.price = IRC.rate
+                  FROM   #temp_result TR
+                         INNER JOIN invratemaster IRC
+                                 ON IRC.id = TR.investigationid
+                                    AND IRC.type = 'INV'
+                         INNER JOIN ratemaster R (nolock)
+                                 ON R.orgid = TR.orgid
+                                    --AND R.ratecode = 'GENERAL'
+				    AND R.RateId = TR.rateID
+                                    AND IRC.rateid = R.rateid
+
+               ---- Get INV Data End ------
+      END
+
+	  IF(@Type = 'PKG')
+	  BEGIN
+	         ---- Get PKG Data ------
+              IF NOT EXISTS(SELECT 1
+                                FROM   codingschemeorgmapping
+                                WHERE  orgid = @pOrgID)
+                    BEGIN
+                        INSERT INTO #temppkgpaging
+                                    (displaytext,
+                                     attgroupid,
+                                     orggroupid,
+                                     testcode,
+                                     type,
+                                     orgid,
+                                     status,
+                                     gender, 
+				     BookingID,
+				     rateID)
+                        SELECT Isnull(IOG.displaytext, IGM.groupname) AS  DisplayText,
+                               IOG.attgroupid,
+                               IOG.orggroupid                         AS OrgGroupID,
+                               CM.codename                            AS packagecode,
+                               'PKG',
+                               IOG.orgid,
+                               CASE
+                                 WHEN Isnull(IOG.status, 'Y') = 'Y' THEN
+                                 'Active'
+                                 ELSE 'Inactive'
+                               END                                    AS Status,
+                               IOG.gender,
+			       tmp.bookingId                          AS BookingID,
+			       tmp.rateID
+                        FROM   invorggroup IOG WITH (nolock)
+						       INNER JOIN #testinfo Tmp 
+							          ON IOG.attgroupid = Tmp.ID 
+									  --AND Tmp.Type = 'PKG'
+                               LEFT JOIN invgroupmaster IGM WITH (nolock)
+                                      ON IGM.groupid = IOG.attgroupid 
+									  AND IGM.type = tmp.Type
+                               LEFT JOIN codemapper CMP WITH (nolock)
+                           ON CMP.identifyingid = IOG.orggroupid
+                                         AND CMP.identifyingtype = 'PKG'
+                               INNER JOIN codemaster CM WITH (nolock)
+                                       ON CM.codemasterid = CMP.codemasterid
+                                          AND CM.codetype = 'PKG'
+                               INNER JOIN codingschememaster CSM WITH (nolock)
+                                       ON CM.codeschemeid = CSM.codetypeid
+                               INNER JOIN codingschemeorgmapping CSOM WITH (nolock)
+                                       ON CSOM.codetypeid = CSM.codetypeid
+                                          AND CSOM.orgid = IOG.orgid
+                        WHERE  CSOM.isprimary = 'Y'
+                               AND IGM.type = 'PKG'
+                               AND IOG.orgid = @pOrgID
+                        ORDER  BY orggroupid
+                    END
+                  ELSE
+                    BEGIN
+                        INSERT INTO #temppkgpaging
+                                    (displaytext,
+                                     attgroupid,
+                                     orggroupid,
+                                     testcode,
+                                     type,
+                                     orgid,
+                                     status,
+                                     gender,
+				     bookingId,
+				     rateID)
+                        SELECT Isnull(IOG.displaytext, IGM.groupname) AS DisplayText,
+                               IOG.attgroupid,
+                               IOG.orggroupid                         AS OrgGroupID,
+                               IOG.testcode,
+                               'PKG',
+                               IOG.orgid,
+                               CASE
+                         WHEN Isnull(IOG.status, 'Y') = 'Y' THEN
+                                 'Active'
+                                 ELSE 'Inactive'
+                               END                                    AS Status,
+                               IOG.gender                             AS Gender,
+			       tmp.bookingId                          AS BookingID,
+			       tmp.rateID                      
+                        FROM   invorggroup IOG WITH (nolock)
+                               INNER JOIN #testinfo Tmp 
+							          ON IOG.attgroupid = Tmp.ID 
+									  AND Tmp.Type = 'PKG'
+                               LEFT JOIN invgroupmaster IGM WITH (nolock)
+                                      ON IGM.groupid = IOG.attgroupid 
+									  --AND IGM.type = tmp.Type
+                        WHERE  IGM.type = 'PKG'
+                               AND IOG.attgroupid = @ID
+                               AND IOG.orgid = @pOrgID
+                        ORDER  BY orggroupid
+                    END
+
+				 INSERT #Temp_Result (InvestigationID,TestCode,Testname,Type,Gender,InvInvestigationID, InvestigationName,INVTestCode,INV_InvestigationName,SampleCode,
+				 SampleName,SampleContainerID,ContainerName,SampleContainerColor,DepartmentID,DeparmentName,Status,OrgID,InvStatus, 
+				 bookingid, ordertype, rateID) 
+	              
+				 SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'GRP'  AS  TestType ,IOG.Gender,
+				 IPM.ID, IOG.Displaytext as InvestigationName, IOG.TestCode,IOG.Displaytext , 0 AS  SampleID ,
+				 '' AS SampleName,0,'','' as [SampleContainerColor],    
+                                  0 DepartmentID,'' DeparmentName,CASE WHEN ISNULL(IOG.Status,'Y')='Y' THEN 'Active' ELSE 'InActive' END,@pOrgid AS[OrgID],
+				  TG.Status, TG.BookingID, @Type as ordertype, TG.rateID
+				 FROM #TempPKGPaging TG
+				    INNER JOIN InvPackageMapping IPM (NOLOCK) ON TG.OrgGroupID=IPM.PackageID AND IPM.Type='GRP' 
+				    INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.OrgGroupID=IPM.ID  AND IPM.Active = 'A' 
+				 WHERE IOG.OrgID=@pOrgid
+				  
+				 UNION
+				  
+				 SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'INV'  AS  TestType ,IOG.Gender,
+								  IOG.InvestigationID,IOG.Displaytext as InvestigationName, IOG.InvestigationCode,IOG.DisplayText, ISM.SampleCode AS  SampleID ,
+								  ISM.SampleDesc AS SampleName,ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor as [SampleContainerColor],    
+                                  IDM.DeptID DepartmentID,IDM.DeptName DeparmentName,
+								  CASE WHEN ISNULL(IOG.Display,'N')='Y' THEN 'Active' ELSE 'InActive' END,@pOrgid AS[OrgID],
+								  TG.Status, TG.BookingID, @Type as ordertype, TG.rateID
+				  FROM #TempPKGPaging TG
+					  INNER JOIN InvPackageMapping IPM (NOLOCK) ON TG.OrgGroupID=IPM.PackageID
+					  INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON IOG.InvestigationID=IPM.ID AND IPM.Type='INV'  AND IPM.Active = 'A' 
+					  INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.OrgID=IOG.OrgID AND IDM.DeptID=IOG.DeptID and  IDM.LangCode='en-GB' 
+					  LEFT JOIN  InvSampleMaster ISM (nolock) ON IOG.samplecode = ISM.samplecode AND ISM.OrgId = IOG.OrgId     
+					  LEFT JOIN InvestigationSampleContainer ISC (nolock) ON IOG.SampleContainerID = ISC.SampleContainerID AND ISC.OrgID = IOG.OrgId 
+				  WHERE IOG.OrgID=@pOrgid
+												
+				UPDATE TR set TR.PKGPrice=IRC.Rate 
+				from #Temp_Result TR 
+				inner join InvGroupMaster IGM ON  IGM.GroupID=TR.InvestigationID
+				inner join InvOrgGroup IOG  ON IOG.AttGroupID=IGM.GroupID  and IOG.Orgid=TR.OrgID 
+				INNER JOIN InvRateMaster  IRC ON IRC.ID=IOG.OrgGroupID AND IRC.Type='PKG'
+				INNER JOIN RateMaster R (NOLOCK) ON R.OrgID=TR.OrgID 
+				--AND R.RateCode='GENERAL'  
+				AND R.RateId=TR.rateID
+				AND IRC.RateID=R.RateID
+
+		        INSERT INTO #TestSampleDetails (PackageID,PackageName,TestCode,TestID,Type,TestName,SampleID,SampleCode,SampleName,
+				 			SampleContainerID,ContainerName,SampleContainerColor, BookingID) 
+			   SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,TR.InvInvestigationID,TR.Type,TR.InvestigationName,
+			   ISM.SampleCode,ISM.SampleCode,ISM.SampleDesc, ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor,TGP.BookingID 
+			   FROM   #TempPKGPaging TGP (nolock)  
+				  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID
+				  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON IGM.GroupID=TR.InvInvestigationID 
+				  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.InvestigationID  AND IOM.OrgID=TGP.OrgID
+				  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID    AND IDM.OrgId=IOM.OrgID
+				  LEFT JOIN InvSampleMaster ISM (nolock) ON IOM.samplecode = ISM.samplecode AND ISM.OrgId = IOM.OrgId     
+				  LEFT JOIN InvestigationSampleContainer ISC (nolock)  ON IOM.SampleContainerID = ISC.SampleContainerID  AND ISC.OrgID = IOM.OrgId     
+			  WHERE  IOM.OrgID = @pOrgID AND TR.Type='GRP' AND IGM.parent='N' AND IGM.active='Y'
+			  UNION
+			    SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,TR.InvInvestigationID,TR.Type,TR.InvestigationName,
+				ISM.SampleCode,ISM.SampleCode,ISM.SampleDesc, ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor,TGP.BookingID 
+			  FROM   #TempPKGPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID
+			  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON IGM.GroupID=TR.InvInvestigationID 
+			  INNER JOIN INvGroupMapMaster IGG (NOLOCK) ON IGG.GroupID=IGM.InvestigationID 
+			  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGG.InvestigationID  AND IOM.OrgID=TGP.OrgID
+			  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID    AND IDM.OrgId=IOM.OrgID
+			  LEFT JOIN InvSampleMaster ISM (nolock) ON IOM.samplecode = ISM.samplecode AND ISM.OrgId = IOM.OrgId     
+			  LEFT JOIN InvestigationSampleContainer ISC (nolock)  ON IOM.SampleContainerID = ISC.SampleContainerID  AND ISC.OrgID = IOM.OrgId     
+			  WHERE  IOM.OrgID = @pOrgID AND TR.Type='GRP' AND IGM.parent='Y' AND IGM.active='Y'
+			  UNION
+			  SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,InvestigationID,TR.Type,TR.InvestigationName,TR.SampleCode,TR.SampleCode,TR.SampleName,     
+							    TR.SampleContainerID,TR.ContainerName,TR.SampleContainerColor,TGP.BookingID 
+			  FROM   #TempPKGPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID     
+			  WHERE   TR.Type='INV'
+      ---- Get PKG Data ------
+	  END
+	  
+	  IF (@Type = 'GRP')
+	     BEGIN
+	          ---- Get GRP Data ------
+                  INSERT INTO #tempgrppaging
+                              (attgroupid,
+                               orggroupid,
+                               testcode,
+                               type,
+                               orgid,
+                               displaytext,
+                               status,
+                               gender,
+			       bookingid,
+			       rateID)
+                  SELECT distinct IOG.attgroupid,
+                         IOG.orggroupid,
+                         IOG.testcode,
+                         'GRP',
+                         IOG.orgid,
+                         IOG.displaytext,
+                         CASE
+                           WHEN Isnull(IOG.status, 'N') = 'Y' THEN 'Active'
+                           ELSE 'Inactive'
+                         END AS Status,
+                         IOG.gender,
+			 tmp.bookingId,
+			 tmp.rateID
+                  FROM   invorggroup IOG WITH(nolock)
+				  INNER JOIN #testinfo Tmp 
+							  ON IOG.attgroupid = Tmp.ID 
+                  WHERE  IOG.orgid = @pOrgID
+				         AND Tmp.Type = 'GRP'
+                  ORDER  BY IOG.orggroupid
+
+                  INSERT #temp_result
+                         (investigationid,
+                          testcode,
+                          testname,
+                          type,
+                          gender,
+                          invinvestigationid,
+                          investigationname,
+                          invtestcode,
+                          inv_investigationname,
+                          samplecode,
+                          samplename,
+                          samplecontainerid,
+                          containername,
+                          samplecontainercolor,
+                          departmentid,
+                          deparmentname,
+                          status,
+                          orgid,
+                          invstatus,
+			  bookingId,
+			  ordertype,
+			  rateID)
+                  SELECT DISTINCT TG.attgroupid   AS InvestigationID,
+                                  TG.testcode,
+                                  TG.displaytext  AS Testname,
+                                  'GRP'           AS TestType,
+                                  IOG.gender,
+                                  IGM.investigationid,
+                                  IOG.displaytext AS InvestigationName,
+                                  IOG.testcode,
+                                  IOG.displaytext,
+                                  0               AS SampleID,
+                                  ''              AS SampleName,
+                                  0,
+                                  '',
+                                  ''              AS [SampleContainerColor],
+                                  0               DepartmentID,
+                                  ''              DeparmentName,
+                                  CASE
+                                   WHEN Isnull(IOG.status, 'N') = 'Y' THEN
+                                    'Active'
+                                    ELSE 'InActive'
+                                  END,
+                                  @pOrgid         AS[OrgID],
+                                  TG.status,
+				  TG.bookingid,
+				  @Type,
+				  TG.rateID
+                  FROM   #tempgrppaging TG
+                         INNER JOIN invgroupmapmaster IGM (nolock)
+                      ON TG.orggroupid = IGM.groupid
+                         INNER JOIN invorggroup IOG (nolock)
+                          ON IOG.orggroupid = IGM.investigationid
+                                    AND IGM.parent = 'Y'
+                                    AND IGM.active = 'Y'
+                  WHERE  IOG.orgid = @pOrgid AND IGM.active='Y'
+                  UNION
+                  SELECT DISTINCT TG.attgroupid      AS InvestigationID,
+                                  TG.testcode,
+                                  TG.displaytext     AS Testname,
+                                  'INV'              AS TestType,
+                                  IOG.gender,
+                                  IOG.investigationid,
+                                  IOG.displaytext    AS InvestigationName,
+                                  IOG.investigationcode,
+                                  IOG.displaytext,
+                                  ISM.samplecode     AS SampleID,
+                                  ISM.sampledesc     AS SampleName,
+                                  ISC.samplecontainerid,
+                                  ISC.containername,
+                                  ISC.containercolor AS [SampleContainerColor],
+                                  IDM.deptid         DepartmentID,
+                                  IDM.deptname       DeparmentName,
+                                  CASE
+                                    WHEN Isnull(IOG.display, 'N') = 'Y' THEN
+                                    'Active'
+                                    ELSE 'InActive'
+                                  END,
+                                  @pOrgid            AS[OrgID],
+                                  TG.status,
+				  TG.bookingid,
+				  @Type,
+				  TG.rateID
+                  FROM   #tempgrppaging TG
+                         INNER JOIN invgroupmapmaster IGM (nolock)
+                                 ON TG.orggroupid = IGM.groupid
+                         INNER JOIN investigationorgmapping IOG (nolock)
+                                 ON IOG.investigationid = IGM.investigationid
+                                    AND IGM.parent = 'N'
+                                    AND IGM.active = 'Y'
+                         INNER JOIN invdeptmaster IDM (nolock)
+                                 ON IDM.orgid = IOG.orgid
+                                    AND IDM.deptid = IOG.deptid
+                                    AND IDM.langcode = 'en-GB'
+                         LEFT JOIN invsamplemaster ISM (nolock)
+                                 ON IOG.samplecode = ISM.samplecode
+                                    AND ISM.orgid = IOG.orgid
+                         LEFT JOIN investigationsamplecontainer ISC (nolock)
+                                 ON IOG.samplecontainerid =
+                                    ISC.samplecontainerid
+                                    AND ISC.orgid = IOG.orgid
+                  WHERE  IOG.orgid = @pOrgid AND IGM.active='Y'
+
+                  UPDATE tr
+                  SET    tr.grpprice = IRC.rate
+                  FROM   #temp_result TR
+                         INNER JOIN invgroupmaster IGM
+                                 ON IGM.groupid = TR.investigationid
+                         INNER JOIN invorggroup IOG
+                                 ON IOG.attgroupid = IGM.groupid
+                                    AND IOG.orgid = TR.orgid
+                         INNER JOIN invratemaster IRC
+                                 ON IRC.id = IOG.orggroupid
+                                     AND IRC.type = 'GRP'
+                         INNER JOIN ratemaster R (nolock)
+                                 ON R.orgid = TR.orgid
+                                    --AND R.ratecode = 'GENERAL'
+				    AND R.rateid = TR.rateID
+                                    AND IRC.rateid = R.rateid
+
+                  INSERT INTO #testsampledetails
+                              (packageid,
+                               packagename,
+                               testcode,
+                               testid,
+                               type,
+                               testname,
+                               sampleid,
+                               samplecode,
+                               samplename,
+                               samplecontainerid,
+                               containername,
+                               samplecontainercolor,
+							   bookingid)
+                  SELECT DISTINCT TGP.attgroupid,
+                                  TGP.displaytext,
+                                  TR.invtestcode,
+                                  IGM.investigationid,
+                                  TR.type,
+                                  TR.investigationname,
+                                  ISM.samplecode,
+                                  ISM.samplecode,
+                                  ISM.sampledesc,
+                                  ISC.samplecontainerid,
+                                  ISC.containername,
+                                  ISC.containercolor,
+								  TGP.bookingid
+                  FROM   #tempgrppaging TGP (nolock)
+                         INNER JOIN #temp_result TR
+                                 ON TGP.attgroupid = TR.investigationid
+                         INNER JOIN invgroupmapmaster IGM (nolock)
+                                 ON IGM.groupid = TR.invinvestigationid
+                         INNER JOIN investigationorgmapping IOM (nolock)
+                                 ON IOM.investigationid = IGM.investigationid
+                                    AND IOM.orgid = TGP.orgid
+                         INNER JOIN invdeptmaster IDM
+                                 ON IDM.deptid = IOM.deptid
+                                    AND IDM.orgid = IOM.orgid
+                         LEFT JOIN invsamplemaster ISM (nolock)
+                                 ON IOM.samplecode = ISM.samplecode
+                                    AND ISM.orgid = IOM.orgid
+                         LEFT JOIN investigationsamplecontainer ISC (nolock)
+                                 ON IOM.samplecontainerid =
+                                    ISC.samplecontainerid
+                                    AND ISC.orgid = IOM.orgid
+                  WHERE  IOM.orgid = @pOrgID
+                         AND TR.type = 'GRP' AND IGM.active='Y'
+                  UNION
+                  SELECT DISTINCT TGP.attgroupid,
+                                  TGP.displaytext,
+                                  TR.invtestcode,
+                                  investigationid,
+                                  TR.type,
+                                  TR.investigationname,
+                                  TR.samplecode,
+                                  TR.samplecode,
+                                  TR.samplename,
+                                  TR.samplecontainerid,
+                                  TR.containername,
+                                  TR.samplecontainercolor,
+								  TGP.bookingid
+                  FROM   #tempgrppaging TGP (nolock)
+                         INNER JOIN #temp_result TR
+                                 ON TGP.attgroupid = TR.investigationid
+                  WHERE  TR.type = 'INV'
+            ---- Get GRP Data End ------
+        END
+
+		----- Inventory Count -----
+		 INSERT INTO #inventorycount (bookingid, invcount)
+		 SELECT POI.QuotationID,  Count(POI.QuotationID)
+           FROM   PreOrderedInvestigations POI
+		   WHERE POI.OrgID = @pOrgID AND POI.QuotationID = @BookingId
+         GROUP BY POI.QuotationID
+		 ----- Inventory Count End -----
+
+        SELECT @Loop = @Loop + 1  
+      END 
+
+      INSERT INTO #tempbookings
+                  (bookingid,
+                   salutation,
+                   NAME,
+                   gender,
+                   age,
+                   dateofbirth,
+                   address,
+                   city,
+                   state,
+                   country,
+                   postalcode,
+                   mobilenumber,
+                   email,
+                   samplecollectiontime,
+                   dispatchtype,
+                   totalgrossamount,
+                   dueamount,
+                   paymentstatus,
+                   status,
+                   userid,
+                   clientcode,
+                   comments,
+                   discountamount,
+                   discountid,
+                   locationid,
+                   ISProcessed)
+      SELECT DISTINCT B.bookingid,
+                      SOM.displaytext           AS Salutation,
+                      B.patientname             AS NAME,
+                      CASE B.sex
+                        WHEN 'F' THEN 'Female'
+                        WHEN 'M' THEN 'Male'
+                        ELSE 'Other'
+                      END                       AS Gender,
+                      B.age,
+                      B.dob                     AS DateOfBirth,
+                      B.collectionaddress + ' '
+                      + B.collectionaddress2    AS Address,
+                      B.city,
+                      B.state,
+                      Cou.countryname           AS Country,
+                      B.pincode,
+                      B.phonenumber             AS MobileNumber,
+                      B.email                   AS EmailID,
+                      B.collectiontime,
+                      B.dispatchvalue          AS DispatchType,
+                      Isnull(B.netamount, 0)  AS NetAmount,
+                      0.00                      AS DueAmount,
+                      'Not Paid'                PaymentStatus,
+                      B.bookingstatus           AS Status,
+                      L.LoginID                 AS UserID,
+                      CASE
+                        WHEN Isnull(B.clientcode, '') = '' THEN 'GENERAL'
+                        ELSE B.clientcode
+                      END                       AS ClientCode,
+                      B.comments,
+                      B.discount,
+                      B.discountid,
+                      Isnull(B.orgaddressid, 0) AS LocationID,
+                      CASE
+                        WHEN Isnull(CM.iscash, 'Y') = 'Y' THEN 'N'
+                        ELSE 'Y'
+                      END                       AS ISProcessed --IsCreaditBill
+      FROM   bookings B WITH(nolock)
+             LEFT JOIN salutationorgmapping SOM WITH(nolock)
+                    ON SOM.titleid = B.titlecode
+                       AND SOM.orgid = B.orgid
+                       AND Isnull(SOM.languagecode, 'en-GB') = 'en-GB'
+             INNER JOIN preorderedinvestigations POI WITH(nolock)
+                     ON POI.quotationid = B.bookingid
+                        AND POI.orgid = B.orgid
+             INNER JOIN users U WITH(nolock)
+                     ON B.userid = U.userid
+                        AND B.orgid = U.orgid
+			 INNER JOIN Login L WITH(nolock)
+                     ON L.LoginID = U.LoginID
+                        AND L.orgid = U.orgid
+             INNER JOIN state S
+                     ON Upper(S.statename) = Upper(B.state)
+             INNER JOIN city C
+                     ON Upper(C.cityname) = Upper(B.city)
+             INNER JOIN country Cou
+                     ON Cou.countryid = S.countryid
+             LEFT JOIN clientmaster CM
+                     ON CM.clientcode = B.clientcode
+                        AND CM.orgid = B.orgid
+      WHERE  B.orgid = @pOrgID
+	         AND B.BookingStatus in ('A')
+             AND ( B.collectiontime >= @pFdate
+                   AND B.createdat < @pTdate )
+             AND ( B.userid = @pUserID
+                    OR @pUserID = '' )
+
+      UPDATE t
+      SET    t.inventorycount = S.invcount
+      FROM   #inventorycount S
+             INNER JOIN #tempbookings T
+                     ON S.bookingid = T.bookingid
+
+	  declare @pInvCount int = 0
+	  SELECT @pInvCount = count(0)
+      FROM   #testsampledetails
+
+      SELECT bookingid                AS [BookingID],
+             salutation               AS [Salutation],
+             NAME                     AS [Name],
+             gender                   AS [Gender],
+             age                      AS [Age],
+             dateofbirth              AS [DateofBirth],
+             address                  AS [Address],
+             city                     AS [City],
+             state                    AS [State],
+             country                  AS [Country],
+             postalcode               AS [PostalCode],
+             mobilenumber             AS [MobileNumber],
+             email                    AS [Email],
+             samplecollectiontime     AS [SampleCollectionTime],
+             dispatchtype             AS [DispatchType],
+             totalgrossamount         AS [TotalGrossAmount],
+             dueamount                AS [DueAmount],
+             paymentstatus            AS [PaymentStatus],
+   status                   AS [Status] ,
+             -- @pInvCount           AS [InventoryCount],
+			 inventorycount           AS [InventoryCount],
+             isnull(userid,0)         AS [UserID],
+             @pOrgID                  AS [OrgID],
+             CASE
+               WHEN locationid = 0 THEN @pOrgAddrID
+               ELSE locationid
+             END                     AS [LocationID],
+             clientcode              AS [ClientCode],
+             comments                AS [Comments],
+             discountamount          AS [DiscountAmount],
+             discountid              AS [DiscountID],
+             isprocessed             AS [ISProcessed]
+      FROM   #tempbookings
+
+      SELECT DISTINCT investigationid                         AS [InvestigationID],
+                      testcode                                AS [InvestigationCode],
+                      testname                                AS [InvestigationName],
+                      type                                    AS [TestType],
+                      Isnull(gender, '')                      AS [Gender],
+                      Isnull(investigationname, '')           AS [TestName],
+                      Isnull(invinvestigationid, '')          AS [TestID],
+                      Isnull(invtestcode, '')                 AS [TestCode],
+                      Cast(samplecode AS INT)                 AS [SampleID],
+                      samplename                              AS [SampleName],
+                      samplecontainerid                       AS [ContainerID],
+                      containername                           AS [ContainerName], 
+                      Isnull([samplecontainercolor], 'White') AS [SampleContainerColour],
+                      Isnull(price, 0.00)                     AS [Price],
+                      Isnull(grpprice, 0.00)                  AS [GRPPrice],
+                      Isnull(pkgprice, 0.00)                  AS [PKGPrice],
+                      departmentid                            AS [DepartmentID],
+                      isnull(deparmentname,'')                AS [DepartmentName],
+                      orgid                                   AS [OrgID],
+                      status                                  AS [Status],
+                      invstatus                               AS [InvStatus],
+					  BookingID                               AS [BookingID],
+					  ordertype                               AS [OrderType]
+      FROM   #temp_result
+      ORDER  BY BookingID
+
+      SELECT distinct packageid             AS [PackageID],
+           isnull(packagename,'')           AS [PackageName],
+           isnull(testcode,'')              AS [TestCode],
+           --testid                           AS [TestID],
+           isnull(testname,'')              AS [TestName],
+           type                    AS [Type],
+           sampleid                         AS [SampleID],
+           isnull(samplecode,'')            AS [SampleCode],
+           isnull(samplename,'')            AS [SampleName],
+           samplecontainerid                AS [SampleContainerID],
+           isnull(containername,'')         AS [ContainerName],
+           isnull(samplecontainercolor,'')  AS [SampleContainerColour],
+		   bookingid                        AS [BookingID]
+      FROM   #testsampledetails where Isnull(sampleid,0) > 0
+	  ORDER  BY bookingid
+
+      DROP TABLE #inventorycount
+      DROP TABLE #tempbookings
+	  DROP TABLE #testsampledetails
+	  DROP TABLE #temp_result
+  END 

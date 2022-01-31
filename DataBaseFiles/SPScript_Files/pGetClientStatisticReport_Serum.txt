@@ -1,0 +1,167 @@
+--exec pGetClientStatisticReport_Serum  @fromdate='01-11-2018',@todate='10-11-2018',@orgid=242
+CREATE PROC [dbo].[pGetClientStatisticReport_Serum] (
+	@Fromdate DATETIME
+	,@Todate DATETIME
+	,@Orgid INT
+	,@Pparamtype VARCHAR(100) = NULL
+	,@Pparamvalue VARCHAR(100) = NULL
+	,@pExcelReportId [INT] = NULL
+	,@pExcelReportName VARCHAR(255) = NULL
+	,@pToExecute VARCHAR(10) = NULL
+	)
+AS
+BEGIN
+	DECLARE @fdate DATE
+		,@tdate DATE
+
+	SELECT @fdate = @fromdate
+		,@tdate = dateadd(day, 1, @Todate)
+
+	--Select ClientName, '' SampleCount ,distinct(VisitCount), SUM(FB.netvalue) netvalue
+	DECLARE @tblTemp AS TABLE (
+		ID INT,
+		VisitID BIGINT,
+		FinalBillID BIGINT,
+		BillDate NVARCHAR(255)
+		,ClientName NVARCHAR(255)
+		,Clientcode NVARCHAR(255)
+		,ClientAddress Varchar(255)
+		,SampleCount BIGINT
+		,VisitCount BIGINT
+		,GrossAmount DECIMAL(18, 2),
+		CancelAmount DECIMAL(18, 2),
+		netvalue DECIMAL(18, 2)
+		)
+
+	  DECLARE @tblTemp1 AS TABLE (
+			    VisitID BIGINT,
+				FinalBillID BIGINT,
+				ClientName NVARCHAR(255)
+				,Clientcode NVARCHAR(255),		
+				CancelAmount DECIMAL(18, 2)
+		)
+
+	INSERT INTO @tblTemp (
+		     VisitID
+			 ,FinalBillID
+			,BillDate
+			,ClientName
+			,Clientcode
+			,ClientAddress
+			,SampleCount
+			,VisitCount
+			,GrossAmount
+			,CancelAmount
+	    )
+	SELECT
+	PV.PatientVisitid,
+	FB.FinalBillID,
+	CONVERT(VARCHAR(10), FB.createdAT, 104),
+		CM.ClientName
+		,CM.Clientcode
+		,AD.Address1
+		,'' SampleCount
+		,1 AS VisitCount
+		,SUM(FB.netvalue) AS NetValue,
+		0 as CancelAmount
+	--Upper(substring(CONVERT(varchar(13),pv.createdAT,107),1,3))MOnths,
+	--Upper(substring(CONVERT(varchar(13),pv.createdAT,107),9,5))Year --convert--(varchar(133),pv.createdat,103)
+	FROM PatientVisit PV(NOLOCK)
+	INNER JOIN visitclientmapping VCM(NOLOCK) ON PV.Patientvisitid = vcm.visitid
+		AND PV.orgid = VCM.Orgid and ISNULL(VCM.IsActive,'Y')!='N'
+	INNER JOIN finalbill FB(NOLOCK) ON VCM.finalbillid = Fb.finalbillid
+		AND VCM.orgid = FB.Orgid
+		AND PV.Patientvisitid = FB.VisitID 
+	INNER JOIN Clientmaster CM(NOLOCK) ON VCM.clientid = CM.clientid
+		AND VCM.orgid = cm.Orgid
+	INNER JOIN AddressDetails AD WITH (NOLOCK) ON AD.OrgID=CM.OrgID AND AD.ReferenceID=CM.ClientID AND AddressTypeID=1
+	INNER JOIN Organization O(NOLOCK) ON O.orgid = PV.orgid
+	--left Join PatientInvsample PIS (Nolock) On PV.Patientvisitid=PIS.PAtientvisitid and PV.orgid=PIS.Orgid
+	--Inner Join OrganizationAddress OA on OA.AddressId=PV.OrgAddressID and OA.OrgID=PV.orgid
+	WHERE FB.createdAT BETWEEN @fdate
+			AND @tdate
+		AND FB.orgid = @Orgid
+	GROUP BY PV.PatientVisitid,FB.FinalBillID,O.NAME
+		,O.orgid
+		,CM.ClientName	,CM.Clientcode,AD.Address1,
+		CONVERT(VARCHAR(10), FB.createdAT, 104)
+	UNION
+	
+	SELECT 
+	PV.PatientVisitid,
+	FB.FinalBillID,
+	CONVERT(VARCHAR(10), FB.createdAT, 104)
+	,CM.ClientName
+	,CM.Clientcode
+	,AD.Address1
+		,count(PIS.samplecode) SampleCount
+		,0 AS VisitCount
+		,0 AS netvalue,
+		0 as CancelAmount
+	--Upper(substring(CONVERT(varchar(13),pv.createdAT,107),1,3))MOnths,
+	--Upper(substring(CONVERT(varchar(13),pv.createdAT,107),9,5))Year --convert--(varchar(133),pv.createdat,103)
+	FROM PatientVisit PV(NOLOCK)
+	INNER JOIN visitclientmapping VCM(NOLOCK) ON PV.Patientvisitid = vcm.visitid
+		AND PV.orgid = VCM.Orgid and ISNULL(VCM.IsActive,'Y')!='N'
+	INNER JOIN finalbill FB(NOLOCK) ON VCM.finalbillid = Fb.finalbillid
+		AND VCM.orgid = FB.Orgid
+		AND PV.Patientvisitid = FB.VisitID
+	INNER JOIN Clientmaster CM(NOLOCK) ON VCM.clientid = CM.clientid
+		AND VCM.orgid = cm.Orgid
+    INNER JOIN AddressDetails AD WITH (NOLOCK) ON AD.OrgID=CM.OrgID AND AD.ReferenceID=CM.ClientID AND AddressTypeID=1
+	INNER JOIN Organization O(NOLOCK) ON O.orgid = PV.orgid
+	LEFT JOIN PatientInvsample PIS(NOLOCK) ON PV.Patientvisitid = PIS.PAtientvisitid
+		AND PV.orgid = PIS.Orgid
+	--Inner Join OrganizationAddress OA on OA.AddressId=PV.OrgAddressID and OA.OrgID=PV.orgid
+	WHERE FB.createdAT BETWEEN @fdate
+			AND @tdate
+		AND FB.orgid = @Orgid
+	GROUP BY PV.PatientVisitid,FB.FinalBillID,O.NAME
+		,O.orgid
+		,CM.ClientName	,CM.Clientcode,AD.Address1,
+		CONVERT(VARCHAR(10), FB.createdAT, 104)
+
+		INSERT INTO @tblTemp1(
+		VisitID,
+		FinalBillID,
+		ClientName
+		,Clientcode,
+		CancelAmount
+		)
+		SELECT PV.PatientVisitId,FB.FinalBillID, CM.ClientName
+		,CM.Clientcode
+		,SUM(ARD.CancelAmount) as CancelAmount
+	FROM PatientVisit PV(NOLOCK)
+	INNER JOIN visitclientmapping VCM(NOLOCK) ON PV.Patientvisitid = vcm.visitid AND PV.orgid = VCM.Orgid
+	INNER JOIN finalbill FB(NOLOCK) ON VCM.finalbillid = Fb.finalbillid AND VCM.orgid = FB.Orgid AND PV.Patientvisitid = FB.VisitID
+		INNER JOIN AmountRefundDetails ARD(NOLOCK) ON  FB.finalbillid=ARD.finalbillid 
+	INNER JOIN Clientmaster CM(NOLOCK) ON VCM.clientid = CM.clientid AND VCM.orgid = cm.Orgid
+	INNER JOIN Organization O(NOLOCK) ON O.orgid = PV.orgid
+  WHERE FB.createdAT BETWEEN @fdate
+			AND @tdate
+		AND FB.orgid = @Orgid
+	GROUP BY PV.PatientVisitId,FB.FinalBillID,O.NAME
+		,O.orgid
+		,CM.ClientName	,CM.Clientcode,
+		CONVERT(VARCHAR(10), FB.createdAT, 104)
+
+		UPDATE T2 SET T2.CancelAmount=T1.CancelAmount   from @tblTemp1 T1 
+		INNER JOIN @tblTemp T2 ON  T1.Clientcode=T2.Clientcode-- AND T2.SampleCount!=0
+		 AND T1.VisitID=T2.VisitID AND T1.FinalBillID=T2.FinalBillID
+
+
+	SELECT 1,
+	BillDate
+		,ClientName
+		,ClientCode
+		,ClientAddress
+		,Sum(SampleCount) AS SampleCount
+		,Sum(VisitCount) AS VisitCount
+		,Sum(GrossAmount) AS GrossAmount,
+		SUM(CancelAmount) as [CancelAmount/ReFund],
+		Sum(GrossAmount) - SUM(CancelAmount) as 'Net Amount'
+	FROM @tblTemp where visitcount>0
+	GROUP BY ClientName,Clientcode,BillDate,ClientAddress
+	ORDER BY BillDate
+
+END

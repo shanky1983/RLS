@@ -1,0 +1,96 @@
+
+CREATE Procedure pGetLabCodeforTests
+(
+@pTestList [dbo].[UDTLabCodeForTest] READONLY,
+@pOrgID int
+)
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+	   
+DECLARE @LabCodePattern TABLE
+        (
+		   RowNo        INT IDENTITY(1, 1),
+           ID        bigint,
+           Type varchar(5),
+		   OrgID int,
+		   LastGeneratedNumber varchar(5),
+		   IncNumber bigint,
+		   IncCharacter varchar(3),
+		   Prefix Nvarchar(5),
+		   LabCode Nvarchar(15),
+		   AccessionNumber bigint
+)
+
+Insert into @LabCodePattern (ID,Type,OrgID,LastGeneratedNumber,IncNumber,Prefix,IncCharacter,AccessionNumber)
+select LCP.ID,LCP.Type,LCP.OrgID,LabNumber,IncNumber,Prefix,IncCharacter ,pTemp.AccessionNumber
+from LabCodePattern LCP Inner Join @pTestList pTemp On pTemp.ID=LCP.ID and pTemp.Type=LCP.Type
+where Orgid=@pOrgID
+
+DECLARE @Count INT = 0
+DECLARE @loop INT = 1
+Declare @OrgID int, @ID bigint,@Type Nvarchar(10),@LastGeneratedNumber bigint,@IncNumber bigint,@IncCharacter Nvarchar(10),
+@AccessionNumber bigint
+SELECT @Count = Count(1)  FROM   @LabCodePattern
+ WHILE( @loop <= @Count )
+        BEGIN
+            SELECT @OrgID =LCP.OrgID,      
+      
+   @ID=LCP.ID,      
+   @Type=LCP.Type,      
+   @LastGeneratedNumber=LastGeneratedNumber,      
+   @IncNumber = LCP.Incnumber,      
+   @IncCharacter=LCP.IncCharacter,      
+   @AccessionNumber = AccessionNumber      
+    FROM LabCodePattern LCP     
+    INNER JOIN @LabCodePattern pTemp On pTemp.ID=LCP.ID and pTemp.Type=LCP.Type       
+    WHERE  RowNo = @loop AND  LCP.Orgid=@pOrgID   
+
+
+If(@LastGeneratedNumber = '9999' )
+BEGIN
+SELECT @IncCharacter = [dbo].[FngetLabcodePattern](@OrgID, @ID, @Type)
+Update LabCodePattern  set IncCharacter= @IncCharacter, IncNumber=0 where ORgId=@OrgID and ID=@ID and Type=@Type
+select @IncNumber = 0
+
+END
+
+Update LabCodePattern Set LabNumber= (SELECT RIGHT(('0000'+CAST(@IncNumber+1 AS varchar(4))),4)), 
+IncNumber= IncNumber+1  where ORgId=@OrgID and ID=@ID 
+and Type=@Type
+
+Update LCP set LastLabcode= CONCAT(Temp.Prefix,@IncCharacter,LCP.LabNumber) from LabCodePattern LCP
+Inner Join  @LabCodePattern Temp on temp.ID=LCp.ID and Temp.Type=LCP.Type and Temp.OrgID=LCP.OrgID  
+where LCP.ORgId=@OrgID and LCP.ID=@ID and LCP.Type=@Type
+
+Declare @LabcodeUpdateRowID bigint
+
+Set @LabcodeUpdateRowID=  (Select Top 1 Sequeceid from PatientInvSampleMapping PISM 
+Inner Join LabcodePattern LCP on LCP.ID=PISM.ID and LCP.Type=PISM.Type and LCP.OrgID=PISM.OrgID
+where PISM.ID =@ID and PISM.Type=@Type and PISM.AccessionNumber = @AccessionNumber and 
+PISM.OrgID=@pOrgID Order by Sequeceid Desc)
+
+Update PISM set PISM.Labcode=LCP.LastLabCode 
+from PatientInvSampleMapping PISM 
+Inner Join LabcodePattern LCP on LCP.ID=PISM.ID and LCP.Type=PISM.Type and LCP.OrgID=PISM.OrgID
+Inner Join Sampletracker ST on PISM.SID=ST.SampleID and ST.InvSampleStatusID=3
+where PISM.ID =@ID and PISM.Type=@Type and PISM.AccessionNumber = @AccessionNumber and 
+PISM.OrgID=@pOrgID and PISM.Sequeceid=@LabcodeUpdateRowID
+
+
+SET @loop=@loop + 1
+END
+END TRY
+BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetLabCodeforTests'
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+
+END

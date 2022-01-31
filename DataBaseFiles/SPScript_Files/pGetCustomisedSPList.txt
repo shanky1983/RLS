@@ -1,0 +1,11 @@
+
+Create procedure [dbo].[pGetCustomisedSPList]           
+(          
+@ContextInfo [UDT_Context] READONLY                 
+)          
+as          
+BEGIN    
+DEclare @Orgid bigint
+select @Orgid=Orgid from @ContextInfo
+select ReportID,SpName as 'ReportDisplayText',ReportName as 'ReportPath' from CustomisedReport where ORgID=@Orgid
+END 

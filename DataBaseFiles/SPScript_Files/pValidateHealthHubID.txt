@@ -1,0 +1,124 @@
+CREATE PROCEDURE [dbo].[pValidateHealthHubID] (  
+          @pOrgID             [INT]
+		 ,@pBookingID         [BIGINT]
+		 ,@pHealthHubID       [NVARCHAR](70)
+		 ,@pName              [NVARCHAR](200)
+		 ,@pDOB               [NVARCHAR](50)
+		 ,@pGender            [NVARCHAR](10)
+		 ,@pMob               [NVARCHAR](20)
+		 ,@pEmail             [NVARCHAR](100)
+         ,@ContextInfo        [UDT_CONTEXT] READONLY 
+	)
+AS
+BEGIN
+	
+	DECLARE @Name NVARCHAR(500), @Gender nchar(2),     @DOB nvarchar(30),            
+			@Mob nvarchar(50), 	 @Email nvarchar(30),  @HHID nvarchar(60)      
+   
+    IF (@pBookingID > 0 )
+	  BEGIN
+		SELECT @Name = PatientName,          @DOB = CONVERT(VARCHAR(10), DOB, 103),    @Gender = Sex,          
+			   @Mob = RIGHT(PhoneNumber,10), @Email = ISNULL(RTRIM(LTRIM(Email)),''),  @HHID = ISNULL(HealthHubID,'')
+		FROM Bookings with(nolock) WHERE BookingID = @pBookingID and OrgID = @pOrgID
+      END
+
+     IF(@pName !='' AND @pName !=null)
+	   BEGIN
+	     SET @pName = ISNULL(RTRIM(LTRIM(@pName)),'')
+       END
+
+	 IF(@pDOB !='' AND @pDOB != null)
+	   BEGIN
+	     SET @pDOB = CONVERT(VARCHAR(10), @pDOB, 103)
+       END
+	 
+	 IF(@pMob !='' AND @pMob != null)
+	   BEGIN
+	     SET @pMob = RIGHT(@pMob, 10)
+       END 
+	 
+	 IF(@pEmail !='' AND @pEmail != null)
+	   BEGIN
+	     SET @pEmail = ISNULL(RTRIM(LTRIM(@pEmail)),'')
+       END 
+
+	 IF(@pHealthHubID = '' AND @HHID != '')
+	    SET @pHealthHubID = @HHID
+
+	 CREATE TABLE #Temp
+	 ( PatientNumber NVARCHAR(50), 
+	   Name          NVARCHAR(500),
+	   HasHealthCard NVARCHAR(60),
+	   Comments NVARCHAR(10))
+     
+	 INSERT INTO #Temp (PatientNumber,  Name,     HasHealthCard, Comments )
+     SELECT TOP 1 P.PatientNumber,      P.[Name], ISNULL(P.HealthHubID,''), 'Y'
+	 FROM Patient P with(Nolock) 
+	     INNER JOIN patientaddress PA with(Nolock) ON P.PatientID = PA.PatientID
+				                      AND P.OrgID = @pOrgID
+	 WHERE P.Name = @pName 
+	   AND CONVERT(VARCHAR(10),DOB, 103) = @pDOB 
+	   AND P.Sex = @pGender 
+	   AND LTRIM(P.Email) = @pEmail
+	   AND RIGHT(PA.MobileNumber,10) = @pMob
+	   AND P.OrgID = @pOrgID
+	   AND RTRIM(LTRIM(P.HealthHubID)) = @pHealthHubID
+	  UNION
+	  SELECT TOP 1 B.PatientNumber,      B.[PatientName], ISNULL(B.HealthHubID,''), 'Y'
+	  FROM Bookings B with(Nolock) 
+	  WHERE B.PatientName = @pName 
+	   AND CONVERT(VARCHAR(10),DOB, 103) = @pDOB 
+	   AND B.Sex = @pGender 
+	   AND LTRIM(B.Email) = @pEmail
+	   AND RIGHT(B.PhoneNumber,10) = @pMob
+	   AND B.OrgID = @pOrgID
+	   AND RTRIM(LTRIM(B.HealthHubID)) = @pHealthHubID
+
+     
+     IF (@pHealthHubID != '' AND @pName ='' AND @pDOB ='' AND @pGender ='' AND @pMob ='' AND @pEmail ='')
+       BEGIN
+	      INSERT INTO #Temp (PatientNumber,  Name,    HasHealthCard,  Comments )
+          SELECT TOP 1 PatientNumber,       [Name],   @pHealthHubID,  'N'
+			   FROM Patient with(Nolock) 
+	      WHERE RTRIM(LTRIM(HealthHubID)) = @pHealthHubID AND OrgID = @pOrgID
+		  UNION
+		  SELECT TOP 1 PatientNumber,       PatientName,  @pHealthHubID,  'N'
+			   FROM Bookings with(Nolock) 
+		  WHERE RTRIM(LTRIM(HealthHubID)) = @pHealthHubID 
+		         AND OrgID = @pOrgID
+       END
+	 ELSE 
+	   BEGIN
+	      INSERT INTO #Temp (PatientNumber,  Name,    HasHealthCard,  Comments )
+		  SELECT TOP 1 P.PatientNumber,      P.[Name], ISNULL(P.HealthHubID,''), 'N'
+			FROM Patient P with(Nolock) 
+				 INNER JOIN patientaddress PA with(Nolock) ON P.PatientID = PA.PatientID
+												  AND P.OrgID = @pOrgID
+			WHERE (P.Name != @pName 
+				   OR CONVERT(VARCHAR(10),DOB, 103) != @pDOB 
+				   OR P.Sex != @pGender 
+				   OR LTRIM(P.Email) != @pEmail
+				   OR RIGHT(PA.MobileNumber,10) != @pMob )
+				   AND RTRIM(LTRIM(P.HealthHubID)) = @pHealthHubID 
+				   AND P.OrgID = @pOrgID
+				  UNION
+				  SELECT TOP 1 B.PatientNumber,      B.[PatientName], ISNULL(B.HealthHubID,''), 'N'
+				  FROM Bookings B with(Nolock) 
+				  WHERE (B.PatientName != @pName 
+				   OR CONVERT(VARCHAR(10),DOB, 103) != @pDOB 
+				   OR B.Sex != @pGender 
+				   OR LTRIM(B.Email) != @pEmail
+				   OR RIGHT(B.PhoneNumber,10) != @pMob)
+				   AND RTRIM(LTRIM(B.HealthHubID)) = @pHealthHubID
+				   AND B.OrgID = @pOrgID
+		END
+
+		IF NOT EXISTS(SELECT 1 FROM #Temp)
+		  BEGIN
+		     INSERT INTO #Temp (PatientNumber,  Name,  HasHealthCard,  Comments )
+	         SELECT '',  '', '', 'Y'
+          END
+
+		SELECT PatientNumber, Name, HasHealthCard, Comments FROM #Temp
+
+END

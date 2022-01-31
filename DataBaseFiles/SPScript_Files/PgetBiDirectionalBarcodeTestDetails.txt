@@ -1,0 +1,198 @@
+--EXEC [PgetBiDirectionalBarcodeTestDetails] 220,415,'DELFIA'
+
+CREATE PROCEDURE [dbo].[PgetBiDirectionalBarcodeTestDetails] 
+@OrgID INT,
+@OrgAddressID INT,
+@DeviceID    VARCHAR(50)       
+WITH EXECUTE AS OWNER          
+AS          
+  BEGIN          
+      -- Service sp which pushes datas to SQL lite ---            
+     SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                                               
+      SET NOCOUNT ON          
+          
+      --DECLARE @OrgID INT          
+          
+      --SELECT @OrgID = OrgID          
+      --FROM   @ContextInfo          
+          
+      Declare @BidirectionalBarCodeDetails as table          
+        (          
+           [PatientName]    [NVARCHAR](250),          
+           [PatientAge]     [VARCHAR](15),          
+           [PatientSex]     [CHAR](10),          
+           [TestCode]       [VARCHAR](20),          
+           [BarCode]        [VARCHAR](100),          
+           [PatientInvID]   [INT],          
+           [AttFlag]        BIT,          
+           [IsProcessed]    BIT,          
+           [OrgID]          [INT],          
+           [DeviceID]       [VARCHAR](20),          
+           [CreatedAt]      [DATETIME],          
+           [DOB]            [DATETIME],          
+           [VisitNumber]    [VARCHAR](200),          
+           [AccessionNumber][BIGINT],          
+           teststatus       VARCHAR(10),      
+           ClientName NVARCHAR(50),
+		   SampleName VARCHAR(50),
+		   InvestigationID INT         
+        )          
+      Declare @DeviceIdtmp as table          
+        (          
+           [DeviceID] [VARCHAR](20)          
+        )          
+          
+      INSERT INTO @DeviceIdtmp          
+        SELECT *    
+      FROM   [dbo].[fnSplit] (@DeviceID, ',')          
+          
+      Declare @BidirectionalBarCode as table          
+        (          
+           Visitid BIGINT,          
+           RowID   BIGINT          
+        )          
+   
+      INSERT INTO @BidirectionalBarCode        
+      SELECT DISTINCT TOP 10 BBC.Visitid,          
+                            BBC.RowID          
+      FROM   BidirectionalBarCodeTestDetails BBC WITH (NOLOCK)          
+      WHERE  IsProcessed = 0          
+             AND IsDataPicked = 0          
+      ORDER  BY RowID ASC          
+
+   INSERT INTO @BidirectionalBarCodeDetails          
+   SELECT DISTINCT Replace(P.Name, '''', ''),          
+                      P.Age,          
+                      P.SEX,          
+                      DIOM.TestCode,          
+                      PIS.BarcodeNumber,          
+                      BBC.PatientInvID,          
+                      BBC.IsDataPicked,          
+                      BBC.IsProcessed,          
+                      BBC.OrgID,          
+                      DIOM.DeviceID,      
+                      BBC.CreatedAt,          
+                      P.DOB,          
+                      BBC.VisitNumber,          
+                      BBC.AccessionNumber,          
+                      BBC.teststatus as Remarks,
+					  BBC.ClientName,
+					  ISM.SampleDesc AS 'SampleName',
+					  PI.InvestigationID         
+      FROM   @BidirectionalBarCode TMP          
+             INNER JOIN PatientVisit PV WITH (NOLOCK)          
+                     On PV.PatientVisitId = TMP.Visitid          
+             INNER JOIN OrderedInvestigations OI WITH (NOLOCK)          
+                     ON TMP.Visitid = OI.Visitid          
+             INNER JOIN PatientInvestigation PI WITH (NOLOCK)          
+                     on OI.AccessionNumber = PI.AccessionNumber        
+             INNER JOIN BidirectionalBarCodeTestDetails BBC WITH (NOLOCK)          
+                     ON BBC.PatientInvID = PI.PatientInvID          
+    INNER JOIN  Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID    
+             INNER JOIN DeviceIntegrationOrgMapping DIOM WITH (NOLOCK)          
+                     ON DIOM.OrgID = PI.OrgID          
+                        and DIOM.InvestigationID = PI.InvestigationID          
+    INNER JOIN @DeviceIdtmp DTMP ON DTMP.DeviceID=DIOM.DeviceID          
+             INNER JOIN PatientInvSampleMapping PISM (NOLOCK)          
+                     ON OI.Visitid = PISM.Visitid          
+                        and OI.ID = PISM.ID          
+      and OI.Type = PISM.Type          
+             INNER JOIN PatientInvSample PIS WITH (NOLOCK)          
+            ON PIS.Sampleid = PISM.SID          
+                        --and PIS.PatientVisitID = PISM.VisitID          
+             inner join InvestigationOrgMapping IOm with(nolock)          
+                     on IOm.InvestigationID = Pi.InvestigationID          
+         and IOm.SampleCode = PIS.SampleCode          
+                        and IOm.OrgID = PI.OrgID  
+						INNER JOIN InvSampleMaster ISM WITH (NOLOCK) 
+						ON IOM.SampleCode=ISM.SampleCode AND IOM.OrgID=ISM.OrgID        
+      WHERE  BBC.IsProcessed = 0          
+             and DIOM.InvestigationID <> 8893          
+             and DIOM.testCode <> '717'          
+      ORDER  BY BBC.patientinvID      
+	  
+	  
+  ------------arun changes -- in a single call, overall entries are get updated asISDATAPICKED = 1 - it should restricted
+   UPDATE BBCD          
+   SET    IsDataPicked = 1          
+   FROM BidirectionalBarCodeTestDetails BBCD --WITH (NOLOCK)          
+   INNER JOIN @BidirectionalBarCodeDetails TMP ON TMP.Visitnumber=BBCD.Visitnumber and TMP.Patientinvid=BBCD.Patientinvid and TMP.Accessionnumber=BBCD.Accessionnumber
+   -----
+   --UPDATE BBCD          
+   --SET    IsDataPicked = 1          
+   --FROM BidirectionalBarCodeTestDetails BBCD --WITH (NOLOCK)          
+   --INNER JOIN @BidirectionalBarCode TMP ON TMP.Visitid=BBCD.Visitid         
+        
+          
+      DECLARE @pCreatedAt DATETIME          
+          
+      SET @pCreatedAt = GETDATE()  
+	          
+    ---Added start by selva 22-05-2019---          
+      UPDATE BBD                
+      SET    BBD.Pickedat = Getdate()                
+      FROM   BidirectionalBarCodeTestDetails BBD                
+             INNER JOIN @BidirectionalBarCodeDetails tmpBBD                
+                     ON tmpBBD.PatientInvID = BBD.PatientInvID                
+                        AND tmpBBD.AccessionNumber = BBd.AccessionNumber    
+             WHERE  ISNULL(BBD.TestStatus,'')!='C'   
+			   
+      UPDATE BBD                
+      SET    BBD.CancelOrder = Getdate()                
+      FROM   BidirectionalBarCodeTestDetails BBD                
+             INNER JOIN @BidirectionalBarCodeDetails tmpBBD                
+                     ON tmpBBD.PatientInvID = BBD.PatientInvID                
+                        AND tmpBBD.AccessionNumber = BBd.AccessionNumber    
+             where isnull(BBD.TestStatus,'')='C'                           
+      ---Added end by selva 22-05-2019---       
+      
+	  UPDATE @BidirectionalBarCodeDetails    
+      SET    ClientName = ''    
+      where  ClientName = 'GENERAL'    
+    
+      UPDATE @BidirectionalBarCodeDetails    
+      SET    ClientName = REPLACE(ClientName, '''', '')    
+      WHERE  ClientName LIKE '%''%'    
+    
+      UPDATE @BidirectionalBarCodeDetails    
+      SET    ClientName = REPLACE(ClientName, '`', '')    
+      WHERE  ClientName LIKE '%`%'    
+    
+      UPDATE @BidirectionalBarCodeDetails    
+      SET    PatientName = REPLACE(PatientName, '''', '')    
+      WHERE PatientName LIKE '%''%'    
+    
+      UPDATE @BidirectionalBarCodeDetails    
+      SET    PatientName = REPLACE(PatientName, '`', '')    
+      WHERE  PatientName LIKE '%`%'  
+	  
+	  UPDATE  @BidirectionalBarCodeDetails
+	  SET TestCode='CD' WHERE InvestigationID IN 
+	  (72738,72739,72740,72754,72787,72806,72808,72822,72826,72827,72828,72833,72835,72840,72858,72859,72897,52561,86629,75157,86630)
+
+	      
+      SELECT PatientName,          
+             PatientAge,          
+             PatientSex,          
+             TestCode,          
+             BarCode,          
+             PatientInvID,          
+             CASE WHEN AttFlag=1 THEN 'Y' ELSE 'N' END AS 'AttFlag',          
+             CASE WHEN IsProcessed=1 THEN 'Y' ELSE 'N' END AS 'IsProcessed',         
+             OrgID,          
+  DeviceID,          
+             CreatedAt,          
+             DOB,          
+             VisitNumber,          
+             AccessionNumber,          
+             teststatus as Remarks,ClientName,SampleName          
+      FROM   @BidirectionalBarCodeDetails ORDER by PatientInvID  ASC
+	  
+	      
+  UPDATE BBD          
+      SET    BBD.IsDataPicked = 1    
+      FROM   BidirectionalBarCodeTestDetails BBD          
+   INNER JOIN @BidirectionalBarCodeDetails tmpBBD          
+                     ON tmpBBD.PatientInvID = BBD.PatientInvID          
+                     AND tmpBBD.AccessionNumber = BBd.AccessionNumber 
+  END 

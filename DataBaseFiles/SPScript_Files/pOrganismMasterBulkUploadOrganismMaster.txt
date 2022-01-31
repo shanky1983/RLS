@@ -1,0 +1,83 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO  
+  
+CREATE PROCEDURE [dbo].[pOrganismMasterBulkUploadOrganismMaster]  
+       @pOrgID INT,   
+       @pUploadXLMasterType [VARCHAR](50),  
+       @pUploadXLMasterCode [VARCHAR](50),  
+       @pUDTOrganismBulkUpload  [dbo].[UDTOrganismBulkUploadOraganism] READONLY,  
+       @ContextInfo [UDT_Context] READONLY   
+WITH EXECUTE AS OWNER  AS   
+BEGIN  
+BEGIN TRY  
+      DECLARE @CreatedAt DATETIME=GETDATE(),@LanguageCode nvarchar(5), @CreatedBy BIGINT      
+      SELECT @CreatedBy = LoginID,@LanguageCode=LanguageCode  
+      FROM   @ContextInfo   
+  
+IF(@pUploadXLMasterType='OM')  
+BEGIN   
+  
+CREATE TABLE #OrganismBulkUploadOraganism  
+        (   
+           OrganismName  VARCHAR(100),   
+           OrganismCode  VARCHAR(100),   
+           OrgID   INT,  
+     OrganismID   BIGINT DEFAULT 0,  
+     IsValid   VARCHAR(10) DEFAULT 'YES',   
+     ErrorDescription NVARCHAR(250) NULL  
+        )   
+  
+      INSERT INTO #OrganismBulkUploadOraganism(OrganismName,OrganismCode,OrgID)  
+      SELECT T.OrganismName,   
+             T.OrganismCode,   
+             @pOrgID   
+      FROM   @pUDTOrganismBulkUpload T   
+  
+   UPDATE T SET T.OrganismID=OM.ID  
+          FROM #OrganismBulkUploadOraganism T  
+             INNER JOIN OrganismMaster OM   
+                    ON OM.Name = T.OrganismName OR  OM.Code=T.OrganismCode AND OM.OrgID = @pOrgID   
+  
+      DELETE from #OrganismBulkUploadOraganism   
+      WHERE  ( OrganismName = ''   
+                OR OrganismName Is Null )   
+             and ( OrganismCode = ''   
+                    OR OrganismCode Is Null )   
+        
+   UPDATE T1    
+      SET    T1.IsValid = 'NO',  
+          ErrorDescription=(CASE WHEN (T1.OrganismID IS NOT NULL  AND T1.OrganismID > 0 ) THEN 'ORGANISM NAME OR ORGANISM CODE ALREADY EXISTS' END)  
+      FROM   #OrganismBulkUploadOraganism T1 with(NOLOCK)    
+      WHERE  OrganismID <> 0  AND OrganismID IS NOT NULL   
+  
+  
+   INSERT INTO OrganismMaster  
+     (Name,  
+     Code,  
+     orgid,  
+     createdat,  
+     createdby)  
+       SELECT T.OrganismName,  
+           T.OrganismCode,   
+     @pOrgID,  
+     @CreatedAt,  
+     @CreatedBy  
+     FROM #OrganismBulkUploadOraganism T WHERE ISNULL (T.IsValid,'')<> 'NO' --AND ISNULL(T.FamilyId,0)=0  
+       
+   SELECT OrganismName, OrganismCode,ErrorDescription  
+      FROM   #OrganismBulkUploadOraganism    
+      WHERE  IsValid = 'NO'    
+  
+      DROP TABLE #OrganismBulkUploadOraganism    
+     
+        
+                   
+     
+        
+END   
+END TRY  
+BEGIN CATCH  
+END CATCH  
+END  

@@ -1,0 +1,143 @@
+CREATE Procedure PGetOutSourceReportMIS               
+(                
+@Fdate Datetime,                
+@Tdate Datetime,                
+@ClientID Int,                
+@VisitType Int,              
+@ContextInfo [dbo].[UDT_Context] READONLY                 
+)                
+As                
+Begin          
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED             
+  SET NOCOUNT ON;          
+  SET XACT_ABORT ON;        
+        
+IF (@ClientID = 0 OR @ClientID = -1)          
+Set @ClientID=NULL          
+          
+Declare @OrgID int          
+select  @OrgID=OrgID from @ContextInfo       
+        
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+Create table #tempoutsource        
+(        
+PatientVisitID Bigint,        
+TestName Nvarchar(255),        
+TestID int,        
+TestType nvarchar(50),        
+VisitType Nvarchar(10)        
+)        
+if(@Datediff <=31)
+BEGIN
+if(@visittype = -1 )
+begin
+IF(ISNULL(@ClientID,'')<>'')          
+Begin         
+INSERT INTO #tempoutsource (PatientVisitID,TestName,TestID,TestType,VisitType)        
+SELECT Distinct PV.PatientVisitID,OI.Name,OI.ID,OI.Type,        
+Case when PV.LabvisitType=0 then 'OPD' Else 'IPD' End as VisitType         
+FROM PatientVisit PV         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID        
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID       
+Inner join Outsourcingdetail OD on OD.Accessionnumber=OI.Accessionnumber    
+where PV.OrgID=@OrgID and VCM.ClientID=@ClientID and PV.Createdat between @Fdate and @Tdate         
+ and OI.ReferralID!=-1 and PV.LabVisitType in (0,1)       
+End        
+Else       
+Begin      
+INSERT INTO #tempoutsource (PatientVisitID,TestName,TestID,TestType,VisitType)        
+SELECT Distinct PV.PatientVisitID,OI.Name,OI.ID,OI.Type,        
+Case when PV.LabvisitType=0 then 'OPD' Else 'IPD' End as VisitType         
+FROM PatientVisit PV         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID        
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID    
+Inner join Outsourcingdetail OD on OD.Accessionnumber=OI.Accessionnumber         
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate and PV.LabVisitType in (0,1)        
+ and OI.ReferralID!=-1       
+End      
+END
+Else
+BEGIN
+IF(ISNULL(@ClientID,'')<>'')          
+Begin         
+INSERT INTO #tempoutsource (PatientVisitID,TestName,TestID,TestType,VisitType)        
+SELECT Distinct PV.PatientVisitID,OI.Name,OI.ID,OI.Type,        
+Case when PV.LabvisitType=0 then 'OPD' Else 'IPD' End as VisitType         
+FROM PatientVisit PV         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID        
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID       
+Inner join Outsourcingdetail OD on OD.Accessionnumber=OI.Accessionnumber    
+where PV.OrgID=@OrgID and VCM.ClientID=@ClientID and PV.Createdat between @Fdate and @Tdate         
+ and OI.ReferralID!=-1 and PV.LabVisitType=@VisitType       
+End        
+Else       
+Begin      
+INSERT INTO #tempoutsource (PatientVisitID,TestName,TestID,TestType,VisitType)        
+SELECT Distinct PV.PatientVisitID,OI.Name,OI.ID,OI.Type,        
+Case when PV.LabvisitType=0 then 'OPD' Else 'IPD' End as VisitType         
+FROM PatientVisit PV         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID        
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID    
+Inner join Outsourcingdetail OD on OD.Accessionnumber=OI.Accessionnumber         
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate and PV.LabVisitType=@VisitType        
+ and OI.ReferralID!=-1       
+End  
+END
+       
+select TestName,TestType,Count(TestID) as Counts,VisitType into #tempselva from #tempoutsource group by TestName,TestType,VisitType order by TestType,TestName              
+        
+select                
+* into #tempselva1 from (select  distinct TestName,TestType,              
+VisitType,Counts as Result              
+from #tempselva with(nolock)              
+)  as t               
+pivot (max(Result) for [VisitType] in([OPD],[IPD])              
+)as pvt              
+order by [TestName]         
+        
+        
+select ROW_NUMBER() OVER(ORDER BY TestName ASC) as SNO,TestName as TESTNAME,TestType as 'TYPE',Isnull(IPD,0) as IPD,Isnull(OPD,0) as OPD,              
+Sum(Convert(int,isnull(OPD,0))+Convert(int,isnull(IPD,0))) as TOTALTESTCOUNT INTO #TempFinal        
+from #tempselva1 group by TestName,TestType,OPD,IPD        
+      
+Declare @TotalTestCount Decimal(18,2)      
+Declare @TotalOutSourceCount Decimal(18,2)      
+Declare @Percentage Decimal(18,2)      
+      
+SELECT Distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount      
+FROM PatientVisit PV         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID        
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID         
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate        
+group by PV.PatientVisitID      
+select @TotalTestCount=Sum(Count1) from #Totalcount      
+select @TotalOutSourceCount=Sum(TOTALTESTCOUNT) from #TempFinal      
+      
+select @Percentage=Convert(varchar,((@TotalOutSourceCount * 100)/@TotalTestCount))      
+      
+Create table #Outsource (TotalTestCount nvarchar(50),TotalOutsourceCount Nvarchar(50),OutSourceTest Nvarchar(50))      
+insert into #Outsource(TotalTestCount,TotalOutsourceCount,OutSourceTest)      
+select Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalOutSourceCount)),Convert(Varchar,@Percentage)       
+        
+Select * from #TempFinal order by Type,TestName 
+if((select Count(1) from #TempFinal)>=1)
+begin
+SELECT '' as SNO,'' as TESTNAME,'' as TYPE,'' as IPD,Details as OPD, Count as TotalTESTCOUNT       
+FROM           
+   (SELECT [TotalTestCount] as [Total Test Count], [TotalOutsourceCount] as [Total Outsource Count], [OutSourceTest] as [%OutSource Test]        
+   FROM #Outsource) p          
+UNPIVOT          
+   (Count FOR Details IN           
+      ([Total Test Count], [Total Outsource Count], [%OutSource Test])          
+)AS unpvt;        
+       
+        END
+Drop table #tempoutsource        
+Drop table #tempselva        
+Drop table #tempselva1        
+Drop table #TempFinal        
+Drop table #Totalcount      
+Drop table #Outsource      
+End 
+END

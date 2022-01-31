@@ -1,0 +1,52 @@
+CREATE PROCEDURE dbo.pTruncateTableBySynonymName (  
+      @SchemaName AS sysname  
+    , @SynonymName AS sysname  
+    )  
+AS  
+BEGIN --Procedure  
+    SET NOCOUNT ON;  
+    DECLARE @BaseObjectName AS NVARCHAR(1035) = NULL;  
+    DECLARE @SQL NVARCHAR(MAX);  
+    DECLARE @ErrorMessage NVARCHAR(255);  
+    SELECT TOP 1  
+        @BaseObjectName = base_object_name  
+    FROM  
+        sys.synonyms  
+        INNER JOIN sys.schemas ON schemas.schema_id = synonyms.schema_id  
+    WHERE  
+        schemas.name = @SchemaName  
+        AND synonyms.name = @SynonymName  
+        AND type = 'SN'  
+        AND is_ms_shipped = 0;  
+    IF @BaseObjectName IS NOT NULL  
+        BEGIN  
+            SET @SQL = N'TRUNCATE TABLE ' + @BaseObjectName;  
+            BEGIN TRY  
+                EXECUTE sys.sp_executesql @SQL;  
+                IF OBJECT_ID('tempdb..#RowCount', 'U') IS NOT NULL  
+                    DROP TABLE #RowCount;  
+                CREATE TABLE #RowCount ( ReturnValue INT );  
+                SET @SQL = N'INSERT INTO #RowCount SELECT Count(*) FROM ' + @SchemaName + '.' + @SynonymName;  
+                EXECUTE sys.sp_executesql @SQL;  
+                DECLARE @RowCount INT = 0;  
+                SELECT TOP 1  
+                    @RowCount = ReturnValue  
+                FROM  
+                    #RowCount;  
+                IF @RowCount > 0  
+                    BEGIN  
+                        SET @ErrorMessage = 'The base table for synonym ' + @SchemaName + '.' + @SynonymName + ' was not truncated.';  
+                        RAISERROR(@ErrorMessage,16,1);  
+                    END;  
+            END TRY  
+            BEGIN CATCH  
+                THROW;  
+            END CATCH;  
+        END;  
+    ELSE  
+        BEGIN  
+            SET @ErrorMessage = 'The base table for synonym ' + @SchemaName + '.' + @SynonymName + ' was not found.';  
+            THROW 50000,@ErrorMessage,1;  
+        END;  
+END;  
+  

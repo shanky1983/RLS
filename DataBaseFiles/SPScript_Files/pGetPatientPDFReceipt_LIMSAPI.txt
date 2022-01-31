@@ -1,0 +1,135 @@
+
+
+--[pGetPatientPDFReceipt_LIMSAPI] 'LIMSAPI','Bill','800004BD029680'
+CREATE PROCEDURE [dbo].[pGetPatientPDFReceipt_LIMSAPI] 
+(
+   @OrgCode NVARCHAR(50),
+   @Type NVARCHAR(50), 
+   @ReferenceNumber NVARCHAR(50)
+
+)
+AS  
+BEGIN 
+
+   DECLARE @pOrgID BIGINT = NULL,@pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL,@pVisitId NVARCHAR(50)
+   DECLARE @REPORTPDFFOLDERPATH NVARCHAR(200),@pIdentityID NVARCHAR(50)
+
+   IF @ReferenceNumber = '0' OR @ReferenceNumber = '-1'
+       SET @ReferenceNumber = ''
+
+	 IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @OrgCode)
+		BEGIN
+		   SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+			  @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+			FROM Integrationtypemaster ITM
+				INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+				INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+			WHERE ITM.IntegrationTypeName = @OrgCode
+		END
+
+		SELECT @REPORTPDFFOLDERPATH=Value
+					  FROM   CommunicationConfig cc 
+					  WHERE  OrgID = @pOrgID
+							 AND Name = 'PdfFolderPath'
+							 AND Isnull(IsActive, 'A') <> 'D'
+
+ 
+	
+-- RETURN
+	IF (@Type='Report')
+	BEGIN
+	  SELECT top 1 @pVisitId=PV.PatientVisitId FROM PatientVisit PV  
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID   
+	  WHERE PV.VisitNumber=@ReferenceNumber  
+
+	  select top 1 @pIdentityID=PV.PatientVisitId FROM PatientVisit PV  
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID 
+	  INNER JOIN Bookings B WITH(Nolock) ON B.PatientID=P.PatientID
+	  where B.ExternalRefNo = @ReferenceNumber
+ 
+ SELECT @pVisitId,@pIdentityID,@ReferenceNumber
+	--SELECT 'HI'
+	  /*SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='ROUNDBPDF'
+	   AND ContextType='CP'*/
+			SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+			  WHERE IdentityID =COALESCE(@pVisitId, @pIdentityID ) AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+			  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='PDF' AND Category='Report'
+		   AND ContextType='CP'
+	END
+	ELSE IF (@Type='Bill')
+	BEGIN
+	
+	SELECT top 1 @pVisitId=FB.FinalBillID
+	  from FinalBill FB WITH(Nolock)
+	  
+	 INNER JOIN PatientVisit PV WITH(Nolock) ON PV.PatientVisitID=FB.VisitID
+	 
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID   
+	  WHERE PV.VisitNumber=@ReferenceNumber  
+	 
+	 SELECT top 1 @pIdentityID=FB.FinalBillID
+	  from FinalBill FB WITH(Nolock)
+	  
+	 INNER JOIN PatientVisit PV WITH(Nolock) ON PV.PatientVisitID=FB.VisitID
+	
+
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID 
+	  INNER JOIN Bookings B WITH(Nolock) ON B.PatientID=P.PatientID
+	  where B.ExternalRefNo = @ReferenceNumber
+ 
+ --SELECT @pVisitId,@pIdentityID,@ReferenceNumber
+	--bill		D:\RLS\RLS\PDF\BILL\249\2021\04\28\Receipt-800004BD029702_B004029703_Testbills2_GENERAL_28Apr2021_142955.pdf  --Receipt-800004BD029701_B004029702_Testbill1_GENERAL_28Apr2021_141143
+
+
+				
+	--SELECT 'HI'
+	--select COALESCE(IsNull(@pVisitId,0), IsNull(@pIdentityID,0)) 
+	 SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID =COALESCE(IsNull(@pVisitId,0), IsNull(@pIdentityID,0)) 
+		AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  
+		  AND Completiontime IS NOT NULL 
+		  AND ActionType in ('Pdf','PDF') AND Category='Bill'
+	   AND ContextType in ('P','CP')
+	END
+	ELSE IF(@Type='INVOICE')
+	BEGIN
+	 SELECT top 1 @pVisitId=ID.InvoiceID
+	  from InvoiceDetails ID   WITH(Nolock)
+	  INNER JOIN FinalBill FB WITH(Nolock) on FB.FinalBillID=ID.FinalBillID
+	  
+	 INNER JOIN PatientVisit PV WITH(Nolock) ON PV.PatientVisitID=FB.VisitID
+	
+	 
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID   
+	  WHERE PV.VisitNumber=@ReferenceNumber  
+	 
+	 SELECT top 1 @pIdentityID=ID.InvoiceID
+	 from InvoiceDetails ID   WITH(Nolock)
+	  INNER JOIN FinalBill FB WITH(Nolock) on FB.FinalBillID=ID.FinalBillID
+	  
+	 INNER JOIN PatientVisit PV WITH(Nolock) ON PV.PatientVisitID=FB.VisitID
+	
+
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID 
+	  INNER JOIN Bookings B WITH(Nolock) ON B.PatientID=P.PatientID
+	  where B.ExternalRefNo = @ReferenceNumber
+
+	--  SELECT @pVisitId,@pIdentityID,@ReferenceNumber
+	--invoice D:\RLS\RLS\PDF\INVOICE\249\2021\03\24\Invoice-80020000002_CC_8000002_2021 03 24_2021 03 24.pdf
+		SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID =COALESCE(@pVisitId, @pIdentityID ) AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='PDF' AND Category='Invoice'
+	    
+   END
+
+END 
+
+
+
+
+
+
+

@@ -1,0 +1,51 @@
+---Created BY Arumugam
+--pGetSampleCollectionPersonList_LIMSAPI '202','test'
+--pGetSampleCollectionPersonList_LIMSAPI_test '202','60000','t'
+
+--SELECT ResourceID FROM SCPSchedulableResource 
+--							WHERE ResourceTemplateID IN ( SELECT * 
+--															FROM SCPScheduleResourcePinCodeMapping WHERE Pincode = @pPinCode
+
+
+CREATE PROCEDURE [dbo].[pGetSampleCollectionPersonList_LIMSAPI]
+@pOrgId INT, 
+@PrefixText nvarchar(10),
+@pPinCode bigint,
+@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+IF @pPinCode > 0 
+
+BEGIN
+
+	SELECT DISTINCT U.LoginID AS UserID, U.Name + ' (' + L.LoginName + ')' AS Name
+	FROM Users U
+		INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+		INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+		INNER JOIN LOGIN L ON L.loginID = U.LoginID
+		AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+	WHERE U.LoginID IN ( SELECT ResourceID FROM SCPSchedulableResource 
+							WHERE ResourceTemplateID IN ( SELECT ResourceTemplateID 
+															FROM SCPScheduleResourcePinCodeMapping WHERE Pincode = @pPinCode ) )
+
+END
+
+ELSE
+
+	BEGIN
+		SELECT DISTINCT U.LoginID AS UserID, U.Name + ' (' + L.LoginName + ')' AS Name
+		FROM Users U
+			INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+			INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+			INNER JOIN LOGIN L ON L.loginID = U.LoginID
+			AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+		WHERE U.OrgID = @pOrgId AND R.RoleName = 'Sample Collection Person'
+		AND U.Name LIKE @PrefixText + '%'
+
+	END
+
+
+
+END

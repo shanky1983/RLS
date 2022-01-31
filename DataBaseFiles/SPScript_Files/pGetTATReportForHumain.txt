@@ -1,0 +1,241 @@
+/****** Object:  StoredProcedure [dbo].[pGetTATReportForHumain]    Script Date: 13-12-2018 11:55:43 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ 
+CREATE PROCEDURE [dbo].[pGetTATReportForHumain] @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+AS
+BEGIN
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+declare @pLocationID [bigint] =null
+IF (@pLocationId = - 1)
+BEGIN
+SET @pLocationId = NULL
+END
+DECLARE @IsExternalVisit NVARCHAR(40)
+SELECT @IsExternalVisit = COm.ConfigValue
+FROM ConfigOrgMaster COM WITH (NOLOCK)
+INNER JOIN ConfigKeyMaster CKM WITH (NOLOCK) ON COM.ConfigKeyID = CKM.ConfigKeyID
+WHERE CKM.ConfigKey = 'ExternalVisitSearch'
+AND COM.OrgID = @pOrgID
+DECLARE @tblVisitID TABLE (
+VisitID BIGINT
+,AccessionNumber BIGINT
+)
+INSERT INTO @tblVisitID
+SELECT pv.PatientVisitId
+,oi.AccessionNumber
+FROM PatientVisit pv WITH (NOLOCK)
+INNER JOIN Misorderedinvestigations oi WITH (NOLOCK) ON PV.PatientVisitid = OI.Visitid --and PV.orgid=OI.Orgid
+WHERE pv.Createdat BETWEEN @pFDate AND @pTDate
+--AND PV.VISITNUMBER ='181000192820'
+AND EXISTS (
+SELECT 1
+FROM PatientInvestigation PI WITH (NOLOCK)
+WHERE oi.AccessionNumber = pi.AccessionNumber 
+AND PI.Createdat BETWEEN @pFDate AND @pTDate
+)
+AND pv.orgid = @pOrgID
+
+SELECT DISTINCT 
+--P.PatientNumber,
+P.NAME AS PatientName
+,ORD.NAME AS TestName --InvestigationName
+--,ORD.ID AS InvestigationID
+,Convert(Varchar,Max(ORD.CreatedAt),120) AS OrderedTime
+,Convert(Varchar,max(ORD.Collectedat),120) AS SampleCollectedTime--SampleTime
+,(Select Convert(Varchar,MAX(ISNULL(S.CreatedAt,'')),120) from SampleTracker S (Nolock) Where S.SampleID = PINV.SampleID AND S.InvSampleStatusID=2)As SampleTransferredTime
+,Convert(Varchar,MIN(ISNULL(ST.ModifiedAt, ST.CreatedAt)),120) As SampleReceivedTime--RecSampleTime
+,Convert(Varchar,max(IVALues.CreatedAt),120) AS ValuesEnterTime
+,Convert(varchar,max(ORD.Completedat),120) AS CompletedTime
+--,Convert(varchar,Max(ISNULL(IVALues.ModifiedAt, IVALues.CreatedAt)),120) AS ValuesModifiedTime
+,Convert(Varchar,max(PIV.ApprovedAt),120) AS ApprovedDateAndTime
+,ORD.STATUS AS STATUS
+,CASE 
+WHEN @IsExternalVisit = 'Y'
+THEN Convert(VARCHAR, Pv.ExternalVisitID)
+ELSE Convert(VARCHAR, pv.Visitnumber)
+END AS VisitID
+,OA.Location AS RegsisteredLocation--Location
+,OAD.Location As ProcessedLocation
+,IDM.DeptName AS DeptName
+--,PIV.accessionnumber
+--,Convert(varchar,BD.TatDateTime,120) AS TATClosingTime
+--,ORD.orgid AS OrganisationID
+,CM.ClientCode
+,CM.ClientName
+,PINV.BarcodeNumber
+,PINV.ExternalBarcode 
+,SM.SampleDesc
+,convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+
+convert(varchar(5),(DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))%60)) as TAT  ,convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),
+MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))/3600)+':'+convert(varchar(5),
+DateDiff(s, MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')), MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))%3600/60)
++':'+convert(varchar(5),(DateDiff(s,   MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))%60)) as OrderToReceivedTAT  ,convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),
+DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+convert(varchar(5),(DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))%60)) as ReceivedToValueEnteredTAT  
+,convert(varchar(5),DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),
+DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+convert(varchar(5),
+(DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))%60)) as ValueEnteredToCompletedTAT  
+,convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),
+MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),
+MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+convert(varchar(5),(DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),
+MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))%60)) as CompletedToApprovedTAT  
+FROM @tblVisitID tmp  
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON tmp.visitid = PV.PatientVisitId  
+INNER JOIN Patient P WITH (NOLOCK) ON PV.PatientID = P.PatientID --and P.orgid=PV.orgid  
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.AddressID = PV.OrgAddressID  
+AND OA.AddressID = ISNULL(@pLocationId, OA.AddressID)  
+INNER JOIN Misorderedinvestigations ORD WITH (NOLOCK) ON ord.AccessionNumber = tmp.AccessionNumber  
+INNER JOIN PatientInvSampleMapping PIS WITH (NOLOCK) ON PIS.ID = ORD.ID AND PIS.VisitID = PV.PatientVisitId AND PIS.Type = ORD.Type  
+INNER JOIN PatientInvSample PINV WITH (NOLOCK) ON PINV.SampleID = PIS.SID --AND PINV.PatientVisitID = PV.patientVisitid AND PINV.OrgID = PV.orgid  
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PINV.SampleID --and ST.PatientVisitid=PV.PatientVisitid and ST.Orgid=PV.orgid  
+INNER JOIN OrganizationAddress OAD WITH (NOLOCK) ON OAD.AddressID = ST.CollectedIn and OAD.Orgid=ST.OrgID  
+INNER JOIN PatientInvestigation PIV WITH (NOLOCK) ON PIV.accessionnumber = ORD.accessionnumber  
+INNER JOIN InvestigationValues IVALues WITH (NOLOCK) ON IVALues.PatientVisitID = PIV.PatientVisitId AND IVALues.Orgid = PIV.orgid  
+AND PIV.InvestigationID = IVALues.InvestigationID   
+INNER JOIN InvestigationOrgMapping IOG WITH (NOLOCK) ON IOG.InvestigationID = PIV.InvestigationID  
+AND IOG.OrgID = P.orgid  
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID = IOG.DeptID  
+AND IDM.OrgID = IOG.orgid  
+INNER JOIN FinalBill(NOLOCK) FB ON FB.VisitID = PV.PatientVisitId  
+AND FB.RefFinalBillID IS NULL  
+INNER JOIN BillingDetails BD WITH (NOLOCK) ON BD.FinalBillID = FB.FinalBillID  
+AND BD.FeeId = ORD.ID  
+INNER JOIN Visitclientmapping VCM(NOLOCK) ON VCM.VisitID = PV.PatientVisitId and VCM.OrgID = PV.OrgID   
+INNER JOIN Clientmaster CM(NOLOCK) ON CM.Clientid = VCM.clientid and VCM.OrgID = CM.OrgID   
+AND CM.OrgID = PV.OrgID  
+INNER JOIN InvSampleMaster SM ON SM.SampleCode=PINV.SampleCode and SM.OrgID=PINV.OrgID  
+WHERE ST.InvSampleStatusID=3  
+AND P.orgid IN (@pOrgId)  
+GROUP BY  --P.PatientNumber,  
+P.NAME ,ORD.NAME ,ORD.ID ,pv.PatientVisitId ,Pv.ExternalVisitID ,ORD.STATUS ,OA.Location ,OAD.Location  
+--,PIV.accessionnumber  
+,BD.TatDateTime ,fb.TATDate ,ORD.ResCaptureLoc ,ORD.orgid ,IDM.DeptName ,pv.Visitnumber ,CM.ClientCode ,CM.ClientName  ,PINV.SampleID  
+,PINV.BarcodeNumber ,PINV.ExternalBarcode ,SM.SampleDesc  
+UNION ALL  
+SELECT DISTINCT   
+--P.PatientNumber,  
+P.NAME AS PatientName  
+,ORD.NAME AS TestName --InvestigationName  
+--,ORD.ID AS InvestigationID  
+,Convert(Varchar,Max(ORD.CreatedAt),120) AS OrderedTime  
+,Convert(Varchar,max(ORD.Collectedat),120) AS SampleCollectedTime--SampleTime  
+,(Select Convert(Varchar,MAX(ISNULL(S.CreatedAt,'')),120) from SampleTracker S (Nolock) Where S.SampleID = PINV.SampleID AND InvSampleStatusID=2)As SampleTransferredTime  
+,Convert(Varchar,MIN(ISNULL(ST.ModifiedAt, ST.CreatedAt)),120) As SampleReceivedTime--RecSampleTime  
+,Convert(Varchar,max(IVALues.CreatedAt),120) AS ValuesEnterTime  
+,Convert(varchar,max(ORD.Completedat),120) AS CompletedTime  
+--,Convert(varchar,Max(ISNULL(IVALues.ModifiedAt, IVALues.CreatedAt)),120) AS ValuesModifiedTime  
+,Convert(Varchar,max(PIV.ApprovedAt),120) AS ApprovedDateAndTime  
+,ORD.STATUS AS STATUS  
+,CASE   
+WHEN @IsExternalVisit = 'Y'  
+THEN Convert(VARCHAR, Pv.ExternalVisitID)  
+ELSE Convert(VARCHAR, pv.Visitnumber)  
+END AS VisitID  
+,OA.Location AS RegsisteredLocation--Location  
+,OAD.Location As ProcessedLocation  
+,IDM.DeptName AS DeptName  
+--,PIV.accessionnumber  
+--,Convert(varchar,BD.TatDateTime,120) AS TATClosingTime  
+--,ORD.orgid AS OrganisationID  
+,CM.ClientCode  
+,CM.ClientName    
+,PINV.BarcodeNumber  
+,PINV.ExternalBarcode   
+,SM.SampleDesc  
+,convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+convert(varchar(5),
+(DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(PIV.ApprovedAt, 'dd/MM/yyyy HH:mm:ss')))%60)) as TAT  ,convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),
+MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))/3600)+':'+
+convert(varchar(5),DateDiff(s, MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')), MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))%3600/60)+':'+convert(varchar(5),(DateDiff(s,   MIN(FORMAT(ORD.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),
+MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))))%60)) as OrderToReceivedTAT  
+,convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))/3600)+':'+convert(varchar(5),DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), 
+FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+convert(varchar(5),
+(DateDiff(s,  MIN(ISNULL(FORMAT(ST.ModifiedAt,'dd/MM/yyyy HH:mm:ss'), FORMAT(ST.CreatedAt,'dd/MM/yyyy HH:mm:ss'))), 
+MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')))%60)) as ReceivedToValueEnteredTAT  
+,convert(varchar(5),DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))/3600)+':'
++convert(varchar(5),DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))%3600/60)
++':'+convert(varchar(5),(DateDiff(s,  MIN(FORMAT(IVALues.CreatedAt, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(ORD.Completedat,'dd/MM/yyyy HH:mm:ss')))%60)) as ValueEnteredToCompletedTAT  
+,convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))/3600)+':'
++convert(varchar(5),DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))%3600/60)+':'+
+convert(varchar(5),(DateDiff(s,  MIN(FORMAT(ORD.Completedat, 'dd/MM/yyyy HH:mm:ss')),MIN(FORMAT(PIV.ApprovedAt,'dd/MM/yyyy HH:mm:ss')))%60)) as CompletedToApprovedTAT  
+  
+FROM @tblVisitID tmp  
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON tmp.VisitID = PV.PatientVisitId  
+INNER JOIN Patient P WITH (NOLOCK) ON PV.PatientID = P.PatientID --and PV.orgid=P.orgid  
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.AddressID = PV.OrgAddressID  
+AND OA.AddressID = ISNULL(@pLocationId, OA.AddressID)  
+INNER JOIN Misorderedinvestigations ORD WITH (NOLOCK) ON ord.AccessionNumber = tmp.AccessionNumber  
+INNER JOIN PatientInvSampleMapping PIS WITH (NOLOCK) ON PIS.ID = ORD.ID  
+AND PIS.VisitID = PV.PatientVisitId  
+AND PIS.Type = ORD.Type  
+INNER JOIN PatientInvSample PINV WITH (NOLOCK) ON PINV.SampleID = PIS.SID -- AND PINV.PatientVisitID = ORD.VisitID AND PINV.OrgID = ORD.OrgID  
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PINV.SampleID --and ST.PatientVisitid=PV.PatientVisitid and ST.Orgid=PV.orgid  
+INNER JOIN OrganizationAddress OAD WITH (NOLOCK) ON OAD.AddressID = ST.CollectedIn and OAD.Orgid=ST.OrgID  
+INNER JOIN PatientInvestigation PIV WITH (NOLOCK) ON PIV.accessionnumber = ORD.accessionnumber  
+INNER JOIN InvestigationValues IVALues WITH (NOLOCK) ON IVALues.PatientVisitID = PIV.PatientVisitId  
+AND IVALues.Orgid = PIV.orgid  
+AND PIV.InvestigationID = IVALues.InvestigationID  
+INNER JOIN InvestigationOrgMapping IOG WITH (NOLOCK) ON IOG.InvestigationID = piv.InvestigationID  
+AND IOG.OrgID = Piv.orgid  
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID = IOG.DeptID  
+AND IDM.OrgID = IOG.orgid  
+INNER JOIN FinalBill(NOLOCK) FB ON FB.VisitID = PV.PatientVisitId  
+AND FB.RefFinalBillID IS NULL  
+INNER JOIN BillingDetails BD ON BD.FinalBillID = FB.FinalBillID  
+AND BD.FeeId = ORD.PkgID  
+INNER JOIN Visitclientmapping VCM(NOLOCK) ON VCM.VisitID = PV.PatientVisitId and VCM.OrgID = PV.OrgID   
+INNER JOIN Clientmaster CM(NOLOCK) ON CM.Clientid = VCM.clientid and VCM.OrgID = CM.OrgID   
+AND CM.OrgID = PV.OrgID  
+INNER JOIN InvSampleMaster SM ON SM.SampleCode=PINV.SampleCode and SM.OrgID=PINV.OrgID  
+WHERE --ORD.Type = 'GRP'and  
+ST.InvSampleStatusID =3  
+AND P.orgid IN (@pOrgId)  
+GROUP BY   
+--P.PatientNumber,  
+P.NAME  
+,ORD.NAME  
+--,ORD.ID  
+,pv.PatientVisitId  
+,Pv.ExternalVisitID  
+,ORD.STATUS  
+,OA.Location  
+,OAD.Location  
+,IDM.DeptName  
+--,PIV.accessionnumber  
+,BD.TatDateTime  
+,fb.TATDate  
+,ORD.ResCaptureLoc  
+,ORD.orgid  
+,ORD.PkgName  
+,pv.Visitnumber  
+,CM.ClientCode  
+,CM.ClientName   
+,PINV.SampleID  
+,PINV.BarcodeNumber  
+,PINV.ExternalBarcode   
+,SM.SampleDesc  
+ORDER BY VisitID  
+END  
+   

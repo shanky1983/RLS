@@ -1,0 +1,9 @@
+create Procedure pPMSUpdatePKGTransfer
+@OrgID int,
+@TestCode nvarchar(60)
+As
+Begin
+update IOG set IOG.IsPkgTransfer=0 from InvOrgGroup IOG
+inner join InvGroupMaster IGM on IGM.GroupID=IOG.AttGroupID and IGM.Type='PKG'
+where IOG.Testcode=@Testcode and IOG.OrgID=@OrgID
+End

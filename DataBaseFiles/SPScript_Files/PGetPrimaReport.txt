@@ -1,0 +1,113 @@
+CREATE PROC [dbo].[PGetPrimaReport]
+(@orgid        INT,
+ @Clientcode   VARCHAR(250), 
+ @orgaddressid VARCHAR(100), 
+ @FromDate     DATETIME, 
+ @ToDate       DATETIME
+)
+AS
+     BEGIN
+         SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+         SET NOCOUNT ON;
+	 SET XACT_ABORT ON;
+         BEGIN TRY
+             DECLARE @EMsg NVARCHAR(4000), @ELine INT, @Eproc NVARCHAR(128), @ESEVERITY INT, @sptrace VARCHAR(8000);
+
+             DECLARE @temp AS TABLE
+             (Patientvisitid  BIGINT, 
+              Visitnumber     VARCHAR(200), 
+              orgid           INT,
+	      CreatedOn	      VARCHAR(250),
+              PatientName     VARCHAR(250), 
+              FirstName       VARCHAR(50), 
+              LastName        VARCHAR(50), 
+              DOB             VARCHAR(100), 
+              Gender          VARCHAR(100), 
+              visitdate       DATETIME,
+	      Id              BIGINT, 
+              type            VARCHAR(100), 
+              Accessionnumber BIGINT, 
+              ClientName      VARCHAR(250), 
+              pkgname         VARCHAR(250)
+             );
+             INSERT INTO @temp
+                    SELECT DISTINCT 
+                           PV.[PatientVisitId], 
+                           PV.Visitnumber, 
+                           pv.OrgID,
+			   pv.createdat As CreatedOn,
+                           P.Name AS PatientName, 
+                           NULL, 
+                           NULL, 
+                           P.DOB, 
+                           P.[Sex] AS 'Gender', 
+                           PV.Createdat AS 'Visit date', 
+                           OI.Id, 
+                           OI.Type, 
+                           OI.AccessionNumber, 
+                           co.ClientName, 
+                           isnull(oI.PkgName, '')
+                    FROM PatientVisit PV
+                         INNER JOIN Patient P ON P.PatientID = PV.PatientID
+                                                 AND P.Orgid = PV.Orgid
+                         INNER JOIN VisitclientMapping VCM ON VCM.Visitid = PV.PatientVisitid
+                                                              AND VCM.Orgid = PV.OrgID
+                         INNER JOIN clientmaster co ON vcm.ClientID = co.ClientID
+                                                       AND vcm.OrgID = co.OrgID
+                         INNER JOIN OrderedInvestigations OI ON oI.Visitid = pv.PatientVisitid
+                                                                AND OI.Orgid = PV.Orgid
+                         LEFT JOIN OrganizationAddress OA ON pv.orgaddressid = oa.addressid
+                                                             AND pv.orgid = oa.orgid
+                    WHERE PV.orgid = @orgid
+			  AND co.clientcode = @Clientcode
+                          AND PV.Createdat BETWEEN @FromDate AND @ToDate
+                          AND PV.OrgAddressid = @orgaddressid;
+             SELECT t.Patientvisitid, 
+                    t.Visitnumber,
+		    t.orgid,
+                    t.PatientName, 
+                    t.FirstName, 
+                    t.LastName, 
+                    t.DOB, 
+                    t.Gender, 
+                    t.visitdate, 
+                    t.Id, 
+                    t.type, 
+                    t.Accessionnumber, 
+                    t.ClientName, 
+                    t.pkgname, 
+		    t.CreatedOn,
+                    V.groupname, 
+                    V.Name AS InvestigationName, 
+                    V.value, 
+                    P.ReferenceRange, 
+                    IOM.UOMCode, 
+                    p.Approvedby,
+                    LO.LoginName
+             FROM @temp t
+                  INNER JOIN PatientInvestigation p ON p.AccessionNumber = t.AccessionNumber
+                                                       AND P.Orgid = t.orgid
+                  INNER JOIN InvestigationValues v ON v.InvestigationID = p.InvestigationID
+                                                      AND v.GroupID = p.GroupID
+                                                      AND v.PatientVisitID = p.PatientVisitId
+                                                      AND p.Orgid = v.Orgid
+                  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = V.InvestigationID
+                                                            AND IOM.Orgid = V.OrgID
+                  INNER JOIN Login LO ON LO.Loginid = P.Approvedby
+                                         AND LO.Orgid = P.Orgid
+             WHERE P.Orgid = @orgid;
+         END TRY
+         BEGIN CATCH
+             SELECT @EMsg = ERROR_MESSAGE(), 
+                    @ELine = ERROR_LINE(), 
+                    @Eproc = ERROR_PROCEDURE(), 
+                    @ESEVERITY = ERROR_SEVERITY(), 
+                    @sptrace = 'PGetPrimaReport @orgid = '+CAST(@orgid AS VARCHAR)+'@Clientcode = '+@Clientcode +'@orgaddressid = '+ @orgaddressid;
+             EXEC usp_insert_errorinfo 
+                  @EMsg, 
+                  @ELine, 
+                  @Eproc, 
+                  @Eseverity, 
+                  @sptrace;
+         END CATCH;
+     END;

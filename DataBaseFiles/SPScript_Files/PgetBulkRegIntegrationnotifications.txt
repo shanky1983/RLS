@@ -1,0 +1,580 @@
+--PgetBulkRegIntegrationnotifications 1
+
+CREATE PROCEDURE [dbo].[PgetBulkRegIntegrationnotifications] 
+(@InstanceID       INT,
+  @ContextInfo [UDT_CONTEXT] readonly) 
+AS 
+  BEGIN
+    DECLARE @Outsourcepath NVARCHAR(1000)
+	  DECLARE @OrgID INT
+  IF(@InstanceID=1)
+  BEGIN
+   CREATE TABLE #BulkRegIntegration(NotificationID bigint,firstName varchar(255),lastName varchar(255),dob Datetime,gender varchar(30),
+   phoneNumber varchar(20),externalPatientId varchar(30),emailid nvarchar(200) ,relation varchar(30), healthHubId varchar(255),
+   visitId varchar(30),visitDate Datetime,location varchar(255) ,PatientVisitID BIGINT,OrgID INT,BookingNo NVARCHAR(255),PatientID BIGINT,labAddress NVARCHAR(MAX)
+   ,OrgCode NVARCHAR(100),EmployeeID NVARCHAR(200)
+)
+    INSERT INTO #BulkRegIntegration
+    select TOP 10 BI.NotificationID,
+	CASE WHEN CHARINDEX('::',P.Name)>0 THEN  Substring(P.Name,CHARINDEX('::',P.Name)+len('::'),LEN(P.Name)) ELSE P.Name END as firstName
+	,'' lastName,P.dob,P.Sex as gender,
+          CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		 -- Isnull(PH.Remarks, '')    as healthHubId,
+		  Isnull(P.HealthHubID, '') as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  PV.PatientVisitID,PV.OrgID,'',P.patientId,'||'+ISNULL(P.EmployeeID,''),--ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location,
+		  O.IntegrationName,ISNULL(P.EmployeeID,'')
+		  --,N.Template,  
+    --      N.AttachmentName
+    FROM PatientVisit PV WITH(NOLOCK)
+        INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED'
+	 AND
+	  ISNULL(BI.ResultStatus,'')=''
+	        Order By BI.NotificationID asc
+			 option(maxdop 1)
+
+	  UPDATE T
+	  SET T.labAddress=CASE WHEN CM.ClientCode='DC_0010067' THEN 'isl|Indian Super League|'+ISNULL(T.EmployeeID,'') ELSE '||'+ISNULL(T.EmployeeID,'') END
+	  FROM #BulkRegIntegration T 
+	  INNER JOIN VisitCLientmapping VCM (NOLOCK) ON  VCM.VisitID = T.PatientVisitID  
+	   INNER JOIN   ClientMaster CM  WITH(NOLOCK)
+                     ON CM.ClientID=VCM.ClientID
+      
+	 /*   UPDATE T
+	  SET T.labAddress=CASE WHEN BI.ClientCode='DC_0010067' THEN 'isl|Indian Super League|'+ISNULL(BI.EmployeeID,'') ELSE '||'+ISNULL(BI.EmployeeID,'') END
+	  FROM #BulkRegIntegration T 
+	   INNER JOIN   Bookings BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID */ 
+
+	  UPDATE T
+	  SET T.BookingNo=BI.ExternalRefNo 
+	  FROM  #BulkRegIntegration T 
+             INNER JOIN   Bookings BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID  
+
+	UPDATE T
+	  SET T.BookingNo=BI.Externalvisitid 
+	  FROM  #BulkRegIntegration T 
+             INNER JOIN   Patientvisit BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID 
+   where ISNULL(T.BookingNo,'')=''
+			UPDATE BI 
+      SET    BI.ResultStatus = 'Picked',--, RetryCount= isnull(RetryCount,0) +1 ,
+	         BI.Retrycnt = ISNULL(BI.Retrycnt,0)+1,
+             BI.ResultPickedAt = Getdate() ,
+			 @OrgID=BI.OrgID
+      FROM  #BulkRegIntegration T 
+             INNER JOIN   BulkReg_IntegrationNotification BI  WITH(NOLOCK)
+                     ON BI.notificationid = T.notificationid 
+      WHERE  Isnull(BI.ResultStatus, '')=''-- in( '' ,'Error')
+
+	  SELECT * FROM #BulkRegIntegration
+	   SELECT @Outsourcepath=Configvalue 
+	  FROM ConfigKeyMaster CM (NOLOCK) 
+	  INNER JOIN ConfigOrgMaster COM (NOLOCK) 
+	  ON CM.ConfigKeyID=COM.ConfigKeyID 
+	  WHERE  CM.ConfigKey='OutSource_UploadPath' AND COM.OrgID=@OrgID
+
+	   
+	  SELECT B.NotificationID,N.FileName,@Outsourcepath+N.FilePath FilePath FROM #BulkRegIntegration B
+		INNER JOIN TRFfilemanager N (NOLOCK) 
+		    ON B.PatientVisitId=N.VisitID
+			   AND B.OrgID=N.OrgID
+	 WHERE  N.IdentifyingType='OutSource_Upload'  
+      DROP TABLE #BulkRegIntegration 
+   END
+    ELSE IF  @InstanceID=2
+	  BEGIN
+	
+
+	     CREATE TABLE #BulkRegIntegrationPDF(NotificationID bigint,firstName varchar(255),lastName varchar(255),dob Datetime,gender varchar(30),
+   phoneNumber varchar(20),externalPatientId varchar(30),emailid nvarchar(200) ,relation varchar(30), healthHubId varchar(255),
+   visitId varchar(30),visitDate Datetime,location varchar(255) ,Template varchar(max),AttachmentName varchar(500),PatientVisitID BIGINT,OrgID INT,
+   BookingNo NVARCHAR(255),PatientID BIGINT,labAddress NVARCHAR(MAX),OrgCode NVARCHAR(100),EmployeeID NVARCHAR(200)
+)
+    INSERT INTO #BulkRegIntegrationPDF
+    select TOP 10 BI.NotificationID,
+	CASE WHEN CHARINDEX('::',P.Name)>0 THEN  Substring(P.Name,CHARINDEX('::',P.Name)+len('::'),LEN(P.Name)) ELSE P.Name END as firstName,
+	'' lastName,P.dob,P.Sex as gender,
+          CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		  Isnull(P.HealthHubID, '') as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  N.Template,  
+          N.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'',P.PatientID,'||'+ISNULL(P.EmployeeID,''),--ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location,
+		  O.IntegrationName,ISNULL(P.EmployeeID,'')
+    FROM PatientVisit PV WITH(NOLOCK)
+        INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED'
+	 AND  ISNULL(BI.PDFStatus,'')=''
+	        Order By BI.NotificationID asc
+			 option( maxdop 1)
+	  
+	    UPDATE T
+	  SET T.labAddress=CASE WHEN CM.ClientCode='DC_0010067' THEN 'isl|Indian Super League|'+ISNULL(T.EmployeeID,'') ELSE '||'+ISNULL(T.EmployeeID,'') END
+	  FROM #BulkRegIntegrationPDF T 
+	  INNER JOIN VisitCLientmapping VCM (NOLOCK) ON  VCM.VisitID = T.PatientVisitID  
+	   INNER JOIN   ClientMaster CM  WITH(NOLOCK)
+                     ON CM.ClientID=VCM.ClientID
+
+	 /* UPDATE T
+	  SET T.labAddress=CASE WHEN BI.ClientCode!='DC_0010067' THEN 'isl|Indian Super League|'+ISNULL(BI.EmployeeID,'') ELSE '||'+ISNULL(BI.EmployeeID,'') END
+	  FROM #BulkRegIntegrationPDF T 
+	   INNER JOIN   Bookings BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID  */
+
+	  UPDATE T
+	  SET T.BookingNo=BI.ExternalRefNo 
+	  FROM  #BulkRegIntegrationPDF T 
+             INNER JOIN   Bookings BI  WITH(NOLOCK)
+      ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID   
+
+	  UPDATE T
+	  SET T.BookingNo=BI.Externalvisitid 
+	  FROM  #BulkRegIntegrationPDF T 
+             INNER JOIN   Patientvisit BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID
+	where ISNULL(T.BookingNo,'')=''
+
+
+			UPDATE BI 
+      SET    BI.PDFStatus = 'Picked',--, RetryCount= isnull(RetryCount,0) +1 ,
+             BI.PDFPickedAt = Getdate(),
+			 BI.PDFRetrycnt = ISNULL(BI.PDFRetrycnt,0)+1,
+			 @OrgID=BI.OrgID 
+      FROM  #BulkRegIntegrationPDF T 
+             INNER JOIN   BulkReg_IntegrationNotification BI  WITH(NOLOCK)
+                     ON BI.notificationid = T.notificationid 
+      WHERE  Isnull(BI.PDFStatus, '')=''-- in( '' ,'Error')
+
+	 
+	  SELECT @Outsourcepath=Configvalue 
+	  FROM ConfigKeyMaster CM (NOLOCK) 
+	  INNER JOIN ConfigOrgMaster COM (NOLOCK) 
+	  ON CM.ConfigKeyID=COM.ConfigKeyID 
+	  WHERE  CM.ConfigKey='OutSource_UploadPath' AND COM.OrgID=@OrgID
+
+
+	  SELECT * FROM #BulkRegIntegrationPDF
+	  SELECT B.NotificationID,N.FileName,@Outsourcepath+N.FilePath FilePath FROM #BulkRegIntegrationPDF B
+		INNER JOIN TRFfilemanager N (NOLOCK) 
+		    ON B.PatientVisitId=N.VisitID
+			   AND B.OrgID=N.OrgID
+	 WHERE  N.IdentifyingType='OutSource_Upload'  
+      DROP TABLE #BulkRegIntegrationPDF
+
+	  END
+    ELSE IF @InstanceID=3
+	  BEGIN
+
+	     CREATE TABLE #BulkRegIntegrationsmart(NotificationID bigint,firstName varchar(255),lastName varchar(255),dob Datetime,gender varchar(30),
+   phoneNumber varchar(20),externalPatientId varchar(30),emailid nvarchar(200) ,relation varchar(30), healthHubId varchar(255),
+   visitId varchar(30),visitDate Datetime,location varchar(255) ,Template varchar(max),AttachmentName varchar(500),PatientVisitID BIGINT,OrgID INT,
+   BookingNo NVARCHAR(255),PatientID BIGINT,labAddress NVARCHAR(MAX),OrgCode NVARCHAR(100)
+)
+    INSERT INTO #BulkRegIntegrationsmart
+    select   TOP 10 BI.NotificationID,P.Name as firstName,'' lastName,P.dob,P.Sex as gender,
+          CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+         ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		  Isnull(P.HealthHubID, '') as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  N.Template,  
+          N.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'',P.PatientID,ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location,
+		  O.IntegrationName
+    FROM PatientVisit PV WITH(NOLOCK)
+        INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED'
+	 AND  ISNULL(BI.SmartReportStatus,'')='' AND ISNULL(IsSmartReportSent,'N')='Y'
+	        Order By BI.NotificationID asc
+			 option( maxdop 1)
+	 
+
+	  UPDATE T
+	  SET T.BookingNo=BI.ExternalRefNo 
+	  FROM  #BulkRegIntegrationsmart T 
+             INNER JOIN   Bookings BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID   
+
+     UPDATE T
+	  SET T.BookingNo=BI.Externalvisitid 
+	  FROM  #BulkRegIntegrationsmart T 
+             INNER JOIN   Patientvisit BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID
+	where ISNULL(T.BookingNo,'')=''
+
+			UPDATE BI 
+      SET   BI.SmartReportStatus = 'Picked',--, RetryCount= isnull(RetryCount,0) +1 ,
+             BI.SmartReportPickedAt = Getdate(),
+			 BI.SmartRetrycnt = ISNULL(BI.SmartRetrycnt,0)+1,
+			 @OrgID=BI.OrgID 
+      FROM  #BulkRegIntegrationsmart T 
+             INNER JOIN   BulkReg_IntegrationNotification BI  WITH(NOLOCK)
+                     ON BI.notificationid = T.notificationid 
+      WHERE  Isnull(BI.SmartReportStatus, '')=''-- in( '' ,'Error')
+
+	 
+	  SELECT @Outsourcepath=Configvalue 
+	  FROM ConfigKeyMaster CM (NOLOCK) 
+	  INNER JOIN ConfigOrgMaster COM (NOLOCK) 
+	  ON CM.ConfigKeyID=COM.ConfigKeyID 
+	  WHERE  CM.ConfigKey='OutSource_UploadPath' AND COM.OrgID=@OrgID
+
+
+	  SELECT * FROM #BulkRegIntegrationsmart
+	  SELECT B.NotificationID,N.FileName,@Outsourcepath+N.FilePath FilePath FROM #BulkRegIntegrationsmart B
+		INNER JOIN TRFfilemanager N (NOLOCK) 
+		    ON B.PatientVisitId=N.VisitID
+			   AND B.OrgID=N.OrgID
+	 WHERE  N.IdentifyingType='OutSource_Upload'  
+      DROP TABLE #BulkRegIntegrationsmart
+
+	  END
+	  ELSE  
+	  BEGIN
+	 
+		 CREATE TABLE #BulkRegnotify (NotificationID BIGINT,VisitID BIGINT,PatientID BIGINT, OrgID INT,Template NVARCHAR(MAX), AttachmentName NVARCHAR(1000))
+		 INSERT INTO #BulkRegnotify (NotificationID,VisitID,PatientID,OrgID,Template,AttachmentName)
+		select TOP 10 A.NotificationID,VisitID,PatientID,A.OrgID,Template,AttachmentName FROM 
+		(
+		select   BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID from BulkReg_IntegrationNotification BI (NOLOCK)
+		INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid
+		INNER JOIN InvestigationOrgmapping  IOM (NOLOCK) ON OI.ID=IOM.InvestigationID AND Oi.Type='INV' AND BI.OrgID=IOM.OrgID AND IOM.TestCode IN ('S0003','S0004','S0005')
+		WHERE ISNULL(BI.CovidStatus,'') in ('','Error') AND OI.Status='Approve' 
+		 UNION
+		 select TOP 10 BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID from BulkReg_IntegrationNotification BI (NOLOCK)
+		INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid 
+		INNER JOIN Invorggroup  IOG (NOLOCK) ON OI.ID=IOG.AttgroupID  AND Oi.Type='GRP'  AND BI.OrgID=IOG.OrgID AND IOG.TestCode IN ('S0006','S0007','MDLRT0610') 
+		WHERE ISNULL(BI.CovidStatus,'') in ('','Error') AND OI.Status='Approve' 
+		UNION
+		select TOP 10 BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID from BulkReg_IntegrationNotification BI (NOLOCK)
+		INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid 
+		INNER JOIN Invorggroup  IOP (NOLOCK) ON OI.PkgID=IOP.AttGroupID AND BI.OrgID=IOP.OrgID AND IOP.TestCode IN ('S0006','S0007','MDLRT0610')
+		WHERE ISNULL(BI.CovidStatus,'') in ('','Error') AND OI.Status='Approve' 
+		) A 
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON A.VisitId=N.IdentityID
+			   AND A.OrgID=N.OrgID   
+      WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED' 
+		Order by A.NotificationID
+ 
+	     CREATE TABLE #BulkRegIntegrationCovid(NotificationID bigint,firstName varchar(255),lastName varchar(255),dob Datetime,gender varchar(30),
+   phoneNumber varchar(20),externalPatientId varchar(30),emailid nvarchar(200) ,relation varchar(30), healthHubId varchar(255),
+   visitId varchar(30),visitDate Datetime,location varchar(255) ,Template varchar(max),AttachmentName varchar(500),PatientVisitID BIGINT,OrgID INT,
+   BookingNo NVARCHAR(255),PatientID BIGINT,labAddress NVARCHAR(MAX),OrgCode NVARCHAR(100),Iscovid NCHAR(1)
+)
+    
+	INSERT INTO #BulkRegIntegrationCovid
+	select   BI.NotificationID,P.Name as firstName,'' lastName,P.dob,P.Sex as gender,
+       CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		 -- Isnull(P.HealthHubID, '') 
+		  P.healthHubId as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  BI.Template,  
+          BI.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'' BookingNo,P.PatientID,ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location Address,
+		  O.IntegrationName,'Y' Iscovid
+    FROM PatientVisit PV WITH(NOLOCK)
+       INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+		INNER JOIN #BulkRegnotify BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		/*INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID    */
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+	 
+	 --AND  ISNULL(BI.CovidStatus,'')=''
+   /*  SELECT TOP 10 * FROM
+   ( select   BI.NotificationID,P.Name as firstName,'' lastName,P.dob,P.Sex as gender,
+       CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		 -- Isnull(P.HealthHubID, '') 
+		  P.healthHubId as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  N.Template,  
+          N.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'' BookingNo,P.PatientID,ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location Address,
+		  O.IntegrationName,'Y' Iscovid
+    FROM PatientVisit PV WITH(NOLOCK)
+       INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+      INNER JOIN   OrderedInvestigations OI  WITH(NOLOCK)
+       ON OI.VisitID = PV.PatientVisitID  AND OI.OrgID=PV.OrgID AND OI.Type='INV'
+	   INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON IOG.InvestigationID=OI.ID   AND PV.OrgID=IOG.OrgID 	   
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED' 
+	 AND  ISNULL(BI.CovidStatus,'')='' AND -- (IOG.InvestigationCOde IN ('S0003','S0004','S0005','S0007','MDLRT0610')  OR
+	  IOG.TestCode IN ('S0003','S0004','S0005','S0007','MDLRT0610')--)
+	 UNION 
+	 select   BI.NotificationID,P.Name as firstName,'' lastName,P.dob,P.Sex as gender,
+       CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		 -- Isnull(P.HealthHubID, '') 
+		  P.healthHubId as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  N.Template,  
+          N.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'' BookingNo,P.PatientID,ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location Address,
+		  O.IntegrationName,'Y' Iscovid
+    FROM PatientVisit PV WITH(NOLOCK)
+INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+      INNER JOIN   OrderedInvestigations OI  WITH(NOLOCK)
+       ON OI.VisitID = PV.PatientVisitID  AND OI.OrgID=PV.OrgID
+	   INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.AttGroupID=OI.ID AND TYpe='GRP' AND PV.OrgID=IOG.OrgID 
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 	    
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED' 
+	 AND  ISNULL(BI.CovidStatus,'')='' AND  IOG.TestCode IN ('S0003','S0004','S0005','S0007','MDLRT0610')  
+	 UNION 
+	 select   BI.NotificationID,P.Name as firstName,'' lastName,P.dob,P.Sex as gender,
+       CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as externalPatientId,
+		  p.email emailid,
+		  'Self' as relation,
+		  -- Isnull(PH.Remarks, '')    as healthHubId,
+		 -- Isnull(P.HealthHubID, '') 
+		  P.healthHubId as healthHubId,
+		  PV.VisitNumber visitId,
+		  PV.visitDate,
+		  OA.location,
+		  N.Template,  
+          N.AttachmentName,
+		  PV.PatientVisitID,PV.OrgID,'' BookingNo,P.PatientID,ISNULL(OA.Add1,'')+' '+ISNULL(OA.Add2,'')+' '+ISNULL(OA.City,'')+' '+OA.Location Address,
+		  O.IntegrationName,'Y' Iscovid
+    FROM PatientVisit PV WITH(NOLOCK)
+INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+	   -- INNER JOIN Bookings B (NOLOCK) ON B.PatientID=BI.PatientID AND B.PatientVisitID=BI.VisitId AND B.SourceType IN ('HMS','JIOHH')
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID
+      INNER JOIN   OrderedInvestigations OI  WITH(NOLOCK)
+       ON OI.VisitID = PV.PatientVisitID  AND OI.OrgID=PV.OrgID
+	   INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.AttGroupID=OI.PkgID   AND PV.OrgID=IOG.OrgID 	
+	    LEFT JOIN PatientHistoryExt PH (NOLOCK)
+            ON PH.PatientID = p.PatientID
+               AND PH.PatientVisitId = pv.PatientVisitId
+               AND PH.OrgID = pv.OrgID 
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED'
+	 AND  ISNULL(BI.CovidStatus,'')='' AND  IOG.TestCode IN ('S0006')  ) A
+	        Order By  NotificationID desc
+			 option( maxdop 1)*/
+
+		 
+	UPDATE T
+	  SET T.BookingNo=BI.ExternalRefNo 
+	  FROM  #BulkRegIntegrationCovid T 
+             INNER JOIN   Bookings BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID  AND BI.PatientVisitID = T.PatientVisitID  	 
+	
+	 UPDATE T
+	  SET T.BookingNo=BI.Externalvisitid 
+	  FROM  #BulkRegIntegrationCovid T 
+             INNER JOIN   Patientvisit BI  WITH(NOLOCK)
+                     ON T.PatientID=BI.PatientID AND BI.PatientVisitID = T.PatientVisitID
+     where ISNULL(T.BookingNo,'')=''
+
+	  UPDATE BI 
+      SET    BI.CovidStatus = 'Picked',--, RetryCount= isnull(RetryCount,0) +1 ,
+             BI.CovidPickedAt = Getdate(),
+			 BI.CovidRetryCnt = ISNULL(BI.CovidRetrycnt,0)+1,
+			 @OrgID=BI.OrgID 
+      FROM  #BulkRegIntegrationCovid T 
+             INNER JOIN   BulkReg_IntegrationNotification BI  WITH(NOLOCK)
+                     ON BI.notificationid = T.notificationid 
+      WHERE  Isnull(BI.CovidStatus, '') in ('','error') AND ISNULL(Iscovid,'N')='Y' 
+
+	 
+	  SELECT @Outsourcepath=Configvalue 
+	  FROM ConfigKeyMaster CM (NOLOCK) 
+	  INNER JOIN ConfigOrgMaster COM (NOLOCK) 
+	  ON CM.ConfigKeyID=COM.ConfigKeyID 
+	  WHERE  CM.ConfigKey='OutSource_UploadPath' AND COM.OrgID=@OrgID
+
+
+	  SELECT * FROM #BulkRegIntegrationCovid  
+	  SELECT B.NotificationID,N.FileName,@Outsourcepath+N.FilePath FilePath 
+	  FROM #BulkRegIntegrationCovid B
+		INNER JOIN TRFfilemanager N (NOLOCK) 
+		    ON B.PatientVisitId=N.VisitID
+			   AND B.OrgID=N.OrgID
+	 WHERE  N.IdentifyingType='OutSource_Upload'  
+      DROP TABLE #BulkRegIntegrationCovid
+	  DROP TABLE #BulkRegnotify
+	  END
+  END
+
+
+
+
+
+

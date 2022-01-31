@@ -1,0 +1,122 @@
+ 
+/****** Object:  StoredProcedure [dbo].[PgetNextweeklybatchstartdatetime]    Script Date: 2/12/2019 2:07:46 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ 
+CREATE PROCEDURE [dbo].[PgetNextweeklybatchstartdatetime] 
+( 
+@Orgid           INT,
+@Orgaddressid    BIGINT,
+@Pindate         DATETIME,
+@pScheduleid     INT,
+@pScheduleday    VARCHAR(20),                       /* 1 - Mon, 2 - Tue, 3 - Wed, 4 - Thu, 5 - Fri, 6 - Sat, 7 - Sun */
+@pTATmode        TINYINT,                           /* 1 - Random, 2 - Batch, 3 - Randombatch */
+@pUDTBatchtiming [dbo].[UDT_Batchtimings] READONLY,
+@outdate         DATETIME OUTPUT 
+)        
+
+AS  
+      
+/*        
+
+select * from LabHolidays where orgid = 67 order by HolidayDate asc
+
+DECLARE @UDTBatchtiming dbo.[UDT_Batchtimings]
+--INSERT INTO @UDTBatchtiming ( Batchstarttime,Cutofftime ) VALUES ( '09:00','16:00' )
+INSERT INTO @UDTBatchtiming ( Batchstarttime,Cutofftime ) VALUES ( NULL,'16:00' )
+
+DECLARE @enddate DATETIME        
+EXEC [PgetNextweeklybatchstartdatetime] @Orgid = 67, @Orgaddressid = 104, @Pindate = '20160628 16:00',@pScheduleid = 1, @pScheduleday = '1,2,3,4,5,6,7',@pTATmode = 1,
+                                        @pUDTBatchtiming = @UDTBatchtiming, @outdate = @enddate OUTPUT        
+SELECT @enddate AS Nextbatchstartdatetime       
+
+*/        
+
+BEGIN        
+
+     SET NOCOUNT ON       
+	 
+	 DECLARE @noofday INT  = 100   
+	 DECLARE @Pdate   DATE = CAST( @Pindate AS DATE ) 
+	 DECLARE @lLabstarttime TIME
+	  
+	 CREATE TABLE #Scheduleprocessingdays ( Weekdayname VARCHAR(10) )
+
+	 INSERT INTO #Scheduleprocessingdays ( Weekdayname )
+				 SELECT CASE WHEN item = 1 THEN 'Monday'
+							 WHEN item = 2 THEN 'Tuesday'
+							 WHEN item = 3 THEN 'Wednesday'
+							 WHEN item = 4 THEN 'Thursday'
+							 WHEN item = 5 THEN 'Friday'
+							 WHEN item = 6 THEN 'Saturday'
+							 WHEN item = 7 THEN 'Sunday' END
+						FROM [dbo].[fnSplit]( @pScheduleday,',' )
+
+     
+     ;          
+	 WITH CTE AS          
+	 (          
+	  SELECT @Pdate AS Date1,@noofday  AS noofday,DATEPART(DW,@Pdate) AS Weekdayno         
+	  
+	  UNION ALL          
+	  
+	  SELECT DATEADD(DAY,1,date1) AS date1,noofday -1 AS noofday,DATEPART(DW,(DATEADD(DAY,1,date1))) AS Weekdayno  
+	         FROM CTE           
+	  WHERE noofday >=1          
+	 )      
+	 ,CTE_2 AS        
+	 (        
+	  SELECT CASE WHEN @pTATmode = 1 THEN
+			                             CASE WHEN U.Cutoffintervaltype = 'M' THEN  DATEADD( MI,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(L.Labend AS DATETIME)) ) 
+										      WHEN U.Cutoffintervaltype = 'H' THEN  DATEADD( HH,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(L.Labend AS DATETIME)) ) 
+											  WHEN U.Cutoffintervaltype = 'D' THEN  DATEADD( DD,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(L.Labend AS DATETIME)) )     
+										 END
+				  WHEN @pTATmode IN ( 2,3 ) THEN
+				                                CASE WHEN U.Cutoffintervaltype = 'M' THEN  DATEADD( MI,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(U.Batchstarttime AS DATETIME)) ) 
+										             WHEN U.Cutoffintervaltype = 'H' THEN  DATEADD( HH,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(U.Batchstarttime AS DATETIME)) ) 
+											         WHEN U.Cutoffintervaltype = 'D' THEN  DATEADD( DD,-U.Cutoffintervalvalue, (CAST(C.date1 AS DATETIME) + CAST(U.Batchstarttime AS DATETIME)) )     
+										        END
+				                                
+				  END AS Cutoffdatetime, 
+	         CASE WHEN @pTATmode = 1 THEN CAST(C.date1 AS DATETIME) + CAST(L.Labstart AS DATETIME)
+			      WHEN @pTATmode IN ( 2,3 ) THEN CAST(C.date1 AS DATETIME) + CAST(U.Batchstarttime AS DATETIME) END AS Batchstartdatetime,
+             CAST(C.date1 AS DATETIME) + CAST(L.Labend AS DATETIME) as Labenddatetime,
+			 C.Weekdayno,
+			 U.Cutoffintervalvalue,
+			 U.Cutoffintervaltype
+			 FROM CTE C
+			      INNER JOIN Locationworkinghours L (NOLOCK) ON C.Weekdayno = L.Weekdayno AND L.Orgid = @Orgid AND L.Orgaddressid = @Orgaddressid
+	              CROSS JOIN @pUDTBatchtiming U        
+	         WHERE CAST(C.Date1 AS DATE) NOT IN           
+	                                          (          
+	                                           SELECT LH.HolidayDate FROM dbo.LabHolidays LH (NOLOCK) 
+											                              LEFT JOIN dbo.TATScheduleholiday SH (NOLOCK) ON SH.HolidayId = LH.HolidayId 
+																		  AND SH.OrgID = @Orgid AND SH.Scheduleid = @pScheduleid
+																	 WHERE LH.OrgID = @Orgid AND SH.Scheduleholidayid IS NULL
+
+	                                          )  
+				   AND DATENAME(WEEKDAY,Date1) IN ( SELECT Weekdayname FROM #Scheduleprocessingdays )
+	 )    
+
+	 --SELECT * FROM CTE_2 ORDER BY Cutoffdatetime ASC
+	 	 
+	 SELECT TOP 1 @outdate = Batchstartdatetime FROM CTE_2  WHERE Cutoffdatetime > @Pindate AND Labenddatetime > @Pindate ORDER BY Cutoffdatetime ASC
+
+	 SELECT @lLabstarttime = L.Labstart FROM Locationworkinghours L (NOLOCK) 
+	        WHERE L.Orgid = @Orgid AND L.Orgaddressid = @Orgaddressid AND L.Weekdayno = DATEPART(DW,@outdate)
+
+	 IF ( @pTATmode = 1 ) AND ( CAST(@outdate AS DATE) = @Pdate ) AND ( CAST(@Pindate AS TIME) > @lLabstarttime )
+	    BEGIN
+
+		     SELECT @outdate = @Pindate
+
+		END
+	    
+        
+	 SET NOCOUNT OFF        
+
+END 
+
+

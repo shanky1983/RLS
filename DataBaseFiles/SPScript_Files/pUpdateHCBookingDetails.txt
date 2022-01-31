@@ -1,0 +1,626 @@
+CREATE PROCEDURE [dbo].[pUpdateHCBookingDetails] 
+                 @pServiceQuotation [dbo].UDTHCBookingSchedule READONLY,    
+                                                      @pOrderedInvTable  [dbo].[OrderedInvestigation] READONLY,    
+                                                      @pOrgID            INT,    
+                                                      @pLID              BIGINT,    
+                                                      @pBookingID        BIGINT output,    
+                                                      @ContextInfo       [UDT_CONTEXT] READONLY    
+													  WITH EXECUTE AS OWNER    
+AS    
+  BEGIN  
+   declare @pCount int      
+      DECLARE @PatientID BIGINT    
+      DECLARE @EditableBookingID BIGINT    
+	   DECLARE @BookingID BIGINT    
+	    DECLARE @mobileno BIGINT    
+      DECLARE @PatientNumber nvarchar(30)    
+      DECLARE @Cityid BIGINT    
+      DECLARE @stateid BIGINT    
+      DECLARE @userid BIGINT ,@LoginID   Bigint    
+   DECLARE @BookStatus nvarchar(10)  
+    DECLARE @PreBookStatus nvarchar(10)  
+      DECLARE @ReSchedule nvarchar(10)  
+	  	  DECLARE @TemplateNo int, @TemplateParamJSON nvarchar(400), @OrgName nvarchar(250),
+	          @PName nvarchar(250), @CollectionTime nvarchar(40),@PhleboName nvarchar(250),@CancelStatus nvarchar(250)
+		--	select *  FROM   @pServiceQuotation  
+			      SELECT @EditableBookingID = BookingID  
+      FROM   @pServiceQuotation    
+      Declare @OrgID int
+                 SELECT @OrgID= B.OrgID,@ReSchedule=B.RescheduleToken
+ FROM  Bookings B 
+	INNER JOIN @pServiceQuotation t    
+                 ON B.BookingID = t.BookingID
+    WHERE  B.BookingID = @EditableBookingID 
+      SELECT @PatientID = PatientID    
+      FROM   @pServiceQuotation    
+    
+      SELECT @stateid = stateid    
+      FROM   @pServiceQuotation    
+    
+      SELECT @PatientID = PatientID    
+      FROM   @pServiceQuotation    
+  
+  
+  
+   SELECT @BookStatus=BookingStatus  
+  
+  
+  
+    FROM   @pServiceQuotation 
+	
+	  SELECT @PreBookStatus=B.BookingStatus  
+  
+  
+  
+    FROM   Bookings B 
+	INNER JOIN @pServiceQuotation t    
+                 ON B.BookingID = t.BookingID
+    WHERE  B.BookingID = @EditableBookingID 
+
+	  SELECT @LoginID=Loginid FROM Users 
+	  WHERE userid=@userid and orgid= @OrgID        
+  
+     declare @DOB datetime
+      DECLARE @Ucity nvarchar(50)  
+      DECLARE @UState nvarchar(50)  
+      DECLARE @UCityId BIGINT  
+      DECLARE @UStateId BIGINT  
+      DECLARE @UPincode BIGINT  
+      DECLARE @ULocation nvarchar(50)  
+  DECLARE @tTok nvarchar(50)  
+  select @tTok=Tokenid from  @pServiceQuotation
+      SELECT @UPincode = Pincode  
+      FROM   @pServiceQuotation  
+  
+      SELECT @ULocation = CollectionAddress2  
+      FROM   @pServiceQuotation  
+  
+      SELECT @UCityId = CityId  
+      FROM   Location L  
+      WHERE  L.LocationName = @ULocation  
+      IF( @PatientID > 0 )    
+        BEGIN    
+            SELECT @PatientNumber = PatientNumber    
+            FROM   Patient    
+            WHERE  PatientID = @PatientID    
+        END    
+    
+      SELECT @EditableBookingID = BookingID    
+      FROM   @pServiceQuotation    
+ --   select 'hi',@EditableBookingID
+              	  CREATE Table #TempSMS
+	  ( 
+	    SrNo      SMALLINT identity(1, 1),
+	    BookingID bigint,
+		OrgID bigint,
+	--    PhleboName nvarchar(30),
+		TripReason nvarchar(30),
+		mobileno  bigint,
+		PName nvarchar(230),
+		OrgName nvarchar(230),
+		CollectionTime datetime2,
+		PhleboName nvarchar(250),
+		TemplateNo bigint,
+		TemplateParamJSON nvarchar(300)
+	
+	  )
+
+	  	 DECLARE @Count INT = 0,      @Loop INT = 1  
+if (@pLID=1)
+BEGIN
+    INSERT INTO [Bookings_HIST] 
+  (BookingID,
+ResourceTemplateID,
+StartTime,
+EndTime,
+TokenNumber,
+Description,
+BookingStatus,
+CreatedBy,
+CreatedAt,
+ModifiedBy,
+ModifiedAt,
+ScheduleID,
+PatientNumber,
+PhoneNumber,
+PatientName,
+CancelRemarks,
+OrgID,
+BookingOrgID,
+ReferalID,
+RemindCount,
+TokenID,
+TITLECode,
+SEX,
+DOB,
+Age,
+LandLineNumber,
+EMail,
+ClientID,
+FeeType,
+SourceType,
+CollectionAddress2,
+PatientID,
+OrgAddressID,
+CollectionAddress,
+RoleID,
+UserID,
+CollectionTime,
+City,
+BillDescription,
+PatientVisitID,
+CreatedOrgID,
+RefPhysicianName,
+NRICNumber,
+NRICType,
+ExternalPatientNo,
+State,
+Pincode,
+StateID,
+CityID,
+Priority,
+Comments,
+URNTypeID,
+URNO,
+DispatchValue,
+RefPhysicianID,
+ReferenceType,
+ParentID,
+BookingStatusId,
+BookingPriority,
+PaymentTypeID,
+VisitPurposeID,
+GroupID,
+Remarks,
+Altmobilenoone,
+Altmobilenotwo,
+CountryID,
+CityCode,
+DistrictCode,
+PostalCode,
+RescheduleToken,
+TaskID
+
+  )
+
+  SELECT B.BookingID,
+B.ResourceTemplateID,
+B.StartTime,
+B.EndTime,
+B.TokenNumber,
+B.Description,
+B.BookingStatus,
+B.CreatedBy,
+B.CreatedAt,
+B.ModifiedBy,
+B.ModifiedAt,
+B.ScheduleID,
+B.PatientNumber,
+B.PhoneNumber,
+B.PatientName,
+B.CancelRemarks,
+B.OrgID,
+B.BookingOrgID,
+B.ReferalID,
+B.RemindCount,
+B.TokenID,
+B.TITLECode,
+B.SEX,
+B.DOB,
+B.Age,
+B.LandLineNumber,
+B.EMail,
+B.ClientID,
+B.FeeType,
+B.SourceType,
+B.CollectionAddress2,
+B.PatientID,
+B.OrgAddressID,
+B.CollectionAddress,
+B.RoleID,
+B.UserID,
+B.CollectionTime,
+B.City,
+B.BillDescription,
+B.PatientVisitID,
+B.CreatedOrgID,
+B.RefPhysicianName,
+B.NRICNumber,
+B.NRICType,
+B.ExternalPatientNo,
+B.State,
+B.Pincode,
+B.StateID,
+B.CityID,
+B.Priority,
+B.Comments,
+B.URNTypeID,
+B.URNO,
+B.DispatchValue,
+B.RefPhysicianID,
+B.ReferenceType,
+B.ParentID,
+B.BookingStatusId,
+B.BookingPriority,
+B.PaymentTypeID,
+B.VisitPurposeID,
+B.GroupID,
+B.Remarks,
+B.Altmobilenoone,
+B.Altmobilenotwo,
+B.CountryID,
+B.CityCode,
+B.DistrictCode,
+B.PostalCode,
+B.RescheduleToken,
+B.TaskID FROM  Bookings B 
+				INNER JOIN  @pServiceQuotation t    
+                       ON     B.BookingID = t.BookingID
+    WHERE  B.BookingID = @EditableBookingID
+
+END
+select @BookStatus as BookingStatus,@PreBookStatus as preBooking,@EditableBookingID as BookingID,@OrgID AS ORGID
+
+	 INSERT INTO #TempSMS
+						      (BookingID,   OrgID,   Mobileno)
+						 SELECT Ord.BookingID,  @OrgID,  Ord.Phonenumber
+						 FROM   @pServiceQuotation Ord  
+			         --    INNER JOIN @pPreOrdered P ON Ord.ID = P.ID AND Ord.OrgID = P.OrgID
+				--	 	select * from #TempSMS
+						 SELECT @Count = Count(1)  
+                         FROM   @pServiceQuotation
+
+	-- WHILE @loop <= @Count  
+						-- BEGIN
+							SELECT @BookingID = NULL, 
+							     
+								   @OrgID = NULL,
+								 @mobileno=NULL
+
+							SELECT @BookingID = BookingID,
+							 
+								   @OrgID = OrgID,
+								 @mobileno=mobileno
+							FROM   #TempSMS
+							WHERE  SrNo = @Count 
+						--	select * from #TempSMS
+--if (@BookStatus='C' or @BookStatus='Canceled' or @BookStatus='TC' or @BookStatus = 'Trip Can-celled')
+--BEGIN
+----select 'hi'
+--		------------------------------------------ WhatsUp Integration Start --------------------------------
+--		--	SELECT @TemplateNo = TemplateMasterNo FROM WhatsUpTemplateMaster WHERE TemplateName ='hc_cancel'
+--		--	SELECT @OrgName = Name FROM Organization WHERE orgid = @OrgID
+--		--	SELECT @PName = B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--	SELECT @CancelStatus = TripReason  FROM [ERPHCBookingInBound] B where B. BookingID = @EditableBookingID -- AND B.OrgID = @OrgID
+--	--	SELECT @CancelStatus = TripReason  FROM [ERPHCBookingInBound] B where B. BookingID = @EditableBookingID -- AND B.OrgID = @OrgID
+--		--	SELECT @CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--	--		FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID--  where  B.OrgID = @pOrgID
+--		--		SELECT @PhleboName = U.name FROM  Users U inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @OrgID
+--	--		SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+ISNULL(@CancelStatus,'')+'|9994420645'+ '|'+ISNULL(@PhleboName,'') 
+--	--	select @CancelStatus
+--			--	select @PName,@OrgName,@CollectionTime,@PhleboName,@TemplateNo,@TemplateParamJSON--,Convert(nvarchar(10),BookingID) 
+--	--		update  #TEMPSMS  set  #TEMPSMS.TemplateNo = W.TemplateMasterNo FROM WhatsUpTemplateMaster  W WHERE W.TemplateName ='hc_cancel'
+--	--		update T set  T.OrgName = O.Name FROM Organization O inner join  #TEMPSMS T on O.Orgid=T.Orgid WHERE T.orgid = @OrgID
+--	--	update T set  T.PName=B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--	update T set  T.TripReason =B.Remarks  FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--			update T set  T.CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--	--		FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID --AND B.OrgID = t.OrgID  where  B.OrgID = @pOrgID
+--	--	update T set T.PhleboName = U.name FROM  Users U inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @OrgID
+--	----		SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+ISNULL(@CancelStatus,'')+'|9994420645'+ '|'+ISNULL(@PhleboName,'') 
+			
+--	--		update T set T.TemplateParamJSON =ISNULL(T.PName,'') +'|'+ ISNULL(T.OrgName ,'')+'|'+ISNULL(T.TripReason,'')+'|9994420645'+ '|'+ISNULL(T.PhleboName,'') 
+--	--	from #TempSMS T where T.OrgID = @OrgID
+--	--	--	SELECT @TemplateParamJSON,@TemplateNo,@OrgName
+--	----	select * from #TempSMS
+--	--		IF((SELECT com.configvalue
+--	--	        FROM dbo.configkeymaster ckm WITH (NOLOCK)
+--	--		    INNER JOIN dbo.configorgmaster com WITH (NOLOCK) ON com.configkeyid = ckm.configkeyid
+--	--					AND com.orgid = @OrgID
+--	--				WHERE ckm.configkey = 'WhatsupIntegration') ='Y' )
+--	--          BEGIN
+--	----	select 'can'
+--	--               INSERT INTO WhatsUpNotification (
+--	--			          MobileNo, TemplateMasterNo, TemplateParamJSON, 
+--	--			          IdentifyingId, OrgId, IsSentYN, IsErrorYN, CreatedAt, CreatedBy)
+--	--			   SELECT '+91'+PhoneNumber, T.TemplateNo, T.TemplateParamJSON, 
+--	--			           T.BookingID, @OrgID,'N', 'N', getdate(), CreatedBy
+--	--			   FROM   Bookings B  
+--	--			   inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  
+--	--			   where B.OrgID = @OrgID
+--	--          END
+--			------------------------------------------ WhatsUp Integration End ---------------------------------
+--END
+--else if ( (@PreBookStatus != 'TC' or @PreBookStatus != 'Trip Can-celled'))
+--BEGIN
+-- if  (@BookStatus='A' or @BookStatus='Assigned')
+-- begin
+--		--	select 'a'
+--			------------------------------------------ WhatsUp Integration Start --------------------------------
+--		--	SELECT @TemplateNo = TemplateMasterNo FROM WhatsUpTemplateMaster WHERE TemplateName ='sample_collection_person_assigned'
+--		--	SELECT @OrgName = Name FROM Organization WHERE orgid = @OrgID
+--		--	SELECT @PName = B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--		--		SELECT @PhleboName = U.name FROM  Users U inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @OrgID
+--		--		SELECT @CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--		--	FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @pOrgID
+		
+			
+--		----	select @PName,@OrgName,@CollectionTime,@PhleboName,Convert(nvarchar(10),@EditableBookingID) 
+--		--	SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+ @CollectionTime +'|'+ ISNULL(@PhleboName,'') +'|'+ Convert(nvarchar(10),@EditableBookingID) +'|9994420645'
+			
+--			--	update  #TEMPSMS  set  #TEMPSMS.TemplateNo = W.TemplateMasterNo FROM WhatsUpTemplateMaster  W WHERE W.TemplateName ='sample_collection_person_assigned'
+--		--	update T set  T.OrgName = O.Name FROM Organization O inner join  #TEMPSMS T on O.Orgid=T.Orgid WHERE T.orgid = @OrgID
+--	--	update T set  T.PName=B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--	update T set  T.TripReason =B.TripReason  FROM [ERPHCBookingInBound] B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--			update T set  T.CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--	--		FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID --AND B.OrgID = t.OrgID  where  B.OrgID = @pOrgID
+--		--update T set T.PhleboName = U.name FROM  Users U 
+--		--inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  
+--		--inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  
+--		--where  B.OrgID = @OrgID
+--	--		SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+ISNULL(@CancelStatus,'')+'|9994420645'+ '|'+ISNULL(@PhleboName,'') 
+			
+--	--		update T set T.TemplateParamJSON =ISNULL(T.PName,'') +'|'+ ISNULL(T.OrgName ,'') +'|'+FORMAT(CAST(T.CollectionTime AS datetime2), N'dd-MM-yyyy') +'|'+ ISNULL(T.PhleboName,'') +'|'+ Convert(nvarchar(10),T.BookingID) +'|9994420645'
+--	--	from #TempSMS T where T.OrgID = @OrgID
+--	----	SELECT @TemplateParamJSON,@TemplateNo,@OrgName
+--	--	select * from #TempSMS
+				
+--	--		IF((SELECT com.configvalue
+--	--					FROM dbo.configkeymaster ckm WITH (NOLOCK)
+--	--					INNER JOIN dbo.configorgmaster com WITH (NOLOCK) ON com.configkeyid = ckm.configkeyid
+--	--							AND com.orgid = @OrgID
+--	--							WHERE ckm.configkey = 'WhatsupIntegration') ='Y' )
+--	--			  BEGIN
+--	--			--  select 'config'
+--	--			--  SELECT @EditableBookingID,@OrgID
+--	--			--	select @TemplateParamJSON
+--	--				   INSERT INTO WhatsUpNotification (
+--	--						  MobileNo, TemplateMasterNo, TemplateParamJSON, 
+--	--						  IdentifyingId, OrgId, IsSentYN, IsErrorYN, CreatedAt, CreatedBy)
+--	--				   SELECT '+91'+PhoneNumber, T.TemplateNo,T.TemplateParamJSON, 
+--	--						    T.BookingID, @OrgID,'N', 'N', getdate(), CreatedBy
+--	--				   FROM   Bookings B
+--	--				    inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  
+--	--			   where B.OrgID = @OrgID
+--	--			  END
+--	--	  end
+--			------------------------------------------ WhatsUp Integration End ---------------------------------
+			 
+--END
+--else if (@PreBookStatus= 'TC' or @PreBookStatus = 'Trip Can-celled')
+--BEGIN
+
+--	------------------------------------------ WhatsUp Integration Start --------------------------------
+--		--	SELECT @TemplateNo = TemplateMasterNo FROM WhatsUpTemplateMaster WHERE TemplateName ='hc_reschedule_reassign'
+--		--	SELECT @OrgName = Name FROM Organization WHERE orgid = @OrgID
+--		--	SELECT @PName = B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--		--		SELECT @PhleboName = U.name FROM  Users U inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @OrgID
+--		--		SELECT @CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--		--	FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @pOrgID
+		
+			
+--		----	select @PName,@OrgName,@CollectionTime,@PhleboName,Convert(nvarchar(10),@EditableBookingID) 
+--		--	SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+  @CollectionTime+'|'+ ISNULL(@PhleboName,'') +'|'+ Convert(nvarchar(10),@EditableBookingID) +'|9994420645'
+			
+--	--			update  #TEMPSMS  set  #TEMPSMS.TemplateNo = W.TemplateMasterNo FROM WhatsUpTemplateMaster  W WHERE W.TemplateName ='hc_reschedule_reassign'
+--	--		update T set  T.OrgName = O.Name FROM Organization O inner join  #TEMPSMS T on O.Orgid=T.Orgid WHERE T.orgid = @OrgID
+--	--	update T set  T.PName=B.PatientName FROM Bookings B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	----	update T set  T.TripReason =B.TripReason  FROM [ERPHCBookingInBound] B inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID where B.OrgID=@Orgid
+--	--			update T set  T.CollectionTime = FORMAT(CAST(B.CollectionTime AS datetime2), N'dd-MM-yyyy') +' '+FORMAT(CAST(B.CollectionTime AS datetime2), N'hh:mm tt')
+--	--		FROM Bookings B  inner join  #TEMPSMS T on B.BookingID = T.BookingID --AND B.OrgID = t.OrgID  where  B.OrgID = @pOrgID
+--	--	update T set T.PhleboName = U.name FROM  Users U inner join Bookings  B on U.UserID=B.UserID and U.Orgid=@OrgID  inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  where  B.OrgID = @OrgID
+--	----		SELECT @TemplateParamJSON = @PName +'|'+ @OrgName +'|'+ISNULL(@CancelStatus,'')+'|9994420645'+ '|'+ISNULL(@PhleboName,'') 
+			
+--	--		update T set T.TemplateParamJSON =ISNULL(T.PName,'') +'|'+ ISNULL(T.OrgName ,'') +'|'+FORMAT(CAST(T.CollectionTime AS datetime2), N'dd-MM-yyyy') +'|'+ ISNULL(T.PhleboName,'') +'|'+ Convert(nvarchar(10),T.BookingID) +'|9994420645'
+--	--	from #TempSMS T where T.OrgID = @OrgID	
+--	--		IF((SELECT com.configvalue
+--	--					FROM dbo.configkeymaster ckm WITH (NOLOCK)
+--	--					INNER JOIN dbo.configorgmaster com WITH (NOLOCK) ON com.configkeyid = ckm.configkeyid
+--	--							AND com.orgid = @OrgID
+--	--							WHERE ckm.configkey = 'WhatsupIntegration') ='Y' )
+--	--			  BEGIN
+--	--			--  select 'config'
+--	--			--  SELECT @EditableBookingID,@OrgID
+--	--			--	select @TemplateParamJSON
+--	--				   INSERT INTO WhatsUpNotification (
+--	--						  MobileNo, TemplateMasterNo, TemplateParamJSON, 
+--	--						  IdentifyingId, OrgId, IsSentYN, IsErrorYN, CreatedAt, CreatedBy)
+--	--				   SELECT '+91'+PhoneNumber,T.TemplateNo, T.TemplateParamJSON, 
+--	--						    T.BookingID, @OrgID,'N', 'N', getdate(), CreatedBy
+--	--				   FROM   Bookings B 
+--	--				    inner join  #TEMPSMS T on B.BookingID = T.BookingID AND B.OrgID = t.OrgID  
+--	--			   where B.OrgID = @OrgID
+--	--			  END
+
+----END
+			
+-- --  SELECT @Loop = @Loop + 1  
+--   END
+
+
+
+    IF(@BookStatus='C' or @BookStatus='Canceled')  
+  
+    BEGIN  
+  
+    Update Bo SET BookingStatus=PSQ.BookingStatus,ModifiedAt=Getdate(),ModifiedBy=@LoginID,CancelRemarks=PSQ.Comments  from Bookings BO INNER JOIN @pServiceQuotation PSQ on BO.BookingID =PSQ.BookingID  
+  
+  
+  
+    END  
+  
+  
+  
+    ELSE if (@PreBookStatus!='C' or @PreBookStatus!='Canceled' )
+  
+  
+  
+BEGIN  
+  
+      IF( @UPincode = 0 )  
+  
+              BEGIN  
+                  SELECT @Ucity = city  
+                  FROM   Bookings  
+                  WHERE  BookingID = @EditableBookingID  
+  
+                  SELECT @UState = [State]  
+                  FROM   Bookings  
+                  WHERE  BookingID = @EditableBookingID  
+  
+                  SELECT @UCityId = CityId  
+                  FROM   Location L  
+                  WHERE  L.LocationName = @ULocation  
+  
+                  SELECT @UStateId = StateId  
+                  FROM   Bookings  
+                  WHERE  BookingID = @EditableBookingID  
+  
+                  SELECT @UPincode = Pincode  
+                  FROM   Bookings  
+                  WHERE  BookingID = @EditableBookingID  
+              END  
+  
+            --select @Ucity Uc,@UCityId UCI,@UState US,@UStateId USI,@UPincode UP ,@ULocation UL  
+            UPDATE B  
+            SET    B.PatientName = t.PatientName,  
+                
+                  B.SEX = t.SEX,  
+      B.DOB=t.DOB,  
+	     B.Age = t.Age,  
+                   -- b.LandLineNumber = t.LandLineNumber,  
+                   B.PhoneNumber = t.PhoneNumber, 
+      B.EMail=t.EMail,  
+                          B.OrgAddressID = t.OrgAddressID,  
+  B.CollectionAddress = t.CollectionAddress,    
+           B.UserID = t.UserID,  
+                   B.CollectionTime = t.CollectionTime,    
+     B.BookingOrgID = t.BookingOrgID,  
+	
+
+
+ B.BookingStatus=	   CASE
+			 WHEN t.BookingStatus = 'Booked' AND  RescheduleToken=1 THEN 'B' 
+               WHEN t.BookingStatus = 'Booked' THEN 'B' 
+               WHEN t.BookingStatus = 'Completed' THEN 'CD'
+               WHEN  t.BookingStatus= 'Canceled' THEN 'C'
+			   WHEN  t.BookingStatus = 'Trip Started' THEN 'TS'
+			   	   WHEN  t.BookingStatus = 'Trip Can-celled' THEN 'TC'
+				     WHEN  t.BookingStatus = 'Reached Destination' THEN 'RD'
+				when  t.BookingStatus='Assigned'  THEN 'A'  
+				WHEN  t.BookingStatus = 'In-progress' THEN 'IP'
+				else t.BookingStatus end,      
+    
+
+
+					--	      B.BookingStatus=t.BookingStatus,
+                   B.CollectionAddress2 = t.CollectionAddress2,    
+				         B.City = CASE  
+                              WHEN t.City = '' THEN @Ucity  
+                              ELSE t.City  
+                            END, 
+							     B.Comments = t.Comments  ,  
+								    b.state = CASE  
+                               WHEN t.state = '' THEN @UState  
+                               ELSE t.state  
+                             END,  
+                   b.pincode = CASE  
+                                 WHEN t.pincode = '' THEN @UPincode  
+                                 ELSE t.pincode  
+                               END,  
+                   b.stateid = CASE  
+                                 WHEN t.stateid = 0 THEN @UStateId  
+                                 ELSE t.stateid  
+                               END,  
+                   b.cityid = CASE  
+                                WHEN t.cityid = 0 THEN @UCityId  
+                             ELSE t.cityid  
+                              END,  
+							      B.URNTypeID=t.URNTypeID,  
+  
+       B.URNO=t.URNO,  
+	     B.DispatchValue=t.DispatchValue,  
+		    B.RefPhysicianName=t.RefPhysicianName, 
+           
+          
+                   B.ModifiedBy=@LoginID,        
+                   B.ModifiedAt=dbo.Fn_getserverdate(@ContextInfo)  
+                   --B.OrgID = t.OrgID,  
+          --B.RoleID = t.RoleID,  
+       --Case
+       --        When [BookingStatus] = 'B' Then 'Booked'
+       --        When [BookingStatus] = 'R' Then 'Registered'
+       --        When [BookingStatus] = 'C' Then 'Cancelled'
+       --        Else [BookingStatus]
+       --      End           As
+	  
+  
+           
+  
+            
+                   --b.BillDescription = t.BillDescription,  
+  
+     
+  
+          --         b.Priority = t.priority,  
+                   --B.City = @Ucity ,  
+                   --         b.state = @UState ,  
+                   --         b.pincode =  @UPincode,  
+                   --         b.stateid = @UStateId  ,  
+                   --         b.cityid =  @UCityId ,  
+              
+                
+  
+              
+  
+   
+  
+   
+    
+	 
+  
+            FROM   Bookings B    
+                   INNER JOIN @pServiceQuotation t    
+                           ON B.BookingID = t.BookingID    
+            WHERE  B.BookingID = t.BookingID
+  
+    
+  
+            
+  
+         
+  
+     IF(( @stateid = 0  
+  
+            OR @stateid = '' )  
+        --OR @pLID = 0  
+        )  
+        BEGIN    
+            --SELECT @Cityid = CityID  
+            --FROM   @pServiceQuotation  
+            SELECT @stateid = stateid  
+            FROM   City  
+            WHERE  CityID = @UCityId  
+  
+            UPDATE Bookings  
+            SET    cityid = @UCityId,  
+                   stateid = @stateid--,UserID=15533   
+            WHERE  BookingID = @pBookingID  
+        END  
+  
+     END    
+  
+    SELECT @pBookingID = @EditableBookingID    
+  
+       set @pCount=(select COUNT(*)       FROM   Bookings B    
+                   INNER JOIN @pServiceQuotation t    
+                           ON B.BookingID = t.BookingID    
+            WHERE  B.BookingID = @EditableBookingID    
+  )    
+  
+            SELECT @pBookingID    
+  select @pcount
+     --   return @pcount  
+  
+  --update Bookings set cityid='1', stateid='31' where BookingID= @pBookingID                               
+  END   
+  

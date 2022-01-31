@@ -1,0 +1,79 @@
+/****** Object:  StoredProcedure [dbo].[PgetReruntestdetails]    Script Date: 7/5/2020 7:43:15 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+--select  * from PatientInvestigation where  CreatedAt between getdate() and getdate() and orgid=98 and status='Recheck' and statustype in ('RC','RR')  
+
+--select * from sampletracker where patientvisitid in (select  patientvisitid from PatientInvestigation where  CreatedAt between getdate()-1 and getdate() and orgid=98 and status='Recheck' and statustype in ('RC','RR')  ) and InvSampleStatusID !=4  
+--3858644
+
+--CREATE Procedure PgetReruntestdetails        
+--(        
+CREATE Procedure [dbo].[PgetReruntestdetails]        
+(        
+@Fdate Datetime,              
+@Tdate Datetime,    
+@OrgID Int     
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL            
+)              
+As              
+Begin              
+        
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED           
+  SET NOCOUNT ON;        
+  SET XACT_ABORT ON;   
+  
+ 
+          Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+          
+            if(@Datediff <=31)
+			BEGIN 
+
+ Select  distinct  pv.PatientVisitId,pi.GroupID,pi.InvestigationID,P.Name As PatientName, PV.VisitNumber,P.Age,P.Sex as Gender,cm.ClientName as ClientName,                            
+Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,OA.Location,(Convert(Varchar,(PV.Createdat),103)+' '+ Convert(Varchar,(PV.Createdat),8))  as 'RegisteredDate',        
+--GroupName ,PI.InvestigationName,  
+Case when PI.Status='Recheck' then 'Rerun' else PI.Status END 'Status', PI.Reason,pi.MedicalRemarks,pi.TechnicalRemarks,      
+U.Name as UserName,(Convert(varchar,(PI.ModifiedAt),103) +' ' +Convert(varchar,(PI.ModifiedAt),8))as 'AberentActionTime',U1.Name as CompletedBy --,U2.Name as Approvedby
+        into #TempFinal
+from Patientvisit PV                            
+inner join Patient P on P.PatientID=PV.PatientID and P.Orgid=PV.Orgid        
+inner join OrganizationAddress OA on PV.Orgaddressid=OA.Addressid and OA.Orgid=PV.Orgid 
+inner join Misorderedinvestigations OI ON oi.visitid=PV.PatientVisitId and OI.orgid=PV.OrgID 
+inner join PatientInvestigation PI on OI.AccessionNumber=PI.AccessionNumber and PI.PatientVisitID=PV.Patientvisitid and   PI.orgid=PV.orgid                    
+inner join Patientinvsample PIS on PIS.Patientvisitid=PV.Patientvisitid and PIS.orgid=OA.orgid                                                           
+Inner join SampleTracker ST on ST.PatientvisitID=PIS.PatientvisitID and  ST.SampleID=PIS.SampleID and ST.OrgID=PIS.OrgID                                    
+inner join users U on U.Loginid=PI.Modifiedby and U.orgid=PI.orgid      
+inner join users U1 on U1.Loginid=OI.Completedby and U1.orgid=PI.orgid   
+inner join users U2 on U2.Loginid=OI.ApprovedBy and U2.orgid=PI.orgid                  
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID                 
+inner join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID                  
+where PV.Orgid=@OrgID and PV.CreatedAt between @Fdate and @Tdate and PI.status='Recheck' and ST.InvSampleStatusID !=4
+and PI.statustype='RC'     --    and PV.VisitNumber='2010001133970'            
+
+                              
+Select T.*,IV.Value As FirstReRunValue,iv.CreatedAt as FirstReRunDate  into #TempFinal1
+from #TempFinal T
+Inner Join InVestigationValues IV WIth(NOLOCK) ON IV.PatientVisitID=T.PatientVisitId and IV.InvestigationID=T.InvestigationID and IV.GroupID=T.GroupID
+Where IV.StatusType='RC'
+
+Select Distinct  '' as Empty,Row_number() over (order by T.RegisteredDate,T.VisitNumber) as 'SLNo', PatientName,VisitNumber, Age, Gender,ClientName, VisitType, 
+Location,RegisteredDate, IV.GroupName ,IV.Name as InvestigationName,FirstReRunValue,FirstReRunDate,IV.Value As AfterReRunValue,T.Status, Reason,
+MedicalRemarks,TechnicalRemarks,UserName As  ReRunMarkedUser,CompletedBy,U.Name As Approvedby
+from #TempFinal1 T
+Inner Join InVestigationValues IV WIth(NOLOCK) ON IV.PatientVisitID=T.PatientVisitId and IV.InvestigationID=T.InvestigationID and IV.GroupID=T.GroupID
+Inner Join Users U On U.LoginID=Isnull(IV.Modifiedby,IV.CreatedBy) and U.OrgID=IV.OrgID
+Where IV.StatusType is null
+Order by T.RegisteredDate,T.VisitNumber                                                         
+                                                  
+Drop table #TempFinal1              
+Drop table #TempFinal                   
+End
+END
+GO

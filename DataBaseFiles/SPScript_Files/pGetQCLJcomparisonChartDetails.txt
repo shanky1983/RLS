@@ -1,0 +1,113 @@
+CREATE PROCEDURE [dbo].[pGetQCLJcomparisonChartDetails]
+@LocationID [int],
+@InstrumentID [bigint],
+@LotID [bigint],
+@AnalyteID [bigint],
+@Level varchar(20),
+@FromDate DATETIME,
+@ToDate DATETIME,
+@ContextInfo [dbo].[UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+begin
+Declare @Orgid bigint
+select @Orgid = OrgID from @ContextInfo;
+
+
+DECLARE @LotLevel AS TABLE
+(
+  LevelCode NVARCHAR(5)
+)
+
+DECLARE @LotLevelID AS TABLE
+(
+  QCLevelID INT,
+  QCLevel VARCHAR(5)
+)
+
+INSERT INTO @LotLevel
+SELECT DISTINCT item
+	FROM fnSplit(@Level,',')
+
+INSERT INTO @LotLevelID	
+SELECT MD.MetaDataID,MD.Code FROM
+MetaData MD
+inner join MetaDataOrgMapping MO on MD.MetaDataID=MO.MetadataID
+INNER JOIN @LotLevel Temp ON Temp.LevelCode=Md.Code
+WHERE  MD.Domain='LotLevel'  AND MO.OrgID=@Orgid
+
+CREATE TABLE #TempLevelOne
+(
+ ProcessedAT VARCHAR(10),
+ Proc_AT DATETIME,
+ Value NVARCHAR(20),
+ QCStatus INT,
+ QCRange NVARCHAR(5),
+ QCValueID BIGINT,
+ QCLevel NVARCHAR(5)
+) 
+
+CREATE TABLE #TempLevelTwo
+(
+ ProcessedAT VARCHAR(10),
+ Proc_AT DATETIME,
+ Value NVARCHAR(20),
+ QCStatus INT,
+ QCRange NVARCHAR(5),
+ QCValueID BIGINT,
+ QCLevel NVARCHAR(5)
+) 
+
+CREATE TABLE #TempLevelThree
+(
+ ProcessedAT VARCHAR(10),
+ Proc_AT DATETIME,
+ Value NVARCHAR(20),
+ QCStatus INT,
+ QCRange NVARCHAR(5),
+ QCValueID BIGINT,
+ QCLevel NVARCHAR(5)
+) 
+
+
+
+ SET @ToDate = DATEADD(DAY,1,@ToDate);
+
+INSERT INTO #TempLevelOne
+SELECT TOP 30  CONVERT(VARCHAR(7), ProcessedAt , 100)  AS ProcessedAt , ProcessedAt AS Proc_AT,CONVERT (DECIMAL(10,2),value1) AS Value,QcStatus,ISNULL
+(REPLACE(QCRange,'S',''),'') AS QCRange,QCValueID,
+Temp.QCLevel
+FROM    AnalyteQCValues AV
+INNER JOIN @LotLevelID Temp ON Temp.QCLevelID=AV.QCLevel
+WHERE OrgID=@Orgid AND ProcessedAt BETWEEN  CONVERT(DATETIME,@FromDate +' 00:00:00',104) and CONVERT(DATETIME,@ToDate +' 11:59:00' ,104) AND 
+InstrumentID=@InstrumentID and InvestigationID=@AnalyteID AND Temp.QCLevel='C1'
+ ORDER BY Proc_AT ASC
+
+INSERT INTO #TempLevelTwo
+ SELECT TOP 30  CONVERT(VARCHAR(7), ProcessedAt , 100)  AS ProcessedAt , ProcessedAt AS Proc_AT,CONVERT (DECIMAL(10,2),value1) AS Value,QcStatus
+ ,ISNULL(REPLACE(QCRange,'S',''),'') AS QCRange,QCValueID,
+Temp.QCLevel
+FROM    AnalyteQCValues AV
+INNER JOIN @LotLevelID Temp ON Temp.QCLevelID=AV.QCLevel
+WHERE OrgID=@Orgid AND ProcessedAt BETWEEN  CONVERT(DATETIME,@FromDate +' 00:00:00',104) and CONVERT(DATETIME,@ToDate +' 11:59:00' ,104) AND 
+InstrumentID=@InstrumentID and InvestigationID=@AnalyteID  AND Temp.QCLevel='C2'
+ ORDER BY Proc_AT ASC
+
+INSERT INTO #TempLevelThree
+ SELECT TOP 30 CONVERT(VARCHAR(7), ProcessedAt , 100)  AS ProcessedAt , ProcessedAt AS Proc_AT,CONVERT (DECIMAL(10,2),value1) AS Value,QcStatus
+ ,ISNULL(REPLACE(QCRange,'S',''),'') AS QCRange,QCValueID,
+Temp.QCLevel
+FROM    AnalyteQCValues AV
+INNER JOIN @LotLevelID Temp ON Temp.QCLevelID=AV.QCLevel
+WHERE OrgID=@Orgid AND ProcessedAt BETWEEN  CONVERT(DATETIME,@FromDate +' 00:00:00',104) and CONVERT(DATETIME,@ToDate +' 11:59:00' ,104) AND 
+InstrumentID=@InstrumentID and InvestigationID=@AnalyteID AND Temp.QCLevel='C3'
+ ORDER BY Proc_AT ASC
+
+ SELECT * FROM #TempLevelOne
+ SELECT * FROM #TempLevelTwo
+ SELECT * FROM #TempLevelThree
+
+ DROP TABLE #TempLevelOne
+ DROP TABLE #TempLevelTwo
+ DROP TABLE #TempLevelThree
+END

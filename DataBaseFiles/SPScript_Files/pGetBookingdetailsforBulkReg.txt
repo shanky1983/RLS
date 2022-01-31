@@ -1,0 +1,201 @@
+CREATE PROCEDURE [dbo].[pGetBookingdetailsforBulkReg]
+         @pFromdate [DATETIME],    
+         @pTodate [DATETIME],
+		 @pOrgID [BIGINT],
+		 @pOrgAddrID [BIGINT], 
+		 @ContextInfo [UDT_CONTEXT] READONLY 
+			     
+WITH EXECUTE AS OWNER    
+AS
+  BEGIN    
+   
+	SELECT @pFromdate=CONVERT(DATETIME,@pFromdate+'00:00:00')                                  
+    SELECT @pTodate=CONVERT(DATETIME,@pTodate+'23:59:59:998')                                
+    
+	Declare @LangCode nvarchar(15) = null
+	select @LangCode = LanguageCode from @ContextInfo
+
+	 IF (@pOrgAddrID = 0 OR @pOrgAddrID = -1) 
+	     SET @pOrgAddrID = null
+
+     CREATE TABLE #tblTestCode (
+	    BookingID    bigint,
+	    TestCode     nvarchar(50),
+		SampleNumber nvarchar(50),
+		SampleCollecteddt nvarchar(20)
+	 )
+
+     CREATE TABLE #tblBookingInfo (
+		  SNo  int identity(1,1),
+		  BookingID bigint,
+		  OrgName nvarchar(150),
+		  LocationName nvarchar(150),
+		  Registrationdt nvarchar(20),
+		  SampleCollecteddt nvarchar(20),
+		  PatientNumber nvarchar(50),
+		  HealthHubID nvarchar(50),
+		  EmployeeID nvarchar(50),
+		  SourceType nvarchar(75),
+		  Salutation nvarchar(25),
+		  PatientName nvarchar(150),
+		  DOB nvarchar(20),
+		  Age nvarchar(25),
+		  AgeType nvarchar(25),
+		  Sex nvarchar(10),
+		  TestCodes nvarchar(10),
+		  AmountPaid decimal(18,2),
+		  DiscountAmt decimal(18,2),
+		  ClientID Bigint,
+		  ClientCode nvarchar(25),
+		  PhleboName nvarchar(150),
+		  Mobile nvarchar(150),
+		  EmailID nvarchar(70),
+		  DispatchMode nvarchar(50),
+		  RefDocName nvarchar(150),
+		  RefHospName nvarchar(150),
+		  History nvarchar(250),
+		  Remarks nvarchar(250),
+		  ExternalRefNo nvarchar(50),
+		  SampleNumber nvarchar(150),
+	 )
+   
+   INSERT INTO #tblBookingInfo 
+        ( BookingID,		                                   OrgName,		                             LocationName,
+		  Registrationdt,		                               SampleCollecteddt,		                 
+		  PatientNumber,
+		  HealthHubID,		                                   EmployeeID,		                         SourceType,		  
+		  Salutation,		                                   PatientName,		                         DOB,		  
+		  Age, 		                                           AgeType,		                             Sex,		  
+		  TestCodes,		                                   AmountPaid,		                         
+		  DiscountAmt,
+		  ClientID,ClientCode,		                                   PhleboName,		                         Mobile,
+		  EmailID,		                                       DispatchMode,		                     RefDocName,
+		  RefHospName,		                                   History,		                             Remarks,
+		  ExternalRefNo )
+   SELECT Convert(varchar,B.BookingID),                                         O.Name,                                   OA.Location,
+          --Convert(Varchar,B.CreatedAt,120) as RegDate,    
+		  --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),B.CreatedAt,13), ' ','/') +' ' + FORMAT(CAST(B.CreatedAt AS datetime), 'hh:mm tt')) as RegDate,
+		  --Convert(Varchar, FORMAT(B.CreatedAt, 'd', 'en-us') +' ' + FORMAT(CAST(B.CreatedAt AS datetime), 'hh:mm tt')) as RegDate,
+		  --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),B.CreatedAt,6), ' ','/') +' ' + FORMAT(CAST(B.CreatedAt AS datetime), 'hh:mm tt'),120) as RegDate,
+		  --Convert(Varchar, FORMAT(B.CreatedAt, 'd', 'en-us') +' ' + FORMAT(CAST(B.CreatedAt AS datetime), 'hh:mm')) as RegDate,
+          --CONVERT(VARCHAR(10), CONVERT(DATETIME,B.CreatedAt, 0), 101) + ' '+ CONVERT(VARCHAR(5),CONVERT(DATETIME,B.CreatedAt, 0), 108) as RegDate,
+		  Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),B.CreatedAt,103), ' ','/')) +' ' + CONVERT(VARCHAR,B.CreatedAt, 108) as RegDate,
+		  '' as SampleCollecteddt, 
+		  ISNULL(B.PatientNumber,'') as PatientNumber, 
+		  ISNULL(B.HealthHubID,'') as HealthHubID,			   Convert(varchar,ISNULL(B.EmployeeID,'')) as EmployeeID,    ISNULL(B.SourceType,'') as SourceType,
+		  ISNULL(SO.DisplayText,'') as Salutation,	  		   ISNULL(B.PatientName,'') as PatientName,  FORMAT(B.DOB,'dd-MMM-yy') as DOB,
+    substring([dbo].[fn_getAge](B.DOB),0,3) as Age,     ([dbo].[fn_getAge](B.DOB)) as AgeType,                 B.SEX as Sex,        
+		  '' as TestCodes,                 		                Convert(varchar,ISNULL(PB.AmtReceived, 0.00)) as AmountPaid,  
+		  Convert(varchar, 0.00) as DiscountAmt,
+		  B.ClientID,B.ClientCode as ClientCode,  		                   'HMSPhlebo' as PhleboName,       B.PhoneNumber as MobNo,
+		  ISNULL(B.EMail,'') as EmailID,   		 ISNULL(B.DispatchValue,'') as DispatchMode,  '' as RefDoctor,
+		  '' as RefHospital,  		                           '' as History,                    B.Remarks as Remarks,
+		  ISNULL(B.ExternalRefNo,'') as ExternalRefNo
+   FROM Bookings B with(Nolock)
+     LEFT JOIN PreBookingPaymentDetails PB with(Nolock) ON PB.BookingID = B.BookingID AND PB.OrgID = B.OrgID
+	 INNER JOIN Organization O with(Nolock) ON O.OrgID = B.OrgID
+	 INNER JOIN OrganizationAddress OA with(Nolock) ON OA.AddressID = B.OrgAddressID 
+	       AND OA.OrgID = O.OrgID
+	 LEFT JOIN SalutationOrgMapping SO with(Nolock) ON SO.TitleID = B.TITLECode AND SO.OrgID = B.OrgID
+		   AND SO.LanguageCode = ISNULL(@LangCode,SO.LanguageCode)
+	 LEFT JOIN Users U with(Nolock) ON U.UserID = B.UserID AND U.OrgID= B.OrgID
+	 LEFT JOIN LOGIN L with(Nolock) ON L.LoginID = U.LoginID AND L.OrgID = U.OrgID
+   WHERE B.BookingStatus in('A','B','Completed') AND B.OrgID = @pOrgID
+        AND ISNULL(B.PatientNumber,0) = 0 AND ISNULL(B.PatientID, -1)  = -1
+        AND B.OrgAddressID = ISNULL(@pOrgAddrID, B.OrgAddressID)
+		AND B.CreatedAt between @pFromdate and @pTodate
+
+DECLARE @RecordCount INT  
+SELECT @RecordCount= Count(1) FROM #tblBookingInfo  
+DECLARE @CounterNo int  
+set @CounterNo=0  
+DECLARE @BookingID INT  
+---Srini  
+  
+WHILE @RecordCount>0  
+  
+BEGIN  
+  
+set @CounterNo=@CounterNo + 1  
+SELECT @BookingID=bookingid from #tblBookingInfo where SNo=@CounterNo  
+  
+UPDATE #tblBookingInfo set  PatientNumber=(select dbo.fnGetPatientNumber(@BookingID,@pOrgID))    
+WHERE  BookingID=@BookingID  
+  
+SET @RecordCount=@RecordCount-1  
+  
+END  
+UPDATE #tblBookingInfo SET PatientNumber='' where PatientNumber='-1'  
+   INSERT INTO #tblTestCode (BookingID, TestCode, SampleNumber, SampleCollecteddt)
+   SELECT PO.QuotationId as BookingID, ISNULL(IM.TestCode,'') as TestCode, ISNULL(PO.BarcodeNo,'') as SampleNumber, 
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,13), ' ','/') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt')) as SampleCollecteddt
+   --Convert(Varchar, FORMAT(PO.SampleCollectedTime, 'd', 'en-us') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt')) as SampleCollecteddt 
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,6), ' ','/') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt'),120) as SampleCollecteddt
+   --Convert(Varchar, FORMAT(PO.SampleCollectedTime, 'd', 'en-us') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm')) as SampleCollecteddt
+   --CONVERT(VARCHAR(10), CONVERT(DATETIME, PO.SampleCollectedTime, 0), 101) + ' '+ CONVERT(VARCHAR(5),CONVERT(DATETIME, PO.SampleCollectedTime, 0), 108)  as SampleCollecteddt
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,103), ' ','/')) +' ' + CONVERT(VARCHAR,PO.SampleCollectedTime, 108) as SampleCollecteddt
+   Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),case Year(PO.SampleCollectedTime) when 9999 then B.CreatedAt else PO.SampleCollectedTime end,103), ' ','/')) 
+            +' ' + CONVERT(VARCHAR,case Year(PO.SampleCollectedTime) when 9999 then B.CreatedAt else PO.SampleCollectedTime end, 108) as SampleCollecteddt
+	 FROM PreOrderedInvestigations PO with(Nolock)
+	    inner join Bookings B with(Nolock) ON B.BookingID = PO.QuotationId AND B.OrgID = PO.OrgID
+		inner join InvestigationOrgMapping IM with(Nolock) ON IM.InvestigationID = PO.ID AND IM.OrgID = PO.OrgID
+		inner join #tblBookingInfo T ON T.BookingID = PO.QuotationId
+   WHERE PO.Type IN ('INV') AND PO.OrgID = @pOrgID 
+   UNION
+   SELECT PO.QuotationId as BookingID, ISNULL(IG.TestCode,'') as TestCode, ISNULL(PO.BarcodeNo,'') as SampleNumber,  
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,13), ' ','/') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt')) as SampleCollecteddt
+   --Convert(Varchar, FORMAT(PO.SampleCollectedTime, 'd', 'en-us') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt')) as SampleCollecteddt
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,6), ' ','/')+' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm tt'),120) as SampleCollecteddt
+   --Convert(Varchar, FORMAT(PO.SampleCollectedTime, 'd', 'en-us') +' ' + FORMAT(CAST(PO.SampleCollectedTime AS datetime), 'hh:mm')) as SampleCollecteddt
+   --CONVERT(VARCHAR(10), CONVERT(DATETIME, PO.SampleCollectedTime, 0), 101) + ' '+ CONVERT(VARCHAR(5),CONVERT(DATETIME, PO.SampleCollectedTime, 0), 108)  as SampleCollecteddt
+   --Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),PO.SampleCollectedTime,103), ' ','/')) +' ' + CONVERT(VARCHAR,PO.SampleCollectedTime, 108) as SampleCollecteddt
+   Convert(Varchar,REPLACE(CONVERT(VARCHAR(11),case Year(PO.SampleCollectedTime) when 9999 then B.CreatedAt else PO.SampleCollectedTime end,103), ' ','/')) 
+            +' ' + CONVERT(VARCHAR,case Year(PO.SampleCollectedTime) when 9999 then B.CreatedAt else PO.SampleCollectedTime end, 108) as SampleCollecteddt
+	 FROM PreOrderedInvestigations PO with(Nolock)
+	    inner join Bookings B with(Nolock) ON B.BookingID = PO.QuotationId AND B.OrgID = PO.OrgID
+	    inner join InvOrggroup IG with(Nolock) ON IG.AttGroupID = PO.ID AND IG.OrgID = PO.OrgID
+		inner join #tblBookingInfo T ON T.BookingID = PO.QuotationId
+   WHERE PO.Type IN ('GRP','PKG') AND PO.OrgID = @pOrgID 
+
+   UPDATE T SET T.TestCodes = S.TestCode, T.SampleNumber = S.SampleNumber, T.SampleCollecteddt = S.SampleCollecteddt
+   FROM #tblBookingInfo T
+   INNER JOIN #tblTestCode S ON T.BookingID = S.BookingID
+
+   Update T Set T.Age=   Replace(T.Age,'.','')
+   from #tblBookingInfo T where T.Age like '%.%'
+   Update T Set T.AgeType= right(t.AgeType, len(t.AgeType) - charindex(' ', t.AgeType))
+   from #tblBookingInfo T
+   DECLARE @tblfilteroption TABLE (ID INT IDENTITY(1,1), FilerOption VARCHAR(25))
+   DECLARE @strfilteroption VARCHAR(50)= (select AdditionalInfo from @ContextInfo)
+   INSERT INTO @tblfilteroption (FilerOption)
+   SELECT item FROM fnSplit(@strfilteroption, ',')
+
+   DECLARE @FilterClientID BIGINT;
+   DECLARE @FilterTestCode VARCHAR(25);
+
+   SELECT @FilterClientID = (SELECT FilerOption FROM @tblfilteroption WHERE ID=1)
+   SELECT @FilterTestCode = (SELECT FilerOption FROM @tblfilteroption WHERE ID=2)
+    
+   IF(@FilterClientID!=-1 AND @FilterClientID!=0)        
+   BEGIN
+   DELETE FROM  #tblBookingInfo WHERE ClientID!=@FilterClientID
+   END 
+
+   IF(ISNULL(@FilterTestCode,'')!='')
+   BEGIN
+   DELETE FROM  #tblBookingInfo WHERE TestCodes!=@FilterTestCode
+   END 
+   UPDATE #tblBookingInfo set PatientName=REPLACE(PatientName,'''','')    
+ SELECT  Convert(Varchar,ROW_NUMBER() OVER(ORDER BY BookingID ASC)) as  SNo,   OrgName,                  LocationName,                  
+        '', 	   SampleCollecteddt, 		          PatientNumber,         
+		HealthHubID,  		   EmployeeID,                        SourceType,
+		Salutation,   		   PatientName,                       Convert(varchar(10),DOB) as DOB,
+		Age,  		           AgeType,                           Sex,
+		TestCodes,     		   ISNULL(Convert(varchar,AmountPaid), '') as AmountPaid,    ISNULL(Convert(varchar,DiscountAmt),'') as DiscountAmt, 
+		ClientCode,            PhleboName,                        Mobile,            
+  EmailID,           DispatchMode,                      RefDocName,       RefHospName,         History,                           Remarks,  
+  Convert(varchar,BookingID) as BookingID,  ExternalRefNo,               SampleNumber   ,'' PassportNumber  
+    FROM #tblBookingInfo 
+
+	DROP TABLE #tblBookingInfo
+ END

@@ -1,0 +1,43 @@
+CREATE PROC pHomeCollectionScheduler
+ As
+BEGIN
+    DECLARE @Loop INT = 1, @Count INT = 0, @BookingId BIGINT, @OrgID INT
+
+    CREATE TABLE #BookingIds (
+	  SrNo      SMALLINT identity(1, 1),
+	  BookingID BIGINT,
+	  OrgID BIGINT
+	)
+	
+	INSERT INTO #BookingIds(BookingID, OrgID)
+	SELECT DISTINCT BookingID, OrgID FROM ERPHCBookingInBound WHERE IsProcessed = 'N'
+	UNION
+	SELECT DISTINCT BookingID, OrgID FROM ERPHCPaymentDetailsInBound WHERE IsProcessed = 'N'
+	UNION
+	SELECT DISTINCT BookingID, OrgID FROM ERPHCTestInBound WHERE IsProcessed = 'N'
+	UNION
+	SELECT DISTINCT BookingID, OrgID FROM TRFfilemanager_hc WHERE ISNULL(IsProcessed,'N') = 'N'
+	UNION
+	SELECT DISTINCT BookingID, OrgID FROM ERPHCTestSampleInBound WHERE ISNULL(IsProcessed,'N') = 'N'
+
+	SELECT @Count = Count(1)  
+    FROM   #BookingIds
+	
+	WHILE @loop <= @Count  
+	BEGIN
+	    SELECT @BookingId = NULL,  
+               @OrgID = NULL
+
+		SELECT @BookingId = BookingID,
+		       @OrgID = OrgID
+		FROM   #BookingIds  
+        WHERE  SrNo = @Loop 
+
+		IF (@BookingId > 0 AND @OrgID > 0)
+		  BEGIN
+		     EXEC pHCBookingProcess @BookingId, @OrgID
+		  END
+
+	   SELECT @Loop = @Loop + 1  
+	END 
+END

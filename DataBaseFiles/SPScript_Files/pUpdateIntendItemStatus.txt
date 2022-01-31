@@ -1,0 +1,38 @@
+CREATE PROCEDURE [dbo].[pUpdateIntendItemStatus] (
+	 @pIntendID bigint,
+	 @pProductID bigint,
+	 @pOrgid  int,
+	 @pLocationid int,
+	 @Remarks varchar(255),
+	 @ContextInfo [dbo].[UDT_Context] READONLY
+)
+As
+Begin  
+
+Update IntendDetail set Status='Cancel',Remarks=@Remarks Where IntendID=@pIntendID AND ProductID=@pProductID AND OrgID=@pOrgid
+
+Declare @TotalOrderItemCount int;
+Declare @TotalCancelItemCount int;
+Declare @TotalClosedItemCount int;
+
+Select @TotalOrderItemCount = Count(IntendID) From IntendDetail where IntendID=@pIntendID AND OrgID=@pOrgid
+
+Select @TotalCancelItemCount = Count(IntendID) From IntendDetail where IntendID=@pIntendID AND OrgID=@pOrgid AND Status='Cancel'
+
+IF ( @TotalOrderItemCount =@TotalCancelItemCount)
+BEGIN
+Update  Intend set [Status]='Cancelled' where IntendID=@pIntendID
+END
+
+IF((Select [Status] from Intend where IntendID=@pIntendID AND OrgID=@pOrgid)='Partial Issued')
+BEGIN 
+Select @TotalClosedItemCount = Count(IntendID) From IntendDetail where IntendID=@pIntendID AND OrgID=@pOrgid AND Status='Closed'
+
+IF (@TotalOrderItemCount = (@TotalClosedItemCount+@TotalCancelItemCount))
+BEGIN
+ Update  Intend set [Status]='Received' where IntendID=@pIntendID
+END
+
+END
+
+END

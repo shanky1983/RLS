@@ -1,0 +1,191 @@
+CREATE PROCEDURE [dbo].[pUpdateInvCancelDetails_IAPI]          
+ @tblID [dbo].[InvestigationDetail] READONLY,          
+ @orgid [bigint],          
+ @pVisitNumber    varchar(40)           
+AS          
+BEGIN                  
+
+
+Declare @visitid bigint 
+select @visitid=Patientvisitid from patientvisit where ExternalVisitid=@pVisitNumber
+
+update pi set pi.status='Cancel' from orderedinvestigations oi
+inner join patientinvestigation pi on pi.AccessionNumber=oi.AccessionNumber and oi.visitid=pi.patientvisitid 
+where oi.visitid=@visitid and oi.ID in(select Visitid from @tblID where type in('GRP','INV'))
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected') 
+
+
+
+ INSERT INTO InvestigationStatusHistory
+                    (PatientVisitID,
+                     InvestigationID,
+                     InvestigationName,
+                     Type,
+                     ModifiedBy,
+                     modifiedat,
+                     UID,
+                     OrgID,
+                     OrginalStatus,
+                     AlteredStatus,
+                     ApprovedBy,
+                     Reason)
+        SELECT visitid,
+               id,
+               name,
+               type,
+                Isnull((SELECT TOP 1 loginid
+                       FROM   login
+                       WHERE  loginname = 'Integration'), 0),
+               Getdate(),
+               uid,
+               orgid,
+               status,
+               'Cancel',
+               Isnull((SELECT TOP 1 loginid
+                       FROM   login
+     WHERE  loginname = 'Integration'), 0),
+               'Integration Cancel' 
+        FROM   orderedinvestigations 
+		where visitid=@visitid and ID in(select Visitid from @tblID where type in('GRP','INV'))
+
+and  status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+update orderedinvestigations set status='Cancel' where visitid=@visitid and ID in(select Visitid from @tblID where type in('GRP','INV'))
+
+and  status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+
+               
+
+
+
+
+update pi set pi.status='Cancel' FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG'
+INNER JOIN InvOrgGroup G (NOLOCK) ON G.OrgGroupID = IPM.ID and IPM.Type='GRP'
+inner join orderedinvestigations oi on oi.PkgID=og.AttGroupID  and Oi.ID=G.AttGroupID and og.orgid=oi.orgid and oi.Visitid= @visitid 
+inner join patientinvestigation pi on pi.AccessionNumber=oi.AccessionNumber and oi.visitid=pi.patientvisitid                                                             
+WHERE OG.OrgID = @orgid                                                             
+AND OG.AttGroupID in (select VISITID from @tblID where type='PKG') and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+update pi  set pi.status='Cancel'    
+FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG' 
+INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID = IPM.ID and IOM.orgid=OG.orgid 
+inner join orderedinvestigations oi on  oi.ID=IOM.InvestigationID   and IOM.orgid=oi.orgid and oi.Visitid= @visitid  
+inner join patientinvestigation pi on pi.AccessionNumber=oi.AccessionNumber and oi.visitid=pi.patientvisitid                                                                              
+WHERE OG.OrgID = @orgid    and IPM.Type='INV'                                                           
+AND OG.AttGroupID in(select VisitID from @tblID where type='PKG')
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+
+
+
+ INSERT INTO InvestigationStatusHistory
+                    (PatientVisitID,
+                     InvestigationID,
+                     InvestigationName,
+                     Type,
+                     ModifiedBy,
+                     modifiedat,
+                     UID,
+                     OrgID,
+                     OrginalStatus,
+                     AlteredStatus,
+                     ApprovedBy,
+                     Reason)
+        SELECT oi.visitid,
+               oi.id,
+               oi.name,
+               oi.type,
+                Isnull((SELECT TOP 1 loginid
+                       FROM   login
+                       WHERE  loginname = 'Integration'), 0),
+               Getdate(),
+               oi.uid,
+               oi.orgid,
+               oi.status,
+               'Cancel',
+               Isnull((SELECT TOP 1 loginid
+                       FROM   login
+     WHERE  loginname = 'Integration'), 0),
+               'Integration Cancel' 
+           FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG'
+INNER JOIN InvOrgGroup G (NOLOCK) ON G.OrgGroupID = IPM.ID and IPM.Type='GRP'
+inner join orderedinvestigations oi on oi.PkgID=og.AttGroupID  and Oi.ID=G.AttGroupID   and og.orgid=oi.orgid and oi.Visitid= @visitid                                                              
+WHERE OG.OrgID = @orgid                                                             
+AND OG.AttGroupID in (select VISITID from @tblID where type='PKG')
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+               
+update oi set oi.status='Cancel' FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG'
+INNER JOIN InvOrgGroup G (NOLOCK) ON G.OrgGroupID = IPM.ID and IPM.Type='GRP'
+inner join orderedinvestigations oi on oi.PkgID=og.AttGroupID  and Oi.ID=G.AttGroupID   and og.orgid=oi.orgid and oi.Visitid= @visitid                                                              
+WHERE OG.OrgID = @orgid                                                             
+AND OG.AttGroupID in (select VISITID from @tblID where type='PKG')
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+
+
+
+
+ INSERT INTO InvestigationStatusHistory
+                    (PatientVisitID,
+                     InvestigationID,
+                     InvestigationName,
+                     Type,
+                     ModifiedBy,
+                     modifiedat,
+                     UID,
+                     OrgID,
+                     OrginalStatus,
+                     AlteredStatus,
+                     ApprovedBy,
+                     Reason)
+        SELECT oi.visitid,
+               oi.id,
+               oi.name,
+               oi.type,
+                Isnull((SELECT TOP 1 loginid
+                       FROM   login
+                       WHERE  loginname = 'Integration'), 0),
+               Getdate(),
+               oi.uid,
+               oi.orgid,
+               oi.status,
+               'Cancel',
+               Isnull((SELECT TOP 1 loginid
+                       FROM   login
+     WHERE  loginname = 'Integration'), 0),
+               'Integration Cancel' 
+           FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG' 
+INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID = IPM.ID and IOM.orgid=OG.orgid 
+inner join orderedinvestigations oi on  oi.ID=IOM.InvestigationID   and IOM.orgid=oi.orgid and oi.Visitid= @visitid                                                                           
+WHERE OG.OrgID = @orgid      and IPM.Type='INV'                                                         
+AND OG.AttGroupID in(select VisitID from @tblID where type='PKG')
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+
+update oi  set oi.status='Cancel'    
+FROM InvPackageMapping IPM (NOLOCK)                                                                          
+INNER JOIN InvOrgGroup OG (NOLOCK) ON OG.OrgGroupID = IPM.PackageID                                                                          
+INNER JOIN InvGroupMaster GM (NOLOCK) ON GM.GroupID = OG.AttGroupID AND GM.Type = 'PKG' 
+INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID = IPM.ID and IOM.orgid=OG.orgid 
+inner join orderedinvestigations oi on  oi.ID=IOM.InvestigationID   and IOM.orgid=oi.orgid and oi.Visitid= @visitid                                                                           
+WHERE OG.OrgID = @orgid      and IPM.Type='INV'                                                         
+AND OG.AttGroupID in(select VisitID from @tblID where type='PKG')
+and oi.status in('Paid','SampleCollected','SampleTransferred','Not Given','Rejected')
+
+
+  
+       
+END          
+          
+          

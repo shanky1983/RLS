@@ -1,0 +1,39 @@
+CREATE Procedure [dbo].[pGetIsSensitiveTestForVisit](      
+@VisitID bigint,      
+@InvestigationID bigint,       
+@orgID int,       
+@AccessionNumber bigint,       
+@Status Nvarchar(100),       
+@Type Nvarchar(100),      
+@ContextInfo [UDT_Context] READONLY       
+)      
+As       
+BEGIN      
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED           
+   SET NOCOUNT ON;        
+   SET XACT_ABORT ON;         
+BEGIN TRY        
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)         
+    --IF(@Status<>'Recheck')  
+    --BEGIN  
+    Select Distinct (Case When Isnull(OI.IsSensitive,'')='Y' Then Isnull(OI.IsSensitive,'')    
+    When Isnull(PI.IsSensitive,'')='Y' Then Isnull(PI.IsSensitive,'')   
+    When Isnull(OI.IsSensitive,'')='N' Then ''   
+    When Isnull(PI.IsSensitive,'')='N' Then '' Else '' END)  As IsSensitive,    
+    OI.Status As Print_Task,    
+    Isnull(N.Status,'') As Status from OrderedInvestigations OI (nolock)          
+    INNER JOIN Patientinvestigation PI (nolock)      ON OI.AccessionNumber=PI.AccessionNumber-- And OI.OrgID=PI.OrgID          
+    LEFT JOIN Notifications N (nolock)      ON N.IdentityID=OI.Visitid AND N.Category='Report' and N.ActionType='PDF' AND N.Status<>'DIFFERED'    and N.OrgID=Oi.OrgID        
+              
+    Where -- OI.VisitID=@VisitID And  
+  OI.AccessionNumber=@AccessionNumber-- And OI.OrgID=@orgID And Oi.ID=@InvestigationID And Oi.Type=@Type        
+    And Oi.Status=@Status   --AND Oi.Status <> 'Retest'  
+    --END        
+          
+END TRY        
+BEGIN CATCH                                         
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),     @sptrace ='pGetIsSensitiveTestForVisit @iVisitID = '+CAST(@VisitID AS VARCHAR)        +'@iPatientID = '+CAST(@InvestigationID AS VARCHAR)+'@iTaskID = '+CAST(@orgID AS VARCHAR)+'@iTaskID = '+CAST(@AccessionNumber AS VARCHAR) +'@patienthistory = '+@Status       +'@remarks = '+ @Type       
+          
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;         
+END CATCH      
+END

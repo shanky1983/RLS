@@ -1,0 +1,30 @@
+  
+CREATE PROCEDURE [dbo].[pInsertStockReceivedBarcodeMapping]   
+ @pBarcodeMapping [dbo].[BarcodeMappingDetails] READONLY,   
+ @ContextInfo [UDT_Context] READONLY  
+WITH EXECUTE AS OWNER  
+AS  
+                                                                                  
+ DECLARE @ret AS BIGINT    
+                  
+ BEGIN                                                  
+                                               
+ SET @ret=-1                                                
+                           
+ BEGIN    
+   
+  if not exists(select 1 from StockReceivedBarcodeMapping where StockReceivedDetailsId in(select distinct  StockReceivedDetailsId  from @pBarcodeMapping))  
+ begin  
+  INSERT INTO StockReceivedBarcodeMapping (ProductID,ProductKey,Barcode,UnitSize,Unit,StockReceivedDetailsId)   
+     select ProductID,ProductKey,Barcode,UnitSize,Unit,StockReceivedDetailsId from @pBarcodeMapping    
+ end  
+                             
+  SET @ret=0                                                  
+ END                                     
+ RETURN @ret                                                  
+END  
+ 
+  
+GO
+
+

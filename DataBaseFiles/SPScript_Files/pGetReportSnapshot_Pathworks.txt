@@ -1,0 +1,243 @@
+
+CREATE PROCEDURE [dbo].[pGetReportSnapshot_Pathworks] @pOrgID        [INT],
+                                            @pOrgAddressID [BIGINT],
+                                            @pVisitID      [BIGINT],
+                                            @pUpdateStatus [BIT],
+					    @pReportType NVARCHAR(20),
+                                            @ContextInfo   [UDT_CONTEXT] READONLY
+--,@pSnapshotType nvarchar(20)                      
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+   SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED 
+  SET NOCOUNT ON;
+SET XACT_ABORT ON;   
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+      /** To Get Trusted Orgs**************/
+      DECLARE @TrustedOrgIDs AS TABLE
+        (
+           OrgID INT
+        )
+      DECLARE @OldFolderPath AS nvarchar(300)
+
+      INSERT INTO @TrustedOrgIDs
+      VALUES      (@pOrgID)
+
+      INSERT INTO @TrustedOrgIDs
+      SELECT TOD.SharingOrgID
+      FROM   TrustedOrgDetails TOD 
+             INNER JOIN TrustedOrgActions TOA 
+                     ON TOA.TrustedOrgDetailsID = TOD.TrustedOrgDetailsID
+             INNER JOIN @ContextInfo T
+                     ON TOD.LoggedOrgID = T.OrgID
+                        AND TOA.RoleID = T.RoleID
+                        AND TOA.IdentifyingType = 'PAGE'
+                        AND TOA.IdentifyingActionID = T.PageID
+                        AND TOD.SharingOrgID <> @pOrgID
+
+						
+
+      /**To Get Trusted Orgs ***************/
+      DECLARE @temp TABLE
+        (
+           [ID]              BIGINT,
+           [Content]         VARBINARY(MAX),
+           [TemplateID]      NVARCHAR(25),
+           [Status]          NVARCHAR(25),
+           [VisitID]         BIGINT,
+           [OrgID]           INT,
+           [OrgAddressID]    BIGINT,
+           [CreatedBy]       BIGINT,
+           [CreatedAt]       DATETIME,
+           [ReportPath]      nvarchar(MAX),
+           [AccessionNumber] nvarchar(MAX),
+           [NotificationID]  INT
+        )
+      DECLARE @Type nvarchar(20) = ''
+      DECLARE @pSnapshotType nvarchar(50)
+
+      SELECT @pSnapshotType = AdditionalInfo
+      FROM   @ContextInfo
+
+      IF( @pUpdateStatus = 1 )
+        BEGIN
+            SET @Type='PDF';
+        END
+      ELSE
+        SET @Type='ROUNDBPDF';
+
+      IF( @pSnapshotType = 'Bill' )
+        BEGIN
+            DECLARE @BILLPDFFOLDERPATH nvarchar(500) = ''
+
+            SELECT @BILLPDFFOLDERPATH = Value
+            FROM   CommunicationConfig
+            WHERE  NAME = 'REPORTPDFFOLDERPATH'
+                   AND InstanceID = 2
+
+            SELECT @OldFolderPath = Value
+            FROM   CommunicationConfig
+            WHERE  NAME = 'OldREPORTPDFFOLDERPATH'
+                   AND InstanceID = 2
+
+            DECLARE @FinalBillID BIGINT
+
+            SELECT @FinalBillID = @pVisitID
+
+            --SELECT  @FinalBillID = MAX(FB.FinalBillID) FROM FinalBill FB          
+            --INNER JOIN VisitClientMapping VCM  ON FB.VisitID=VCM.VisitID AND FB.OrgID=VCM.OrgID        
+            --WHERE FB.OrgID=@pOrgID AND ISNULL(VCM.IsActive,'Y')='Y' AND FB.VisitID=@pVisitID        
+            INSERT @temp
+            SELECT TOP 1 ID,
+                         Content,
+                         0,
+                         NULL Status,
+                         -1   VisitID,
+                         OrgID,
+                         OrgAddressID,
+                         CreatedBy,
+                         CreatedAt,
+                         CASE
+                           WHEN HasChangedFolderPath = 'Y' THEN @OldFolderPath + InvoicePath
+                           ELSE @BILLPDFFOLDERPATH + InvoicePath
+                         END,
+                         InvoiceID,
+                         NotificationID
+            FROM   InvoiceSnapshot 
+            WHERE  OrgID IN(SELECT OrgID
+                            FROM @TrustedOrgIDs)
+                AND InvoiceID = @FinalBillID
+AND TYPE = @pSnapshotType
+            ORDER  BY CreatedAt DESC
+        END
+      ELSE
+   BEGIN
+DECLARE @REPORTPDFFOLDERPATH nvarchar(500) = ''
+-- set @REPORTPDFFOLDERPATH='\\lissistoragefordbbackup.file.core.windows.net\liskernel-pdf\PDF\REPORT\202\ROUNDB\2021/02/17\Report-7017392_Vimala_GENERAL_17Feb2021_121139.pdf\REPORT\168\2021/02/24\Report-KO2131761_Test_GENERAL_24Feb2021_113549.pdf\REPORT\
+--168\2021/02/19\Report-KO2131748_Tests_GENERAL_19Feb2021_183942.pdf'
+   --     set @REPORTPDFFOLDERPATH='F:\Report-7017392_Vimala_GENERAL_17Feb2021_121139.pdf'
+		
+		SELECT @REPORTPDFFOLDERPATH = Value
+            FROM   CommunicationConfig
+            WHERE  NAME = 'REPORTPDFFOLDERPATH'
+                   AND InstanceID = 1    
+
+            SELECT @OldFolderPath = Value
+            FROM   CommunicationConfig
+            WHERE  NAME = 'OldREPORTPDFFOLDERPATH'
+                   AND InstanceID = 2
+
+
+
+		--Added By QBITZ Prakash.K
+		IF @pReportType = 'Cumulative'
+			BEGIN
+
+			
+			INSERT @temp
+            SELECT TOP 1   RS.ID,
+						   RS.Content,
+                           RS.TemplateID,
+                           RS.Status,
+                           RS.VisitID,
+                           RS.OrgID,
+                           RS.OrgAddressID,
+                           RS.CreatedBy,
+                           RS.CreatedAt,
+                         CASE
+                           WHEN   RS.HasChangedFolderPath = 'Y' THEN @OldFolderPath +   RS.ReportPath
+                           ELSE @REPORTPDFFOLDERPATH +   RS.ReportPath
+                         END,
+                           RS.AccessionNumber,
+                           RS.NotificationID
+            FROM   ReportSnapshot RS 
+			INNER JOIN Notifications N on RS.NotificationID=N.NotificationID
+            WHERE    RS.OrgID IN (SELECT OrgID
+                             FROM   @TrustedOrgIDs)
+                   AND   RS.VisitID = @pVisitID
+                   AND   RS.TYPE = @Type AND ISNULL(N.ReportType,'')=@pReportType
+		    ORDER  BY CreatedAt DESC
+
+			
+			END
+		ELSE IF @pReportType='SmartReport'
+		BEGIN
+		 INSERT @temp
+            SELECT  TOP 1  N.NotificationID,
+						   CONVERT(varbinary,''),
+                           0,
+                           N.Status,
+                           N.IdentityID,
+                           N.OrgID,
+                           N.OrgAddressID,
+                           N.CreatedBy,
+                           N.CreatedAt,
+                           @REPORTPDFFOLDERPATH +   N.Template+N.AttachmentName,
+                           '',
+                           N.NotificationID 
+            FROM    Notifications N  
+            WHERE    N.OrgID IN (SELECT OrgID
+                             FROM   @TrustedOrgIDs)
+                   AND   N.IdentityId = @pVisitID    AND   ISNULL(N.ActionType,'') = (@pReportType) 
+		    ORDER  BY CreatedAt DESC
+			END
+		ELSE
+		BEGIN
+	
+            INSERT @temp
+            SELECT TOP 1   RS.ID,
+						   RS.Content,
+                           RS.TemplateID,
+                           RS.Status,
+                           RS.VisitID,
+                           RS.OrgID,
+                           RS.OrgAddressID,
+                           RS.CreatedBy,
+                           RS.CreatedAt,
+                         CASE
+                           WHEN   RS.HasChangedFolderPath = 'Y' THEN @OldFolderPath +   RS.ReportPath
+                           ELSE @REPORTPDFFOLDERPATH --+   RS.ReportPath
+                         END,
+                           RS.AccessionNumber,
+                           RS.NotificationID
+            FROM   ReportSnapshot RS 
+			INNER JOIN Notifications N on RS.NotificationID=N.NotificationID
+            WHERE    RS.OrgID IN (SELECT OrgID
+                     					         FROM   @TrustedOrgIDs)
+                   AND  
+				    RS.VisitID = @pVisitID
+                  
+				   AND   RS.TYPE = @Type  AND ((ISNULL(N.ReportType,'') <> 'Cumulative'  AND ISNULL(N.ReportType,'') IN (@pReportType)) OR 
+				   (ISNULL(N.ReportType,'') <> 'Cumulative' AND (ISNULL(@pReportType,'') ='')))
+		    ORDER  BY CreatedAt DESC
+        END
+	END
+      SELECT *
+      FROM   @temp
+--	select * from  @TrustedOrgIDs
+--	select @pReportType,@REPORTPDFFOLDERPATH,@pVisitID
+END TRY
+BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pGetReportSnapshot @pOrgID = '+CAST(@pOrgID AS VARCHAR) +'@pOrgAddressID = '+CAST(@pOrgAddressID AS VARCHAR) +'@pVisitID = '+CAST
+
+
+
+
+
+(@pVisitID AS VARCHAR) 
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH  
+  END
+
+
+
+
+
+
+
+
+
+
+

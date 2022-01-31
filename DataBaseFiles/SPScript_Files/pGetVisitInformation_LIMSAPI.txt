@@ -1,0 +1,30 @@
+CREATE PROCEDURE [dbo].[pGetVisitInformation_LIMSAPI]
+	@pOrgCode NVARCHAR(100),
+	@pBookingID INT
+
+AS
+BEGIN
+ 
+ DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL
+
+ IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+      SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+             @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+
+        FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+    END
+
+	SELECT B.BookingID,PV.VisitDate,PV.VisitNumber,@pOrgCode as OrgCode,@pOrgAddrID	as OrgLocationCode from Bookings (NOLOCK) B
+	INNER JOIN PatientVisit (NOLOCK) PV ON 
+	PV.OrgID=B.OrgID 
+	AND PV.PatientVisitId=B.PatientVisitID
+	INNER JOIN Patient P  (NOLOCK) ON P.OrgId=P.OrgId
+	AND P.PatientId=PV.PatientId
+	WHERE PV.OrgID=@pOrgID 
+	AND B.BookingId=@pBookingID
+	order by PV.VisitNumber desc
+END

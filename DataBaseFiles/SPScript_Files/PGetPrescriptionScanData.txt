@@ -1,0 +1,79 @@
+CREATE PROCEDURE [dbo].PGetPrescriptionScanData
+(             
+@Fdate Datetime,                  
+@Tdate Datetime,  
+@OrgID int,
+@Pparamtype VARCHAR(100),
+@Pparamvalue VARCHAR(100)               
+)                
+As                
+Begin       
+          
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+CREATE TABLE #Prescriptiondata 
+(
+PatientVisitID Bigint,
+PatientName varchar(250),
+Visitnumber nvarchar(200),
+Age varchar(20),
+Sex varchar(10),
+PatientContact nvarchar (40),
+VisitDate nvarchar(100),
+ClientName nvarchar(255),
+ReferingPhysicianName nvarchar(255),
+BillingPersonName nvarchar(255),
+TRFStatus varchar(10)
+)
+ 
+
+
+if(@Datediff <= 31)
+
+BEGIN
+
+INSERT INTO #Prescriptiondata 
+
+SELECT DISTINCT 
+PV.PatientVisitID, 
+P.Name as PatientName, 
+PV.Visitnumber, 
+P.Age, 
+P.Sex, 
+PA.MobileNumber as PatientContact,
+PV.VisitDate,
+CM.ClientName,
+PV.ReferingPhysicianName,
+U.Name AS BillingPersonName,
+CASE WHEN TF.VisitID is Not NULL THEN 'YES' ELSE 'NO' END AS TRFStatus
+FROM PATIENT P (NOLOCK)
+INNER JOIN PATIENTVISIT PV (NOLOCK) ON P.PATIENTID=PV.PATIENTID AND P.ORGID=PV.ORGID
+INNER JOIN PATIENTADDRESS PA (NOLOCK) ON PA.PATIENTID=P.PATIENTID AND PA.ADDRESSTYPE='P'
+INNER JOIN VISITCLIENTMAPPING VCM (NOLOCK) ON VCM.VISITID=PV.PATIENTVISITID AND VCM.ORGID=PV.ORGID AND ISNULL(VCM.ISACTIVE,'Y')<>'N'
+INNER JOIN CLIENTMASTER CM (NOLOCK) ON CM.CLIENTID=VCM.CLIENTID AND CM.ORGID=VCM.ORGID
+LEFT JOIN TRFFILEMANAGER TF (NOLOCK) ON TF.VISITID=PV.PATIENTVISITID AND TF.PATIENTID=PV.PATIENTID AND TF.ORGID=PV.ORGID
+INNER JOIN USERS U ON U.LOGINID=PV.CREATEDBY AND U.ORGID=PV.ORGID
+WHERE PV.ORGID = @OrgID AND PV.CREATEDAT BETWEEN @Fdate + '00:00:00.000' AND @Tdate + '23:59:59.997' 
+ --and pv.VisitNumber='20106300377'
+ 
+Select distinct 
+Row_number() over (order by Visitnumber) as 'SLNo',
+PatientVisitID,
+PatientName,
+Visitnumber,
+
+Age,
+Sex,
+PatientContact,
+VisitDate,
+ClientName,
+ReferingPhysicianName,
+BillingPersonName,
+TRFStatus
+FROM #Prescriptiondata 
+ORDER BY Visitnumber,VisitDate
+DROP TABLE #Prescriptiondata
+
+END
+END

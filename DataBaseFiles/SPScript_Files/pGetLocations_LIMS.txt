@@ -1,0 +1,19 @@
+CREATE PROCEDURE pGetLocations_LIMS  
+(
+ @OrgCode Nvarchar(100)
+)
+AS 
+BEGIN 
+
+	DECLARE @Orgid INT
+
+	SELECT @Orgid= AttuneOrgID FROM VendorOrgMapping WHERE IntegrationTypeCode=@OrgCode
+
+	Select LocationID ,LocationName,LocationCode From Locations where orgid=@Orgid AND LocationCode IS NOT NULL
+
+END
+
+
+
+
+

@@ -1,0 +1,33 @@
+CREATE PROCEDURE [dbo].[pInsertIntegrationDetails_IAPI]    
+    @pOrgCode  nvarchar(10),    
+ @pOrderingLocationCode nvarchar(20),     
+ @VisitTypeCode varchar (10),    
+ @tbl [dbo].[UDTIntegrationDetails] READONLY,    
+ @preturnCode [bigint] OUTPUT,    
+ @OrgID int output ,    
+ @LocationID int output ,    
+ @VisitType int output,  
+ @pClientID bigint output,     
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN      
+          
+ set @preturnCode = -1          
+ Insert into integrationhistory(IntegrationValue,OrgID,Createdby,CreatedAt,ExternalID,Type,XMLType)          
+ select Value,OrgID,CreatedBy,(SELECT dbo.fn_GetServerDate(@ContextInfo)),ExternalID,Type,XMLType from @tbl          
+     set @preturnCode = 0     
+    
+declare @sOrgID int,@sLocationID int,@sVisitType int    
+ select @sOrgID=OrgID from organization where orgid=@pOrgCode    
+ --select @sLocationID=AddressID  from OrganizationAddress where OrgID=@sOrgID and AddressID=@pOrderingLocationCode    
+  select @pClientID=ClientID, @sLocationID=CollectionCenterID from ClientMaster where OrgID=@sOrgID and clientcode=@pOrderingLocationCode  
+ select @sVisitType=Convert(int,Code) from metadata where  Domain='VisitType'  and displaytext=@VisitTypeCode    
+ set @OrgID=@sOrgID    
+ set @LocationID=@sLocationID    
+ set @VisitType=@sVisitType    
+ ---------------------------    
+END    
+    
+    
+    

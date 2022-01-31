@@ -1,0 +1,66 @@
+CREATE PROC [dbo].[PgetbillpaymentdetailsWithLanguage] @pVisitID   BIGINT,
+                                  @pBillID    BIGINT,
+                                  @pOrgID     INT,
+                                  @IsFullBill NVARCHAR(1)
+								   ,@LanguageCode NVARCHAR(20)
+AS
+  BEGIN
+      SELECT P.PaymentName,
+             CASE
+               WHEN ARD.ChequeorCardNumber = '0' THEN P.PaymentName + ' - ' + CM1.CurrencyName + ' - '
+                                                      + CONVERT(nvarchar, Sum(ARD.OtherCurrencyAmount))
+               ELSE P.PaymentName + ' - ' + CM1.CurrencyName + ' - '
+                    + CONVERT(nvarchar, Sum(ARD.OtherCurrencyAmount))
+                    + ' ( ' + ARD.BankNameorCardType + ' - '
+                    + CONVERT(nvarchar, ARD.ChequeorCardNumber)
+                    + ' ) '
+             END AS PayDetails,
+             ARD.FinalBillID
+      FROM   AmountReceivedDetails ARD WITH(NOLOCK)
+             INNER JOIN PaymentType P WITH(NOLOCK)
+                     ON ARD.TypeID = P.PaymentTypeID
+             LEFT JOIN CurrencyMaster CM1
+                    ON CM1.CurrencyID = ARD.BaseCurrencyID
+      WHERE  ARD.FinalBillID IN (@pBillID)  and Isnull(P.LanguageCode,'en-GB')=Isnull(@LanguageCode,'en-GB')
+      GROUP  BY CM1.CurrencyName,
+                ARD.OtherCurrencyAmount,
+                P.PaymentName,
+                ARD.ChequeorCardNumber,
+                ARD.BankNameorCardType,
+                ARD.FinalBillID
+      
+
+	  UNION
+
+	  SELECT P.PaymentName,
+             CASE
+               WHEN ARD.ChequeorCardNumber = '0' THEN P.PaymentName + ' - ' + CM1.CurrencyName + ' - '
+                                                      + CONVERT(nvarchar, Sum(ARD.OtherCurrencyAmount))
+               ELSE P.PaymentName + ' - ' + CM1.CurrencyName + ' - '
+                    + CONVERT(nvarchar, Sum(ARD.OtherCurrencyAmount))
+                    + ' ( ' + ARD.BankNameorCardType + ' - '
+                    + CONVERT(nvarchar, ARD.ChequeorCardNumber)
+                    + ' ) '
+             END AS PayDetails,
+             ARD.FinalBillID
+      FROM   AmountReceivedDetails ARD WITH(NOLOCK)
+             INNER JOIN PaymentType P WITH(NOLOCK)
+                     ON ARD.TypeID = P.PaymentTypeID
+             LEFT JOIN CurrencyMaster CM1
+                    ON CM1.CurrencyID = ARD.BaseCurrencyID
+      WHERE  ARD.FinalBillID IN (SELECT (CASE WHEN @IsFullBill = 'Y' THEN  PaidBillNo ELSE NULL END) FROM   DuePaidDetail WHERE  DueBillNo = @pBillID)
+	    and Isnull(P.LanguageCode,'en-GB')=Isnull(@LanguageCode,'en-GB')
+      GROUP  BY CM1.CurrencyName,
+                ARD.OtherCurrencyAmount,
+                P.PaymentName,
+                ARD.ChequeorCardNumber,
+                ARD.BankNameorCardType,
+                ARD.FinalBillID
+      ORDER  BY ARD.FinalBillID
+
+  END
+
+
+
+
+

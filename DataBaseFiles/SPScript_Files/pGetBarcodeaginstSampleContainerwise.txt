@@ -1,0 +1,55 @@
+Create procedure [dbo].[pGetBarcodeaginstSampleContainerwise]
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59' 
+DECLARE @cols AS NVARCHAR(MAX), @cols2 varchar(max),@query  AS NVARCHAR(MAX)
+ 
+Declare @Temp as Table (PatientName varchar(200),VisitDate datetime,VisitNumber varchar(100),ContainerName nvarchar(300),barcodeNumber varchar(100))
+insert into @Temp
+ select PA.Name,PV.VisitDate,PV.Visitnumber,ContainerName, BarcodeNumber 
+from PatientVisit PV with(NOLOCK)
+inner join Patient PA with (NOLOCK) on PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+inner join PatientInvSample PIS with(NOLOCK) ON PIS.PatientVisitID=PV.PatientVisitId and PIS.OrgID=PV.OrgID
+inner join Investigationsamplecontainer ISC with(NOLOCK) on ISC.OrgID=PIS.OrgID and ISC.SampleContainerID=PIS.SampleContainerID
+where PV.OrgID=@pOrgId and PV.VisitDate between @pFDate and @pTDate
+ 
+ select * into #Temp from @temp  
+SELECT @cols = STUFF((SELECT DISTINCT ',' + isnull(QUOTENAME([ContainerName]) ,'')
+                      from @Temp
+            FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)') 
+        ,1,1,'')    
+set @cols2 =SUBSTRING(( select distinct ',IsNull(['+ContainerName+'],''-'') as ['+ContainerName+']' from @Temp for xml path('')),2,8000)
+ 
+
+SELECT @query = 
+ ' SELECT ''123'' as Empty,PatientName,VisitDate,VisitNumber,'+@cols2+' FROM
+(SELECT     
+    [ContainerName], PatientName, VisitDate,Visitnumber, BarcodeNumber
+FROM #Temp )X  
+PIVOT 
+(
+    MAX(BarcodeNumber)
+    for [ContainerName] in (' + @cols + ')
+) P'
+ 
+EXEC SP_EXECUTESQL @query
+ 
+drop table #Temp 
+End 
+  
+
+

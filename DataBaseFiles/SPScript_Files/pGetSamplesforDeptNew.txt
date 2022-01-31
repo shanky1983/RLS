@@ -1,0 +1,248 @@
+/****** Object:  StoredProcedure [dbo].[pGetSamplesforDept]    Script Date: 6/25/2018 4:06:39 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetSamplesforDeptNew] @RoleID         [BIGINT],
+                                            @OrgID          [INT],
+                                            @PatientVisitID [BIGINT],
+                                            @OrgAddresID    [INT],
+                                            @ContextInfo    [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      DECLARE @DeptID INT
+      DECLARE @ChildVisitID BIGINT
+      DECLARE @LanguageCode NVARCHAR(20)
+
+      SELECT @LanguageCode = LanguageCode
+      FROM   @ContextInfo
+
+      SELECT @ChildVisitID = PatientVisitId
+      FROM   PatientVisit
+      WHERE  ReferVisitID = @PatientVisitID
+
+      BEGIN
+          DECLARE @TempInvStatus TABLE
+            (
+               STATUS      VARCHAR(100),
+               DisplayText VARCHAR(255)
+            )
+
+          IF NOT EXISTS (SELECT 1
+                         FROM   InvestigationStatus with(NOLOCK)
+                         WHERE  Orgid = @OrgID)
+            BEGIN
+                INSERT INTO @TempInvStatus
+                            (STATUS,DisplayText)
+                SELECT Invsts.STATUS,
+                       ISO.DisplayText
+                FROM   InvestigationStatus Invsts WITH (NOLOCK)
+                       Inner join InvStatusOrgMapping ISO WITH(NOLOCK)
+                               on ISO.status = Invsts.Status
+                                  and isnull(ISO.LangCode, 'en-GB') = @LanguageCode
+                                  AND ISO.OrgID = @OrgID
+                WHERE  Invsts.Orgid IS NULL
+            END
+          ELSE
+            BEGIN
+                INSERT INTO @TempInvStatus
+                            (STATUS,DisplayText)
+                SELECT Invsts.STATUS,
+                       ISO.DisplayText
+                FROM   InvestigationStatus Invsts WITH (NOLOCK)
+                       Inner join InvStatusOrgMapping ISO WITH (NOLOCK)
+                               on ISO.status = Invsts.Status
+                                  AND ISO.OrgID = @OrgID
+                                  and isnull(ISO.LangCode, 'en-GB') = @LanguageCode
+                WHERE  Invsts.Orgid = @OrgID
+            END
+
+          IF NOT EXISTS (SELECT 1
+                         FROM   OrderedInvestigations WITH (NOLOCK)
+                         WHERE  VisitID = @PatientVisitID
+                                AND OrgID = @OrgID)
+            BEGIN
+                SELECT NAME                                  AS InvestigationName,
+                       ID                                    AS InvestigationID,
+                       [TYPE]                                AS Type,
+                       OI.STATUS,
+                       PkgName                               AS PackageName,
+                       ReferredType,
+                       Isnull(InvSts.DisplayText, OI.STATUS) AS DisplayStatus
+                FROM   OrderedInvestigations OI WITH (NOLOCK)
+                       INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+                               ON OI.VisitID = PIS.PatientVisitID
+                       INNER JOIN @TempInvStatus InvSts
+                               ON Invsts.STATUS = OI.STATUS
+                WHERE  PIS.PatientVisitID = @PatientVisitID
+                       AND PIS.recorgid = @OrgID
+                       AND PIS.OrgID <> PIS.recorgid
+                       AND oi.PkgName IS NULL
+                       AND OI.AccessionNumber NOT IN (SELECT oi1.ReferredAccessionNo
+                                                      FROM   OrderedInvestigations oi1 WITH (NOLOCK)
+                                                      WHERE  oi1.VisitID = @PatientVisitID)
+                UNION
+                SELECT NAME                                  AS InvestigationName,
+                       ID                                    AS InvestigationID,
+                       [TYPE]                                AS Type,
+                       OI.STATUS,
+                       PkgName                               AS PackageName,
+                       ReferredType,
+                       Isnull(InvSts.DisplayText, OI.STATUS) AS DisplayStatus
+                FROM   OrderedInvestigations OI WITH (NOLOCK)
+                       INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+                               ON OI.VisitID = PIS.PatientVisitID
+                       INNER JOIN @TempInvStatus InvSts
+                               ON Invsts.STATUS = OI.STATUS
+                WHERE  PIS.PatientVisitID = @PatientVisitID
+                       AND PIS.recorgid = @OrgID
+                       AND PIS.OrgID <> PIS.recorgid
+                       AND oi.PkgName IS NOT NULL
+                       AND OI.AccessionNumber NOT IN (SELECT oi1.ReferredAccessionNo
+                                                      FROM   OrderedInvestigations oi1 WITH (NOLOCK)
+                                                      WHERE  oi1.VisitID = @PatientVisitID)
+                ORDER  BY OI.NAME ASC
+            END
+          ELSE
+            BEGIN
+                SELECT NAME                                  AS InvestigationName,
+                       ID                                    AS InvestigationID,
+                       [TYPE]                                AS Type,
+                       OI.STATUS,
+                       PkgName                               AS PackageName,
+                       ReferredType,
+                       Isnull(InvSts.DisplayText, OI.STATUS) AS DisplayStatus
+                FROM   OrderedInvestigations OI WITH (NOLOCK)
+                       INNER JOIN @TempInvStatus InvSts
+                               ON Invsts.STATUS = OI.STATUS
+                WHERE  VisitID = @PatientVisitID
+                       AND OI.OrgID = @OrgID
+                       AND PkgName IS NULL
+                       AND OI.AccessionNumber NOT IN (SELECT oi1.ReferredAccessionNo
+                                                      FROM   OrderedInvestigations oi1 WITH (NOLOCK)
+                                                      WHERE  oi1.VisitID = @PatientVisitID)
+                UNION
+                SELECT NAME                                  AS InvestigationName,
+                       ID                                    AS InvestigationID,
+                       [TYPE]                                AS Type,
+                       OI.STATUS,
+                       PkgName                               AS PackageName,
+                       ReferredType,
+                       Isnull(InvSts.DisplayText, OI.STATUS) AS DisplayStatus
+                FROM   OrderedInvestigations OI WITH (NOLOCK)
+                       INNER JOIN @TempInvStatus InvSts
+                               ON Invsts.STATUS = OI.STATUS
+                WHERE  VisitID = @PatientVisitID
+                       AND OI.OrgID = @OrgID
+                       AND PkgName IS NOT NULL
+                       AND OI.AccessionNumber NOT IN (SELECT oi1.ReferredAccessionNo
+                                                      FROM   OrderedInvestigations oi1 WITH (NOLOCK)
+                                                      WHERE  oi1.VisitID = @PatientVisitID)
+            END
+      END
+
+      SELECT DISTINCT pis.PatientVisitID,
+                      pis.SampleID                    AS SampleID,
+                      pis.SampleCode,
+                      ISM.SampleDesc,
+                      ISC.SampleContainerID           AS SampleContainerID,
+                      Isnull(ISC.ContainerName, '--') AS SampleContainerName,
+                      CASE pis.BarcodeNumber
+                        WHEN '0' THEN '--'
+                        ELSE pis.BarcodeNumber
+                      END                             AS BarcodeNumber,
+                      pis.RecSampleLocID,
+                      ORD.Location                    AS LocationName
+      FROM   PatientInvSample pis WITH (NOLOCK)
+             INNER JOIN InvSampleMaster ISM WITH (NOLOCK)
+                     ON ISM.SampleCode = pis.SampleCode
+                        AND ISM.OrgID = PIS.OrgID
+             INNER JOIN SampleTracker ST WITH (NOLOCK)
+                     ON ST.SampleID = pis.SampleID
+                        AND ST.OrgID = pis.OrgId
+             LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)
+                    ON ISC.SampleContainerID = pis.SampleContainerID
+                       AND ISC.OrgID = PIS.OrgID
+             INNER JOIN OrganizationAddress ORD WITH (NOLOCK)
+                     ON ORD.AddressID = pis.CollectedLocID
+             INNER JOIN Organization O WITH (NOLOCK)
+                     ON O.orgid = ord.orgid
+             INNER JOIN PatientInvSampleMapping PISM(NOLOCK)
+                     ON PISM.VisitId = PIS.PatientVisitID
+                        AND PISM.SID = PIS.SampleID
+                        AND PISM.OrgId = PIS.OrgID
+             INNER JOIN OrderedInvestigations OI(NOLOCK)
+                     ON PISM.ID = OI.ID
+                        AND PISM.Type = OI.Type
+                        AND OI.VisitID = PISM.VisitID
+                        AND OI.STATUS IN ( 'SampleTransferred', 'SampleCollected' )
+      WHERE  pis.PatientVisitID = @PatientVisitID
+             AND ST.InvSampleStatusID NOT IN ( 4, 6, 13 )
+             and ISNULL(ISC.LangCode, 'en-GB') = @LanguageCode
+             and isnull(ISM.LangCode, 'en-GB') = @LanguageCode
+             AND ST.SampleID IN (SELECT sampleid
+                                 FROM   PatientInvSample WITH (NOLOCK)
+                                 WHERE  PatientVisitID = @PatientVisitID)
+             AND ST.InvSampleStatusID IN ( 1, 3 )
+             AND OI.ResCaptureLoc = @OrgAddresID  and pis.sampleid not in (select samplerelationshipid from Patientinvsample where patientvisitid=pis.patientvisitid and  isnull(samplerelationshipid,0)<>0 )-- isnull(pis.samplerelationshipid,0)=0    
+
+      SELECT idm.DeptID
+      FROM   InvDeptMaster idm WITH (NOLOCK)
+             INNER JOIN RoleDeptMap rl WITH (NOLOCK)
+                     ON rl.DeptID = idm.DeptID
+      WHERE  rl.RoleID = @RoleID
+             AND idm.OrgID = @OrgID
+
+      SELECT DISTINCT invsMaster.SampleDesc,
+                      ISC.SampleContainerID                          AS SampleContainerID,
+                      Isnull(ISC.ContainerName, '--')                AS SampleContainerName,
+                      isMaster.InvSampleStatusDesc,
+                      dptMaster.DeptName + '(' + ORGA.Location + ')' AS DeptName,
+                      sTracker.CreatedAt,
+                      CASE PIS.BarcodeNumber
+                        WHEN '0' THEN '--'
+                        ELSE PIS.BarcodeNumber
+                      END                                            AS BarcodeNumber
+      FROM   SampleTracker sTracker WITH (NOLOCK)
+             INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+                     ON PIS.SampleID = sTracker.SampleID
+                        AND PIS.PatientVisitID = sTracker.PatientVisitID
+                        AND PIS.OrgID = sTracker.OrgID
+             INNER JOIN InvSampleStatusmaster isMaster WITH (NOLOCK)
+                     ON isMaster.InvSampleStatusID = sTracker.InvSampleStatusID
+             LEFT JOIN InvDeptMaster dptMaster WITH (NOLOCK)
+                    ON dptMaster.DeptID = sTracker.DeptID
+             INNER JOIN InvSampleMaster invsMaster WITH (NOLOCK)
+                     ON invsMaster.SampleCode = PIS.SampleCode
+                        AND invsMaster.OrgID = PIS.OrgID
+             LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)
+                    ON ISC.SampleContainerID = PIS.SampleContainerID
+                       AND ISC.OrgID = PIS.OrgID
+             LEFT JOIN OrganizationAddress ORGA WITH (NOLOCK)
+                    ON ORGA.AddressID = sTracker.Collectedin
+      WHERE  sTracker.PatientVisitID = @PatientVisitID
+             AND pis.recorgid = @OrgID
+             and isnull(ISC.LangCode, 'en-GB') = @LanguageCode
+             and isnull(invsMaster.LangCode, 'en-GB') = @LanguageCode
+             AND PIS.SampleID NOT IN (SELECT SampleID
+                                      FROM   SampleTracker ST WITH (NOLOCK)
+                                      WHERE  CollectedIn = @OrgAddresID
+                                             AND OrgID = @OrgID
+                                             AND InvSampleStatusID = 3
+                                             AND PatientVisitID = @PatientVisitID)
+             AND sTracker.SampleID IN (SELECT sampleid
+                                       FROM   PatientInvSample WITH (NOLOCK)
+                                       WHERE  PatientVisitID = @PatientVisitID)
+             AND sTracker.InvSampleStatusID IN ( 1, 2 )
+
+      SELECT DISTINCT DM.DeptID,
+                      DM.DeptName
+      FROM   InvDeptSamples IDS WITH (NOLOCK)
+             INNER JOIN InvDeptMaster DM WITH (NOLOCK)
+                     ON DM.DeptID = IDS.DeptID
+      WHERE  DM.OrgID = IDS.OrgID
+             AND IDS.OrgID = @OrgID
+             AND IDS.PatientVisitID = @PatientVisitID
+  END

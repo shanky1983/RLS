@@ -1,0 +1,43 @@
+
+CREATE PROC [dbo].[pGetPatientTestHistory] (@OrgID       [INT],
+                                            @VisitID     BIGINT,
+                                            @ContextInfo [UDT_CONTEXT] READONLY)
+AS
+  BEGIN 
+
+  Create table #Temptable 
+  (
+  FieldKey varchar(100),
+  Valuedata varchar(100),
+  ReferenceID bigint,
+  ReferenceType varchar(100),
+  TestName varchar(100),
+  TestType varchar(100)
+  )
+  Insert into #Temptable
+  SELECT PAF.FieldKey as  [Key],PAF.FieldValue as Valuedata,Convert(BIGINT,PAF.ReferenceID) as ReferenceID,PAF.ReferenceType as ReferenceType,ISnull(IOM.BillingName,IOM.DisplayText) as TestName,PAF.TestType as TestType FROM PatientAttributeFields PAF
+			Inner join InvestigationOrgMapping IOM on Iom.InvestigationID = PAF.ReferenceID and PAF.OrgID=IOM.Orgid
+			 Where PAF.PatientVisitId=@VisitID and ReferenceType='Test' and PAF.TestType='INV'
+			 and PAF.OrgID=@OrgID
+			
+ Union 
+ SELECT PAF.FieldKey as  [Key],PAF.FieldValue as Valuedata,Convert(BIGINT,PAF.ReferenceID) as ReferenceID,PAF.ReferenceType as ReferenceType,ISnull(IOM.BillingName,IOM.DisplayText) as TestName,PAF.TestType as TestType FROM PatientAttributeFields PAF
+			Inner join InvOrgGroup IOM on Iom.AttGroupID = PAF.ReferenceID and PAF.OrgID=IOM.Orgid
+			 Where PAF.PatientVisitId=@VisitID and ReferenceType='Test' and PAF.TestType in ('GRP','PKG')
+			 and PAF.OrgID=@OrgID
+			 Order by TestName
+
+
+			 select  FieldKey  as [Key],Valuedata , ReferenceID , ReferenceType , TestName,TestType from #TempTable
+			 drop table #TempTable
+  END
+
+
+
+
+
+
+
+
+
+

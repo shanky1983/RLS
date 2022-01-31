@@ -1,0 +1,8 @@
+ CREATE PROC pUpdateIntegrationRepushJob
+AS
+BEGIN
+Update BulkReg_IntegrationNotification SET CovidStatus='' where CovidStatus='Picked' AND DATEDIFF(HH, CovidPickedAt,GETDATE())>=1 AND CovidRetrycnt<=3
+Update BulkReg_IntegrationNotification SET PDFStatus='' where PDFStatus in ('Error','Picked' ) and ISNULL(PDFErrorDescription,'') IN ('','catch-loop') AND DATEDIFF(HH, PDFPickedAt,GETDATE())>=1 AND PdfRetrycnt<=5
+Update BulkReg_IntegrationNotification SET ResultStatus='' where ResultStatus in ('Error','Picked' ) and ISNULL(ResultErrorDescription,'') IN ('','catch-loop') AND DATEDIFF(HH, ResultPickedAt,GETDATE())>=1 AND Retrycnt<=5
+Update BulkReg_IntegrationNotification SET SmartReportStatus='' where SmartReportStatus='Picked' AND DATEDIFF(HH, SmartReportPickedAt,GETDATE())>=1 AND IsSmartReportSent='Y' AND SmartRetrycnt<=3
+END

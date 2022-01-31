@@ -1,0 +1,55 @@
+ 
+CREATE procedure [dbo].[pSaveOrganismRangeValueMapping]( 
+@OrganismRangeValues [UDTInvOrganismDrugMapping] READONLY,            
+@ContextInfo [UDT_Context] READONLY)            
+as            
+begin            
+       SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+	   SET NOCOUNT ON;
+	   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+ 
+ declare @LoginId bigint    
+ declare @OrgId bigint    
+ select @LoginId=LoginId,@OrgId=orgid from @ContextInfo 
+
+	Declare @temp as table (ID int identity(1,1),OrganismID BIGINT, DrugID bigint,Susceptibility nvarchar(100),Intermediate nvarchar(100),
+	Resistant nvarchar(100),ModifiedBy bigint, ModifiedAt	datetime )
+
+     Insert into @temp (OrganismID,DrugID,Susceptibility,Intermediate,Resistant)
+	 Select  OrganismID,DrugID,Susceptibility,Intermediate,Resistant from @OrganismRangeValues
+
+	Declare @max int;
+	Declare @min int = 1;
+	Declare @DrugdID bigint;
+	Declare @OrganismID bigint;
+	Select @max = Count(1)  from @temp;
+
+	While(@min <= @max)
+	BEGIN
+	Select @OrganismID=OrganismID,@DrugdID= DrugID from @temp where ID=@min
+	IF EXISTS (Select 1 from OrganismDrugRangeMapping where OrganismID=@OrganismID AND DrugID=@DrugdID)
+	BEGIN
+	Update o Set o.Susceptibility=t.Susceptibility,o.Intermediate=t.Intermediate,o.Resistant=t.Resistant,
+	 o.ModifiedBy=@LoginId,o.ModifiedAt=getdate()
+	from  OrganismDrugRangeMapping o 
+	inner join @temp t on O.OrganismID=t.OrganismID AND o.DrugID=t.DrugID
+	END
+	Else
+	BEGIN 
+	 Insert into OrganismDrugRangeMapping(OrganismID,DrugID,Susceptibility,Intermediate,Resistant,CreatedBy,CreatedAt,OrgID)    
+	 select OrganismID,DrugID,Susceptibility,Intermediate,Resistant,@LoginId,getdate(),@OrgId from @OrganismRangeValues  where DrugID=@DrugdID AND OrganismID=@OrganismID
+	END  
+	SET @min+=@min; 
+	END
+END TRY
+ BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace =''
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH         
+END     
+    
+  
+

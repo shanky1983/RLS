@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Schema Namespace="LISKernelEntities" Alias="Self" annotation:UseStrongSpatialTypes="false" xmlns:annotation="http://schemas.microsoft.com/ado/2009/02/edm/annotation" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+  <EntityType Name="WhatsUpNotification">
+    <Key>
+      <PropertyRef Name="WhatsUpNotificationId" />
+    </Key>
+    <Property Name="WhatsUpNotificationId" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+    <Property Name="MobileNo" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+    <Property Name="TemplateMasterNo" Type="Int32" />
+    <Property Name="TemplateParamJSON" Type="String" MaxLength="4000" FixedLength="false" Unicode="true" />
+    <Property Name="IsSentYN" Type="String" MaxLength="1" FixedLength="false" Unicode="true" />
+    <Property Name="IsErrorYN" Type="String" MaxLength="1" FixedLength="false" Unicode="true" />
+  </EntityType>
+  <EntityType Name="WhatsUpTemplateMaster">
+    <Key>
+      <PropertyRef Name="TemplateMasterNo" />
+    </Key>
+    <Property Name="TemplateMasterNo" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+    <Property Name="TemplateName" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="NoofParameters" Type="Int32" />
+  </EntityType>
+  <EntityContainer Name="Entities" annotation:LazyLoadingEnabled="true">
+    <EntitySet Name="WhatsUpNotifications" EntityType="Self.WhatsUpNotification" />
+    <EntitySet Name="WhatsUpTemplateMasters" EntityType="Self.WhatsUpTemplateMaster" />
+  </EntityContainer>
+</Schema>

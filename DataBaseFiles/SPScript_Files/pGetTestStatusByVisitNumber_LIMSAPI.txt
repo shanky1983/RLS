@@ -1,0 +1,99 @@
+CREATE PROCEDURE pGetTestStatusByVisitNumber_LIMSAPI  
+(  
+   @pOrgId INT,  
+   @pVisitNumber NVARCHAR(50)  
+)  
+AS  
+BEGIN  
+  
+ DECLARE @PatientId BIGINT  
+ DECLARE @PatientVisitID BIGINT  
+  
+ SELECT @PatientId=PatientID,@PatientVisitID=PatientVisitID FROM PatientVisit(NOLOCK)   
+ WHERE VisitNumber=@pVisitNumber  
+  
+ SELECT PatientID,Name, isNull(EMail,'') as Email,S.TitleName,Age,PatientNumber,PatientType,ExternalPatientNumber  
+ FROM Patient P(NOLOCK)  
+ INNER JOIN Salutation S ON S.TitleID=P.TITLECode  
+ WHERE PatientId=@PatientId  
+ AND OrgId=@pOrgId;  
+
+ Declare @ORDEREDTEST as Table 
+ (ID int Identity (1,1), VisitID bigint, Accessionnumber bigint,Name Nvarchar(200), Status varchar(50),CreatedAt datetime, OrgID bigint, Type nvarchar(20), PKGID bigint
+ )
+
+ INSERT INTO @ORDEREDTEST (VisitID,Accessionnumber,Name,Status,CreatedAt,OrgID,Type,PKGID)
+ SELECT OI.VisitID, OI.Accessionnumber,OI.Name,OI.Status,OI.CreatedAt,OI.OrgID, OI.Type, OI.PKGID
+   FROM orderedinvestigations oi (nolock)   
+              INNER JOIN Patientinvestigation PI (nolock) ON PI.AccessionNumber = OI.AccessionNumber    
+                   AND PI.OrgID = OI.OrgID    
+              INNER JOIN PatientVisit Pv (nolock) ON pv.PatientVisitId = oi.VisitID    
+                   AND Pv.OrgID = OI.OrgID   
+			  INNER JOIN patient(nolock) P  ON p.patientid = pv.patientid 
+                   AND P.orgid = PV.orgid 
+			  WHERE   OI.VisitID=@PatientVisitID AND OI.OrgID=@pOrgId
+ 
+ ;WITH OrderedInvestigation_CTE(PatientVisitID,TestName,TestStatus,TestType,OrgID,  
+      OrderedDate, UOMCode, MethodName, ReferenceRange, IsAbnormal, ResultCapturedAt, TestValue, TestID, TestCode)  
+ as  
+ (  
+  SELECT OI.VisitID as PatientVisitID, PIN.InvestigationName AS TestName, OI.Status as TestStatus, OI.Type as TestType,OI.OrgID,   
+         OI.CreatedAt as OrderedDate, IOM.UOMCode as UOMCode, PIN.MethodName as MethodName, PIN.ReferenceRange as ReferenceRange,   
+      PIN.IsAbnormal as IsAbnormal,  
+      IV.CreatedAt as ResultCapturedAt, IV.Value as TestValue, PIN.investigationID as TestID, IOM.TestCode as TestCode  
+  FROM @ORDEREDTEST OI 
+    INNER JOIN patientInvestigation PIN with(Nolock) ON PIN.Accessionnumber = OI.Accessionnumber AND PIN.OrgID = OI.OrgID  
+	INNER JOIN Investigationvalues IV WITH(NOLOCK) ON IV.patientvisitid=PIN.patientvisitid AND IV.investigationID = PIN.investigationID AND IV.OrgID = PIN.OrgID 
+    INNER JOIN InvestigationOrgMapping IOM WITH(Nolock) ON IOM.investigationID = PIN.investigationID AND IOM.OrgID = PIN.OrgID  
+  WHERE OI.VisitID=@PatientVisitID  AND OI.Type = 'INV' AND Isnull(OI.PKGID,0)=0 AND OI.OrgId=@pOrgId  
+
+  UNION
+
+    SELECT OI.VisitID as PatientVisitID, PIN.InvestigationName AS TestName, OI.Status as TestStatus, OI.Type as TestType,OI.OrgID,   
+         OI.CreatedAt as OrderedDate, IOM.UOMCode as UOMCode, PIN.MethodName as MethodName, PIN.ReferenceRange as ReferenceRange,   
+      PIN.IsAbnormal as IsAbnormal,  
+      IV.CreatedAt as ResultCapturedAt, IV.Value as TestValue, PIN.investigationID as TestID, IOM.TestCode as TestCode  
+  FROM @ORDEREDTEST OI 
+    INNER JOIN patientInvestigation PIN with(Nolock) ON PIN.Accessionnumber = OI.Accessionnumber AND PIN.OrgID = OI.OrgID  
+	INNER JOIN Investigationvalues IV WITH(NOLOCK) ON IV.patientvisitid=PIN.patientvisitid AND IV.investigationID = PIN.investigationID AND IV.OrgID = PIN.OrgID 
+    INNER JOIN InvestigationOrgMapping IOM WITH(Nolock) ON IOM.investigationID = PIN.investigationID AND IOM.OrgID = PIN.OrgID  
+  WHERE OI.VisitID=@PatientVisitID  AND OI.Type = 'INV' AND Isnull(OI.PKGID,0)>0 AND OI.OrgId=@pOrgId 
+
+  UNION 
+
+    SELECT OI.VisitID as PatientVisitID, PIN.InvestigationName AS TestName, OI.Status as TestStatus, OI.Type as TestType,OI.OrgID,   
+         OI.CreatedAt as OrderedDate, IOM.UOMCode as UOMCode, PIN.MethodName as MethodName, PIN.ReferenceRange as ReferenceRange,   
+      PIN.IsAbnormal as IsAbnormal,  
+      IV.CreatedAt as ResultCapturedAt, IV.Value as TestValue, PIN.investigationID as TestID, IOM.TestCode as TestCode  
+  FROM @ORDEREDTEST OI 
+    INNER JOIN patientInvestigation PIN with(Nolock) ON PIN.Accessionnumber = OI.Accessionnumber AND PIN.OrgID = OI.OrgID  
+	INNER JOIN Investigationvalues IV WITH(NOLOCK) ON IV.patientvisitid=PIN.patientvisitid AND IV.investigationID = PIN.investigationID AND IV.OrgID = PIN.OrgID
+	INNER JOIN InvOrgGroup iog WITH (NOLOCK) ON iog.AttGroupID = OI.ID AND iog.OrgID = OI.OrgID
+    INNER JOIN InvGroupMapMaster igmm WITH (NOLOCK) ON igmm.GroupID = iog.OrgGroupID 
+    INNER JOIN InvestigationOrgMapping IOM WITH(Nolock) ON IOM.investigationID = PIN.investigationID AND IOM.OrgID = PIN.OrgID  
+  WHERE OI.VisitID=@PatientVisitID  AND OI.Type = 'GRP' AND Isnull(OI.PKGID,0)=0 AND OI.OrgId=@pOrgId 
+
+    UNION 
+
+    SELECT OI.VisitID as PatientVisitID, PIN.InvestigationName AS TestName, OI.Status as TestStatus, OI.Type as TestType,OI.OrgID,   
+         OI.CreatedAt as OrderedDate, IOM.UOMCode as UOMCode, PIN.MethodName as MethodName, PIN.ReferenceRange as ReferenceRange,   
+      PIN.IsAbnormal as IsAbnormal,  
+      IV.CreatedAt as ResultCapturedAt, IV.Value as TestValue, PIN.investigationID as TestID, IOM.TestCode as TestCode  
+  FROM @ORDEREDTEST OI 
+    INNER JOIN patientInvestigation PIN with(Nolock) ON PIN.Accessionnumber = OI.Accessionnumber AND PIN.OrgID = OI.OrgID  
+	INNER JOIN Investigationvalues IV WITH(NOLOCK) ON IV.patientvisitid=PIN.patientvisitid AND IV.investigationID = PIN.investigationID AND IV.OrgID = PIN.OrgID 
+	INNER JOIN InvOrgGroup iog WITH (NOLOCK) ON iog.AttGroupID = OI.ID AND iog.OrgID = OI.OrgID
+    INNER JOIN InvGroupMapMaster igmm WITH (NOLOCK) ON igmm.GroupID = iog.OrgGroupID 
+    INNER JOIN InvestigationOrgMapping IOM WITH(Nolock) ON IOM.investigationID = PIN.investigationID AND IOM.OrgID = PIN.OrgID  
+  WHERE OI.VisitID=@PatientVisitID  AND OI.Type = 'GRP' AND Isnull(OI.PKGID,0)>0 AND OI.OrgId=@pOrgId 
+
+ )   
+ SELECT T.PatientVisitID,TestType,TestName, PV.VisitNumber,TestStatus, convert(varchar,OrderedDate, 105) +' '+ CONVERT(VARCHAR(8),OrderedDate,108) as OrderedDate,   
+        UOMCode,  MethodName,  IsAbnormal, ReferenceRange, ResultCapturedAt,   
+     TestValue, TestID, TestCode, PV.ExternalVisitID  
+ FROM OrderedInvestigation_CTE T  
+ INNER JOIN PatientVisit(NOLOCK) PV ON PV.PatientVisitId=T.PatientVisitID  
+ AND T.OrgID=PV.OrgID  
+ WHERE PV.PatientVisitId=@PatientVisitID  
+  
+END

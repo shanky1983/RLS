@@ -1,0 +1,487 @@
+--pGetSCPBookingslot_LIMSAPI '700002','','2021-08-05','1','0'
+CREATE PROCEDURE [dbo].[pGetSCPBookingslot_LIMSAPI] 
+(
+   	
+	@pPinCode				  BIGINT,
+	@pSCPPerson				  VARCHAR(1000) = '',
+	@pCheckDate				  DATETIME,
+	@pUserID				  BIGINT,
+	@PPageCount				  INT
+	
+	)
+
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+
+	DECLARE @pOrgID INT = 0, @pOrgAddrID INT = 0, @ServerdateTime DATETIME, @EnddateTime DATETIME,  @ResourceID BIGINT
+	DECLARE @MaxCountResTempID INT 
+    
+    --SET @ServerdateTime = GETDATE();
+    --SET @EnddateTime = DATEADD(year, 4, GETDATE())
+
+	IF @PPageCount <> 0
+		SET @PPageCount = @PPageCount * 4 
+
+	SET @pCheckDate = DATEADD(DAY, @PPageCount, @pCheckDate) 
+
+	CREATE TABLE #TempResource
+	 (
+		AutoID INT IDENTITY(1,1),
+		ResourceID BIGINT,
+		ResourceTemplateID BIGINT
+	 )
+
+	
+
+	 CREATE TABLE #TempWorkingDays
+	 (	
+		AutoID				INT IDENTITY(1,1),		
+		ResourceTemplateID	BIGINT,
+		WDays				INT,
+		Nameofweek			VARCHAR(100),
+		StartTime			TIME,
+		EndTime				TIME,
+		Slot				TIME,
+	 )
+
+	 CREATE TABLE #TempSCPScheduleTemplate
+	 (	
+		AutoID					INT IDENTITY(1,1),
+		ScheduleTemplateID		INT,
+		ResourceTemplateID		BIGINT,
+		WorkingDays				VARCHAR(100),
+		StartTime				TIME,
+		EndTime					TIME,
+		SlotDuration			TIME
+		
+		)
+	
+	CREATE TABLE #TempSlotTable
+	 (	
+		AutoID					INT IDENTITY(1,1),			
+		CheckingDate			DATE,
+		Nameofweek				VARCHAR(5),
+		Wdays					INT,		
+		
+		)
+
+		CREATE TABLE #TempMainSlotTable
+	 (	
+		AutoID					INT IDENTITY(1,1),	
+		ResourceTemplateID		BIGINT,
+		CheckingDate			DATE,
+		Nameofweek				VARCHAR(5),
+		Wdays					INT,
+		SlotDuration			INT,
+		StartTime				TIME,
+		EndTime					TIME,
+		SlotHours				TIME
+		)
+
+		
+	 
+	IF ( @pPinCode <> '' AND @pSCPPerson = ''   )
+		BEGIN
+		
+			INSERT INTO #TempResource (ResourceID, ResourceTemplateID)
+						SELECT ResourceID, ResourceTemplateID FROM SCPSchedulableResource
+						WHERE ResourceTemplateID IN (SELECT DISTINCT ResourceTemplateID 
+													FROM [SCPScheduleResourcePinCodeMapping] WHERE PinCode = @pPinCode)
+
+		END
+
+	IF ( @pPinCode <> '' AND @pSCPPerson <> ''   )
+		BEGIN
+		
+			INSERT INTO #TempResource (ResourceID, ResourceTemplateID)
+						SELECT ResourceID, ResourceTemplateID FROM SCPSchedulableResource
+							   WHERE ResourceID IN (SELECT U.LoginID FROM Users U
+															INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+															INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+															INNER JOIN LOGIN L ON L.loginID = U.LoginID
+															AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+													WHERE R.RoleName = 'Sample Collection Person' AND L.LoginName = @pSCPPerson)
+		END
+
+		
+		SELECT @MaxCountResTempID = COUNT(ResourceTemplateID)  FROM #TempResource
+
+		DECLARE @CountRT INT 
+		DECLARE @Count1 INT 
+		DECLARE @RTID BIGINT
+		DECLARE @MaxCountRTID BIGINT 
+		
+		SET @CountRT= 1
+		SET @Count1= 1
+		WHILE @CountRT <= @MaxCountResTempID
+			BEGIN
+
+			    SELECT @RTID = ResourceTemplateID FROM #TempResource WHERE AutoID = @CountRT 
+				
+				INSERT INTO #TempSCPScheduleTemplate (ScheduleTemplateID,ResourceTemplateID,WorkingDays,
+														StartTime,EndTime,SlotDuration)
+										SELECT ScheduleTemplateID,ResourceTemplateID,WorkingDays,StartTime,EndTime,
+										SlotDuration FROM SCPScheduleTemplate WHERE ResourceTemplateID = @RTID
+				
+				SET @MaxCountRTID = 0
+				SELECT @MaxCountRTID = COUNT(ResourceTemplateID) FROM #TempSCPScheduleTemplate WHERE ResourceTemplateID = @RTID	
+				SET @Count1 = 1
+						WHILE @Count1 <= @MaxCountRTID
+							BEGIN
+
+							    INSERT INTO #TempWorkingDays (ResourceTemplateID, WDays, StartTime, EndTime, Slot)				
+									SELECT ResourceTemplateID ,item AS WDays, StartTime,EndTime,SlotDuration FROM #TempSCPScheduleTemplate 
+									CROSS APPLY dbo.fnSplit(WorkingDays, ',') 
+									WHERE AutoID = @Count1 
+						
+							SET @Count1  = @Count1  + 1
+
+							END
+
+             TRUNCATE TABLE #TempSCPScheduleTemplate
+
+				SET @CountRT  = @CountRT  + 1
+			END
+
+		--SELECT * FROM #TempSCPScheduleTemplate
+		--SELECT * FROM #TempWorkingDays
+
+		DECLARE @DATECOUNT INT
+		DECLARE @MAXDATECOUNT INT
+		SET @DATECOUNT = 0
+		SET @MAXDATECOUNT = 4
+
+		WHILE @DATECOUNT < @MAXDATECOUNT
+			BEGIN
+
+				INSERT INTO #TempSlotTable(CheckingDate)
+				SELECT DATEADD(DAY, @DATECOUNT, @pCheckDate) AS DateAdd; 
+				
+				SET @DATECOUNT  = @DATECOUNT  + 1
+
+            END
+
+			--exec pGetSCPBookingslot_LIMSAPI '','Biswahit','2021-03-05','1','0'
+
+			UPDATE T SET Nameofweek = FORMAT(CheckingDate,'ddd') 
+			 FROM #TempSlotTable T 
+
+			UPDATE T SET Wdays = M.Code
+			 FROM #TempSlotTable AS T
+			 JOIN MetaData AS M ON T.Nameofweek = M.DisplayText AND M.Domain = 'WeekDay'
+
+
+			 CREATE TABLE #TempRes(ResID int)
+
+			 INSERT INTO #TempRes(ResID)
+			 SELECT DISTINCT ResourceTemplateID FROM #TempWorkingDays
+			
+			INSERT INTO #TempMainSlotTable (ResourceTemplateID, CheckingDate, Nameofweek, Wdays)
+
+			SELECT B.ResID, A.CheckingDate, A.Nameofweek, A.Wdays FROM #TempSlotTable AS A
+			CROSS JOIN #TempRes AS B
+
+		
+		---SELECT * FROM #TempMainSlotTable
+
+		DECLARE @FinalCOUNT INT, @MaxFinalCOUNT INT,  @ResID INT , @Wdays INT, @STime TIME, @ETime TIME, @SlotDur TIME
+		DECLARE @SlotHour INT, @SlotVar FLOAT, @DiffSlotDur TIME, @DiffSlotVar FLOAT , @intSlot INT, @null time 		
+
+		SET @null = '00:00:00';
+		SET @FinalCOUNT = 1
+		SELECT @MaxFinalCOUNT = COUNT (AutoID) FROM #TempMainSlotTable
+
+		WHILE @FinalCOUNT <= @MaxFinalCOUNT
+			BEGIN
+
+			SET @ResID = 0
+			SET @Wdays = 0
+			SET @STime = '00:00'
+			SET @ETime = '00:00'
+			SET @DiffSlotDur = '00:00'
+			SET @DiffSlotVar = ''
+			SET @SlotVar = ''
+			
+
+					SELECT  @ResID = ResourceTemplateID, @Wdays = Wdays FROM #TempMainSlotTable 
+											    WHERE AutoID = @FinalCOUNT
+
+					SELECT @STime =StartTime, @ETime  =EndTime, @SlotDur = Slot FROM #TempWorkingDays 
+												WHERE ResourceTemplateID = @ResID AND WDays = @Wdays
+
+
+					SELECT  @DiffSlotDur = DATEADD(HOUR, - DATEDIFF(HOUR, @ETime, @STime), @null)
+
+					
+
+					SET @DiffSlotVar = REPLACE (LEFT(@DiffSlotDur, 5 ), ':','.')
+					SET @SlotVar = REPLACE (LEFT(@SlotDur, 5 ), ':','.')
+													
+				    SET @SlotHour =  @DiffSlotVar  / @SlotVar 
+					--SET @SlotHour =  @DiffSlotDur / CAST(@SlotVar AS FLOAT)
+
+					IF (@SlotHour <> 0)
+					BEGIN
+						--UPDATE T SET SlotDuration = @SlotHour +1
+						--FROM  #TempMainSlotTable AS T
+						--WHERE AutoID = @FinalCOUNT
+
+						UPDATE T SET SlotDuration = @SlotHour +1
+						FROM  #TempMainSlotTable AS T
+						WHERE AutoID = @FinalCOUNT
+
+					END
+
+					SET @FinalCOUNT  = @FinalCOUNT  + 1
+
+					--exec pGetSCPBookingslot_LIMSAPI '','testAttuneaaru','2021-29-04','1','0'
+					--exec pGetSCPBookingslot_LIMSAPI '700002','','2021-08-05','1','0'
+
+			END	
+			
+			--	SELECT * FROM #TempMainSlotTable	
+			 --Table 1 Output---
+			--SELECT CONVERT(VARCHAR, CheckingDate, 106) CheckingDate, 	CheckingDate AS ClickDate,		
+			--	CASE WHEN SUM( SlotDuration) > 1 THEN CAST (SUM( SlotDuration) as VARCHAR) + ' Slots Available'
+			--	ELSE CAST (SUM( SlotDuration) as VARCHAR) + ' Slot Available' END AS Available 
+			--	FROM #TempMainSlotTable GROUP BY CheckingDate
+
+			--exec pGetSCPBookingslot_LIMSAPI '','Biswahit','2021-30-04','1','0'
+
+			--select * from [SCPScheduleResourceLeaveMapping]
+
+			UPDATE T SET T.StartTime = W.StartTime, T.EndTime = W.EndTime, T.SlotHours = W.Slot
+			FROM #TempMainSlotTable AS T
+			JOIN #TempWorkingDays AS W ON T.ResourceTemplateID = W.ResourceTemplateID AND T.Wdays = W.Wdays
+
+			CREATE TABLE #TempLeaveDays(
+			AutoID					INT IDENTITY(1,1),	
+			ResourceTemplateID		BIGINT,
+			StartDate				DATE,
+			EndDate					DATE			 
+			) 
+
+			INSERT INTO #TempLeaveDays (ResourceTemplateID, StartDate, EndDate)
+			SELECT ResourceTemplateID, StartDate, EndDate  FROM SCPScheduleResourceLeaveMapping 
+			WHERE ResourceTemplateID IN (SELECT DISTINCT ResourceTemplateID FROM #TempMainSlotTable)
+
+
+
+
+
+			
+			--SELECT * FROM #TempLeaveDays
+			--SELECT * FROM #TempMainSlotTable	
+
+			---------------------------------------------------------------------------------------------------------
+			-- Table 2 data binding---
+			---------------------------------------------------------------------------------------------------------
+
+		CREATE TABLE #TempTotalTimeslot
+	   (	
+			AutoID					INT IDENTITY(1,1),
+			ResourceID				BIGINT,
+			ResourceName			VARCHAR(100),
+			ResourceTemplateID		BIGINT,
+			ClickDate				DATE,			
+			SlotDuration			VARCHAR(10),
+			BookedSlot				INT DEFAULT  0,
+			CheckbkSlot				VARCHAR(10)
+		)
+
+
+
+			 DECLARE @CountT2 INT ,@MaxCountT2 INT, @ResTIDT2 BIGINT, @WdaysT2 BIGINT, @STimeT2 TIME , @ETimeT2 TIME, @SlotT2 TIME
+			 DECLARE @ClickDateT2 DATE , @STime1T2 TIME
+			 
+			 SET @CountT2 = 1
+			 SELECT @MaxCountT2 = COUNT(AutoID) FROM #TempMainSlotTable
+
+			 WHILE @CountT2 <= @MaxCountT2
+			 BEGIN
+
+			     SELECT @ResTIDT2= ResourceTemplateID, @ClickDateT2 =CheckingDate, @WdaysT2 = Wdays, @STimeT2 =StartTime, @ETimeT2  =EndTime, @SlotT2 = SlotHours 
+					FROM #TempMainSlotTable WHERE AutoID = @CountT2
+
+					INSERT INTO #TempTotalTimeslot( ResourceTemplateID, ClickDate, SlotDuration, CheckbkSlot)
+						SELECT @ResTIDT2, @ClickDateT2, CONVERT(varchar(10),@STimeT2,100), @STimeT2
+
+					WHILE @STimeT2 < @ETimeT2
+					BEGIN
+						
+
+						SET @STimeT2 = DATEADD(SECOND,DATEDIFF(SECOND,'00:00:00',@STimeT2),@SlotT2)   
+
+						IF ( @STimeT2 < @ETimeT2)
+						BEGIN
+							INSERT INTO #TempTotalTimeslot( ResourceTemplateID, ClickDate, SlotDuration, CheckbkSlot)
+							SELECT @ResTIDT2, @ClickDateT2, CONVERT(varchar(10),@STimeT2,100), @STimeT2
+						END
+
+
+					END
+
+
+				
+				SET @CountT2 = @CountT2 + 1
+
+
+			 END
+
+
+			 
+
+			DECLARE @LeaveCOUNT INT, @MaxLeaveCOUNT INT,  @LeaveResTID INT,  @LeaveSDate DATE, @LeaveEDate DATE
+		
+
+
+		SET @LeaveCOUNT = 1
+		SELECT @MaxLeaveCOUNT = COUNT (AutoID) FROM #TempLeaveDays
+
+		WHILE @LeaveCOUNT <= @MaxLeaveCOUNT
+			BEGIN
+				
+				SELECT @LeaveResTID = ResourceTemplateID, @LeaveSDate = StartDate, @LeaveEDate = EndDate 
+					FROM #TempLeaveDays WHERE AutoID = @LeaveCOUNT
+
+				UPDATE T SET SlotDuration = NULL, CheckbkSlot = NULL
+				FROM #TempTotalTimeslot AS T 
+				WHERE T.ResourceTemplateID = @LeaveResTID AND ClickDate BETWEEN @LeaveSDate AND @LeaveEDate		 
+
+				SET @LeaveCOUNT = @LeaveCOUNT+ 1 
+
+			END
+
+			
+
+			 UPDATE T  SET T.ResourceID = B.ResourceID
+			 FROM #TempTotalTimeslot AS T 
+			 JOIN SCPSchedulableResource AS B ON T.ResourceTemplateID = B.ResourceTemplateID
+					
+			UPDATE T  SET T.ResourceName =   U.Name + ' (' + L.LoginName + ')' 
+			FROM #TempTotalTimeslot AS T
+			JOIN Users AS U ON T.ResourceID = U.LoginID
+			JOIN LOGIN L ON U.loginID = L.LoginID
+
+
+			UPDATE A SET BookedSlot = 1
+		FROM #TempTotalTimeslot AS A
+		JOIN Bookings AS B ON B.UserID = A.ResourceID AND CAST(B.CollectionTime AS DATE) = CAST(A.ClickDate AS DATE) 
+		AND CONVERT(VARCHAR(5), B.CollectionTime, 108)   = CONVERT(VARCHAR(5), isnull(A.CheckbkSlot, 0), 108) 
+		WHERE B.PinCode = @pPinCode
+
+		UPDATE A SET BookedSlot = null
+		FROM #TempTotalTimeslot AS A
+		where bookedslot =0  And SlotDuration IS NULL
+
+      
+			
+
+   --pGetSCPBookingslot_LIMSAPI '700002','','2021-08-05','1','0'
+
+		SELECT CONVERT(VARCHAR, ClickDate, 106) CheckingDate, 	ClickDate AS ClickDate,		
+				CASE WHEN count(bookedslot) > 1  THEN CAST (count(bookedslot) as VARCHAR) + ' Slots Available'
+				ELSE CAST (count(bookedslot) as VARCHAR) + ' Slot Available' END AS Available 
+				FROM #TempTotalTimeslot 
+				where bookedslot =0 
+				GROUP BY ClickDate ORDER BY ClickDate
+
+        SELECT  * FROM #TempTotalTimeslot
+
+  -- select  ClickDate ,count(bookedslot) from #TempTotalTimeslot where bookedslot =0 group by  ClickDate
+    ---------------------------------------------------------------------------------------------------------
+			-- Table 3 data binding---
+	---------------------------------------------------------------------------------------------------------
+
+		--exec pGetSCPBookingslot_LIMSAPI '','testAttuneaaru','2021-29-04','1','0'
+					--exec pGetSCPBookingslot_LIMSAPI '700002','','2021-29-04','1','0'
+
+		CREATE TABLE #TempTotalBooking
+	   (	
+			AutoID					INT IDENTITY(1,1),			
+			ResourceTemplateID		BIGINT,
+			ResourceName			VARCHAR(100),
+			SCPCount				INT
+		)
+
+		INSERT INTO #TempTotalBooking (ResourceTemplateID)
+			SELECT DISTINCT ResourceTemplateID FROM #TempTotalTimeslot
+
+			DECLARE @SCPCnt INT
+			SELECT  @SCPCnt = COUNT(ResourceTemplateID) FROM #TempTotalBooking
+
+			UPDATE #TempTotalBooking SET SCPCount = @SCPCnt
+
+			UPDATE T SET ResourceName = A.ResourceName
+			FROM  #TempTotalBooking AS T
+			JOIN #TempTotalTimeslot AS A ON T.ResourceTemplateID = A.ResourceTemplateID
+
+			SELECT * FROM #TempTotalBooking
+
+				DROP TABLE  #TempWorkingDays
+				DROP TABLE  #TempSCPScheduleTemplate
+				DROP TABLE  #TempSlotTable
+				DROP TABLE  #TempMainSlotTable
+				DROP TABLE  #TempTotalBooking
+
+	END
+
+
+	--declare @Tempo as Time = '10:00:00';
+	--declare @Tempo1 as varchar(5)
+	--select @Tempo1 = REPLACE (LEFT(@Tempo, 5 ), ':','.')
+	--select @Tempo1
+
+--	declare @hh as float = '2.15';
+--select @Tempo as Tempo;
+--set @Tempo = DateAdd( ms, DateDiff( ms, 0, @Tempo ) / @hh, 0 );
+--select Round(@Tempo) as HalfTempo;
+
+
+--DECLARE @null time;
+  --      SET @null = '00:00:00';
+		--SELECT DATEADD(HOUR, - DATEDIFF(HOUR, '19:30:00.0000000','09:30:00.0000000'), @null) AS hh
+
+
+--	DECLARE @stime time
+--declare @ttime time
+--DECLARE @etime time
+--DECLARE @slot time
+--DECLARE @Tslot time
+
+--SET @stime = '10:00:00'
+--SET @etime = '19:00:00'
+--SET @slot =  '03:00:00'
+--while @stime < @etime 
+--BEGIN
+----print @stime
+
+--SET @stime =   DATEADD(SECOND,DATEDIFF(SECOND,'00:00:00',@stime),@slot)   
+
+----set @ttime = format(@stime, 'tt')
+
+--select CONVERT(varchar(10),@stime,100)
+
+--print @stime
+
+----break
+--END
+
+
+--declare @t time
+--set @t = '11:40'
+
+--select CONVERT(varchar(15),@t,100)
+
+
+	--CREATE TABLE #TempTotalTimeslot
+	--   (	
+	--	AutoID					INT IDENTITY(1,1),
+	--	ResourceID				BIGINT,
+	--	ClickDate				DATE,
+	--	ResourceTemplateID		BIGINT,
+	--	SlotDuration			VARCHAR(10)
+		
+	--	)

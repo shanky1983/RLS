@@ -1,0 +1,27 @@
+CREATE PROCEDURE [dbo].[pInsertInvestigationQCResults]
+(
+ @pDeviceIntegrationQCResults [dbo].[UDTDeviceIntegrationQCResults] READONLY,
+ @pOrgID INT,
+ @pOrgAddressID INT,
+ @pBarcodeNumber VARCHAR(20),
+ @pReturnStatus [INT] OUTPUT,
+ @ContextInfo [UDT_Context] READONLY  
+ )
+ AS
+ BEGIN
+ SET @pReturnStatus=-1  
+
+   INSERT INTO DeviceIntegrationQCResults
+   SELECT *,@pOrgID,@pOrgAddressID,@pBarcodeNumber,GETDATE() FROM @pDeviceIntegrationQCResults   
+
+   INSERT INTO AnalyteQCValues(InstrumentID,InvestigationID,OrgAddressID,OrgID,value1,LotID,LotName,QCLevel,QCStatus,QCRange,FailedRule,QCRule,ProcessedAt,CreatedAt)
+   SELECT DIOM.InstrumentID,DIOM.InvestigationID,@pOrgAddressID,@pOrgID,Temp.ResultValue,LM.LotID,LM.LotName,LLM.LevelID,QCStatus,QCRange,QCFailedRule,Addinfo,ProcessedAt,Getdate()
+   FROM @pDeviceIntegrationQCResults Temp
+   INNER JOIN DeviceIntegrationOrgMapping DIOM WITH (NOLOCK) ON DIOM.DeviceID=Temp.DeviceID AND DIOM.TestCode=Temp.TestCode 
+   INNER JOIN LotMaster LM WITH(NOLOCK) ON LM.LotCode=@pBarcodeNumber AND LM.OrgID=@pOrgID
+   INNER JOIN LotLevelMapping LLM WITH (NOLOCK) ON LLM.LotID=LM.LotID AND LM.OrgID=LLM.OrgID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=LLM.LevelID AND MD.Code=Temp.QCLevel
+   WHERE DIOM.OrgID=@pOrgID;
+
+ SET @pReturnStatus=0  
+ END

@@ -1,0 +1,414 @@
+create PROCEDURE [dbo].[PGetBidirectionalBarCodeDetails] (@Fromdate datetime,    
+                                                          @Todate   datetime,    
+                                                          @POrgid   int,    
+                                                          @DeviceID nvarchar (255),@ContextInfo [UDT_Context] READONLY)    
+as    
+  BEGIN    
+  SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED    
+       SET NOCOUNT ON;   
+     BEGIN  TRY    
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)   
+    
+      DECLARE @TEMP AS TABLE    
+        (    
+           DeviceID nvarchar(10)    
+        )    
+    
+      INSERT INTO @TEMP    
+      SELECT *    
+      FROM   [dbo].[fnSplit] (@DeviceID, ',')    
+    
+      if( @DeviceID = '' )    
+        Set @DeviceID=NULL    
+    
+      DECLARE @PatientInvID as TABLE    
+        (    
+           PatientInvID BIGINT    
+        )    
+    /*
+      INSERT INTO @PatientInvID    
+      SELECT distinct PatientInvID    
+      from       BidirectionalBarCodeDetails BD     
+      inner join @TEMP T on BD.DeviceID = T.DeviceID and BD.Iscompleted = 0 and BD.orgid = @POrgid   
+   
+      INSERT INTO Machinekey    
+      VALUES      (@DeviceID,dbo.Fn_getserverdate(@ContextInfo),@POrgid)    
+     */
+	 Declare @ExternlaBarcodeConfig1 Varchar(5)
+				SELECT @ExternlaBarcodeConfig1 = COM.ConfigValue
+				FROM   ConfigOrgMaster COM WITH (NOLOCK)
+				inner JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+				ON CKM.ConfigKeyID = COM.ConfigKeyID
+				WHERE  ConfigKey = 'ShowExternalBarcodeInsteadofBarcode'
+				AND OrgID = @POrgid
+      DECLARE @TblPatientInv as Table    
+        (    
+           AccessionNumber Bigint,    
+           PatientInvID    Bigint,    
+           OrgID           BIGINT,    
+           InvestigationID BIGINT,    
+           Testcode        nvarchar(50),    
+           DeviceID        nvarchar(50)    
+        )    
+    
+      --IF( @DeviceID = '13'    
+      --     OR @DeviceID = '32'    
+      --     OR @DeviceID = '13,32'    
+      --     OR @DeviceID = '32,13'    
+      --     OR @DeviceID = '10'    
+      --     OR @DeviceID = '46'    
+      --     OR @DeviceID = '43'    
+      --     OR @DeviceID = '10,43'    
+      --     OR @DeviceID = '10,46'    
+      --     OR @DeviceID = '46,10' )    
+      --  BEGIN    
+            INSERT into @TblPatientInv    
+            SELECT     PINV.AccessionNumber,    
+                       PINV.PatientInvID,    
+                       PINV.OrgID,    
+                       PINV.InvestigationID,    
+                       DIOM.TestCode,    
+                       DIOM.DeviceID    
+            FROM       PatientInvestigation PINV  WITH(NOLOCK)         
+            inner join DeviceIntegrationOrgMapping DIOM WITH(NOLOCK)  ON DIOM.InvestigationID = PINV.InvestigationID          
+                                                                        AND DIOM.OrgID = PINV.OrgID    
+                                                                        AND IsActive <> 'N'    
+                                                                        AND ISNULL(DIOM.IsUpload, 'Y') = 'Y'  
+			LEFT JOIN BidirectionalBarCodeDetails BD WITH(NOLOCK)  ON BD.PatientInvID=PINV.PatientInvID AND BD.DeviceID=DIOM.DeviceID  
+            INNER JOIN @TEMP TMP ON Tmp.DeviceID = DIOM.DeviceID    
+            where      PINV.OrgID = @POrgid     and  BD.PatientInvID is null   
+                       and Status = 'SampleReceived'        
+         
+      --  END    
+      --ELSE    
+      --  BEGIN    
+      --      INSERT into @TblPatientInv    
+      --      SELECT     PINV.AccessionNumber,    
+      --                 PatientInvID,    
+      --                 PINV.OrgID,    
+      --                 PINV.InvestigationID,    
+      --                 DIOM.TestCode,    
+      --                 DIOM.DeviceID    
+      --      FROM       PatientInvestigation PINV     
+      --      inner join DeviceIntegrationOrgMapping DIOM  ON DIOM.InvestigationID = PINV.InvestigationID    
+      --                                                                  AND DIOM.OrgID = PINV.OrgID    
+      --                                                                  AND IsActive <> 'N'    
+      --      INNER JOIN @TEMP TMP ON Tmp.DeviceID = DIOM.DeviceID    
+      --      where      PINV.OrgID = @POrgid    
+      --                 and Status = 'SampleReceived'    
+      --  END    
+    
+      Declare @TempTable as table    
+        (    
+           PatientName   nvarchar (255),    
+           PatientAge    nvarchar (20),    
+           PatientSex    nchar (1),    
+           TestCode      nvarchar (50),    
+           BarCode       nvarchar (255),    
+           PatientInvID  bigint,    
+           OrgID         int,    
+           DeviceID      nvarchar(50),    
+           DeviceDate    datetime,    
+           DOB           datetime,    
+SampleName   nvarchar (255),    
+           PhysicianName nvarchar(100),    
+           ClientName    nvarchar(100),    
+           VisitNumber   nvarchar(100),    
+           Remarks       nvarchar(255)    
+        )    
+    
+      if( @DeviceID != '' )    
+        BEGIN    
+            IF( @DeviceID = '13'    
+                 OR @DeviceID = '32'    
+                 OR @DeviceID = '13,32'    
+                 OR @DeviceID = '32,13'    
+                 OR @DeviceID = '10'    
+                 OR @DeviceID = '46'    
+                 OR @DeviceID = '43'    
+                 OR @DeviceID = '10,43'    
+                 OR @DeviceID = '10,46'    
+                 OR @DeviceID = '46,10' )    
+              BEGIN    
+                  INSERT INTO @TempTable    
+                              (PatientName,    
+                               PatientAge,    
+                               PatientSex,    
+                               TestCode,    
+                               Barcode,    
+                               PatientInvId,    
+                               OrgID,    
+                               DeviceID,    
+                               Devicedate,    
+                               DOB,    
+                               SampleName,    
+                               PhysicianName,    
+                               ClientName,    
+                               VisitNumber,    
+                               Remarks)    
+                  select     distinct top 100 P.Name                       as PatientName,    
+                                              P.Age                        as PatientAge,    
+                                              P.SEX                        as PatientSex,    
+                                              PINV.TestCode                as TestCode,    
+											  Case When @ExternlaBarcodeConfig1='Y' Then (
+						  Case when PISM.ExternalBarcode='' or PISM.ExternalBarcode is null then PIS.BarcodeNumber Else PIS.ExternalBarcode End)
+						  Else PIS.BarcodeNumber End As BarCode,  
+                                              --PIS.BarcodeNumber            as BarCode,    
+                                              PINV.PatientInvID,    
+                                              PINV.OrgID,    
+                                              PINV.DeviceID,    
+                                              CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105),    
+                                              CASE    
+                                                WHEN P.DOB = '1800-01-01 00:00:00.000' THEN CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105)    
+                                                else CONVERT(datetime, P.DOB, 105)    
+                                              end,    
+                                              ISM.SampleDesc,    
+                                              '' AS PhysicianName,--isnull(RP.PhysicianName, '') AS PhysicianName,    
+                                              ''AS ClientName,--CM.ClientName,    
+                                              PV.VisitNumber,    
+                                              --ISNULL(PHE.Remarks, '')     
+											  '' AS Remarks    
+                  from       Patient P     
+                  inner join PatientVisit PV  ON P.PatientID = PV.PatientID    
+                                                             and P.OrgID = PV.OrgID    
+                  Inner join OrderedInvestigations OI  ON PV.PatientVisitId = OI.VisitID    
+                                                                      and PV.OrgID = OI.OrgID    
+                  inner join @TblPatientInv PINV ON PINV.AccessionNumber = OI.AccessionNumber    
+                                                    AND PINV.OrgID = OI.OrgID    
+                  inner join PatientInvSampleMapping PISM  ON PISM.VisitID = OI.Visitid    
+                                                                          and PISM.UID = OI.UID    
+                                                                       and PISM.ID = OI.ID    
+                                                                          and PISM.Type = OI.Type    
+                  inner join PatientInvSample PIS  ON PISM.SID = PIS.SampleID    
+                  Inner Join SampleTracker ST  ON ST.PatientVisitID = PIS.PatientVisitID    
+                  and ST.SampleID = PIS.SampleID    
+                                        and ST.OrgID = PIS.OrgID    
+                                                              and ST.InvSampleStatusID <> 4    
+                  inner join InvSampleMaster ISM  ON ISM.SampleCode = PIS.SampleCode    
+                                                                 AND ISM.OrgID = PIS.Orgid    
+                  --inner join VisitClientMapping VCM  ON VCM.VisitID = PV.PatientVisitId    
+                  --                                                  AND VCM.OrgID = PV.OrgID    
+                  --inner join ClientMaster CM  ON CM.ClientID = VCM.ClientID    
+                  --                                           AND CM.OrgID = VCM.OrgID    
+                  --left join  ReferingPhysician RP  ON RP.ReferingPhysicianID = PV.ReferingPhysicianID    
+                  --                                                AND RP.OrgID = PV.OrgID    
+                  --left join  PatientHistoryExt PHE  ON PHE.PatientID = PV.PatientID    
+                                                                   --AND PHE.PatientVisitId = PV.PatientVisitId    
+                                                                   --AND PHE.OrgID = PV.OrgID    
+                  where      PV.OrgID = @POrgid    
+                             --and PINV.PatientInvID not in (select PatientInvID    
+                             --                              from   @PatientInvID)    
+                  order      by PINV.PatientInvID    
+          
+              END    
+            ELSE    
+              BEGIN    
+                  INSERT INTO @TempTable    
+                              (PatientName,    
+                               PatientAge,    
+                               PatientSex,    
+                               TestCode,    
+                               Barcode,    
+                               PatientInvId,    
+                               OrgID,    
+                               DeviceID,    
+                               Devicedate,    
+                               DOB,    
+                               SampleName,    
+                               PhysicianName,    
+                               ClientName,    
+                               VisitNumber,    
+                               Remarks)    
+                  select     distinct top 10 P.Name                       as PatientName,    
+                                             P.Age                        as PatientAge,    
+                                             P.SEX                        as PatientSex,    
+                                             PINV.TestCode                as TestCode,    
+											 Case When @ExternlaBarcodeConfig1='Y' Then (
+						  Case when PISM.ExternalBarcode='' or PISM.ExternalBarcode is null then PIS.BarcodeNumber Else PIS.ExternalBarcode End)
+						  Else PIS.BarcodeNumber End As BarCode,   
+                                             --PIS.BarcodeNumber            as BarCode,    
+                                             PINV.PatientInvID,    
+                                             PINV.OrgID,    
+                                             PINV.DeviceID,    
+                                             CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105),    
+                                             CASE    
+                                               WHEN P.DOB = '1800-01-01 00:00:00.000' THEN CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105)    
+                                               else CONVERT(datetime, P.DOB, 105)    
+                                             end,    
+                                             ISM.SampleDesc,    
+                                               '' AS PhysicianName,--isnull(RP.PhysicianName, '') AS PhysicianName,    
+                                              ''AS ClientName,--CM.ClientName,    
+                                              PV.VisitNumber,    
+                                              --ISNULL(PHE.Remarks, '')     
+											  '' AS Remarks  
+                  from       Patient P     
+                  inner join PatientVisit PV  ON P.PatientID = PV.PatientID    
+                                                             and P.OrgID = PV.OrgID    
+        Inner join OrderedInvestigations OI  ON PV.PatientVisitId = OI.VisitID    
+                                                                      and PV.OrgID = OI.OrgID    
+                  inner join @TblPatientInv PINV ON PINV.AccessionNumber = OI.AccessionNumber    
+                                                    AND PINV.OrgID = OI.OrgID    
+                  inner join PatientInvSampleMapping PISM  ON PISM.VisitID = OI.Visitid    
+                                                                          and PISM.UID = OI.UID    
+                                                                          and PISM.ID = OI.ID    
+                                                                          and PISM.Type = OI.Type    
+                  inner join PatientInvSample PIS  ON PISM.SID = PIS.SampleID    
+                  Inner Join SampleTracker ST  ON ST.PatientVisitID = PIS.PatientVisitID    
+                                                              and ST.SampleID = PIS.SampleID    
+                                                              and ST.OrgID = PIS.OrgID    
+                                                              and ST.InvSampleStatusID <> 4    
+                  inner join InvSampleMaster ISM  ON ISM.SampleCode = PIS.SampleCode    
+                                                                 AND ISM.OrgID = PIS.Orgid    
+                  --inner join VisitClientMapping VCM  ON  VCM.OrgID = PV.OrgID and VCM.VisitID = PV.PatientVisitId                                                                         
+                  --inner join ClientMaster CM  ON CM.ClientID = VCM.ClientID    
+                  --                                           AND CM.OrgID = VCM.OrgID    
+                  ----left join  ReferingPhysician RP  ON RP.ReferingPhysicianID = PV.ReferingPhysicianID    
+                  ----                                                AND RP.OrgID = PV.OrgID    
+                  --left join  PatientHistoryExt PHE  ON PHE.PatientVisitId = PV.PatientVisitId and  PHE.PatientID = PV.PatientID    
+                                                                       
+                                                                   --AND PHE.OrgID = PV.OrgID    
+                  where      PV.OrgID = @POrgid    
+                             --and PINV.PatientInvID not in (select PatientInvID    
+                             --                              from   @PatientInvID)    
+                  order      by PINV.PatientInvID    
+          
+              END    
+        END    
+      else    
+        BEGIN    
+            INSERT INTO @TempTable    
+                        (PatientName,    
+                         PatientAge,    
+                         PatientSex,    
+                         TestCode,    
+                         Barcode,    
+                         PatientInvId,    
+                         OrgID,    
+                         DeviceID,    
+                         Devicedate,    
+                         DOB,    
+                         SampleName,    
+                         PhysicianName,    
+                         ClientName,    
+                         VisitNumber,    
+                         Remarks)    
+            select     distinct top 10 P.Name                       as PatientName,    
+                                       P.Age                        as PatientAge,    
+                                       P.SEX                        as PatientSex,    
+                                       DIOM.TestCode                as TestCode,    
+									   Case When @ExternlaBarcodeConfig1='Y' Then (
+						  Case when PISM.ExternalBarcode='' or PISM.ExternalBarcode is null then PIS.BarcodeNumber Else PIS.ExternalBarcode End)
+						  Else PIS.BarcodeNumber End As BarCode,    
+                                       --PIS.BarcodeNumber            as BarCode,    
+                                  PINV.PatientInvID,    
+                                       PINV.OrgID,    
+                                       DIOM.DeviceID,    
+                                       CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105),    
+                                       CASE    
+                                         WHEN P.DOB = '1800-01-01 00:00:00.000' THEN CONVERT(datetime, dbo.Fn_getserverdate(@ContextInfo), 105)    
+                                         else CONVERT(datetime, P.DOB, 105)    
+                                       end,    
+                                       ISM.SampleDesc,    
+                          '' AS PhysicianName,--isnull(RP.PhysicianName, '') AS PhysicianName,    
+                                              ''AS ClientName,--CM.ClientName,    
+                                              PV.VisitNumber,    
+                                              --ISNULL(PHE.Remarks, '')     
+											  '' AS Remarks     
+            from       Patient P     
+            inner join PatientVisit PV  ON P.PatientID = PV.PatientID    
+                                                       and P.OrgID = PV.OrgID    
+            Inner join OrderedInvestigations OI  ON PV.PatientVisitId = OI.VisitID    
+                                                                and PV.OrgID = OI.OrgID    
+            inner join @TblPatientInv PINV ON PINV.AccessionNumber = OI.AccessionNumber    
+                                              AND PINV.OrgID = OI.OrgID    
+            inner join DeviceIntegrationOrgMapping DIOM  ON DIOM.InvestigationID = PINV.InvestigationID    
+                                                                        AND DIOM.OrgID = PINV.OrgID    
+                                                                        AND DIOM.IsActive <> 'N'    
+            inner join PatientInvSampleMapping PISM  ON PISM.VisitID = OI.Visitid    
+                                                                    and PISM.UID = OI.UID    
+                                                                    and PISM.ID = OI.ID    
+                                                                    and PISM.Type = OI.Type    
+            inner join PatientInvSample PIS  ON PISM.SID = PIS.SampleID    
+            Inner Join SampleTracker ST  ON ST.PatientVisitID = PIS.PatientVisitID    
+                                                        and ST.SampleID = PIS.SampleID    
+                                                        and ST.OrgID = PIS.OrgID    
+                                                        and ST.InvSampleStatusID <> 4    
+            inner join InvSampleMaster ISM  ON ISM.SampleCode = PIS.SampleCode    
+                                                           AND ISM.OrgID = PIS.orgid    
+           -- inner join VisitClientMapping VCM  ON VCM.VisitID = PV.PatientVisitId    
+           --                                                   AND VCM.OrgID = PV.OrgID    
+           -- inner join ClientMaster CM  ON CM.ClientID = VCM.ClientID    
+           --                                            AND CM.OrgID = VCM.OrgID    
+           -- --left join  ReferingPhysician RP  ON RP.ReferingPhysicianID = PV.ReferingPhysicianID    
+           -- --                                                AND RP.OrgID = PV.OrgID    
+           --left join  PatientHistoryExt PHE  ON PHE.PatientVisitId = PV.PatientVisitId and  PHE.PatientID = PV.PatientID    
+                                                                       
+           --                                                        AND PHE.OrgID = PV.OrgID    
+            where      PV.OrgID = @POrgid    
+            order      by PINV.PatientInvID    
+       
+        END    
+    
+      UPDATE @TempTable    
+      SET    ClientName = ''    
+      where  ClientName = 'GENERAL'    
+    
+      UPDATE @TempTable    
+      SET    ClientName = REPLACE(ClientName, '''', '')    
+      WHERE  ClientName LIKE '%''%'    
+    
+      UPDATE @TempTable    
+      SET    ClientName = REPLACE(ClientName, '`', '')    
+      WHERE  ClientName LIKE '%`%'    
+    
+      UPDATE @TempTable    
+      SET    PhysicianName = REPLACE(PhysicianName, '''', '')    
+      WHERE  PhysicianName LIKE '%''%'    
+    
+      UPDATE @TempTable    
+      SET    PhysicianName = REPLACE(PhysicianName, '`', '')    
+      WHERE  PhysicianName LIKE '%`%'    
+    
+      UPDATE @TempTable    
+      SET    PatientName = REPLACE(PatientName, '''', '')    
+     WHERE PatientName LIKE '%''%'    
+    
+      UPDATE @TempTable    
+      SET    PatientName = REPLACE(PatientName, '`', '')    
+      WHERE  PatientName LIKE '%`%'    
+    
+      UPDATE @TempTable    
+      SET    Remarks = REPLACE(Remarks, '''', '')    
+      WHERE  Remarks LIKE '%''%'    
+    
+      UPDATE @TempTable    
+      SET    Remarks = REPLACE(Remarks, '`', '')    
+      WHERE  Remarks LIKE '%`%'    
+    
+      select DISTINCT PatientName,    
+                      PatientAge,    
+                      PatientSex,    
+                      TestCode,    
+                      BarCode,    
+                      PatientInvID,    
+                      OrgID,    
+                      DeviceID,    
+                      DeviceDate,    
+                      DOB,    
+                      SampleName,    
+                      PhysicianName,    
+                      ClientName,    
+                      VisitNumber,    
+                      Remarks    
+      from   @TempTable    
+END TRY                                   
+  BEGIN CATCH     
+                                
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='PGetBidirectionalBarCodeDetails @Fromdate = '+cast(@Fromdate as varchar)+' @Todate  = '+cast(@Todate as varchar)+'@POrgid  = '+ cast(@POrgid as nvarchar) + '@DeviceID = '+@DeviceID   
+    
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH      
+     
+     
+End    
+    

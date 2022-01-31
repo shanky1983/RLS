@@ -1,0 +1,127 @@
+CREATE Procedure PGetRejectStatusReport               
+(                
+@Fdate Datetime,                
+@Tdate Datetime,                
+@ClientID Int,                
+@VisitType Int,             
+@ContextInfo [dbo].[UDT_Context] READONLY                 
+)                
+As                
+Begin      
+   
+IF (@ClientID = 0 OR @ClientID = -1)  
+Set @ClientID=NULL  
+          
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+Declare @OrgID int          
+select @OrgID=Orgid from @ContextInfo   
+
+create table #Tempfinal (RequestNo varchar(100),Name varchar (100),VisitNumber nvarchar (50),Age nvarchar(40),Gender nchar(4),VisitType nvarchar (10),
+Location nvarchar (500),ClientName nvarchar(100),RegisteredDate varchar(100),BarcodeNumber nvarchar (100),TestDetails nvarchar (500),AberrantStatus nvarchar (200),
+Reason nvarchar (1000),UserName nvarchar (100), AberrantActionTime varchar(100))
+
+create table #Tempfinal1 (RequestNo Varchar(100),Name varchar (100),VisitNumber nvarchar (50),Age nvarchar(40),Gender nchar(4),VisitType nvarchar (10),        
+Location nvarchar (500),ClientName nvarchar(100),RegisteredDate varchar(100),BarcodeNumber nvarchar (100),TestDetails nvarchar (500),AberrantStatus nvarchar (200),        
+Reason nvarchar (1000),UserName nvarchar (100), AberrantActionTime varchar(100))     
+ 
+ if(@Datediff <= 31)
+ BEGIN
+if(@VisitType = -1)
+
+Begin
+insert into #TempFinal
+select distinct PV.ExternalVisitID as RequestNo,P.Name,PV.VisitNumber,P.Age,P.SEX as Gender      
+,case when PV.LabVisitType=1 then 'IP' else 'OP' end as VisitType,OA.Location,CM.ClientName,(Convert(Varchar,(PV.Createdat),103) + ' '+ Convert(Varchar,(PV.Createdat),8)) as RegisteredDate,PISM.Barcode as 'BarcodeNumber'  
+,Case when OI.PkgName is not null then OI.PkgName when OI.Status='GRP' and PkgName is null then OI.Name else OI.Name End as 'TestDetails',ISS.InvSampleStatusDesc as AberrantStatus,ST.Reason,U.Name as UserName,        
+(Convert(Varchar,(MIN(ST.CreatedAt)),103) +' '+ Convert(Varchar,(MIN(ST.CreatedAt)),8)) as AberrantActionTime from Patient P                  
+inner join PatientVisit PV on P.PatientID=PV.PatientID and P.OrgID=PV.OrgID          
+inner join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and OA.OrgID=PV.OrgID  
+Inner join patientinvsample PIS on PIS.patientvisitid=PV.PatientVisitId and PIS.OrgID=PV.OrgID          
+inner join PatientInvSampleMapping PISM on PISM.VisitID=PIS.PatientVisitId and PISM.OrgID=PIS.OrgID and PISM.barcode=PIS.barcodenumber         
+inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitId and OI.OrgID=Pv.OrgID and OI.ID=PISM.ID and OI.Type=PISM.Type   
+Inner join Patientinvestigation PI on PI.AccessionNumber=oi.Accessionnumber and PI.SampleID=PISM.SampleID        
+inner join SampleTracker ST on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID and ST.sampleid=PISM.SID         
+inner join InvSampleStatusmaster ISS on ISS.InvSampleStatusID=ST.InvSampleStatusID          
+left join Users U on U.LoginID=ST.Createdby and U.OrgID=OI.OrgID         
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID                 
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID               
+where ST.InvSampleStatusID=4 and Pv.CreatedAt between @Fdate and @Tdate and PIS.SampleRelationShipID=0 and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType in (0,1)    
+Group by PV.ExternalvisitID,P.Name,Pv.Visitnumber,P.Age,P.Sex,Pv.LabvisitType,OA.Location,Cm.Clientname,Pv.Createdat,PISM.Barcode,OI.PKGName,OI.status,OI.Name,ISS.InvsampleStatusDesc,ST.Reason,U.NAme      
+End     
+
+Else
+Begin
+insert into #TempFinal
+select distinct PV.ExternalVisitID as RequestNo,P.Name,PV.VisitNumber,P.Age,P.SEX as Gender      
+,case when PV.LabVisitType=1 then 'IP' else 'OP' end as VisitType,OA.Location,CM.ClientName,(Convert(Varchar,(PV.Createdat),103) + ' '+ Convert(Varchar,(PV.Createdat),8)) as RegisteredDate,
+PISM.Barcode as 'BarcodeNumber',Case when OI.PkgName is not null then OI.PkgName when OI.Status='GRP' and PkgName is null then OI.Name else OI.Name End as 'TestDetails',ISS.InvSampleStatusDesc as AberrantStatus,ST.Reason,U.Name as UserName,        
+(Convert(Varchar,(MIN(ST.CreatedAt)),103) +' '+ Convert(Varchar,(MIN(ST.CreatedAt)),8)) as AberrantActionTime  from Patient P                  
+inner join PatientVisit PV on P.PatientID=PV.PatientID and P.OrgID=PV.OrgID          
+inner join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and OA.OrgID=PV.OrgID  
+Inner join patientinvsample PIS on PIS.patientvisitid=PV.PatientVisitId and PIS.OrgID=PV.OrgID          
+inner join PatientInvSampleMapping PISM on PISM.VisitID=PIS.PatientVisitId and PISM.OrgID=PIS.OrgID and PISM.barcode=PIS.barcodenumber         
+inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitId and OI.OrgID=Pv.OrgID and OI.ID=PISM.ID and OI.Type=PISM.Type   
+Inner join Patientinvestigation PI on PI.AccessionNumber=oi.Accessionnumber and PI.SampleID=PISM.SampleID        
+inner join SampleTracker ST on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID and ST.sampleid=PISM.SID         
+inner join InvSampleStatusmaster ISS on ISS.InvSampleStatusID=ST.InvSampleStatusID          
+left join Users U on U.LoginID=ST.Createdby and U.OrgID=OI.OrgID
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID                  
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID            
+where ST.InvSampleStatusID=4 and PV.CreatedAt between @Fdate and @Tdate and PIS.SampleRelationShipID=0 and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType  
+Group by PV.ExternalvisitID,P.Name,Pv.Visitnumber,P.Age,P.Sex,Pv.LabvisitType,OA.Location,Cm.Clientname,Pv.Createdat,PISM.Barcode,OI.PKGName,OI.status,OI.Name,ISS.InvsampleStatusDesc,ST.Reason,U.NAme      
+End  
+    Insert into #TempFinal1    
+    select  Distinct RequestNo,Name,VisitNumber,Age,Gender,VisitType,Location,ClientName,RegisteredDate,BarcodeNumber, TestDetails=                  
+STUFF((SELECT ', ' + TestDetails                      
+           FROM #TempFinal b                       
+    WHERE B.VisitNumber=A.VisitNumber and B.BarcodeNumber=A.BarcodeNumber                    
+          FOR XML PATH('')), 1, 2, ''),                  
+AberrantStatus,Reason,UserName,AberrantActionTime                 
+       from   #TempFinal A    
+Declare @TotalTestCount Decimal(18,2)              
+Declare @TotalRejectCount Decimal(18,2)              
+Declare @Percentage Decimal(18,2)           
+          
+SELECT distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount              
+FROM PatientVisit PV                 
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID             
+  where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate             
+             
+group by PV.PatientVisitID          
+          
+          
+          
+          
+select @TotalTestCount=Sum(Count1) from #Totalcount            
+select @TotalRejectCount=Count(AberrantStatus) from #TempFinal1                  
+select @Percentage=Convert(varchar,((@TotalRejectCount * 100)/@TotalTestCount))             
+          
+          
+Create table #ReJect (TotalTestCount nvarchar(50),TotalRejectCount Nvarchar(50),RejectPercentage Nvarchar(50))              
+insert into #ReJect (TotalTestCount,TotalRejectCount,RejectPercentage)              
+select Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalRejectCount)),Convert(Varchar,@Percentage)             
+select   Row_number() over (order by RequestNo desc) as 'SLNo',RequestNo,Name as 'Patient Name',VisitNumber,Age,Gender,VisitType,Location,ClientName,RegisteredDate,BarcodeNumber,TestDetails,          
+AberrantStatus as 'Test Status',Reason,UserName,AberrantActionTime as 'Event Date and Time'          
+       from   #TempFinal1             
+               
+ If ((select Count(1) from #TempFinal)>=1)          
+Begin          
+SELECT '' as SLNo,'' as RequestNo,'' as 'Patient Name','' as VisitNumber,'' as Age,'' as Gender,'' as VisitType,'' as Location,'' as ClientName,'' as RegisteredDate,'' as BarcodeNumber,'' as TestDetails,          
+'' as 'Test Status','' as Reason,Details as UserName,Count as 'Event Date and Time'          
+          
+           
+FROM                   
+   (SELECT [TotalTestCount] as [Total Test Count], [TotalRejectCount] as [Total Reject Count], [RejectPercentage] as [%Reject Test]                
+   FROM #ReJect) p                  
+UNPIVOT                  
+   (Count FOR Details IN                   
+      ([Total Test Count], [Total Reject Count], [%Reject Test])                  
+)AS unpvt;           
+          
+END        
+drop table  #TempFinal1              
+drop table  #TempFinal
+end
+END

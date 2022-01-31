@@ -1,0 +1,23 @@
+CREATE PROC [dbo].[pInsertIntegrationAPIMessageLog]
+(
+	@patientID BIGINT,
+	@patientvisitId BIGINT, 
+	@OrgID INT ,
+	@MessageType nvarchar(20),
+	@PlacerOrderNumber varchar(50), 
+	@FinalBillID BIGINT,
+	@ChangeType NVARCHAR(200),
+	@ContextInfo UDT_Context READONLY
+			
+)
+AS
+BEGIN
+			DECLARE @createdBy BIGINT,@createdat DATETIME 
+			SELECT @createdBy=LoginID FROM @ContextInfo
+
+			SELECT @createdAt=[dbo].[fn_GetServerDate](@ContextInfo)
+		 
+		    INSERT INTO IntegrationOrderAPILog (PatientID,PatientVisitID,OrderID,OrgID,MessageType,StatusID,CreatedAt,CreatedBy,FinalBillID,Changetype)
+			SELECT @patientID,@patientvisitId,@PlacerOrderNumber,@OrgID,@MessageType,0,GETDATE(),182,@FinalBillID,@ChangeType
+	
+END

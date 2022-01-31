@@ -1,0 +1,214 @@
+CREATE procedure [dbo].[pGetOrderStatus_IAPI]            
+            
+as            
+begin            
+    
+DECLARE  @OrderStatus   TABLE             
+  (            
+     MessageID             Bigint,            
+     OrgCode               NVARCHAR(5),            
+     OrderID               varchar(40),            
+     ExternalPatientID     NVARCHAR(60),            
+     ExternalVisitID       NVARCHAR(25),            
+     LISPatientID          BIGINT,            
+  LISVisitID            BIGINT,            
+     OrderedTestCode       NVARCHAR(250),            
+     OrderedTestName       NVARCHAR(250),            
+     ContentTestCode       NVARCHAR(250),            
+     ContentTestName       NVARCHAR(250),            
+     OrderedTestStatus     NVARCHAR(100),            
+     ContentTestStatus     NVARCHAR(100),            
+     OrderedStatusDateTime DATETIME,            
+     ContentStatusDateTime DATETIME,            
+  Type nvarchar(40),                
+  PatientID             Nvarchar(100)  ,            
+  pkgid bigint   ,         
+     Department  varchar(250),    
+  OrderedType varchar(10)     
+  )                
+                
+  Declare @tVisits  table(VisitID bigint,OrgID bigint,createdat datetime,sid bigint)            
+insert into @tVisits            
+ select Distinct top 5 nc.Visitid,pv.OrgID ,nc.createdat,nc.sid                 
+ from  IntegrationConfig ic            
+ inner join IntegrationStatusConfig isc on isc.IntegrationID=ic.IntegrationID     and isc.StatusType='Order'                 
+ inner join MISOrderedinvestigationhistory nc  (nolock)  on   nc.Status=isc.Status  and nc.ProcessStatus='N'         
+  inner join patientvisit pv on pv.OrgID=ic.OrgID and nc.Visitid=pv.PatientVisitId           
+  where nc.visitid >108191 and ic.IsActive='Y' and isc.StatusType='Order'  and isc.IsActive='Y' and  nc.ProcessStatus='N'  --and pv.patientvisitid =148420           
+    order by nc.sid asc                 
+            
+DECLARE @ORDEREDITEMS AS TABLE (VisitID bigint,ID BIGINT,Type nvarchar(40),Name nvarchar(500),AccessionNumber bigint ,Status nvarchar(100),OrderedStatusDateTime DATETIME ,ContentStatusDateTime DateTime,pkgid bigint,pkgname varchar(max))                
+insert into @ORDEREDITEMS            
+     select distinct  oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status ,oi.CreatedAt AS DD,oi.CreatedAt,oi.pkgid,oi.pkgname          
+  from @tVisits t inner join MISOrderedinvestigationhistory oi on oi.sid=t.sid         
+  inner join IntegrationStatusConfig isc on isc.status=oi.status         
+  inner join IntegrationConfig ic on ic.integrationid=isc.integrationid        
+  where  oi.visitid >108191 and ic.IsActive='Y' and isc.StatusType='Order'  and isc.IsActive='Y' and  oi.ProcessStatus='N'           
+        
+ --  select distinct  oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status ,oi.CreatedAt AS DD,oi.CreatedAt,oi.pkgid,oi.pkgname  from  IntegrationConfig ic   (nolock)                 
+ -- inner join IntegrationStatusConfig isc (nolock)  on isc.IntegrationID=ic.IntegrationID                
+ --inner join MISOrderedinvestigationhistory oi  (nolock)  on   oi.Status=isc.Status                
+ -- inner join patientvisit pv on pv.OrgID=ic.OrgID and oi.Visitid=pv.PatientVisitId             
+ -- inner join @tVisits tv on tv.VisitID=pv.PatientVisitId and pv.OrgID=tv.OrgID             
+ -- where ic.IsActive='Y' and isc.StatusType='Order'  and isc.IsActive='Y' and  oi.ProcessStatus='N'             
+ --  order by createdat asc           
+           
+           
+                
+  declare @TblStatus as table (          
+  VisitId bigint,          
+  pkgid bigint,          
+  Seq int    )          
+          
+              
+Create table #tempStatusCode (              
+Statuscode varchar(10),              
+pkgid bigint             
+            
+)               
+              
+insert into #tempStatusCode(Statuscode,pkgid)              
+select distinct IM.IntegrationStatusCode,Pkgid from IntegrationTestStatusMapping IM               
+group by IM.IntegrationStatusCode,Pkgid having Count(IM.IntegrationStatusCode)>1              
+              
+           
+  --select @Seq= min(Invst.Sequence) from @ORDEREDITEMS OI              
+  Insert into @TblStatus          
+  select  OI.VisitID,OI.Pkgid, min(Invst.Sequence) from @ORDEREDITEMS OI              
+Inner join IntegrationTestStatusMapping IM on OI.PkgID=IM.Pkgid and OI.id=IM.ID         
+inner join #tempStatusCode T on T.pkgid=IM.Pkgid and T.Statuscode=IM.IntegrationStatusCode              
+inner join InvestigationStatus Invst on Invst.Status=OI.Status    group by OI.VisitID,OI.Pkgid          
+          
+          
+          
+          
+              
+ update  OI set OI.status=Invst.Status,oi.Name=im.pkgname from @ORDEREDITEMS OI              
+Inner join IntegrationTestStatusMapping IM on OI.PkgID=IM.Pkgid and OI.id=IM.ID              
+inner join #tempStatusCode T on T.pkgid=IM.Pkgid and T.Statuscode=IM.IntegrationStatusCode              
+inner join @TblStatus TS on TS.Pkgid=T.pkgid and TS.VisitID=OI.visitid          
+inner join InvestigationStatus Invst on   Invst.Sequence=TS.Seq              
+          
+          
+ update  OI set OI.Type='GRP',OI.ID=IM.PkgID from @ORDEREDITEMS OI              
+Inner join IntegrationTestStatusMapping IM on OI.PkgID=IM.Pkgid and OI.id=IM.ID              
+inner join #tempStatusCode T on T.pkgid=IM.Pkgid and T.Statuscode=IM.IntegrationStatusCode           
+              
+drop table #tempStatusCode              
+              
+           
+          
+insert into @OrderStatus                
+select            
+oi.AccessionNumber,            
+pv.OrgID                 
+,pv.ExternalVisitID              
+,p.PatientNumber              
+,pv.PreviousLabNumber            
+,p.patientid            
+,pv.PatientVisitID            
+,iom.TestCode            
+,oi.Name             
+,iom.TestCode            
+,oi.Name            
+,oi.status sts            
+,oi.status            
+,oi.OrderedStatusDateTime            
+,oi.ContentStatusDateTime            
+,OI.Type             
+,p.HPatientID            
+,oi.pkgid   
+,dm.DeptName  
+,'INV'                   
+from @ORDEREDITEMS oi            
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID            
+inner join Investigationorgmapping iom  (nolock)  on iom.investigationid=oi.ID and iom.OrgID=pv.OrgID  
+inner join InvDeptMaster dm on dm.DeptID=iom.DeptID  and dm.OrgID=iom.OrgID              
+inner join patient p (nolock) on p.PatientID=pv.PatientID             
+where  oi.type='INV' and isnull(oi.pkgid,0)=0            
+union             
+select             
+oi.AccessionNumber            
+,pv.OrgID                
+,pv.ExternalVisitID              
+,p.PatientNumber              
+,pv.PreviousLabNumber            
+,p.patientid            
+,pv.PatientVisitID            
+,iog.TestCode            
+,oi.Name             
+,iog.TestCode            
+,oi.Name            
+,oi.status sts            
+,oi.status            
+,oi.OrderedStatusDateTime            
+,oi.ContentStatusDateTime            
+,OI.Type             
+,p.HPatientID            
+,oi.pkgid     
+,dm.DeptName  
+,'GRP'            
+from @ORDEREDITEMS oi            
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID            
+inner join InvOrgGroup iog  (nolock)  on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID     
+inner join MISordereddept        modd on modd.AccessionNumber=oi.AccessionNumber   
+inner join InvDeptMaster dm on dm.DeptID=modd.Deptid           
+inner join patient p (nolock) on p.PatientID=pv.PatientID             
+where  oi.type='GRP' and isnull(oi.pkgid,0)=0            
+            
+union            
+select oi.AccessionNumber            
+,pv.OrgID,pv.ExternalVisitID                  
+,p.PatientNumber              
+,pv.PreviousLabNumber  ,p.patientid,pv.PatientVisitID,            
+(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) as Pkgcode, oi.pkgname,Case when oi.type='GRP' then iog.TestCode else iogm.Testcode end as sts, oi.Name,            
+oi.Status as sts,oi.Status,oi.OrderedStatusDateTime,oi.ContentStatusDateTime,OI.Type,p.HPatientID ,oi.pkgid   , dm.DeptName,'PKG'            
+               
+ from @ORDEREDITEMS oi                
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                
+left join InvOrgGroup iog  (nolock)  on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID    and OI.Type='GRP'            
+left join investigationorgmapping iogm (nolock) on iogm.investigationid=OI.id and oi.type='INV'     
+inner join MISordereddept        modd on modd.AccessionNumber=oi.AccessionNumber   
+--inner join InvDeptMaster dm on dm.DeptID=iogm.DeptID and iogm.orgid=dm.OrgID    
+inner join InvDeptMaster dm on dm.DeptID=modd.Deptid                             
+--inner join IntegrationTestStatusMapping iog on iog.Pkgid=oi.pkgid and oi.ID=Iog.ID and OI.Type=iog.Type               
+inner join patient p (nolock) on p.PatientID=pv.PatientID                 
+where isnull(oi.pkgid,0)>0                
+--union                 
+--select oi.AccessionNumber,pv.OrgID,pv.ExternalVisitID                  
+--,p.PatientNumber                  
+--,pv.PreviousLabNumber  ,p.patientid,pv.PatientVisitID ,                
+--(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) as Pkgcode,oi.pkgname, iom.TestCode,oi.Name,oi.Status as sts,oi.Status,oi.OrderedStatusDateTime,oi.ContentStatusDateTime,OI.Type,p.HPatientID                
+-- from @ORDEREDITEMS oi                
+--inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                
+--inner join Investigationorgmapping iom  (nolock)  on iom.investigationid=oi.ID and iom.OrgID=pv.OrgID                
+--inner join patient p (nolock) on p.PatientID=pv.PatientID                 
+--where isnull(oi.pkgid,0)>0 and OI.Type='INV'                
+--select * from MISOrderedinvestigationhistory where accessionnumber=5512777                
+                
+    UPDATE IH SET IH.ProcessStatus='S',ProcessedDateTime=getdate() from MISOrderedinvestigationhistory ih                
+ inner join @OrderStatus os on os.MessageID=ih.AccessionNumber  and ih.createdat=os.ContentStatusDateTime                
+ where  IH.visitid >108191 and  ih.ProcessStatus='N'    and ih.status=os.OrderedTestStatus         
+             
+             
+select Distinct 1 as  MessageID,OrgCode,OrderID,ExternalPatientID,ExternalVisitID,LISPatientID,LISVisitID,OrderedTestCode,                
+  OrderedTestName,ContentTestCode,ContentTestName,OrderedTestStatus,ContentTestStatus,max(OrderedStatusDateTime) as OrderedStatusDateTime,                 
+  max(ContentStatusDateTime)as ContentStatusDateTime, Type ,PatientID,Department,OrderedType  from @OrderStatus where  isnull(pkgid,0)=0            
+  group by MessageID,OrgCode,OrderID,ExternalPatientID,ExternalVisitID,LISPatientID,LISVisitID,OrderedTestCode,                
+  OrderedTestName,ContentTestCode,ContentTestName,OrderedTestStatus,ContentTestStatus,     
+   Type ,PatientID ,Department,OrderedType            
+  -- order by ContentStatusDateTime asc             
+              
+  union            
+  select Distinct 1 as MessageID,OrgCode,OrderID,ExternalPatientID,ExternalVisitID,LISPatientID,LISVisitID,OrderedTestCode,                
+  OrderedTestName,ContentTestCode,ContentTestName,OrderedTestStatus,ContentTestStatus,min(OrderedStatusDateTime) as OrderedStatusDateTime,                 
+  min(ContentStatusDateTime) as ContentStatusDateTime, Type ,PatientID,Department,OrderedType  from @OrderStatus where  isnull(pkgid,0)>0             
+  group by MessageID,OrgCode,OrderID,ExternalPatientID,ExternalVisitID,LISPatientID,LISVisitID,OrderedTestCode,                
+  OrderedTestName,ContentTestCode,ContentTestName,OrderedTestStatus,ContentTestStatus,                 
+   Type ,PatientID  ,Department,OrderedType          
+    --order by ContentStatusDateTime asc                
+                
+                
+                
+                
+  End 

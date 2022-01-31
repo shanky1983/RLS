@@ -1,0 +1,162 @@
+create PROCEDURE [dbo].[pGetIntegrationReport]
+	@pFDate [datetime],
+	@pTDate [datetime],
+	@pOrgId [int]
+	,@Pparamtype VARCHAR(20) = NULL
+
+,@Pparamvalue SMALLINT = NULL
+--	@ContextInfo [UDT_Context] READONLY
+	WITH EXECUTE AS OWNER
+AS
+BEGIN      
+ SET @pFDate = CONVERT(DATETIME,CONVERT(nvarchar,@pFDate,103) + ' 00:00:00')                                        
+ SET @pTDate = CONVERT(DATETIME,CONVERT(nvarchar,@pTDate,103) + ' 23:59:59.998')    
+  DECLARE @LAbNAme VARCHAR(100)
+ SET @LAbNAme = (
+ SELECT NAME
+ FROM Organization
+ WHERE orgid = @porgid
+ )
+ CREATE TABLE #TempBookings (
+		BookingID BIGINT,
+		Salutation NVARCHAR(10),
+		Name NVARCHAR(150),
+		Gender NVARCHAR(10),
+		Age NVARCHAR(30),
+		DateofBirth DATETIME,
+		Address NVARCHAR(500),
+		City NVARCHAR(75),
+		State NVARCHAR(150),
+		Country NVARCHAR(150),
+		PostalCode NVARCHAR(10),
+		MobileNumber NVARCHAR(30),
+		Email NVARCHAR(100),
+		SampleCollectionTime DATETIME,
+		DispatchType NVARCHAR(100),
+		TotalGrossAmount DECIMAL(18,2),
+		DueAmount DECIMAL(18,2),
+		PaymentStatus NVARCHAR(50),
+		Status NVARCHAR(50),
+		SampleCode INT, 
+		SampleContainerID INT, 
+		TestCode NVARCHAR(100),
+		InventoryCount INT,
+		UserID NVARCHAR(15),
+		ClientCode NVARCHAR(25),
+		DiscountAmount DECIMAL(18,2),
+		Comments NVARCHAR(225),
+		DiscountID BIGINT	,  
+		ExternalRefNo  NVARCHAR(25),
+		VisitNumber  NVARCHAR(25),
+		PatientVisitID BIGINT,
+		CreatedAT DATETIME,
+		SourceType NVARCHAR(25),
+		Remarks NVARCHAR(225),
+		HealthHubID  NVARCHAR(25),
+		PatientNumber NVARCHAR(25),
+		Orgid BIGINT,
+  RowNUM   BIGINT                                       
+ )  
+ 
+-- select 'h'
+    INSERT INTO #TempBookings 
+		   (	BookingID, Salutation,  Name,  Gender,         
+		        Age,        DateofBirth,  Address,   City,	State,     Country,    PostalCode,   MobileNumber, 
+				Email,   SampleCollectionTime, DispatchType, TotalGrossAmount,  DueAmount, PaymentStatus, 
+				Status, UserID, ClientCode,Comments, DiscountAmount,DiscountID
+				,ExternalRefNo ,VisitNumber,PatientVisitID,CreatedAT ,SourceType,Remarks,HealthHubID, PatientNumber,Orgid,RowNUM   
+				)
+ select DISTINCT B.BookingID, SOM.DisplayText as Salutation, B.PatientName as Name,
+				case B.sex when 'F' then 'Female' when 'M' then 'Male' else 'Other' end as Gender, B.Age, B.DOB as DateOfBirth, 
+				B.CollectionAddress + ' ' + B.CollectionAddress2 as Address, B.City, B.State,
+			Cou.CountryName as Country, B.Pincode, B.PhoneNumber as MobileNumber, 
+				B.EMail as EmailID, B.CollectionTime, B.DispatchValue as DispatchType, ISNULL(B.NetAmount,0) as NetAmount, 0.00 as DueAmount, 
+			--	case when (B.NetAmount >= 0.00) then 'Paid' else
+				
+			--	'Not Paid' end as PaymentStatus,
+			 'Not Paid' PaymentStatus,
+				B.BookingStatus as Status, 
+				U.LoginID  as UserID, 
+				case when ISNULL(B.ClientCode,'') = '' then 'GENERAL' else B.ClientCode end as ClientCode,
+				B.Comments,B.Discount, B.DiscountID
+				,B.ExternalRefNo,
+				PV.VisitNumber,
+			PV.PatientVisitID,
+				B.CreatedAT,B.SourceType,B.Remarks,HealthHubID,B.PatientNumber,B.OrgID
+ , ROW_NUMBER() OVER (ORDER BY CONVERT(DATETIME,CONVERT(nvarchar,B.CreatedAT,103)))  
+ FROM Bookings B with(Nolock)
+			left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode= 'en-GB'
+			INNER JOIN PreOrderedInvestigations POI with(Nolock) ON POI.QuotationId = B.BookingID AND POI.OrgID = B.OrgID
+			INNER JOIN Users U with(Nolock) ON B.UserID = U.UserID and B.OrgID = U.OrgID 
+			INNER JOIN state S on Upper(S.StateName) =Upper(B.State)  
+			INNER JOIN PatientVisit PV (NOLOCK) ON Isnull(B.PatientVisitID,PV.PatientVisitID)=PV.PatientVisitID
+			INNER JOIN city  C on UPPER(C.CityName)=UPPER(B.City)                
+			INNER JOIN Country Cou on Cou.CountryID=S.CountryID
+			
+		WHERE B.OrgID = @pOrgID and 
+		(B.CollectionTime >= @pFdate AND B.CreatedAt < @pTdate )
+	--	AND CONVERT(DATETIME,CONVERT(nvarchar,B.CreatedAT,103)) between @pFDate and @pTDate
+	--	AND B.CollectionTime>= @pFdate AND B.CreatedAT < @pTdate 
+-- from Bookings B 
+-- left JOIN SalutationOrgMapping SOM with(Nolock) ON  SOM.TitleID = B.TITLECode AND SOM.OrgID = B.OrgID and SOM.LanguageCode= 'en-GB'
+-- INNER JOIN PatientVisit PV (NOLOCK)
+--ON B.PatientVisitID=PV.PatientVisitID
+-- WHERE B.OrgID= @pOrgId                
+--     AND B.CreatedAt BETWEEN @pFDate AND @pTDate  
+	 -- GROUP BY CONVERT(DATETIME,CONVERT(nvarchar,B.CreatedAT,103))
+--	 select * from   #TempBookings TB
+ SELECT    @LAbNAme,                        
+     CONVERT(DATETIME,CONVERT(nvarchar,TB.createdat,103))AS 'Dates',                                        
+    	TB.SourceType as 'Source Type',TB.ClientCode as	'Client Code',TB.Remarks as	'Remarks'	,
+		count(TB.BookingID) as 'Booking Count'	,
+		case when TB.Status = 'Completed' or TB.Status = 'CD' then
+		count(TB.Status) end as 'Registration Count'	,
+		case when OI.Status = 'Approve' then
+		count(OI.Status) end as 'Result Approved Count',
+		Case when BI.CovidStatus = 'Completed' then
+		count(BI.CovidStatus) end  as 'Sent to HMS count'	,
+		Case when BI.PDFStatus = 'Completed' then
+		count(BI.PDFStatus) end as 'Sent to JHH count',
+	
+                       
+    ROW_NUMBER() OVER (ORDER BY CONVERT(DATETIME,CONVERT(nvarchar,TB.createdat,103))) as 'rownum'                                       
+   FROM      
+     #TempBookings TB
+	 INNER JOIN  OrderedInvestigations OI (NOLOCK)
+ON TB.PatientVisitID=OI.VisitID
+INNER JOIN BulkReg_IntegrationNotification BI (NOLOCK)
+ON TB.PatientVisitID=BI.VisitID
+   GROUP BY CONVERT(DATETIME,CONVERT(nvarchar,TB.CreatedAT,103)),TB.SourceType ,TB.ClientCode,TB.Remarks
+   ,TB.BookingID,TB.CreatedAT,
+   OI.Status,
+   TB.HealthHubID,TB.Status,BI.CovidStatus,BI.PDFStatus
+
+   SELECT @LAbNAme,B.CreatedAT as 'Dates', B.SourceType as  'Source Type',B.clientCode as 'Client Code',
+   B.Remarks as 'Remarks',
+   B.ExternalRefNo	as 'HMS ID'
+   ,PV.VisitNumber as 'Attune VID',
+   PO.BarcodeNo as 'Sample Barcode',
+   BI.CovidStatus as	'Sent to HMS Log',
+   BI.PDFStatus as 	'Sent to JHH log'
+ --  ,ERP.JsonString as	'Payload'
+   --B.BookingID,B.ExternalRefNo,B.PatientNumber,PV.VisitNumber,BI.PDFStatus,BI.PDFCompletedAt,BI.CovidStatus ,BI.CovidCompletedAt
+  
+
+
+FROM #TempBookings B (NOLOCK)
+INNER JOIN PatientVisit PV (NOLOCK)
+ON B.PatientVisitID=PV.PatientVisitID
+   INNER JOIN PreOrderedInvestigations PO  ON PO.QuotationId = B.BookingID  
+  --  WHERE (BI.CollectionTime >= @pFdate AND BI.CreatedAt < @pTdate ) AND
+INNER JOIN  OrderedInvestigations OI (NOLOCK)
+ON B.PatientVisitID=OI.VisitID
+--left JOIN [dbo].[ERPHCBookingInBound] ERP (NOLOCK) ON IsNull(B.ExternalRefNo,'')=IsNull(ERP.ExternalRefNo,'') and ERP.OrgID=B.Orgid
+--inner join InvSampleMaster ISM (NOLOCK) --ON ISM.sample 
+INNER JOIN BulkReg_IntegrationNotification BI (NOLOCK)
+ON B.PatientVisitID=BI.VisitID
+
+drop table #TempBookings
+
+END
+
+

@@ -1,0 +1,137 @@
+--[pGetPatientReferringPhysicianlogReport] '01/03/2021','02/04/2021',220,'','',0,'',''
+CREATE procedure [dbo].[pGetPatientReferringPhysicianlogReport]
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+ 
+		CREATE TABLE #PatientDetails
+		(
+		  ID INT Identity(1,1),
+		  PatientID BIGINT,
+		  PatientNumber NVARCHAR(300),
+		  PatientName NVARCHAR(500),
+		  PatientVisitID BIGINT,
+		  VisitNumber NVARCHAR(300),
+		  Age NVARCHAR(100),
+		  Sex NVARCHAR(100),
+		  PatientContact NVARCHAR(100),
+		  VisitDate DATETIME,
+		  ModifiedAt DATETIME,
+		  BillAmount DECIMAL(18,2),
+		  ReferringPhysicianName NVARCHAR(500),
+		  OldRefName NVARCHAR(500),
+		  OrgID INT,
+		  ClientName NVARCHAR(1000),
+		  BilledbyName NVARCHAR(1000),
+		  RefDrModifiedBy NVARCHAR(1000),
+		  TRFStatus NVARCHAR(100)
+		)
+
+		
+		CREATE TABLE #PatientVisit
+		( 
+		  RankID INT,
+		  HistID BIGINT,
+		  PatientVisitID BIGINT, 
+		  ReferringPhysicianName NVARCHAR(500), 
+		  OrgID INT,
+		  ModifiedAt DATETIME,
+		  ModifiedBy BIGINT
+		)
+
+		INSERT INTO #PatientDetails(PatientID,PatientNumber,PatientName,PatientVisitID,VisitNumber,OldRefName,ReferringPhysicianName,OrgID,
+		P.Age,Sex,PatientContact,VisitDate,ClientName)
+		SELECT P.PatientID,P.PatientNumber,S.TitleName+P.Name,PV.PatientVisitID,PV.VisitNumber,PV.ReferingPhysicianName,'',P.OrgID,P.Age,
+		CASE WHEN P.Sex='F' THEN 'Female' WHEN P.Sex='M' THEN 'Male' ELSE 'Both' END,PA.MobileNumber,PV.VisitDate ,CM.ClientName 
+		FROM Patient P (NOLOCK)
+		INNER JOIN PatientAddress PA (NOLOCK) ON P.PatientID=PA.PatientID AND PA.AddressType='P'
+		INNER JOIN PatientVisit PV (NOLOCK) ON P.PatientID=PV.PatientID
+		INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitID 
+		INNER JOIN ClientMaster CM (NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.OrgID=VCM.OrgID
+		INNER JOIN Salutation S (NOLOCK) ON S.TitleID=P.Titlecode
+		WHERE PV.CreatedAt BETWEEN @pFDate AND @pTdate
+		AND PV.OrgID=@pOrgID
+
+		UPDATE P
+		SET P.BillAmount=FB.GrossBillValue,
+		    P.BilledByName=U.Name
+		FROM #PatientDetails P  
+		INNER JOIN FinalBill FB (NOLOCK) ON P.PatientVisitID=FB.VisitID
+		INNER JOIN Users U (NOLOCK) ON U.LoginID=FB.CreatedBy
+
+		UPDATE P
+		SET P.TRFStatus='Uploaded'
+		FROM #PatientDetails P  
+		INNER JOIN TRFFileManager FB (NOLOCK) ON P.PatientVisitID=FB.VisitID 
+		WHERE FB.IdentifyingType='TRF_Upload'
+
+		INSERT INTO #PatientVisit(RankID,HistID,PatientVisitID,ReferringPhysicianName,OrgID,ModifiedBy,ModifiedAt)
+		SELECT DENSE_RANK() OVER ( Partition By PVH.Patientvisitid order by PatientVisitId_HISTID desc),PVH.PatientVisitId_HISTID,PVH.PatientVisitId ,
+		PVH.ReferingPhysicianName,PVH.OrgID,PVH.CreatedBy,PVH.CreatedAt
+		FROM #PatientDetails P 
+		INNER JOIN PatientVisit_HIST PVH (NOLOCK) ON P.PatientVisitID=PVH.PatientVisitID  
+		 
+		/*UPDATE P
+		SET P.OldRefName=PVH.ReferringPhysicianName 
+		FROM #PatientDetails P
+		INNER JOIN  #PatientVisit PVH   ON P.PatientVisitID=PVH.PatientVisitID 
+		INNER JOIN Users U (NOLOCK) ON U.LoginID=PVH.ModifiedBY
+		WHERE PVH.RankID=2
+
+		UPDATE P
+		SET P.RefDrModifiedBy=U.Name,
+		    P.ModifiedAt=PVH.ModifiedAt 
+		FROM #PatientDetails P
+		INNER JOIN  #PatientVisit PVH   ON P.PatientVisitID=PVH.PatientVisitID 
+		INNER JOIN Users U (NOLOCK) ON U.LoginID=PVH.ModifiedBY
+		WHERE PVH.RankID=1*/
+
+			UPDATE P
+		SET P.ReferringPhysicianName=PVH.ReferringPhysicianName 
+		FROM #PatientDetails P
+		INNER JOIN  #PatientVisit PVH   ON P.PatientVisitID=PVH.PatientVisitID 
+		INNER JOIN Patient_HIST PH (NOLOCK) ON PH.PatientID=P.PatientID AND PH.PatientVisit_HISTID=PVH.HistID 
+		--WHERE PVH.RankID=2
+
+		UPDATE P
+		SET P.ReferringPhysicianName=P.Oldrefname ,
+		P.Oldrefname=PVH.ReferringPhysicianName
+		FROM #PatientDetails P
+		INNER JOIN  #PatientVisit PVH   ON P.PatientVisitID=PVH.PatientVisitID  
+		WHERE PVH.RankID=2
+
+		UPDATE P
+		SET P.RefDrModifiedBy=U.Name,
+		    P.ModifiedAt=PVH.ModifiedAt 
+		FROM #PatientDetails P
+		INNER JOIN  #PatientVisit PVH   ON P.PatientVisitID=PVH.PatientVisitID 
+		INNER JOIN Users U (NOLOCK) ON U.LoginID=PVH.ModifiedBY
+		WHERE PVH.RankID=1 AND ISNULL(P.ReferringPhysicianName,'')!=''
+		  
+		SELECT ID [SL.No],PatientID,PatientNumber,PatientName,PatientVisitID,VisitNumber,Age,Sex,PatientContact,VisitDate [Visit Date Time],
+		       ModifiedAt [Modified date and time],ClientName,BillAmount [Billed Amount],OldRefName [Ref dr.Name(original value)],
+			   ReferringPhysicianName [Ref dr.Name(modified value)],BilledbyName [Billing person name],ISNULL(RefDrModifiedBy,'') [Ref dr modified person name],
+			   TRFStatus [TRF status]
+		FROM #PatientDetails
+
+ DROP TABLE #PatientDetails
+ DROP TABLE #PatientVisit
+ENd
+
+
+
+
+

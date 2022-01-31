@@ -1,0 +1,35 @@
+CREATE PROCEDURE pgetinventorymodulestockreport
+@pOrgId [BIGINT]
+ ,@PparamType VARCHAR(20) = NULL
+ ,@Pparamvalue SMALLINT = NULL
+ ,@Debugflag BIT = 0
+
+ AS
+ BEGIN
+--Declare @Orgid int =98
+--Declare @LocationID int =7
+select 
+distinct '123' Empty,PO.ProductID,LocationName,PO.ProductName,PO.ProductCode,PC.CategoryName,PO.LSU,SH.BatchNo --,SH.CostPrice
+,StokcInQTY,SH.ReceivedUniqueNumber,SH.CreatedAt ,--SH.SellingPrice,SH.MRP,
+SH.StockInHandid,SP.SupplierName
+from products PO with(NOLOCK)						
+inner join ProductCategories PC with (NOLOCK) ON PO.Categoryid=PC.CategoryID and PO.OrgID=PC.OrgID					
+--inner join ProductUOMMapping PUM with(NOLOCK) ON PUM.ProductID=PO.ProductID and IsBaseunit=1 AND Status <>'D'
+inner join stockreceiveddetails SRD (NOLOCK) ON PO.OrgId=SRD.OrgID and PO.ProductID=SRD.ProductId
+inner join  stockreceived SR (NOLOCK) ON SRD.StockReceivedId=SR.StockReceivedID and SRD.OrgID=SR.OrgID
+Inner Join Suppliers SP (NOLOCK) ON SP.OrgID=SR.OrgID and SP.SupplierID=SR.SupplierID
+
+CROSS APPLY  (
+                  SELECT  
+				       Productid,S.LocationID, LocationName,S.OrgID, S.BatchNo, S.CostPrice as CostPrice , Sum(
+                      (TotalStockReceived - 						
+						 (TotalStockIssued+TotalStockReturn+TotalStockDamage+TotalLocationIssued+ISNULL(SubstoreReturnqty,0))
+		               ) ) as StokcInQTY ,S.ReceivedUniqueNumber,S.CreatedAt,S.SellingPrice,S.MRP,S.StockInHandid
+				  FROM StockInHand S with(NOLOCK) 
+					   INNER JOIN Locations L  with(NOLOCK) ON S.LocationID=L.LocationID
+				  WHERE S.OrgID=@pOrgId  AND S.ProductID=PO.ProductID	-- AND S.LocationID=@LocationID 
+				  GROUP BY Productid,LocationName,S.OrgID,S.BatchNo,S.LocationID,S.ReceivedUniqueNumber,S.CostPrice,S.CreatedAt,S.SellingPrice,S.MRP,S.StockInHandid
+       )SH 					
+where PO.OrgID=@pOrgId and StokcInQTY>0	--and SH.LocationID=7			
+order by LocationName,ProductName
+END			

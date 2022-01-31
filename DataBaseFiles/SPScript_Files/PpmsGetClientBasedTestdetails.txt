@@ -1,0 +1,32 @@
+Create PROCEDURE [dbo].[PpmsGetClientBasedTestdetails] 
+
+@pFDate [DATETIME],
+@pTDate [DATETIME],
+@pOrgId [INT], 
+--@Locationid bigint,
+@Clientid bigint
+as
+begin
+Declare @temp as table (Patientvisitid bigint,Visitnumber varchar(200),PatientName varchar(250),FirstName varchar(50),LastName varchar(50),
+DOB varchar(100),Gender varchar(100) ,VisitDate varchar(50),Id bigint,type varchar(100)
+,Accessionnumber bigint,ClientName varchar(250),pkgname varchar(250),PhoneNumber nvarchar(1000))
+--investigationid bigint,name varchar(250),Value nvarchar(250),Groupname varchar(250)
+
+Insert into @temp 
+Select Distinct PV.[PatientVisitId],PV.Visitnumber,P.Name as PatientName,null,null ,P.DOB,P.[Sex] As 'Gender' ,Convert(varchar,pv.VisitDate,103), OI.Id,OI.Type,
+OI.AccessionNumber,CM.ClientName,isnull(oI.PkgName ,''),Isnull(Coalesce(AD.Mobile,AD.Phone),'') As PhoneNumber
+from PatientVisit PV WITH (NOLOCK)
+inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid
+inner Join VisitclientMapping VCM WITH (NOLOCK) ON VCM.Visitid=PV.PatientVisitid and VCM.Orgid=PV.OrgID and VCM.CLientid=@Clientid
+inner join ClientMaster CM with(NOLOCK) ON CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID
+Inner join AddressDetails AD with(NOLOCK) ON AD.ReferenceID=CM.ClientID and AD.OrgID=CM.OrgID
+Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid
+where PV.orgid=@pOrgId and CM.CLientID=@Clientid and  PV.Createdat Between @pFDate   And @pTDate + ' 23:59:59'--and PV.OrgAddressid=423
+select t.*,V.groupname,V.Name as InvestigationName, V.value,P.ReferenceRange,IOM.UOMCode,p.Approvedby,LO.LoginName,PhoneNumber-- into Excel_Prima_Data_Feb26
+ from @temp t
+inner Join PatientInvestigation p WITH (NOLOCK) ON p.AccessionNumber=t.AccessionNumber
+inner Join InvestigationValues v WITH (NOLOCK) ON v.InvestigationID=p.InvestigationID and v.GroupID=p.GroupID and  v.PatientVisitID  = p.PatientVisitId and p.Orgid =v.Orgid 
+Inner join InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=V.InvestigationID and IOM.Orgid=V.OrgID
+inner join Login LO WITH (NOLOCK) ON LO.Loginid=P.Approvedby and LO.Orgid=P.Orgid
+where P.Orgid=@pOrgId
+end

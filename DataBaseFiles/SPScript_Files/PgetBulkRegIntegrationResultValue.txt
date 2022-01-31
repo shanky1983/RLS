@@ -1,0 +1,303 @@
+ 
+--PgetBulkRegIntegrationResultValue 3
+
+CREATE PROCEDURE [dbo].[PgetBulkRegIntegrationResultValue] (@NotificationID       BIGINT,
+  @ContextInfo [UDT_CONTEXT] readonly) 
+AS 
+  BEGIN
+
+ Declare @Patientvisitid bigint,@OrgID INT,@IsCovid NCHAR(1),@IsSmart NCHAR(1),@InstanceID INT
+ SELECT @InstanceID=OrgID FROM @ContextInfo
+ SELECT  @Patientvisitid = VisitID,@OrgID=OrgID,@IsSmart=IsSmartReportSent FROM BulkReg_IntegrationNotification WITH(NOLOCK) WHERE NotificationID=@NotificationID
+ 
+ SELECT @IsCovid='Y' FROM  OrderedInvestigations OI  WITH(NOLOCK) 
+	   INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.AttGroupID=OI.ID AND TYpe='GRP' AND OI.OrgID=IOG.OrgID 
+	   WHERE OI.VisitID=@Patientvisitid AND IOG.TestCode IN ('S0003','S0004','S0005','S0007','MDLRT0610')  
+    SELECT @IsCovid='Y' FROM  OrderedInvestigations OI  WITH(NOLOCK) 
+	   INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON IOG.investigationid=OI.ID   AND OI.OrgID=IOG.OrgID 
+	   WHERE OI.VisitID=@Patientvisitid AND IOG.TestCode IN ('S0003','S0004','S0005','S0007') 
+	 SELECT @IsCovid='Y' FROM  OrderedInvestigations OI  WITH(NOLOCK) 
+	   INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.AttGroupID=OI.pkgID AND TYpe='PKG' AND OI.OrgID=IOG.OrgID 
+	   WHERE OI.VisitID=@Patientvisitid AND  IOG.TestCode IN ('S0006' )
+
+ DECLARE @FolderPath NVARCHAR(MAX)
+ SELECT @FolderPath=Replace(AttachmentName,'report','SmartReport')  FROM Notifications N (NOLOCK) WHERE N.IdentityID=@Patientvisitid AND ActionType='Pdf'
+
+ IF @InstanceID=1
+BEGIN
+		select  oi.accessionnumber as reportId ,pi.approvedat as reportDate,iom.TestCode,isnull(iv.value,'') as value,isnull(iv.UOMCode,'') as unit,isnull(imm.MethodName,'') as testmethod,pi.referencerange as normalrange, ism.SampleDesc as specimen
+				,CASE WHEN ISNULL(PkgId,0)!=0 THEN oi.PkgName ELSE oi.Name END InvestigationName,PI.interpretation,U.Name doctor,L.ImageSource 'Signature',@FolderPath FilePath,PV.PatientVisitID,@OrgID OrgID,
+				ISNULL(U.Qualification,'') designation,IOM.DisplayText TestName,iv.CreatedAt ApprovedDate,OI.ModifiedAt AccessionDate,pi.approvedat as  ReportDate
+		from   patientvisit pv (nolock)
+		 inner join orderedinvestigations oi (nolock) 
+		 on oi.visitid  = pv.patientvisitid
+		inner join patientinvestigation pi (nolock)
+		on oi.visitid = pi.patientvisitid
+		and oi.orgid = pi.orgid
+		and oi.accessionnumber=pi.accessionnumber 
+		and oi.status = pi.status  and  oi.Status in( 'Approve','ReflexTest')   
+		inner join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid
+		LEFT JOIN InvestigationMethod imm (nolock)
+					  ON imm.MethodID = pi.investigationMethodID
+						 AND pi.orgid = imm.orgid
+		 LEFT JOIN invsamplemaster ism (nolock)
+					  ON iom.SampleCode = ism.SampleCode
+						 AND iom.orgid = ism.orgid
+		LEFT JOIN Users U (NOLOCK) ON U.LoginID=Pi.ApprovedBy 
+		LEFT JOIN Login L (NOLOCK) ON L.loginID=Pi.ApprovedBy
+		where pv.patientvisitid = @Patientvisitid
+
+union  
+
+		select  oi.accessionnumber as reportId,pi.approvedat as reportDate,iom.TestCode,isnull(iv.value,'') as value,isnull(iv.UOMCode,'') as unit,isnull(imm.MethodName,'') as testmethod,pi.referencerange as normalrange, ism.SampleDesc as specimen
+				,CASE WHEN ISNULL(PkgId,0)!=0 THEN oi.PkgName ELSE oi.Name END InvestigationName,PI.interpretation,U.Name doctor,L.ImageSource 'Signature',@FolderPath FilePath,PV.PatientVisitID,@OrgID OrgID
+				,ISNULL(U.Qualification,'') designation,IOM.DisplayText TestName,iv.CreatedAt ApprovedDate,OI.ModifiedAt AccessionDate,pi.approvedat as  ReportDate
+		from   patientvisit pv (nolock)
+		 inner join orderedinvestigations oi (nolock) 
+		 on oi.visitid  = pv.patientvisitid
+		inner join patientinvestigation pi (nolock)
+		on oi.visitid = pi.patientvisitid
+		and oi.orgid = pi.orgid
+		and oi.accessionnumber=pi.accessionnumber 
+		and oi.status = pi.status  and  oi.Status in ( 'Approve','ReflexTest')   
+		inner join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid
+		LEFT JOIN InvestigationMethod imm (nolock)
+					  ON imm.MethodID = pi.investigationMethodID
+						 AND pi.orgid = imm.orgid
+		 LEFT JOIN invsamplemaster ism (nolock)
+					  ON iom.SampleCode = ism.SampleCode
+						 AND iom.orgid = ism.orgid
+		LEFT JOIN Users U (NOLOCK) ON U.LoginID=Pi.ApprovedBy 
+		LEFT JOIN Login L (NOLOCK) ON L.loginID=Pi.ApprovedBy
+		where pv.Refervisitid = @Patientvisitid
+END
+IF ISNULL(@IsSmart,'N')='Y' AND @InstanceID=3
+BEGIN
+	
+CREATE TABLE #Order
+(
+  VisitID BIGINT,
+  ID BIGINT,
+  Type NVARCHAR(100),
+  SeqNo INT,
+  PkgID BIGINT,
+  AccessionNumber BIGINT,
+  SubGroupID BIGINT,
+  PackageName NVARCHAR(2000)
+) 
+
+INSERT INTO #Order (VisitID,ID,Type,SeqNo,PkgID,AccessionNumber,SubGroupID,PackageName)
+(
+	SELECT DISTINCT  OI.VisitID,OI.ID,IPM.Type,IPM.SequenceNo,IPM.PackageID,OI.AccessionNumber,0,OI.PkgName
+	FROM PatientVisit PV(NOLOCK)
+	INNER JOIN OrderedInvestigations OI (NOLOCK)  ON OI.VisitID=PV.PatientVisitID
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.PkgID=IOG.AttGroupID AND Oi.OrgID=IOG.OrgID
+	INNER JOIN InvPackageMapping IPM (NOLOCK) ON IOG.OrgGroupID=IPM.PackageID  AND IPM.ID=OI.ID  AND IPM.Type='INV' AND OI.Type='INV'
+	WHERE PV.PatientVisitID=@Patientvisitid
+	UNION  
+	SELECT  DISTINCT OI.VisitID,IOM.orgGroupID,IPM.Type,IPM.SequenceNo,IPM.PackageID,OI.AccessionNumber,0,OI.PkgName
+	 FROM PatientVisit PV(NOLOCK)
+	INNER JOIN OrderedInvestigations OI (NOLOCK)  ON OI.VisitID=PV.PatientVisitID 
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.PkgID=IOG.AttGroupID  AND Oi.OrgID=IOG.OrgID
+	INNER JOIN InvOrggroup IOM (NOLOCK) ON IOM.AttGroupID=OI.ID AND OI.Type='GRP'   AND Oi.OrgID=IOM.OrgID
+	 INNER JOIN InvPackageMapping IPM (NOLOCK) ON IOG.OrgGroupID=IPM.PackageID  AND IPM.ID=IOM.OrgGroupID   AND IPM.Type='GRP'
+	WHERE PV.PatientVisitID=@Patientvisitid   
+)
+ SELECT * FROM
+  ( select  oi.accessionnumber as reportId ,pi.approvedat as reportDate,iom.TestCode,isnull(iv.value,'') as value,isnull(iv.UOMCode,'') as unit,isnull(imm.MethodName,'') as testmethod,pi.referencerange as normalrange, ism.SampleDesc as specimen
+				,CASE WHEN ISNULL(OI.PkgId,0)!=0 THEN oi.PkgName ELSE oi.Name END InvestigationName,PI.interpretation,U.Name doctor,L.ImageSource 'Signature','' FilePath,O.SeqNo,@OrgID OrgID,
+				ISNULL(U.Qualification,'') designation,IOM.DisplayText TestName,iv.CreatedAt ApprovedDate,OI.ModifiedAt AccessionDate 
+				  
+		from   patientvisit pv (nolock)
+		 inner join orderedinvestigations oi (nolock) 
+		 on oi.visitid  = pv.patientvisitid
+		inner join patientinvestigation pi (nolock)
+		on oi.visitid = pi.patientvisitid
+		and oi.orgid = pi.orgid
+		and oi.accessionnumber=pi.accessionnumber 
+		and oi.status = pi.status   and  oi.Status in( 'Approve','ReflexTest') 
+		inner join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid		
+		INNER JOIN #Order O ON O.VisitID=PI.PatientVisitID AND O.AccessionNumber=PI.AccessionNumber    
+		LEFT JOIN InvestigationMethod imm (nolock)
+					  ON imm.MethodID = pi.investigationMethodID
+						 AND pi.orgid = imm.orgid
+		 LEFT JOIN invsamplemaster ism (nolock)
+					  ON iom.SampleCode = ism.SampleCode
+						 AND iom.orgid = ism.orgid
+		LEFT JOIN Users U (NOLOCK) ON U.LoginID=Pi.ApprovedBy 
+		LEFT JOIN Login L (NOLOCK) ON L.loginID=Pi.ApprovedBy
+		where pv.patientvisitid = @Patientvisitid
+		 UNION
+		select  oi.accessionnumber as reportId ,pi.approvedat as reportDate,iom.TestCode,isnull(iv.value,'') as value,isnull(iv.UOMCode,'') as unit,isnull(imm.MethodName,'') as testmethod,pi.referencerange as normalrange, ism.SampleDesc as specimen
+				,O.PackageName InvestigationName,PI.interpretation,U.Name doctor,L.ImageSource 'Signature','' FilePath,O.SeqNo,@OrgID OrgID,
+				ISNULL(U.Qualification,'') designation,IOM.DisplayText TestName,iv.CreatedAt ApprovedDate,OI.ModifiedAt AccessionDate 
+				 
+		from   patientvisit pv (nolock)
+		 inner join orderedinvestigations oi (nolock) 
+		 on oi.visitid  = pv.patientvisitid
+		inner join patientinvestigation pi (nolock)
+		on oi.visitid = pi.patientvisitid
+		and oi.orgid = pi.orgid
+		and oi.accessionnumber=pi.accessionnumber 
+		and oi.status = pi.status  and  oi.Status in( 'Approve','ReflexTest') 
+		INNER join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid		
+		INNER JOIN #Order O ON O.VisitID=PV.ReferVisitID AND O.AccessionNumber=OI.ReferredAccessionNo    
+		LEFT JOIN InvestigationMethod imm (nolock)
+					  ON imm.MethodID = pi.investigationMethodID
+						 AND pi.orgid = imm.orgid
+		 LEFT JOIN invsamplemaster ism (nolock)
+					  ON iom.SampleCode = ism.SampleCode
+						 AND iom.orgid = ism.orgid
+		LEFT JOIN Users U (NOLOCK) ON U.LoginID=Pi.ApprovedBy 
+		LEFT JOIN Login L (NOLOCK) ON L.loginID=Pi.ApprovedBy
+		where pv.ReferVisitID = @Patientvisitid) Smart
+		order by Seqno  
+		DROP TABLE #Order
+		
+
+END
+
+IF ISNULL(@IsCovid,'N')='Y'  AND @InstanceID=4
+BEGIN
+	DECLARE  @TestResults AS TABLE
+	(
+		reportId BIGINT,
+		reportDate DATETIME,
+		TestCode NVARCHAR(100),
+		value NVARCHAR(200),
+		unit NVARCHAR(100),
+		testmethod NVARCHAR(255) ,
+		normalrange NVARCHAR(MAX),
+		specimen NVARCHAR(255),
+		InvestigationName NVARCHAR(1000),
+		interpretation NVARCHAR(MAX),
+		doctor NVARCHAR(255),
+		Signature VARBINARY,
+		FilePath NVARCHAR(MAX),
+		PatientVisitID BIGINT,
+		OrgID INT,
+		designation NVARCHAR(255),
+		TestName NVARCHAR(MAX),
+		ApprovedDate DATETIME,
+		AccessionDate DATETIME ,
+		ID INT,
+		Status NVARCHAR(200)
+	)
+	
+	INSERT INTO @TestResults (ID,reportId,reportDate,TestCode,value,unit,testmethod,normalrange,specimen,InvestigationName,interpretation,
+	                          PatientVisitID,OrgID,TestName,Status)
+    SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON OI.ID=IOG.InvestigationID AND OI.Type='INV' AND ISNULL(OI.PKGID,0)=0 AND OI.OrgID=IOG.OrgID
+	WHERE pv.PatientVisitId=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest') 
+	AND IOG.TestCode IN ('S0003','S0004','S0005','S0007') 
+	UNION
+	SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON OI.ID=IOG.InvestigationID AND OI.Type='INV' AND  ISNULL(OI.PKGID,0)=0 AND OI.OrgID=IOG.OrgID
+	WHERE pv.ReferVisitID=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest') 
+	AND IOG.TestCode IN ('S0003','S0004','S0005','S0007') 
+	UNION
+    SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.ID=IOG.AttGroupID AND OI.Type='GRP' AND OI.OrgID=IOG.OrgID AND  ISNULL(OI.PKGID,0)=0
+	WHERE pv.PatientVisitId=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest') 
+	AND IOG.TestCode IN ('S0003','S0004','S0005','S0007','MDLRT0610') 
+	UNION
+	SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.PkgID=IOG.AttGroupID   AND OI.OrgID=IOG.OrgID
+	WHERE pv.PatientVisitId=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest')  AND IOG.TestCode IN ('S0006')
+	UNION
+	 SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.ID=IOG.AttGroupID AND OI.Type='GRP' AND OI.OrgID=IOG.OrgID AND ISNULL(OI.PKGID,0)=0
+	WHERE pv.ReferVisitID=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest')  
+	AND IOG.TestCode IN ('S0003','S0004','S0005','S0007','MDLRT0610')
+	UNION
+	 SELECT OI.ID,OI.AccessionNumber,OI.ModifiedAt,IOG.TestCode,'','','','','',OI.Name,'',OI.VisitID,OI.OrgID,OI.Name,OI.Status
+	 FROM patientvisit pv (nolock)
+    inner join	 OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	INNER JOIN InvOrgGroup IOG (NOLOCK) ON OI.PkgID=IOG.AttGroupID  AND OI.OrgID=IOG.OrgID  
+	WHERE pv.ReferVisitID=@Patientvisitid and  oi.Status in( 'Approve','ReflexTest') AND IOG.TestCode IN ('S0006')
+
+	UPDATE TR
+	SET TR.testMethod=imm.MethodName,
+	    TR.reportDate=pi.ApprovedAt ,
+		TR.specimen=ism.SampleDesc,
+		TR.doctor=U.Name, 
+		TR.Value=  CASE WHEN (select Count(1) FROM  dbo.fnSplit(Iv.Value,','))  >1 THEN RTRIM(LTRIM(SUBSTRING(Iv.Value,1,CHARINDEX(',',Iv.Value,0)-1))) ELSE iv.value END ,
+       TR.Interpretation=CASE WHEN (select Count(1) FROM  dbo.fnSplit(Iv.Value,','))  >1 THEN RTRIM(LTRIM(SUBSTRING(Iv.Value,CHARINDEX(',',Iv.Value,0)+LEN(','),LEN(Iv.Value)))) ELSE '' END   
+	 FROM @TestResults TR
+	INNER JOIN patientinvestigation pi (nolock)
+		on TR.Patientvisitid = pi.patientvisitid
+		and TR.orgid = pi.orgid
+		and TR.reportid=pi.accessionnumber 
+		and TR.status = pi.status    
+		inner join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid
+		LEFT JOIN InvestigationMethod imm (nolock)
+					  ON imm.MethodID = pi.investigationMethodID
+						 AND pi.orgid = imm.orgid
+		 LEFT JOIN invsamplemaster ism (nolock)
+					  ON iom.SampleCode = ism.SampleCode
+						 AND iom.orgid = ism.orgid
+		LEFT JOIN Users U (NOLOCK) ON U.LoginID=Pi.ApprovedBy 
+		LEFT JOIN Login L (NOLOCK) ON L.loginID=Pi.ApprovedBy 
+	/*	WHERE  iv.Name='Result'
+		 
+	UPDATE TR
+	SET   TR.Interpretation=  Iv.Value  
+	FROM @TestResults TR 
+	INNER JOIN patientinvestigation pi (nolock)
+		on TR.Patientvisitid = pi.patientvisitid
+		and TR.orgid = pi.orgid
+		and TR.reportid=pi.accessionnumber 
+		and TR.status = pi.status   
+		inner join  investigationvalues iv(nolock)
+		on iv.patientvisitid=pi.patientvisitid
+		and pi.investigationid=iv.investigationid
+		inner join investigationorgmapping iom (nolock)
+		on iom.Investigationid = iv.Investigationid
+		and  iom.orgid = iv.orgid  
+		WHERE  iv.name  like 'Observed%Value%'*/
+
+	 SELECT * FROM @TestResults
+
+
+	
+END
+end
+
+
+
+

@@ -1,0 +1,9 @@
+CREATE procedure [dbo].[pUpdateApprovedResults_IAPI]  
+@pNotificationID bigint  
+WITH EXECUTE AS OWNER  
+as  
+  
+begin  
+update Notifications set status='Completed' where NotificationID=@pNotificationID  
+end  
+  

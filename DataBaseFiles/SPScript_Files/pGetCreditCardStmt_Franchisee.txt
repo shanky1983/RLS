@@ -1,0 +1,518 @@
+ CREATE PROCEDURE [dbo].[pGetCreditCardStmt_Franchisee]                                     
+ @pFDate datetime,                                      
+ @pTDate datetime,                                      
+ @pOrgId [int],                                 
+ @pVisitType [int],                                     
+ @pLocation [int],                        
+ @pReportType [int],                          
+ @Receivedby [nvarchar](max),                    
+ @PatientName  [nvarchar](10),                                
+ @pTotalCardAmt [decimal](18, 2) OUTPUT,                                      
+ @pTotalServiceChrg [decimal](18, 2) OUTPUT,                                      
+ @pPaymentTypeID [int],                                      
+ @ContextInfo [UDT_Context] READONLY                                      
+WITH EXECUTE AS OWNER                                      
+AS                                      
+--EXEC pGetCreditCardStmt @pFDate, @pTDate, @pOrgId, @pVisitType, @pTotalCardAmt OUT, @pTotalServiceChrg OUT                                                                
+--EXEC pgetcreditcardstmt '28-04-2011 00:00:00','28-04-2011 00:00:00',78,-1,0,0                                                                      
+BEGIN                                                                      
+Set NOCOUNT ON                                                               
+ SET @pFDate = CONVERT(DATETIME,CONVERT(nvarchar,@pFDate,103) + ' 00:00:00')                                                                      
+ SET @pTDate = CONVERT(DATETIME,CONVERT(nvarchar,@pTDate,103) + ' 23:59:59.998')                                                                      
+    DECLARE @LogInID BIGINT,@ClientID BIGINT
+                                                          
+      DECLARE @LangCode AS NVARCHAR(80);
+      SELECT @LangCode = languageCode,@LogInID=LoginID
+      FROM   @ContextInfo
+	  SELECT @ClientID=CLientID FROM ClientLoginMapping (NOLOCK) WHERE LoginID=@LogInID AND LoginType='F'
+ DECLARE @TempTable AS TABLE                                                                        
+ (                                                                         
+  PatientNumber nvarchar(30),                                                                        
+  PatientName  nvarchar(255),                                                                
+  CreditorDebitCard nvarchar(200),                         
+  Receiveduser  nvarchar(10),                                                                     
+  Age    nvarchar(25),                                                                       
+  VisitType  nchar(10),                                                                        
+  VisitDate  DATETIME,                                                                      
+  ReceivedAmount DECIMAL(18,2),                                                                      
+  ServiceCharge DECIMAL(18,2),                                                                      
+  BillNumber  nvarchar(30),                                                  
+  ReceiptNo nvarchar(30),                 
+  VisitNo nvarchar(30),                 
+  PaymentMode nvarchar(30),                                                                  
+  RowNUM   BIGINT                                                                      
+ )                                                                      
+                                       
+DECLARE @PaymentMode TABLE                                            
+ (                                            
+  PaymentTypeID int                                            
+ )                                       
+ IF (@pPaymentTypeID = 0)                                            
+  BEGIN                                            
+   INSERT @PaymentMode                                              
+   select PaymentTypeID from PaymentType                                           
+            WHERE  Isnull(LanguageCode, 'en-GB') = @LangCode
+   --INNER JOIN PaymentType P ON POM.PaymentTypeID = P.PaymentTypeID and POM.OrgID = @pOrgId                                            
+  END                                            
+ ELSE                                            
+  BEGIN                                            
+   INSERT @PaymentMode      
+   SELECT @pPaymentTypeID                                            
+  END         
+                                                           
+IF(@pVisitType = 0)                             
+BEGIN                           
+    if(@pLocation!=-1)                    
+    Begin                                              
+  INSERT INTO @TempTable (                
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                             
+ )                                                                      
+ SELECT    P.PatientNumber,                                                  
+      P.Name  AS PatientName,                                                                  
+     ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                                                                
+     --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                          
+        ARD.ReceivedBy as Receiveduser,                                                                 
+     CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                               
+     'OP' AS VisitType,                                                                  
+     CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+     ARD.AmtReceived AS ReceivedAmount,                                                                      
+     ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, FB.BillNumber,                                            
+     isnull (ARD.ReceiptNO,0)as ReceiptNO,pv.visitnumber as VisitNo,PT.PaymentName as PaymentMode                                                                   
+ FROM  AmountReceivedDetails ARD (NOLOCK)      
+     INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID  AND FB.OrgID=ARD.OrgID                                            
+     INNER JOIN PatientVisit PV (NOLOCK) ON FB.VisitID = PV.PatientVisitId     AND FB.OrgID=PV.OrgID  
+	 INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                                                   
+     INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID AND FB.OrgID=P.OrgID                                                               
+     INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID AND FB.OrgID=S.OrgID                                   
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                                                       
+     INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID         
+     INNER JOIN @PaymentMode PM ON PM. PaymentTypeID=    PT.PaymentTypeID                                    
+ WHERE ARD.OrgID = @pOrgId AND PV.VisitType = @pVisitType               
+   --AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--(3, 5, 6, 7, 8, 9)                                     
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                     
+   and FB.OrgAddressID = @pLocation                                                               
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+                        
+  INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                      
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                         
+ )                                                           
+ SELECT 0, FB.Name + '(Walk In Patient)'  AS PatientName,                                                            
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,ARD.ReceivedBy as Receiveduser,                                                     
+   '' AS Age,                                                                  
+   'OP' AS VisitType,                                                  
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                           
+   ARD.AmtReceived AS ReceivedAmount,                                                                      
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                  
+   isnull (ARD.ReceiptNO,0)as ReceiptNO,'' as VisitNo,PT.PaymentName as PaymentMode                                                                           
+ FROM  AmountReceivedDetails ARD (NOLOCK)                                                                      
+   INNER JOIN FinalBill FB (NOLOCK) ON ARD.FinalBillID = FB.FinalBillID AND FB.OrgID = @pOrgId AND PatientID = -1 AND VisitID = -1                                                          
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--IN (3, 5, 6, 7, 8, 9)                                                                           
+ WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate and FB.OrgAddressID = @pLocation                                                                      
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+                                                     
+  INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                       
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                     
+ )                                                      
+ SELECT P.PatientNumber,                          
+    P.Name + ' (Deposit)'  AS PatientName,                                                                  
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                         
+   '' as Receiveduser,                                             
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                      
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                                  
+   'OP' AS VisitType,                                                             
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+   ARD.AmountDeposited AS ReceivedAmount,    
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, 0,                                                  
+   isnull (ARD.ReceiptNO,0) ,'' as VisitNo,PT.PaymentName as PaymentMode                                                                 
+ FROM PatientDepositHistory ARD (NOLOCK)                                                                      
+   INNER JOIN Patient P (NOLOCK)  ON ARD.PatientID = P.PatientID                                                                      
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID              
+   --INNER JOIN PatientVisit PV ON FB.VisitID = PV.PatientVisitId                                       
+inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.PaymentTypeID= PT.PaymentTypeID                                         
+ WHERE ARD.OrgID = @pOrgId                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode) --NOT IN (1,2,4)                      
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                                             
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+    End                     
+    else if(@pLocation=-1)                    
+   Begin                    
+   INSERT INTO @TempTable (                 
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                      
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                     
+ )                                                                      
+ SELECT    P.PatientNumber,                                                  
+      P.Name  AS PatientName,                       
+     ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                                                                
+     --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                          
+        ARD.ReceivedBy as Receiveduser,                                                                 
+     CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                               
+     'OP' AS VisitType,                                                                  
+     CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+     ARD.AmtReceived AS ReceivedAmount,                                                                      
+     ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, FB.BillNumber,                                            
+     isnull (ARD.ReceiptNO,0)as ReceiptNO, ISNULL(pv.visitnumber,0)as VisitNo,PT.PaymentName as PaymentMode               
+ FROM  AmountReceivedDetails ARD (NOLOCK)                                                                     
+     INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID                                              
+     INNER JOIN PatientVisit PV (NOLOCK) ON PV.PatientVisitId =FB.VisitID   
+	  INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                 
+     INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID                                                                      
+     INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                   
+     INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID                                             
+ WHERE PV.VisitType = @pVisitType                                                                      
+   AND FB.OrgID = @pOrgId                 
+   --AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--(3, 5, 6, 7, 8, 9)                                                                 
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                     
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+                                           
+   INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                      
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                     
+ )                                                           
+ SELECT 0, FB.Name + '(Walk In Patient)'  AS PatientName,                                                            
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,ARD.ReceivedBy as Receiveduser,                                                               
+   '' AS Age,                                          
+   'OP' AS VisitType,                                                                      
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+   ARD.AmtReceived AS ReceivedAmount,                                                                      
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                  
+   isnull (ARD.ReceiptNO,0)as ReceiptNO,PV.VisitNumber as VisitNo,PT.PaymentName as PaymentMode                                                                      
+ FROM  AmountReceivedDetails ARD  (NOLOCK)                                                                     
+   INNER JOIN FinalBill FB (NOLOCK) ON ARD.FinalBillID = FB.FinalBillID AND FB.OrgID = @pOrgId AND PatientID = -1 AND VisitID = -1                 
+   INNER JOIN PatientVisit PV (NOLOCK) ON FB.VisitID = PV.PatientVisitId                   
+    INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                                
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID --IN (3, 5, 6, 7, 8, 9)                                                                           
+ WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)                                                                       
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+                                                       
+   INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                     
+ )                                                      
+ SELECT P.PatientNumber,                          
+    P.Name + ' (Deposit)'  AS PatientName,                                                                  
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                         
+   '' as Receiveduser,                                             
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                      
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                  
+   'OP' AS VisitType,                                                             
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+   ARD.AmountDeposited AS ReceivedAmount,                                           
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, 0,                                                  
+   isnull (ARD.ReceiptNO,0),'' as VisitNo,PT.PaymentName as PaymentMode                                                                         
+ FROM PatientDepositHistory ARD  (NOLOCK)                                                                     
+   INNER JOIN Patient P (NOLOCK)  ON ARD.PatientID = P.PatientID                                   
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.PaymentTypeID= PT.PaymentTypeID       
+ WHERE ARD.OrgID = @pOrgId                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode) --NOT IN (1,2,4)                                                              
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                      
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+  End                                                  
+ END                                                     
+ ELSE IF(@pVisitType = 1 )                                                                      
+ BEGIN                   
+  if(@pLocation!=-1)                    
+ Begin                                       
+  INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType, VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                    
+ )                                                                      
+                                                             
+ SELECT COALESCE(IPN.IPNumber, P.PatientNumber),                                                                   
+    P.Name AS PatientName,                                   
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                          
+   ARD.ReceivedBy as Receiveduser,                                                              
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                      
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                              
+   'IP' AS VisitType,                                                                      
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+   ARD.AmtReceived AS ReceivedAmount,                                                                      
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                  
+  isnull (ARD.ReceiptNO,0),pv.visitnumber as VisitNo,PT.PaymentName as PaymentMode                                                                
+ FROM AmountReceivedDetails ARD  (NOLOCK)                                                                     
+   INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID                                                                      
+   INNER JOIN PatientVisit PV (NOLOCK) ON PV.PatientVisitId  =FB.VisitID 
+    INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                                                    
+  INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID                                                                      
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID LEFT JOIN InPatientNumber IPN ON IPN.PatientID = P.PatientID                                                                      
+ WHERE PV.VisitType = @pVisitType                                                                      
+   AND FB.OrgID = @pOrgId                                                                      
+   -- AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--IN (3, 5, 6, 7, 8, 9)                                                                    
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate  and FB.OrgAddressID = @pLocation                       
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+ End                      
+                       
+  Else if(@pLocation=-1)                         
+  Begin                    
+   INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType, VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                      
+ )                                                                      
+                                                             
+ SELECT COALESCE(IPN.IPNumber, P.PatientNumber),                                                  
+    P.Name AS PatientName,                                                                  
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                          
+   ARD.ReceivedBy as Receiveduser,                                                              
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                      
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                                  
+   'IP' AS VisitType,                                                                      
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+   ARD.AmtReceived AS ReceivedAmount,                                                                      
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                  
+  isnull (ARD.ReceiptNO,0),pv.visitnumber as VisitNo,PT.PaymentName as PaymentMode                                                                  
+ FROM AmountReceivedDetails ARD (NOLOCK)                                                                      
+   INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID                                                                      
+   INNER JOIN PatientVisit PV (NOLOCK) ON FB.VisitID = PV.PatientVisitId     
+    INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID               
+   INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID                                                                      
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID LEFT JOIN InPatientNumber IPN ON IPN.PatientID = P.PatientID                                                                      
+ WHERE PV.VisitType = @pVisitType                                                                      
+   AND FB.OrgID = @pOrgId                                                                      
+   -- AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--IN (3, 5, 6, 7, 8, 9)                                                                    
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                      
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+  End                                                          
+  END                                                                      
+ELSE IF(@pVisitType = -1)                                                                      
+BEGIN                      
+ if(@pLocation!=-1)                    
+         Begin                         
+   INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard, Receiveduser, Age, VisitType,                                                                      
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNO,VisitNo ,PaymentMode                                                                    
+ )                                
+ SELECT    P.PatientNumber,                                                                   
+      P.Name  AS PatientName,                                   
+     ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                        
+      ARD.ReceivedBy as Receiveduser,                                                                
+     --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                     
+     CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                         
+     Case when PV.VisitType=0 then 'OP' else 'IP' End AS VisitType,                            
+     CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                      
+     ARD.AmtReceived AS ReceivedAmount,                                                                      
+     ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                  
+     isnull (ARD.ReceiptNO,0)as ReceiptNO ,pv.VisitNumber as VisitNo,PT.PaymentName as PaymentMode                                                    
+ FROM  AmountReceivedDetails ARD (NOLOCK)                                                                      
+     INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID                                                                      
+     INNER JOIN PatientVisit PV (NOLOCK) ON FB.VisitID = PV.PatientVisitId      
+	 INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                                                   
+     INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID                             
+     INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+     INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID                                                                      
+ WHERE PV.VisitType in(0,1)                                                                          
+   AND FB.OrgID = @pOrgId                                                                          
+   --AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                          
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--(3, 5, 6, 7, 8, 9)                                                                     
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                         
+   and FB.OrgAddressID = @pLocation                                                                   
+                         AND Isnull(PT.LanguageCode, 'en-GB') = @LangCode
+                                               
+  INSERT INTO @TempTable (                                                                          
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                          
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                         
+ )                              
+ SELECT 0, FB.Name + '(Walk In Patient)'  AS PatientName,                                                                
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,ARD.ReceivedBy as Receiveduser,                                                                   
+   '' AS Age,                                                                      
+   'OP' AS VisitType,                                                                          
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                          
+   ARD.AmtReceived AS ReceivedAmount,       
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                      
+   isnull (ARD.ReceiptNO,0)as ReceiptNO,'' as VisitNo,PT.PaymentName as PaymentMode                                                                           
+ FROM  AmountReceivedDetails ARD (NOLOCK)                                                                      
+   INNER JOIN FinalBill FB (NOLOCK) ON ARD.FinalBillID = FB.FinalBillID AND FB.OrgID = @pOrgId AND PatientID = -1 AND VisitID = -1                                           
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID                                                                          
+ WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate and FB.OrgAddressID = @pLocation  AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--IN (3, 5, 6, 7, 8, 9)                                                                           
+                                                       
+   INSERT INTO @TempTable (                                                                      
+   PatientNumber, PatientName,CreditorDebitCard, Receiveduser, Age, VisitType,                                                                      
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                       
+ )                                                
+ SELECT P.PatientNumber,                                                                   
+    P.Name + ' (Deposit)'  AS PatientName,                                                                  
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                        
+    ''as Receiveduser,                                 
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                      
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                                  
+   'OP' AS VisitType,                                                                      
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                             
+   ARD.AmountDeposited AS ReceivedAmount,                                                                      
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, 0,                                                  
+   isnull (ARD.ReceiptNO,0),'' as VisitNo,PT.PaymentName as PaymentMode                                                                         
+ FROM PatientDepositHistory ARD (NOLOCK)                                                    
+   INNER JOIN Patient P  ON ARD.PatientID = P.PatientID                                          
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                      
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                      
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.PaymentTypeID= PT.PaymentTypeID                                                                      
+ WHERE ARD.OrgID = @pOrgId                                                                      
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--NOT IN (1,2,4)                                                                 
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                              
+    End                         
+    else if(@pLocation=-1)                        
+   Begin                        
+   INSERT INTO @TempTable (                                                                       
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                          
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                   
+ )                                                                          
+ SELECT    P.PatientNumber,                                                      
+      P.Name  AS PatientName,                                                                      
+     ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                                                                    
+     --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                              
+        ARD.ReceivedBy as Receiveduser,                                           
+     CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                                   
+     Case when PV.VisitType=0 then 'OP' else 'IP' End AS VisitType,                                                    
+     CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                                          
+     ARD.AmtReceived AS ReceivedAmount,                                                                          
+     ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, FB.BillNumber,                                
+     isnull (ARD.ReceiptNO,0)as ReceiptNO,pv.visitnumber as VisitNo,PT.PaymentName as PaymentMode                                    
+ FROM  AmountReceivedDetails ARD (NOLOCK)                       
+     INNER JOIN FinalBill FB (NOLOCK)  ON ARD.FinalBillID = FB.FinalBillID                                                  
+     INNER JOIN PatientVisit PV (NOLOCK) ON FB.VisitID = PV.PatientVisitId      
+	 INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitId AND VCM.FinalBillID=FB.FinalBillID AND VCM.ClientID=@CLientID                                           
+     INNER JOIN Patient P (NOLOCK)  ON PV.PatientID = P.PatientID                                                                          
+     INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                          
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode           
+     INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID                                                 
+ WHERE PV.VisitType in(0,1)                                                                          
+   AND FB.OrgID = @pOrgId                                                                          
+   --AND PT.PaymentName IN ('Credit/Debit Card', 'VISA', 'MASTER', 'NETS', 'AMEX', 'DINERS')                                                                          
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--(3, 5, 6, 7, 8, 9)                                                                     
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                         
+                                                                     
+                                               
+   INSERT INTO @TempTable (                         
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                          
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                         
+ )                                                               
+ SELECT 0, FB.Name + '(Walk In Patient)'  AS PatientName,                    
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,ARD.ReceivedBy as Receiveduser,                                                                   
+   '' AS Age,                                                                      
+   'OP' AS VisitType,                                                                          
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                
+   ARD.AmtReceived AS ReceivedAmount,                        
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge,  FB.BillNumber,                                                      
+   isnull (ARD.ReceiptNO,0)as ReceiptNO ,'' as VisitNo,PT.PaymentName as PaymentMode                                                                             
+ FROM  AmountReceivedDetails ARD (NOLOCK)                                                                          
+   INNER JOIN FinalBill FB (NOLOCK) ON ARD.FinalBillID = FB.FinalBillID AND FB.OrgID = @pOrgId AND PatientID = -1 AND VisitID = -1                                                                          
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.TypeID = PT.PaymentTypeID                                                                            
+ WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode)--IN (3, 5, 6, 7, 8, 9)                                                                              
+                                                           
+   INSERT INTO @TempTable (                                   
+   PatientNumber, PatientName,CreditorDebitCard,Receiveduser, Age, VisitType,                                                                          
+   VisitDate, ReceivedAmount, ServiceCharge, BillNumber,ReceiptNo,VisitNo ,PaymentMode                                                                         
+ )                                                          
+ SELECT P.PatientNumber,                              
+    P.Name + ' (Deposit)'  AS PatientName,                                                                      
+   ARD.BankNameorCardType + ' - ' + CONVERT(nvarchar, ARD.ChequeorCardNumber) AS BankNameOrCardType,                             
+   '' as Receiveduser,                                               
+   --PARSENAME(REPLACE(P.Age, ' ', '.'), 2) + ' / ' + P.SEX AS Age,                                                                          
+   CASE WHEN DATEPART(YYYY, P.DOB) = 1800 THEN P.Age ELSE dbo.fn_getAge(P.DOB) END + ' / ' + P.SEX AS Age,                                                                      
+   'OP' AS VisitType,                                                                 
+   CONVERT(DATETIME,CONVERT(nvarchar,ARD.CreatedAt,103)) AS VisitDate,                                                
+   ARD.AmountDeposited AS ReceivedAmount,                                                 
+   ISNULL(ARD.ServiceCharge,0) AS ServiceCharge, 0,                                                      
+   isnull (ARD.ReceiptNO,0),'' as VisitNo,PT.PaymentName as PaymentMode                                                                              
+ FROM PatientDepositHistory ARD  (NOLOCK)                                                                          
+   INNER JOIN Patient P (NOLOCK)  ON ARD.PatientID = P.PatientID                                       
+   INNER JOIN SalutationOrgMapping S (NOLOCK) ON P.TITLECode = S.TitleID                                          
+ inner join @ContextInfo ctx1 on ctx1.OrgID=S.OrgID and ctx1.LanguageCode=S.LanguageCode                                          
+   INNER JOIN PaymentType PT (NOLOCK) ON ARD.PaymentTypeID= PT.PaymentTypeID                                                                     
+ WHERE ARD.OrgID = @pOrgId                                                                          
+   AND PT.PaymentTypeID IN  (select PaymentTypeID from  @PaymentMode) --NOT IN (1,2,4)                                                                  
+   AND ARD.CreatedAt BETWEEN @pFDate AND @pTDate                          
+  End                                                      
+ END                              
+                        
+                        
+                        
+                                    
+INSERT INTO  @TempTable                                                                     
+ (                                                                      
+  PatientNumber, PatientName, Receiveduser, Age, VisitType,                                                                      
+  VisitDate, ReceivedAmount, ServiceCharge, BillNumber,RowNUM                                                                      
+ )                                                                      
+ SELECT  0,                                                         
+   'TOTAL',''as Receiveduser, '', '',                     
+   CONVERT(DATETIME,CONVERT(nvarchar,VisitDate,103))AS VisitDate,                                                                      
+   SUM(ReceivedAmount) AS ReceivedAmount,                                                         
+   SUM(ServiceCharge) AS ServiceCharge,                                                                      
+ 0,                                                    
+  -- isnull (ReceiptNO,0)as ReceiptNO,                                                       
+   ROW_NUMBER() OVER (ORDER BY CONVERT(DATETIME,CONVERT(nvarchar,VisitDate,103)))                                                                      
+ FROM  @TempTable                                                                      
+ GROUP BY CONVERT(DATETIME,CONVERT(nvarchar,VisitDate,103))                                       
+                                      
+          if(@Receivedby ='')                            
+          Begin                            
+          set @Receivedby =NULL                            
+          SELECT  @pTotalCardAmt = SUM(ReceivedAmount),                                                                    
+    @pTotalServiceChrg = SUM(ServiceCharge)                                                                      
+ FROM     @TempTable  WHERE    PatientName NOT IN ('TOTAL')                          
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'                                     
+                                                               
+     if(@pReportType=0)                 
+     Begin                                
+   SELECT  T.VisitDate, L.loginname as CollectedName ,COUNT(T.BillNumber) as PatientCount, SUM(T.ReceivedAmount)as ReceivedAmount,                                                                        
+    SUM(T.ServiceCharge) as ServiceCharge,T.PaymentMode as Payertype                                                            
+   FROM  @TempTable T left join login L on L.loginID=T.Receiveduser   WHERE  PatientName NOT IN ('TOTAL')                        
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'   group by VisitDate,L.loginname,T.PaymentMode order by  T.VisitDate                                       
+    End                                                               
+     if(@pReportType=1)                                          
+     Begin                                                          
+   SELECT   T.PatientNumber,L.loginname as CollectedName, T.PatientName,T.CreditorDebitCard, T.Age, T.VisitType,                                                                          
+   T.VisitDate, T.ReceivedAmount, T.ServiceCharge, T.BillNumber,T.ReceiptNo,T.PaymentMode as Payertype,T.VisitNo as VisitState                                                                    
+   FROM     @TempTable T left join login L on L.loginID=T.Receiveduser   WHERE    PatientName NOT IN ('TOTAL')                         
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'                                                                            
+   ORDER BY VisitDate,L.loginname                                      
+ End                                    
+          End                            
+          Else                             
+            BEGIN                            
+            CREATE TABLE #TEMP(item nvarchar(20))                                     
+        INSERT INTO #TEMP                                      
+  SELECT  * FROM [dbo].[fnSplit] (@Receivedby,',')                               
+                                       
+         SELECT   @pTotalCardAmt = SUM(ReceivedAmount),                                   
+    @pTotalServiceChrg = SUM(ServiceCharge)                                                                      
+ FROM     @TempTable  WHERE    PatientName NOT IN ('TOTAL')                         
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'    and Receiveduser COLLATE SQL_Latin1_General_CP1_CI_AI in (SELECT * from #TEMP )                                   
+                                                                       
+     if(@pReportType=0)                                    
+     Begin                                                                
+   SELECT  T.VisitDate, L.loginname as CollectedName,COUNT(T.BillNumber) as PatientCount, SUM(T.ReceivedAmount)as ReceivedAmount,                                                                        
+    SUM(T.ServiceCharge) as ServiceCharge, T.PaymentMode as Payertype                                                  
+   FROM   @TempTable T left join login L on L.loginID=T.Receiveduser   WHERE    PatientName NOT IN ('TOTAL')                        
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'    and Receiveduser COLLATE SQL_Latin1_General_CP1_CI_AI in (SELECT * from #TEMP ) group by VisitDate,Receiveduser,L.loginname, T.PaymentMode              
+order by  T.VisitDate                                          
+    End                                                                                          
+     if(@pReportType=1)                                          
+     Begin                                                          
+   SELECT   T.PatientNumber,L.loginname as CollectedName, T.PatientName,T.CreditorDebitCard, T.Age, T.VisitType,                            
+   T.VisitDate, T.ReceivedAmount, T.ServiceCharge, T.BillNumber,T.ReceiptNo, T.PaymentMode as Payertype,T.VisitNo as VisitState                                                                       
+   FROM      @TempTable T left join login L on L.loginID=T.Receiveduser  WHERE    PatientName NOT IN ('TOTAL')                        
+and PatientName LIKE COALESCE(@PatientName,PatientName) +'%'   and  Receiveduser COLLATE SQL_Latin1_General_CP1_CI_AI in (SELECT * from #TEMP )                                                                          
+   ORDER BY VisitDate,L.loginname                                    
+ End                                     
+        DROP TABLE #TEMP                             
+       End                                                         
+END
+
+
+
+
+
+
+

@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{4613C11A-B2F1-4A27-930D-F81D429F7203}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Attune.KernelV2.DAL</RootNamespace>
+    <AssemblyName>Attune.KernelV2.DAL</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\Bin_45\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="ActionManager_DAL.cs" />
+    <Compile Include="Billing_DAL.cs" />
+    <Compile Include="Client_DAL.cs" />
+    <Compile Include="Investigation_DAL.cs" />
+    <Compile Include="Master_DAL.cs" />
+    <Compile Include="MetaData_DAL.cs" />
+    <Compile Include="Patient_DAL.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Task_DAL.cs" />
+    <Compile Include="UserProfile_DAL.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\KernelV2\KernelV2.csproj">
+      <Project>{9b0d211d-d905-4e7a-a4d9-ffad95caf0e9}</Project>
+      <Name>KernelV2</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\KernelV2_Command\KernelV2_Command.csproj">
+      <Project>{b392b06d-05c5-427e-a44c-5206047e5ebb}</Project>
+      <Name>KernelV2_Command</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\KernelV2_DataAccessEngine\KernelV2_DataAccessEngine.csproj">
+      <Project>{2088665d-f6b4-4166-b805-92fb5b1e9934}</Project>
+      <Name>KernelV2_DataAccessEngine</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\KernelV2_Entities\KernelV2_Entities.csproj">
+      <Project>{b2ba816a-9d19-43b6-9281-8fc530358aae}</Project>
+      <Name>KernelV2_Entities</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\KernelV2_UDT\KernelV2_UDT_DAL.csproj">
+      <Project>{389af4d4-00e7-400e-88c7-30338e180750}</Project>
+      <Name>KernelV2_UDT_DAL</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\KernelV2_Utilities\KernelV2_Utilities.csproj">
+      <Project>{e37c2869-a1e6-4302-9ee2-7ce847ca47a8}</Project>
+      <Name>KernelV2_Utilities</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

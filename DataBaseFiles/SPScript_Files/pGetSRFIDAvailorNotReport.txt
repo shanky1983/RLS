@@ -1,0 +1,22 @@
+ CREATE procedure pGetSRFIDAvailorNotReport
+(
+@Fdate DATETIME = NULL
+,@Tdate DATETIME = NULL
+,@Orgid INT
+,@PparamType VARCHAR(20) = NULL
+,@Pparamvalue SMALLINT = NULL
+,@ContextInfo [UDT_Context] READONLY
+)
+
+AS
+BEGIN
+select CAST(Row_Number() Over (Order by PV.Visitnumber asc) AS INT) as 'SlNo', P.Name as 'PatientName' ,P.SEX as 'Gender', P.Age as 'Age',                                               
+  CASE WHEN ISNULL(PA.MobileNumber,'')<>'' AND PA.MobileNumber<>'0' THEN PA.MobileNumber ELSE '' END  AS 'MobileNumber' ,
+  P.PatientNumber as 'MRNNumber',PV.VisitNumber,PV.VisitDate,Case when ISNULL(PV.SRFID,'') <>'' then 'Y' else 'N' END AS 'SRFID(Y/N)',ISNULL(PV.SRFID,'') as 'SRFID'
+ from PatientVisit PV (Nolock) 
+Inner Join Patient P (Nolock) On P.PatientID=PV.PatientID and P.OrgID=PV.OrgID 
+Inner Join PatientAddress PA (Nolock) On PA.PatientID=P.PatientID   and PA.AddressType='C'
+Where PV.CreatedAt between @Fdate+' 00:00:00'  and @Tdate+' 23:59:59' and Pv.OrgID=@Orgid
+
+
+END 

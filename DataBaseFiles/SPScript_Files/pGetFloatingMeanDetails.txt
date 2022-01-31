@@ -1,0 +1,127 @@
+CREATE PROCEDURE [dbo].[pGetFloatingMeanDetails]    
+ @pOrgID [int],    
+ @pInstrumentID [BIGINT],    
+ @pInvestigationID [BIGINT],
+ @pLotID [BIGINT],    
+ @pFromDate [DATETIME] NULL,
+ @pToDate  [DATETIME] NULL,
+ @pFMOption INT=0,
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN      
+
+  SET @pToDate=DATEADD(DAY,1,@pToDate);
+
+ IF(@pInstrumentID=0)
+  SET @pInstrumentID=NULL;
+ IF(@pInvestigationID=0)
+  SET @pInvestigationID=NULL;
+ IF(@pLotID=0)
+  SET @pLotID=NULL;
+
+  CREATE TABLE #TempLevelOneResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 LotID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV DECIMAL(18,3)
+  )
+   CREATE TABLE #TempLevelTwoResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 LotID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV DECIMAL(18,3)
+  )
+  CREATE TABLE #TempLevelThreeResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 LotID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV DECIMAL(18,3)
+  )
+
+  IF(@pFMOption =1 OR @pFMOption=3)
+  BEGIN
+
+   INSERT INTO #TempLevelOneResult
+   SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3)))) FROM AnalyteQCValues AV WITH (NOLOCK)
+
+
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C1'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus in (1,2)
+   AND AV.ProcessedAt BETWEEN @pFromDate AND @pToDate
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText 
+
+   INSERT INTO #TempLevelTwoResult
+      SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3))))   
+   FROM AnalyteQCValues AV WITH (NOLOCK)  
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C2'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus in (1,2)
+   AND AV.ProcessedAt BETWEEN @pFromDate AND @pToDate
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText
+
+   INSERT INTO #TempLevelThreeResult
+   SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3)))) FROM AnalyteQCValues AV WITH (NOLOCK)
+
+
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C3'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus in (1,2)
+   AND AV.ProcessedAt BETWEEN @pFromDate AND @pToDate
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText
+   END
+   
+   IF (@pFMOption=2)
+   BEGIN
+      INSERT INTO #TempLevelOneResult
+   SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3)))) FROM AnalyteQCValues AV WITH (NOLOCK
+
+
+)
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C1'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus=1
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText 
+
+   INSERT INTO #TempLevelTwoResult
+      SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3))))   
+   FROM AnalyteQCValues AV WITH (NOLOCK)  
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C2'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus=1
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText
+
+   INSERT INTO #TempLevelThreeResult
+   SELECT AV.InvestigationID,AV.InstrumentID,AV.LotID,IOM.DisplayText,AVG(CAST(value1 AS Decimal(18,3))),STDEVP(CAST(value1 AS Decimal(18,3))),(STDEVP(CAST(value1 AS Decimal(18,3)))/AVG(CAST(value1 AS Decimal(18,3)))) FROM AnalyteQCValues AV WITH (NOLOCK)
+
+
+   --INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON AV.InvestigationID=AV.InvestigationID AND AV.OrgID=DIM.OrgID AND AV.InstrumentID=DIM.InstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=AV.OrgID AND IOM.InvestigationID=AV.InvestigationID
+   INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C3'
+   WHERE AV.OrgId=@pOrgID AND AV.LotID=@pLotID AND AV.InvestigationID=ISNULL(@pInvestigationID,AV.InvestigationID)  AND AV.InstrumentID=@pInstrumentID AND AV.QcStatus=1
+   GROUP BY AV.InstrumentID,AV.LotID,AV.InvestigationID,IOM.DisplayText
+   END
+   SELECT ROW_NUMBER() OVER (Partition BY T1.InvestigationID,T1.InstrumentID order by T1.InvestigationID) AS 'SNO',T1.InvestigationID,T1.InstrumentID,T1.LotID,T1.TestName AS 'TestName',T1.Mean AS 'LOMean',T1.SD AS 'LOSD',T1.CV AS 'LOCV'
+  ,T2.Mean AS 'LTMean',T2.SD AS 'LTSD',T2.CV AS 'LTCV'
+  ,T3.Mean AS 'LEMean',T3.SD AS 'LESD',T3.CV AS 'LECV' FROM #TempLevelOneResult T1
+  LEFT JOIN #TempLevelTwoResult T2 ON T1.InvestigationID=T2.InvestigationID AND T1.InstrumentID=T2.InstrumentID
+  LEFT JOIN #TempLevelThreeResult T3 ON T1.InvestigationID=T2.InvestigationID AND T1.InstrumentID=T2.InstrumentID
+END

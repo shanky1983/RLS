@@ -1,0 +1,99 @@
+
+IF NOT EXISTS(select 1 from ConfigKeyMaster where Configkey = 'BlockPdfInChildforDue')
+begin
+declare @ConfigkeyId int
+select @ConfigkeyId= max(configkeyid)+1 from ConfigKeyMaster
+       insert into ConfigKeyMaster(configkeyid,ConfigKey,DisplayText,IsInternal,ControlType,ConfigType,IsAddressBased)
+       select @ConfigkeyId,'BlockPdfInChildforDue','Block Pdf for  Due Bill','N','RDO',NULL,NULL
+End        
+GO
+
+DECLARE @ConfigKeyID BIGINT
+DECLARE @OrgID BIGINT
+
+SET @ConfigKeyID=(SELECT ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='BlockPdfInChildforDue')
+
+
+SET @OrgID=(SELECT OrgID FROM organization WHERE Name='IGENETIC Diagnostics Pvt. Ltd.')
+
+IF NOT EXISTS(SELECT 1 FROM ConfigOrgMaster where ConfigKeyID=@ConfigKeyID AND ConfigValue='Y' AND OrgID=@OrgID) AND @OrgID>0 AND @ConfigKeyID>0
+BEGIN
+INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,OrgAddressId) VALUES (@ConfigKeyID,'Y',@OrgID,@OrgID)
+END
+GO
+
+
+
+
+IF NOT EXISTS(select 1 from ConfigKeyMaster where Configkey = 'BlockCancelforDue')
+begin
+declare @ConfigkeyId int
+select @ConfigkeyId= max(configkeyid)+1 from ConfigKeyMaster
+       insert into ConfigKeyMaster(configkeyid,ConfigKey,DisplayText,IsInternal,ControlType,ConfigType,IsAddressBased)
+       select @ConfigkeyId,'BlockCancelforDue','Block Cancel if Bill is Due','N','RDO',NULL,NULL
+End        
+GO
+
+DECLARE @ConfigKeyID BIGINT
+DECLARE @OrgID BIGINT
+
+SET @ConfigKeyID=(SELECT ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='BlockCancelforDue')
+
+
+SET @OrgID=(SELECT OrgID FROM organization WHERE Name='IGENETIC Diagnostics Pvt. Ltd.')
+
+IF NOT EXISTS(SELECT 1 FROM ConfigOrgMaster where ConfigKeyID=@ConfigKeyID AND ConfigValue='Y' AND OrgID=@OrgID) AND @OrgID>0 AND @ConfigKeyID>0
+BEGIN
+INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,OrgAddressId) VALUES (@ConfigKeyID,'Y',@OrgID,@OrgID)
+END
+GO
+
+
+
+
+IF NOT EXISTS(select 1 from ConfigKeyMaster where Configkey = 'BlockCancelforSampleProcessed')
+begin
+declare @ConfigkeyId int
+select @ConfigkeyId= max(configkeyid)+1 from ConfigKeyMaster
+       insert into ConfigKeyMaster(configkeyid,ConfigKey,DisplayText,IsInternal,ControlType,ConfigType,IsAddressBased)
+       select @ConfigkeyId,'BlockCancelforSampleProcessed','Block Cancel if all Samples are Processed for a Bill','N','RDO',NULL,NULL
+End        
+GO
+
+DECLARE @ConfigKeyID BIGINT
+DECLARE @OrgID BIGINT
+
+SET @ConfigKeyID=(SELECT ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='BlockCancelforSampleProcessed')
+
+
+SET @OrgID=(SELECT OrgID FROM organization WHERE Name='IGENETIC Diagnostics Pvt. Ltd.')
+
+IF NOT EXISTS(SELECT 1 FROM ConfigOrgMaster where ConfigKeyID=@ConfigKeyID AND ConfigValue='Y' AND OrgID=@OrgID) AND @OrgID>0 AND @ConfigKeyID>0
+BEGIN
+INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,OrgAddressId) VALUES (@ConfigKeyID,'Y',@OrgID,@OrgID)
+END
+GO
+
+
+IF NOT EXISTS(select 1 from ConfigKeyMaster where Configkey = 'BlockCancelItemIfSampleProcessed')
+begin
+declare @ConfigkeyId int
+select @ConfigkeyId= max(configkeyid)+1 from ConfigKeyMaster
+       insert into ConfigKeyMaster(configkeyid,ConfigKey,DisplayText,IsInternal,ControlType,ConfigType,IsAddressBased)
+       select @ConfigkeyId,'BlockCancelItemIfSampleProcessed','Block Cancel Samples for an Item is Processed in a Bill','N','RDO',NULL,NULL
+End        
+GO
+
+DECLARE @ConfigKeyID BIGINT
+DECLARE @OrgID BIGINT
+
+SET @ConfigKeyID=(SELECT ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='BlockCancelItemIfSampleProcessed')
+
+
+SET @OrgID=(SELECT OrgID FROM organization WHERE Name='IGENETIC Diagnostics Pvt. Ltd.')
+
+IF NOT EXISTS(SELECT 1 FROM ConfigOrgMaster where ConfigKeyID=@ConfigKeyID AND ConfigValue='Y' AND OrgID=@OrgID) AND @OrgID>0 AND @ConfigKeyID>0
+BEGIN
+INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,OrgAddressId) VALUES (@ConfigKeyID,'Y',@OrgID,@OrgID)
+END
+GO

@@ -1,0 +1,31 @@
+
+--pGetPincode_LIMSAPI '700', 'SCP'
+CREATE PROCEDURE [dbo].[pGetPincode_LIMSAPI] 
+@PrefixText nvarchar(10),
+@PMode VARCHAR(10),
+@ContextInfo      [UDT_CONTEXT] READONLY
+AS
+BEGIN
+
+IF @PMode = 'SCP'
+ 
+		BEGIN              
+			SELECT DISTINCT CAST( PinCode AS VARCHAR(10))  AS Pincode from [SCPScheduleResourcePinCodeMapping]         
+			WHERE Pincode LIKE @PrefixText + '%'            
+		END 
+		
+ELSE
+
+		BEGIN              
+			SELECT CAST(loc.Pincode AS VARCHAR(10))  AS Pincode
+			FROM Country AS con                  
+				INNER JOIN state    as sta on con.CountryID=sta.CountryID                
+				INNER JOIN city     as cit on cit.StateID=sta.StateID                
+				INNER JOIN Location as loc on loc.CityID=cit.CityID                
+			WHERE loc.Pincode LIKE @PrefixText + '%'            
+		END 
+
+		   
+   
+
+END

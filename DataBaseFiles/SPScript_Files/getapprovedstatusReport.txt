@@ -1,0 +1,129 @@
+CREATE Procedure [dbo].[getapprovedstatusReport]
+( 
+@pFromdate datetime ,
+@pTodate datetime,
+@pOrgID int,
+@Pparamtype varchar(255)=null,
+@Pparamvalue varchar(255)=null
+
+)As
+Begin
+
+
+--Exec PgetapprovestatuspreviousmonthReport @Fromdate='20150101',@Todate='20150130'
+Declare @Fdate Varchar(20),@Tdate Varchar(20),@CodeID int
+
+    Select @Fdate =  REPLACE(Convert(varchar, cast(@pFromdate as Date), 120), '-', '')  + ' 00:00:00'
+
+        Select @Tdate =REPLACE(Convert(varchar, cast(@pTodate as Date), 120), '-', '')  + ' 23:59:59'
+
+
+
+
+
+
+Select @CodeID= Codetypeid from CodingSchemeOrgMapping where OrgID=@pOrgID and IsPrimary='Y'
+
+
+Select 'Approval Report' as [Header], 
+ORD.CreatedAt as RegDate,PV.VisitNumber,P.Name,
+--CM.ClientCode,
+CM.ClientName,
+--ORD.ID,
+T.DeptName as [Department Name],
+T.CodeName As Tcode,
+T.InvestigationName as TName,ORD.Type,U.Name as ApprovedBy,PINV.ApprovedAt as ApprovedOn
+ from PatientVisit PV(Nolock)
+Inner Join Patient P (Nolock)ON P.PatientID=PV.PatientID and P.orgid=PV.orgid
+Inner Join OrderedInvestigations ORD (Nolock) On ORD.VisitID=PV.PatientVisitId and PV.orgid=ORD.OrgID
+Inner Join Patientinvestigation PINV (Nolock)On PINV.AccessionNumber =ORD.AccessionNumber and PINV.OrgID=ORD.OrgID
+Inner Join VisitClientMapping VCM (Nolock)On VCM.VisitID=PINV.PatientVisitID and VCM.OrgID=PINV.OrgID
+Inner Join ClientMaster CM (Nolock)On CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID
+Inner Join Users U (Nolock)On U.LoginID=PINV.ApprovedBy
+Inner Join
+(
+
+Select CM.CodeName,IM.InvestigationName,IM.InvestigationID,IOM.DeptID,IDM.DeptName 
+from CodeMaster CM (Nolock)
+INNER JOIN CodeMapper CP (Nolock) ON CM.CodeMasterID = CP.CodeMasterID AND CM.CodeType =CP.IdentifyingType 
+INNER Join InvestigationOrgMapping IOM (Nolock) ON IOM.InvestigationID=CP.IdentifyingID 
+INNER JOIN InvestigationOrgAttributes IOA (Nolock) ON IOM.InvestigationID=IOA.InvestigationID AND IOA.OrgID =IOM.OrgID 
+INNER JOIN InvestigationMaster IM (Nolock) ON IM.InvestigationID =IOM.InvestigationID 
+Left Join InvDeptMaster IDM (Nolock)ON IDM.DeptID=IOM.DeptID and IOM.OrgID=IDM.OrgID
+WHERE CM.CodeSchemeID =@CodeID
+AND CP.IdentifyingType ='Investigations' 
+AND IOM.OrgID =@pOrgID
+)
+T ON T.Investigationid=ORD.ID
+Where ORD.CreatedAt between @Fdate and @Tdate
+And PV.orgid=@pOrgID
+And ORD.Type='INV'
+And ORD.Status='Approve'
+and ISNull(VCM.IsActive,'Y')='Y'
+--and VisitNumber='1500000013'
+group by T.DeptName,ORD.CreatedAt ,PV.VisitNumber,P.Name,CM.ClientCode,CM.ClientName,ORD.ID,T.CodeName,
+T.InvestigationName ,ORD.Type,PINV.ApprovedAt,U.Name
+
+
+Union all
+
+
+
+
+Select 'Approval Report' as [Header],
+ORD.CreatedAt as RegDate,PV.VisitNumber as VisitNumber,P.Name
+--,CM.ClientCode
+,CM.ClientName,
+--ORD.ID,
+Max(T.DeptName) as [Department Name],
+GM.CodeName,
+GM.GroupName,ORD.Type
+,U.Name as ApprovedBy,PINV.ApprovedAt as ApprovedOn
+from PatientVisit PV(Nolock)
+Inner Join Patient P (Nolock)ON P.PatientID=PV.PatientID and P.orgid=PV.orgid
+Inner Join OrderedInvestigations ORD (Nolock) On ORD.VisitID=PV.PatientVisitId and PV.orgid=ORD.OrgID
+Inner Join Patientinvestigation PINV (Nolock)On PINV.AccessionNumber =ORD.AccessionNumber and PINV.OrgID=ORD.OrgID
+Inner Join VisitClientMapping VCM (Nolock)On VCM.VisitID=PINV.PatientVisitID and VCM.OrgID=PINV.OrgID
+Inner Join ClientMaster CM(Nolock) On CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID
+Inner Join Users U (Nolock)On U.LoginID=PINV.ApprovedBy
+Inner Join
+(
+
+Select CM.CodeName,IM.InvestigationName,IM.InvestigationID,IOM.DeptID,IDM.DeptName 
+from CodeMaster CM (Nolock)
+INNER JOIN CodeMapper CP (Nolock) ON CM.CodeMasterID = CP.CodeMasterID AND CM.CodeType =CP.IdentifyingType 
+INNER Join InvestigationOrgMapping IOM (Nolock) ON IOM.InvestigationID=CP.IdentifyingID 
+INNER JOIN InvestigationOrgAttributes IOA (Nolock) ON IOM.InvestigationID=IOA.InvestigationID AND IOA.OrgID =IOM.OrgID 
+INNER JOIN InvestigationMaster IM (Nolock) ON IM.InvestigationID =IOM.InvestigationID 
+Left Join InvDeptMaster IDM (Nolock)ON IDM.DeptID=IOM.DeptID and IOM.OrgID=IDM.OrgID
+WHERE CM.CodeSchemeID =@CodeID
+AND CP.IdentifyingType ='Investigations' 
+AND IOM.OrgID =@pOrgID
+)T ON T.Investigationid=pinv.InvestigationID
+Inner Join 
+(
+Select CM.CodeName,IM.GroupName,IOM.OrgGroupID,IM.GroupID 
+from CodeMaster CM (Nolock)
+INNER JOIN CodeMapper CP (Nolock) ON CM.CodeMasterID = CP.CodeMasterID AND CM.CodeType =CP.IdentifyingType 
+INNER Join InvOrgGroup  IOM (Nolock) ON IOM.OrgGroupID =CP.IdentifyingID 
+INNER JOIN InvGroupMaster IM (Nolock) ON IM.GroupID  =IOM.AttGroupID  
+WHERE CM.CodeSchemeID =@CodeID
+AND CP.IdentifyingType ='GRP' 
+AND IOM.OrgID =@pOrgID
+)GM On GM.GroupID=ORD.ID
+Where ORD.CreatedAt between @Fdate and @Tdate
+And ORD.Type='GRP'
+And ORD.Status='Approve'
+and ISNull(VCM.IsActive,'Y')='Y'
+and Ord.OrgID=@pOrgID
+--and VisitNumber='1500000013' 
+Group By ORD.CreatedAt ,PV.VisitNumber ,P.Name,CM.ClientCode,CM.ClientName,ORD.ID,GM.CodeName,GM.GroupName,ORD.Type,PINV.ApprovedAt,U.Name
+
+Order by DeptName,VisitNumber
+
+END
+
+
+
+
+

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Report xmlns:rd="http://schemas.microsoft.com/SQLServer/reporting/reportdesigner" xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition">
+  <DataSources>
+    <DataSource Name="DataSource1">
+      <ConnectionProperties>
+        <DataProvider>SQL</DataProvider>
+        <ConnectString>Data Source=Venkat\Sqlexpress;Initial Catalog=MedAll</ConnectString>
+      </ConnectionProperties>
+      <rd:DataSourceID>3fb59eac-e137-4782-856b-4b2f0e7744ae</rd:DataSourceID>
+    </DataSource>
+  </DataSources>
+  <DataSets>
+    <DataSet Name="DataSet1">
+      <Fields>
+        <Field Name="PatientVisitID">
+          <DataField>PatientVisitID</DataField>
+          <rd:TypeName>System.Int64</rd:TypeName>
+        </Field>
+        <Field Name="InvestigationID">
+          <DataField>InvestigationID</DataField>
+          <rd:TypeName>System.Int64</rd:TypeName>
+        </Field>
+        <Field Name="InvestigationName">
+          <DataField>InvestigationName</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="ReportName">
+          <DataField>ReportName</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+        <Field Name="TemplateID">
+          <DataField>TemplateID</DataField>
+          <rd:TypeName>System.Int32</rd:TypeName>
+        </Field>
+        <Field Name="ReportStatus">
+          <DataField>ReportStatus</DataField>
+          <rd:TypeName>System.String</rd:TypeName>
+        </Field>
+      </Fields>
+      <Query>
+        <DataSourceName>DataSource1</DataSourceName>
+        <CommandText>SELECT piv.PatientVisitID,piv.InvestigationID     
+    ,piv.InvestigationName     
+    ,ISNULL (im.reporttemplatename,     
+    (SELECT Reporttemplatename     
+    FROM InvReportMaster     
+    WHERE IsDefault='Y' AND OrgID = @OrgID)) AS ReportName     
+    ,ISNULL(im.templateid,     
+    (SELECT TemplateID from InvReportMaster     
+    WHERE IsDefault='Y' AND OrgID = @OrgID))AS TemplateID ,piv.ReportStatus    
+    FROM PatientInvestigation piv     
+    LEFT OUTER JOIN invreportmapping irm ON irm.investigationid = piv.InvestigationID     
+    LEFT OUTER JOIN invreportmaster im ON im.templateid = irm.templateid     
+    WHERE piv.PatientVisitID=@pVisitID     
+    AND piv.OrgID=@OrgID     and im.templateid = 4 and im.Orgid = @OrgID</CommandText>
+        <QueryParameters>
+          <QueryParameter Name="@OrgID">
+            <Value>=Parameters!OrgID.Value</Value>
+          </QueryParameter>
+          <QueryParameter Name="@pVisitID">
+            <Value>=Parameters!pVisitID.Value</Value>
+          </QueryParameter>
+        </QueryParameters>
+        <rd:UseGenericDesigner>true</rd:UseGenericDesigner>
+      </Query>
+    </DataSet>
+  </DataSets>
+  <Body>
+    <ReportItems>
+      <Subreport Name="Subreport1">
+        <ReportName>HospitalInvestigationValuesReport</ReportName>
+        <Parameters>
+          <Parameter Name="pVisitID">
+            <Value>=Parameters!pVisitID.Value</Value>
+          </Parameter>
+          <Parameter Name="OrgID">
+            <Value>=Parameters!OrgID.Value</Value>
+          </Parameter>
+          <Parameter Name="TemplateID">
+            <Value>=Parameters!TemplateID.Value</Value>
+          </Parameter>
+          <Parameter Name="InvestigationID">
+            <Value>=Parameters!InvestigationID.Value</Value>
+          </Parameter>
+          <Parameter Name="ConnectionString">
+            <Value>=Parameters!ConnectionString.Value</Value>
+          </Parameter>
+        </Parameters>
+        <Top>0.04875in</Top>
+        <Height>1.5in</Height>
+        <Width>6.5in</Width>
+        <Style>
+          <Border>
+            <Style>None</Style>
+          </Border>
+        </Style>
+      </Subreport>
+      <Subreport Name="Subreport2">
+        <ReportName>HospitalCultureReport</ReportName>
+        <Parameters>
+          <Parameter Name="pVisitID">
+            <Value>=Parameters!pVisitID.Value</Value>
+          </Parameter>
+          <Parameter Name="OrgID">
+            <Value>=Parameters!OrgID.Value</Value>
+          </Parameter>
+          <Parameter Name="TemplateID">
+            <Value>4</Value>
+          </Parameter>
+          <Parameter Name="InvestigationID">
+            <Value>=First(Fields!InvestigationID.Value, "DataSet1")</Value>
+          </Parameter>
+          <Parameter Name="ConnectionString">
+            <Value>=Parameters!ConnectionString.Value</Value>
+          </Parameter>
+        </Parameters>
+        <Top>1.67375in</Top>
+        <Height>2.59375in</Height>
+        <Width>6.5in</Width>
+        <ZIndex>1</ZIndex>
+        <Style>
+          <Border>
+            <Style>None</Style>
+          </Border>
+        </Style>
+      </Subreport>
+      <Subreport Name="Subreport3">
+        <ReportName>HospitalTextReport</ReportName>
+        <Parameters>
+          <Parameter Name="pVisitID">
+            <Value>=Parameters!pVisitID.Value</Value>
+          </Parameter>
+          <Parameter Name="OrgID">
+            <Value>=Parameters!OrgID.Value</Value>
+          </Parameter>
+          <Parameter Name="TemplateID">
+            <Value>2</Value>
+          </Parameter>
+          <Parameter Name="InvestigationID">
+            <Value>=Parameters!InvestigationID.Value</Value>
+          </Parameter>
+          <Parameter Name="ConnectionString">
+            <Value>=Parameters!ConnectionString.Value</Value>
+          </Parameter>
+        </Parameters>
+        <Top>4.29528in</Top>
+        <Height>3.05208in</Height>
+        <Width>6.5in</Width>
+        <ZIndex>2</ZIndex>
+        <Style>
+          <Border>
+            <Style>None</Style>
+          </Border>
+        </Style>
+      </Subreport>
+    </ReportItems>
+    <Height>8.17375in</Height>
+    <Style />
+  </Body>
+  <ReportParameters>
+    <ReportParameter Name="pVisitID">
+      <DataType>String</DataType>
+      <Prompt>p Visit ID</Prompt>
+    </ReportParameter>
+    <ReportParameter Name="OrgID">
+      <DataType>String</DataType>
+      <Prompt>Org ID</Prompt>
+    </ReportParameter>
+    <ReportParameter Name="TemplateID">
+      <DataType>String</DataType>
+      <Prompt>Template ID</Prompt>
+    </ReportParameter>
+    <ReportParameter Name="InvestigationID">
+      <DataType>String</DataType>
+      <Prompt>InvestigationID</Prompt>
+    </ReportParameter>
+    <ReportParameter Name="ConnectionString">
+      <DataType>String</DataType>
+      <DefaultValue>
+        <Values>
+          <Value>Server=Venkat\Sqlexpress;Database=MedAll; uid=sa; pwd=A$$une</Value>
+        </Values>
+      </DefaultValue>
+      <Prompt>ConnectionString</Prompt>
+    </ReportParameter>
+  </ReportParameters>
+  <Width>8.05917in</Width>
+  <Page>
+    <PageHeight>10.02in</PageHeight>
+    <PageWidth>8.66in</PageWidth>
+    <LeftMargin>0.59in</LeftMargin>
+    <TopMargin>2in</TopMargin>
+    <BottomMargin>1.3in</BottomMargin>
+    <Style />
+  </Page>
+  <rd:ReportID>e221356e-5032-4148-8945-5732c966152b</rd:ReportID>
+  <rd:ReportUnitType>Inch</rd:ReportUnitType>
+</Report>

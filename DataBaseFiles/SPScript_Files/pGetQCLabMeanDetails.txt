@@ -1,0 +1,71 @@
+CREATE PROCEDURE [dbo].[pGetQCLabMeanDetails]    
+ @pOrgID [int],    
+ @pInstrumentID [BIGINT],    
+ @pInvestigationID [BIGINT],
+ @pLotID [BIGINT],    
+ --@pFromDate [DATETIME],
+ --@pToDate  [DATETIME],
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN      
+
+ IF(@pInstrumentID=0)
+  SET @pInstrumentID=NULL;
+ IF(@pInvestigationID=0)
+  SET @pInvestigationID=NULL;
+ IF(@pLotID=0)
+  SET @pLotID=NULL;
+
+  CREATE TABLE #TempLevelOneResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV nvarchar(50)
+  )
+   CREATE TABLE #TempLevelTwoResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV nvarchar(50)
+  )
+  CREATE TABLE #TempLevelThreeResult
+  (
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 TestName NVARCHAR(50),
+	 Mean DECIMAL(18,3),
+	 SD DECIMAL(18,3),
+	 CV nvarchar(50)
+  )
+
+   INSERT INTO #TempLevelOneResult
+   SELECT DISTINCT IOM.InvestigationID,DIM.InstrumentID,IOM.DisplayText,RM.LabMean,RM.LabSD,RM.LabCV AS CV FROM QCRuleMaster RM WITH (NOLOCK)
+   INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON RM.Analyte=DIM.InvestigationID AND RM.OrgID=DIM.OrgID AND DIM.InstrumentID=@pInstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=DIM.OrgID AND IOM.InvestigationID=DIM.InvestigationID
+   WHERE RM.OrgId=@pOrgID AND RM.LotID=@pLotID AND Analyte=ISNULL(@pInvestigationID,Analyte) AND RM.QCLevel='C1' --AND RM.IsActive=1
+
+   INSERT INTO #TempLevelTwoResult
+   SELECT DISTINCT IOM.InvestigationID,DIM.InstrumentID,IOM.DisplayText,RM.LabMean,RM.LabSD,RM.LabCV AS CV FROM QCRuleMaster RM WITH (NOLOCK)
+   INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON RM.Analyte=DIM.InvestigationID AND RM.OrgID=DIM.OrgID AND DIM.InstrumentID=@pInstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=DIM.OrgID AND IOM.InvestigationID=DIM.InvestigationID
+   WHERE RM.OrgId=@pOrgID AND RM.LotID=@pLotID AND Analyte=ISNULL(@pInvestigationID,Analyte) AND RM.QCLevel='C2' AND RM.IsActive=1
+
+   INSERT INTO #TempLevelThreeResult
+   SELECT DISTINCT IOM.InvestigationID,DIM.InstrumentID,IOM.DisplayText,RM.LabMean,RM.LabSD,RM.LabCV AS CV FROM QCRuleMaster RM WITH (NOLOCK)
+   INNER JOIN DeviceIntegrationOrgmapping DIM WITH (NOLOCK) ON RM.Analyte=DIM.InvestigationID AND RM.OrgID=DIM.OrgID AND DIM.InstrumentID=@pInstrumentID
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID=DIM.OrgID AND IOM.InvestigationID=DIM.InvestigationID
+   WHERE RM.OrgId=@pOrgID AND RM.LotID=@pLotID AND Analyte=ISNULL(@pInvestigationID,Analyte) AND RM.QCLevel='C3' AND RM.IsActive=1
+
+   SELECT ROW_NUMBER() OVER (Partition BY T1.InvestigationID,T1.InstrumentID order by T1.InvestigationID) AS 'SNO',T1.InvestigationID,T1.InstrumentID,T1.TestName AS 'TestName',T1.Mean AS 'LOMean',T1.SD AS 'LOSD',T1.CV AS 'LOCV'
+  ,T2.Mean AS 'LTMean',T2.SD AS 'LTSD',T2.CV AS 'LTCV'
+  ,T3.Mean AS 'LEMean',T3.SD AS 'LESD',T3.CV AS 'LECV' FROM #TempLevelOneResult T1
+  INNER JOIN #TempLevelTwoResult T2 ON T1.InvestigationID=T2.InvestigationID AND T1.InstrumentID=T2.InstrumentID
+  INNER JOIN #TempLevelThreeResult T3 ON T1.InvestigationID=T2.InvestigationID AND T1.InstrumentID=T2.InstrumentID
+END

@@ -1,0 +1,91 @@
+
+CREATE PROCEDURE [dbo].[pInsertTRFHCDetails]    
+      @pOrgCode NVARCHAR(100),
+        @FileName	nvarchar(300),
+		@BookingID bigint,
+		 @ExternalRefNo	nvarchar(300),
+	@IdentifyingID	bigint,
+	@IdentifyingType	nvarchar(250),
+		@SourceType	nvarchar(250),
+	@FilePath	nvarchar(max)
+
+WITH EXECUTE AS OWNER    
+AS  
+BEGIN   
+
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50) ,	@VendorID bigint
+
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, @VendorID=VOM.VendorID,
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+
+
+
+declare 	
+      
+     
+	 	@PatientID	bigint,
+	@VisitID	bigint
+
+--	select 
+	 DECLARE @SERVERDATE AS DATETIME
+	   SET @SERVERDATE=Getdate()
+--	 IF( Isnull(@BookingID, 0) = 0
+  --        AND ( Isnull(@pOrgID, 0)<>0 and Isnull(@pOrgAddrID, 0)<>0) )
+  --      BEGIN
+	--	select 'h1'
+
+--	IF(@IdentifyingType='TRF_Upload_Home_Collection')
+--	Begin
+	if (@SourceType='HomeCollection_Web')
+	begin
+  INSERT INTO TRFFileManager_HC(FileName,BookingID,OrgID,IdentifyingID,IdentifyingType,FilePath,Createdby,[Createdat ],SourceType,ExternalRefNo)  
+  
+  
+  values (LOWER(@FileName),   
+                  @BookingID,
+                  
+				    @pOrgID,
+                  
+                cast(@IdentifyingID as bigint)  , @IdentifyingType,@FilePath,@VendorID,@SERVERDATE,@SourceType,0)
+               
+      update TRFFileManager_HC set PatientID=B.PatientID,VisitID=B.PatientVisitID from Bookings B where B.BookingID=@BookingID
+	End
+	
+	else
+	begin
+	 INSERT INTO TRFFileManager_HC(FileName,BookingID,OrgID,IdentifyingID,IdentifyingType,FilePath,Createdby,[Createdat ],SourceType,ExternalRefNo)  
+  
+  
+  values (LOWER(@FileName),
+			     
+                  @BookingID,
+				  
+                  
+				    @pOrgID,
+                  
+                 cast(@IdentifyingID as bigint), @IdentifyingType,@FilePath,@VendorID,@SERVERDATE,@SourceType,@BookingID)
+               
+      update TRFFileManager_HC set PatientID=B.PatientID,VisitID=B.PatientVisitID from Bookings B where B.BookingID=@BookingID
+	End
+--	end
+	
+--	end
+ 
+ END  
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,57 @@
+/****** Object:  StoredProcedure [dbo].[pSaveUnHoldDetails]    Script Date: 3/1/2019 8:12:08 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pSaveUnHoldDetails]
+@pPatientInvTable [dbo].[PatientInvestigation] READONLY
+WITH EXECUTE 
+AS OWNER
+AS 
+BEGIN
+IF EXISTS (SELECT 1 FROM @pPatientInvTable)
+BEGIN
+
+DECLARE  @VisitID [bigint], @OrgID [int]
+
+SELECT  TOP 1 @VisitID=  PatientVisitID,@OrgID=OrgID  FROM @pPatientInvTable
+
+UPDATE PIV  
+SET PIV.IsReportable =CASE WHEN TempInv.Status='UnHold' THEN  0 
+					       WHEN TempInv.Status='On Hold' THEN  1  ELSE NULL END 
+FROM PatientInvestigation PIV WITH(NOLOCK)
+INNER JOIN @pPatientInvTable  TempInv ON TempInv.PatientVisitID = PIV.PatientVisitID 
+AND TempInv.InvestigationID = PIV.InvestigationID 
+END
+
+
+/*Notifiction Update Block*/
+IF EXISTS (SELECT 1 FROM Notifications WITH (NOLOCK) WHERE IdentityID=@VisitID and OrgID=@OrgID)
+BEGIN
+IF EXISTS( SELECT 1 from OrderedInvestigations WITH (NOLOCK) WHERE VisitID=@VisitID and VisitID=@OrgID and Status='Approve')	   
+BEGIN 
+UPDATE Notifications WITH (ROWLOCK) SET status='' where IdentityID=@VisitID and OrgID=@OrgID
+DELETE FROM ReportSnapshot WHERE visitid=@VisitID and OrgID=@OrgID
+INSERT INTO NoticiationHist(VisitID,OrgID,Comments,Createdat,Notificationid)
+SELECT @VisitID,@OrgID,'StatusChanges',getdate(),NotificationID FROM Notifications WHERE IdentityID=@VisitID and OrgID=@OrgID and ActionType in ('Pdf','ROUNDBPDF')
+END
+ELSE
+BEGIN
+UPDATE Notifications WITH (ROWLOCK) SET status='DIFFERED' where IdentityID=@VisitID and OrgID=@OrgID
+DELETE FROM ReportSnapshot where visitid=@VisitID and orgid=@OrgID
+INSERT INTO NoticiationHist(VisitID,OrgID,Comments,Createdat,Notificationid)
+SELECT @VisitID,@OrgID,'StatusChangesDIFFERED',getdate(),NotificationID FROM Notifications WITH (NOLOCK) WHERE IdentityID=@VisitID and orgid=@OrgID and ActionType in ('Pdf','ROUNDBPDF')
+END
+END
+/*Code added by T.Suresh for MIS Purpose Start here */
+
+
+
+END
+
+
+GO
+
+

@@ -1,0 +1,569 @@
+Declare @OrgID bigint,@CreatedAt DATETIME,@CreatedBy BIGINT,@RoleID bigint,@RolID bigint
+	select top 1 @OrgID=OrgID from organization where Orgid=189 --Name = 'Ashok Laboratory'
+	SELECT @CreatedAt=GETDATE(),@CreatedBy=189
+	--select  top 1 @RoleID =RoleID+1 from Role where OrgID=@OrgID order by 1 desc
+	if not Exists(select top 1 RoleID from Role where OrgID=@OrgID order by 1 desc)
+	begin
+	set @RolID = (select top 1 RoleID from Role where Orgid=@OrgID order by 1 desc)
+	set @RoleID=(@RolID+1)
+	select @RoleID,@RolID
+	end
+	else
+	begin
+	set @RolID = (select top 1 RoleID from Role order by 1 desc)
+	set @RoleID=(@RolID+1)
+	select @RoleID,@RolID
+	end
+
+	if(@OrgID is not null)
+	Begin
+	if not Exists(select 1 from Role where RoleName='Scheduler' and OrgID=@OrgID  AND LangCode='en-GB')
+	Begin
+		insert into Role (RoleID,RoleName,Description,OrgID,CreatedAt,CreatedBy,LangCode) values(
+		 @RoleID,'Scheduler','Scheduler',@OrgID,@CreatedAt,@CreatedBy,'en-GB' )
+	End
+	end
+	Go
+
+Declare @PageID bigint
+Declare @PageName NVarchar(250)
+Declare @PageURL NVarchar(500)
+SET @PageName='Home Collection - Task Scheduling'
+SET @PageURL='/HomeCollection/homecollectiontaskscheduler.aspx'
+If Not Exists(Select 1 from Pages Where PageName=@PageName and ISNULL(PageURL,'')=@PageURL)
+begin
+	----set @PageID=1--Max(PageID)+1 from Pages ---- use when truncate the pages table
+	select @PageID=Max(PageID)+1 from Pages
+	Insert into Pages(PageID,PageName,PageURL,CreatedBy,CreatedAt) values (@PageID,@PageName,@PageURL,0,GETDATE())
+end
+SELECT @PageID =PageID FROM  Pages where pagename=@PageName and ISNULL(PageURL,'')=@PageURL
+IF NOT EXISTS (Select 1 FROM PageLangMapping where Pageid=@PageID and Langcode='en-GB')
+BEGIN
+INSERT INTO PageLangMapping (PageID,DisplayText,LangCode,CreatedAt,CreatedBy)select @PageID,@PageName,'en-GB',getdate(),100
+End
+go
+
+
+CREATE TABLE #TempOrgID (ID INT IDENTITY(1,1),OrgID INT)
+INSERT INTO #TempOrgID
+SELECT OrgID from Organization WITH(NOLOCK) where Orgid=189  ---Name='Prima Diagnostics' ORDER BY OrgID
+DECLARE @MinValue int 
+DECLARE @MaxValue int
+DECLARE @MenuID bigint 
+DECLARE @PageID bigint
+DECLARE @RoleID bigint
+DECLARE @OrgID INT
+SET @MinValue=(SELECT MIN(ID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(ID) FROM #TempOrgID) 
+SET @MenuID=(SELECT MAX(MenuID)+1 FROM MenuMaster)
+
+SELECT @PageID=PageID FROM Pages WHERE PageURL='/HomeCollection/homecollectiontaskscheduler.aspx'
+WHILE @MinValue <= @MaxValue 
+BEGIN
+
+SELECT @OrgID=OrgID FROM #TempOrgID WITH(NOLOCK) WHERE ID=@MinValue
+
+SELECT @RoleID=RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+IF EXISTS(SELECT OrgID FROM Organization WITH(NOLOCK) WHERE OrgID=@OrgID) 
+BEGIN
+	IF EXISTS(SELECT RoleID FROM Role WITH(NOLOCK) WHERE RoleID=@RoleID) 
+	BEGIN
+		IF EXISTS(SELECT PageID FROM Pages WITH(NOLOCK) WHERE PageID=@PageID) 
+		BEGIN
+			IF NOT EXISTS(SELECT MenuID FROM MenuMaster WHERE PageID=@PageID AND OrgId=@OrgID)
+			BEGIN
+				INSERT INTO MenuMaster(MenuID,DisplayText,Parentid,OrgId,PageID) 
+				SELECT @MenuID,'Home Collection - Task Scheduling',0,@OrgID,@PageID
+			END
+			IF NOT EXISTS(SELECT RoleID FROM RoleMenu RM JOIN MenuMaster MM ON MM.MenuID=RM.MenuID WHERE PageID=@PageID AND MM.OrgId=@OrgID)
+			BEGIN
+				INSERT INTO RoleMenu(MenuID,RoleID,IsMapped) 
+				SELECT @MenuID,@RoleID,'Y'
+			END
+		END
+	END
+END
+SET @MinValue = @MinValue + 1
+SET @MenuID = @MenuID + 1
+END
+DROP TABLE #TempOrgID
+GO
+
+
+
+CREATE TABLE #TempOrgID (ID INT IDENTITY(1,1),OrgID INT)
+INSERT INTO #TempOrgID
+SELECT OrgID from Organization WITH(NOLOCK) where Orgid=189  ---Name='Prima Diagnostics' ORDER BY OrgID
+DECLARE @MinValue int 
+DECLARE @MaxValue int
+DECLARE @MenuID bigint 
+DECLARE @PageID bigint
+DECLARE @RoleID bigint
+DECLARE @OrgID INT
+SET @MinValue=(SELECT MIN(ID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(ID) FROM #TempOrgID) 
+SET @MenuID=(SELECT MAX(MenuID)+1 FROM MenuMaster)
+
+SELECT @PageID=PageID FROM Pages WHERE PageURL='/HomeCollection/homecollectiontaskscheduler.aspx'
+WHILE @MinValue <= @MaxValue 
+BEGIN
+
+SELECT @OrgID=OrgID FROM #TempOrgID WITH(NOLOCK) WHERE ID=@MinValue
+
+SELECT @RoleID=RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+IF EXISTS(SELECT OrgID FROM Organization WITH(NOLOCK) WHERE OrgID=@OrgID) 
+BEGIN
+	IF EXISTS(SELECT RoleID FROM Role WITH(NOLOCK) WHERE RoleID=@RoleID) 
+	BEGIN
+		IF EXISTS(SELECT PageID FROM Pages WITH(NOLOCK) WHERE PageID=@PageID) 
+		BEGIN
+			IF NOT EXISTS(SELECT MenuID FROM MenuMaster WHERE PageID=@PageID AND OrgId=@OrgID)
+			BEGIN
+				INSERT INTO MenuMaster(MenuID,DisplayText,Parentid,OrgId,PageID) 
+				SELECT @MenuID,'Home Collection - Task Scheduling',0,@OrgID,@PageID
+			END
+			IF NOT EXISTS(SELECT RoleID FROM RoleMenu RM JOIN MenuMaster MM ON MM.MenuID=RM.MenuID WHERE PageID=@PageID AND MM.OrgId=@OrgID)
+			BEGIN
+				INSERT INTO RoleMenu(MenuID,RoleID,IsMapped) 
+				SELECT @MenuID,@RoleID,'Y'
+			END
+		END
+	END
+END
+SET @MinValue = @MinValue + 1
+SET @MenuID = @MenuID + 1
+END
+DROP TABLE #TempOrgID
+GO
+
+
+Declare @PageID bigint
+Declare @PageName NVarchar(250)
+Declare @PageURL NVarchar(500)
+SET @PageName='Live Location Tracking'
+SET @PageURL='/HomeCollection/HCLocation.aspx'
+If Not Exists(Select 1 from Pages Where PageName=@PageName and ISNULL(PageURL,'')=@PageURL)
+begin
+	----set @PageID=1--Max(PageID)+1 from Pages ---- use when truncate the pages table
+	select @PageID=Max(PageID)+1 from Pages
+	Insert into Pages(PageID,PageName,PageURL,CreatedBy,CreatedAt) values (@PageID,@PageName,@PageURL,0,GETDATE())
+end
+SELECT @PageID =PageID FROM  Pages where pagename=@PageName and ISNULL(PageURL,'')=@PageURL
+IF NOT EXISTS (Select 1 FROM PageLangMapping where Pageid=@PageID and Langcode='en-GB')
+BEGIN
+INSERT INTO PageLangMapping (PageID,DisplayText,LangCode,CreatedAt,CreatedBy)select @PageID,@PageName,'en-GB',getdate(),100
+End
+go
+
+
+CREATE TABLE #TempOrgID (ID INT IDENTITY(1,1),OrgID INT)
+INSERT INTO #TempOrgID
+SELECT OrgID from Organization WITH(NOLOCK) where Orgid=189  ---Name='Prima Diagnostics' ORDER BY OrgID
+DECLARE @MinValue int 
+DECLARE @MaxValue int
+DECLARE @MenuID bigint 
+DECLARE @PageID bigint
+DECLARE @RoleID bigint
+DECLARE @OrgID INT
+SET @MinValue=(SELECT MIN(ID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(ID) FROM #TempOrgID) 
+SET @MenuID=(SELECT MAX(MenuID)+1 FROM MenuMaster)
+
+SELECT @PageID=PageID FROM Pages WHERE PageURL='/HomeCollection/HCLocation.aspx'
+WHILE @MinValue <= @MaxValue 
+BEGIN
+
+SELECT @OrgID=OrgID FROM #TempOrgID WITH(NOLOCK) WHERE ID=@MinValue
+
+SELECT @RoleID=RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+IF EXISTS(SELECT OrgID FROM Organization WITH(NOLOCK) WHERE OrgID=@OrgID) 
+BEGIN
+	IF EXISTS(SELECT RoleID FROM Role WITH(NOLOCK) WHERE RoleID=@RoleID) 
+	BEGIN
+		IF EXISTS(SELECT PageID FROM Pages WITH(NOLOCK) WHERE PageID=@PageID) 
+		BEGIN
+			IF NOT EXISTS(SELECT MenuID FROM MenuMaster WHERE PageID=@PageID AND OrgId=@OrgID)
+			BEGIN
+				INSERT INTO MenuMaster(MenuID,DisplayText,Parentid,OrgId,PageID) 
+				SELECT @MenuID,'Live Location Tracking',0,@OrgID,@PageID
+			END
+			IF NOT EXISTS(SELECT RoleID FROM RoleMenu RM JOIN MenuMaster MM ON MM.MenuID=RM.MenuID WHERE PageID=@PageID AND MM.OrgId=@OrgID)
+			BEGIN
+				INSERT INTO RoleMenu(MenuID,RoleID,IsMapped) 
+				SELECT @MenuID,@RoleID,'Y'
+			END
+		END
+	END
+END
+SET @MinValue = @MinValue + 1
+SET @MenuID = @MenuID + 1
+END
+DROP TABLE #TempOrgID
+GO
+
+
+
+CREATE TABLE #TempOrgID (ID INT IDENTITY(1,1),OrgID INT)
+INSERT INTO #TempOrgID
+SELECT OrgID from Organization WITH(NOLOCK) where Orgid=189  ---Name='Prima Diagnostics' ORDER BY OrgID
+DECLARE @MinValue int 
+DECLARE @MaxValue int
+DECLARE @MenuID bigint 
+DECLARE @PageID bigint
+DECLARE @RoleID bigint
+DECLARE @OrgID INT
+SET @MinValue=(SELECT MIN(ID) FROM #TempOrgID) 
+SET @MaxValue=(SELECT MAX(ID) FROM #TempOrgID) 
+SET @MenuID=(SELECT MAX(MenuID)+1 FROM MenuMaster)
+
+SELECT @PageID=PageID FROM Pages WHERE PageURL='/HomeCollection/HCLocation.aspx'
+WHILE @MinValue <= @MaxValue 
+BEGIN
+
+SELECT @OrgID=OrgID FROM #TempOrgID WITH(NOLOCK) WHERE ID=@MinValue
+
+SELECT @RoleID=RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+IF EXISTS(SELECT OrgID FROM Organization WITH(NOLOCK) WHERE OrgID=@OrgID) 
+BEGIN
+	IF EXISTS(SELECT RoleID FROM Role WITH(NOLOCK) WHERE RoleID=@RoleID) 
+	BEGIN
+		IF EXISTS(SELECT PageID FROM Pages WITH(NOLOCK) WHERE PageID=@PageID) 
+		BEGIN
+			IF NOT EXISTS(SELECT MenuID FROM MenuMaster WHERE PageID=@PageID AND OrgId=@OrgID)
+			BEGIN
+				INSERT INTO MenuMaster(MenuID,DisplayText,Parentid,OrgId,PageID) 
+				SELECT @MenuID,'Live Location Tracking',0,@OrgID,@PageID
+			END
+			IF NOT EXISTS(SELECT RoleID FROM RoleMenu RM JOIN MenuMaster MM ON MM.MenuID=RM.MenuID WHERE PageID=@PageID AND MM.OrgId=@OrgID)
+			BEGIN
+				INSERT INTO RoleMenu(MenuID,RoleID,IsMapped) 
+				SELECT @MenuID,@RoleID,'Y'
+			END
+		END
+	END
+END
+SET @MinValue = @MinValue + 1
+SET @MenuID = @MenuID + 1
+END
+DROP TABLE #TempOrgID
+GO
+
+Declare @OrgID int, 
+@PageID bigint, 
+@RoleID bigint, 
+@pPageID bigint
+
+Select @OrgID=OrgID from Organization where Orgid=189  ---Name='Prima Diagnostics' ORDER BY OrgID
+select @RoleID=RoleID from role where orgid=@OrgID and RoleName='Scheduler' and Description = 'Scheduler' and LangCode ='en-GB'
+
+select @PageID=PageID from pages where PageName='Home Collection - Task Scheduling' and PageURL='/HomeCollection/homecollectiontaskscheduler.aspx'
+
+select @pPageID=PageID from pages where PageName='PatientRegistration' and PageURL='/Reception/PatientRegistration.aspx'
+
+IF not EXISTS(SELECT 1 FROM PageMapping WHERE PageID=@PageID and RoleID=@RoleID)
+ 
+ BEGIN
+   
+ IF EXISTS (SELECT 1 FROM PageMapping WHERE PageID=@pPageID and RoleID=@RoleID)
+    
+
+  BEGIN
+        
+UPDATE PageMapping set PageID = @PageID where RoleID = @RoleID AND PageID = @pPageID
+   
+   END
+	
+  else
+	
+  begin
+	
+  insert into PageMapping(RoleId,PageID,Description,SeqNo) values(@RoleID,@PageID,'Home Collection - Task Scheduling',1)
+
+	  end
+ 
+ END
+
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='B'
+set @SubTypeCode1='Booked'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='A'
+set @SubTypeCode1='Assigned'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='C'
+set @SubTypeCode1='Canceled'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT  EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='TS'
+set @SubTypeCode1='Trip Started'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF  NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='TC'
+set @SubTypeCode1='Trip Can-celled'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT  EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='RD'
+set @SubTypeCode1='Reached Destination'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT  EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='CD'
+set @SubTypeCode1='Completed'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF NOT  EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO
+
+declare @Orgid bigint
+declare @LangCode varchar(10)
+Declare @Code VARCHAR(20)
+Declare @Domain VARCHAR(20)
+Declare @SubTypeCode1 VARCHAR(20)
+
+Declare @ParentID Bigint
+Declare @MetaDataID1 Bigint
+
+select @Orgid=OrgID from Organization where Orgid=189  --where OrgDisplayName = 'Prima Diagnostics'
+set @LangCode='en-GB'
+set @Domain='HC-BookingStatus'
+set @Code='IP'
+set @SubTypeCode1='In-progress'
+
+Select @ParentID=MetaDataID from MetaData Where Domain=@Domain and LangCode=@LangCode AND Code=@Code
+IF   NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+ BEGIN
+		 IF NOT EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode 
+		 AND Code=@SubTypeCode1 and ParentID=@ParentID)
+		 BEGIN
+			 INSERT INTO [dbo].[MetaData](Domain,Code,DisplayText,LangCode,ParentID)
+			 VALUES (@Domain,@Code,@SubTypeCode1,@LangCode,@ParentID)
+		 END
+		 IF EXISTS (select 1 from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code)
+		 BEGIN
+			select @MetaDataID1=MetaDataID from MetaData where Domain=@Domain and LangCode=@LangCode AND Code=@Code 
+			IF NOT EXISTS (select 1 from MetaDataOrgMapping where MetadataID=@MetaDataID1 and OrgID=@Orgid and LangCode=@LangCode and DisplayText=@SubTypeCode1 )
+			BEGIN
+				INSERT INTO MetaDataOrgMapping(MetadataID,OrgID,LangCode,DisplayText,IsActive) values (@MetaDataID1,@Orgid,@LangCode,@SubTypeCode1,'Y')
+			END
+		 END
+END
+GO

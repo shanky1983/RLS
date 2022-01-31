@@ -1,0 +1,51 @@
+/****** Object:  StoredProcedure [dbo].[PgetDateListByOrg]    Script Date: 4/5/2019 6:57:01 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE Proc [dbo].[PgetDateListByOrg] (@Pdate datetime,@pcount int,@outdate datetime output,@OrgID INT)        
+as        
+/*        
+Declare @enddate datetime        
+Exec PgetDateList @Pdate = '22/11/2013',@pcount = 4,@outdate = @enddate output        
+select @enddate        
+*/        
+Begin        
+Declare @noofday int = 80        
+Declare @remainter int       
+Select @remainter = @pcount % 24      
+Select @pcount = @pcount / 24      
+If  cast(@Pdate as date) <> cast(DATEADD(hh,@remainter,@Pdate) as date)      
+Begin      
+ Select @pcount = @pcount +1    
+ Select @Pdate = convert(varchar,@Pdate,103)     
+End      
+Else      
+Begin      
+ select @Pdate = DATEADD(hh,@remainter,@Pdate)      
+End      
+Select @pcount = @pcount +1         
+set nocount on        
+;          
+With CTE as          
+(          
+select @Pdate as Date1,@noofday  as noofday           
+union all          
+select dateadd(day,1,date1) as date1,noofday -1 as noofday  from CTE           
+where noofday >=1          
+)          
+,CTE_2 as        
+(        
+select top (@pcount) date1  from CTE          
+Where cast(Date1 as date) not in           
+(          
+Select HolidayDate from LabHolidays (nolock) WHERE OrgID=  @OrgID           
+)          
+)        
+        
+select @outdate=MAX(date1) From CTE_2        
+set nocount off        
+End 
+
+
+

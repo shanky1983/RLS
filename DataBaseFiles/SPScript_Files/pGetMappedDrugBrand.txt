@@ -1,0 +1,29 @@
+/****** Object:  StoredProcedure [dbo].[pGetMappedDrugBrand]    Script Date: 6/25/2018 11:39:13 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetMappedDrugBrand]        
+ @pOrganismID [bigint],        
+ @pInvestigationID [bigint],        
+ @ContextInfo [UDT_Context] READONLY        
+WITH EXECUTE AS OWNER        
+AS        
+BEGIN              
+Declare @OrgId int        
+select @OrgId =OrgId from @ContextInfo         
+ SELECT b.DrugID,BrandName,Code,InvestigationName as LoginName  
+    FROM InvestigationDrugBrand b with(nolock)        
+ inner join InvOrganismDrugMapping m with(nolock)        
+ on b.DrugID=m.DrugID  
+ inner join investigationorgmapping mp with(nolock)  
+ on m.InvestigationID=mp.investigationid  
+ and mp.OrgID=@OrgId  
+ inner join investigationmaster inv with(nolock)  
+      on m.InvestigationID=inv.InvestigationID  
+    WHERE b.OrgID=@OrgId and m.OrganismID=@pOrganismID and m.InvestigationID=@pInvestigationID and b.isactive=1    
+    ORDER BY m.SequenceNo,BrandName              
+ END  
+GO

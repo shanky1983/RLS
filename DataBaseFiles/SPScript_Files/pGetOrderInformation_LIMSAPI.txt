@@ -1,0 +1,228 @@
+CREATE PROCEDURE [dbo].[pGetOrderInformation_LIMSAPI]
+(
+	@pOrgCode NVARCHAR(100),
+	@pDateRange DATETIME,
+	@pPatientNumber NVARCHAR(50),
+	@pVisitNumber NVARCHAR(50),
+	@Page INT,
+	@Size INT
+)
+AS
+BEGIN
+ 
+ DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL
+ DECLARE @pFdate DATETIME, @pTdate DATETIME
+
+ SELECT @pFdate=CONVERt(DATE,@pDateRange), @pTdate=DATEADD(ss,-1,DATEADD(dd,1,@pFdate))
+
+ CREATE TABLE #TempOrders
+ (
+	PatientID BIGINT,
+	Salutation NVARCHAR(10),
+	Name NVARCHAR(250),
+	Age NVARCHAR(15),
+	DateOfBirth DateTime,
+	Gender NVARCHAR(10),
+	PatientAddress NVARCHAR(4000),
+	MobileNumber NVARCHAR(20),
+	EMailID NVARCHAR(50),
+	City NVARCHAR(100),
+	State NVARCHAR(100),
+	Country NVARCHAR(100),
+	PinCode NVARCHAR(10),
+	ClientName NVARCHAR(255),
+	RefPhysicianID BIGINT,
+	RefPhysicianName NVARCHAR(255),
+	HospitalID BIGINT,
+	HospitalName NVARCHAR(500),
+	ExternalPatientNumber NVARCHAR(50),
+	PatientType NVARCHAR(20),
+	VisitType NVARCHAR(10),
+	URNType NVARCHAR(50),
+	URNNumber NVARCHAR(100),
+	Id BIGINT,
+	TestCode NVARCHAR(50),
+	Type NVARCHAR(10),
+	TestName NVARCHAR(500),
+	Amount DECIMAL(10,2),
+	Quantity DECIMAL(10,2),
+	GrossAmount DECIMAL(10,2),
+	DiscountAmount DECIMAL(10,2),
+	NetAmount DECIMAL(10,2),
+	AmountReceived DECIMAL(10,2),
+	DueAmount DECIMAL(10,2),
+	OrgID BIGINT,
+	PatientNumber NVARCHAR(50),
+	VisitNumber NVARCHAR(50),
+	FinalBillId BIGINT,
+	PaymentStatus NVARCHAR(25),
+	ExternalVisitID NVARCHAR(30),
+	BedWardInfo NVARCHAR(30),
+	ClientCode NVARCHAR(30),
+	PatientCategory NVARCHAR(50)
+ )
+
+ DECLARE @MaxRecordCount INT
+ DECLARE @MaxCountReached BIT
+ DECLARE @TotalRecords INT
+
+
+ SELECT @MaxRecordCount=MaximumRecordCount 
+ FROM APIConfiguration 
+ WHERE SPName='pGetOrderInformation_LIMSAPI'
+
+ IF @Size > @MaxRecordCount
+ BEGIN
+	 SET @Size = @MaxRecordCount
+	 SET @MaxCountReached=1
+ END
+
+ IF @pPatientNumber = '0' OR @pPatientNumber = '-1'
+     SET @pPatientNumber = ''
+
+ IF @pVisitNumber = '0' OR @pVisitNumber = '-1'
+     SET @pVisitNumber = ''
+
+ IF EXISTS(Select 1 from Integrationtypemaster with(NOLOCK) where IntegrationTypeName = @pOrgCode)
+  BEGIN
+    SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+          @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+    FROM Integrationtypemaster ITM with(NOLOCK)
+       INNER JOIN VendorOrgMapping VOM with(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+       INNER JOIN vendorOrgAddressMapping VOA with(NOLOCK) ON VOA.VendorID = VOM.VendorID
+    WHERE ITM.IntegrationTypeName = @pOrgCode
+  END
+
+
+SELECT @TotalRecords = COUNT(1) FROM  PatientVisit PV with(NOLOCK)
+INNER JOIN Patient P  with(NOLOCK) ON 
+	P.OrgId=P.OrgId
+	AND P.PatientId=PV.PatientId
+INNER JOIN FinalBill F with(NOLOCK) ON F.PatientID=F.PatientID
+AND F.VisitID=PV.PatientVisitId
+AND F.OrgID=PV.OrgID
+WHERE  (PV.CreatedAt >= @pFdate AND PV.CreatedAt < @pTdate )
+AND (P.PatientNumber=@pPatientNumber OR @pPatientNumber='')
+AND (PV.VisitNumber=@pVisitNumber OR @pVisitNumber='');
+
+
+WITH CTE_OrderInfo
+AS
+(
+	SELECT P.PatientId,				PV.PatientVisitId,        PV.VisitNumber,   P.ExternalPatientNumber,   P.OrgID,
+	        SA.TitleName,			P.Name,                   P.Age,            P.DOB as DateOfBirth,     
+			case when P.SEX ='F' then 'Female' when P.SEX ='M' then 'Male' else 'Other' end as Gender,
+	        P.EMail as EMailID,	   P.PatientType,   
+			CASE WHEN PV.VisitType=0 THEN 'OP' 	WHEN PV.VisitType=1 THEN 'IP' ELSE 'WalkIN' END AS VisitType,
+			PV.WardNo,			P.URNTypeId,		P.URNO as URNNumber, 	PV.HospitalID,   PV.HospitalName,  F.FinalBillID,
+			F.GrossBillValue,	F.DiscountAmount,	F.Due,			    	F.NetValue,		 F.AmountReceived, P.PatientNumber,
+			PV.ExternalVisitID,   PV.ReferingPhysicianID, PV.ReferingPhysicianName
+	FROM PatientVisit PV with(NOLOCK) 
+	INNER JOIN Patient P with(NOLOCK) ON P.OrgId=PV.OrgId
+		AND P.PatientId=PV.PatientId
+	INNER JOIN FinalBill F with(NOLOCK) ON F.PatientID=P.PatientID
+		AND F.VisitID=PV.PatientVisitId
+		AND F.OrgID=PV.OrgID
+	INNER JOIN Salutation SA with(Nolock) ON SA.TitleID  = p.TITLECode
+	INNER JOIN SalutationOrgMapping SOM with(Nolock) ON SOM.TitleID  = SA.TitleID 
+	           AND SOM.OrgID = @pOrgID AND SOM.LanguageCode = 'en-GB'
+	WHERE (PV.CreatedAt >= @pFdate AND PV.CreatedAt < @pTdate ) 
+		AND (P.PatientNumber=@pPatientNumber OR @pPatientNumber='')
+		AND (PV.VisitNumber=@pVisitNumber OR @pVisitNumber='') 
+	ORDER BY PV.PatientVisitId
+	OFFSET (@Page -1) * @Size ROWS
+	FETCH NEXT @Size ROWS ONLY  
+ )
+	INSERT INTO #TempOrders 
+	SELECT C.PatientID,		C.TitleName AS Salutation,	C.Name,			   C.Age,				   C.DateOfBirth,				  C.Gender,
+		   ISNULL(PA.Add1,'') + '  '+ ISNULL(PA.Add2,'') +'  '+ ISNULL(PA.Add3,'') AS Address,
+		   PA.MobileNumber,	C.EMailID,				   ISNULL(PA.City,''), ISNULL(S.StateName,''), ISNULL(Cou.CountryName,''),    PA.PostalCode AS PinCode,
+		   CM.ClientName,   C.ReferingPhysicianID,     ISNULL(C.ReferingPhysicianName,'') as RefPhysicianName, C.HospitalID,      C.HospitalName,
+		   C.ExternalPatientNumber,	 C.PatientType,    VisitType,	ISNULL(U.URNType,'') as URNType , C.URNNumber,
+		   B.FeeID,   --OI.Id,  	
+		   CAST('' AS NVARCHAR(50)) AS TestCode,  B.FeeType, B.FeeDescription,     --OI.Type,   	OI.Name,	
+		   B.Amount,	     B.Quantity, 	C.GrossBillValue,	C.DiscountAmount,
+		   C.NetValue,	   C.AmountReceived,	       C.Due,	    C.OrgID,	C.PatientNumber, C.VisitNumber,	C.FinalBillID,      B.Status, 
+		   C.ExternalVisitID, ISNULL(C.WardNo,'') as WardNo,       CM.ClientCode as ClientCode, '' as PatientCategory
+	FROM CTE_OrderInfo C
+	INNER JOIN PatientAddress PA with(NOLOCK) ON PA.PatientID=C.PatientID
+	         AND PA.AddressType='P'
+	LEFT JOIN state S with(NOLOCK) on S.StateID =PA.StateID                
+	LEFT JOIN Country Cou with(NOLOCK) on Cou.CountryID=S.CountryID
+	LEFT JOIN URNTypes U with(NOLOCK) ON U.URNTypeId=C.URNTypeId
+	INNER JOIN VisitClientMapping VCM with(NOLOCK) ON C.PatientVisitId=VCM.VisitID 
+	         AND VCM.OrgID=@pOrgID
+	INNER JOIN ClientMaster CM with(NOLOCK) ON CM.ClientID=VCM.ClientID
+	         AND CM.OrgID=VCM.OrgID
+	--INNER JOIN OrderedInvestigations OI with(NOLOCK) ON OI.VisitID=C.PatientVisitId
+	--      AND OI.OrgID=C.OrgID
+	INNER JOIN BillingDetails B with(NOLOCK) ON B.FinalBillID=C.FinalBillID --AND B.FeeID = OI.ID
+	AND B.OrgID=C.OrgID AND PA.PatientID = C.PatientID
+	--UNION ALL
+	--SELECT C.PatientID,		C.TitleName AS Salutation,	C.Name,			   C.Age,				   C.DateOfBirth,				  C.Gender,
+	--	   ISNULL(PA.Add1,'') + ISNULL(PA.Add2,'') + ISNULL(PA.Add3,'') AS Address,
+	--	   PA.MobileNumber,	C.EMailID,				   ISNULL(PA.City,''), ISNULL(S.StateName,''), ISNULL(Cou.CountryName,''),    PA.PostalCode AS PinCode,
+	--	   CM.ClientName,   C.ReferingPhysicianID,     ISNULL(C.ReferingPhysicianName,'') as RefPhysicianName, C.HospitalID,       C.HospitalName,
+	--	   C.ExternalPatientNumber,	 C.PatientType,    VisitType,	ISNULL(U.URNType,'') as URNType , C.URNNumber, 
+	--	   --case when ISNULL(OI.Id,0) = 0 THEN OI.PkgID ELSE OI.Id END Id,  
+	--	   B.FeeID,	
+	--	   CAST('' AS NVARCHAR(50)) AS TestCode,       --OI.Type,   
+	--	   --case when	ISNULL(OI.NAME,'') = '' THEN  OI.PkgName ELSE OI.NAME END PkgName,	
+	--	   B.FeeType, B.FeeDescription,
+	--	   B.Amount,	     B.Quantity, 	C.GrossBillValue,	C.DiscountAmount,
+	--	   C.NetValue,	   C.AmountReceived,	       C.Due,	    C.OrgID,	C.PatientNumber, C.VisitNumber,	C.FinalBillID,      B.Status, 
+	--	   C.ExternalVisitID, ISNULL(C.WardNo,'') as WardNo,     CM.ClientCode as ClientCode, '' as PatientCategory
+	--FROM CTE_OrderInfo C
+	--INNER JOIN PatientAddress PA with(NOLOCK) ON PA.PatientID=C.PatientID
+	--         AND PA.AddressType='P'
+	--LEFT JOIN state S with(NOLOCK) on S.StateID =PA.StateID                
+	--LEFT JOIN Country Cou with(NOLOCK) on Cou.CountryID=S.CountryID
+	--LEFT JOIN URNTypes U with(NOLOCK) ON U.URNTypeId=C.URNTypeId
+	--INNER JOIN VisitClientMapping VCM with(NOLOCK) ON C.PatientVisitId=VCM.VisitID 
+	--         AND VCM.OrgID=@pOrgID
+	--INNER JOIN ClientMaster CM with(NOLOCK) ON CM.ClientID=VCM.ClientID
+	--         AND CM.OrgID=VCM.OrgID
+	----INNER JOIN OrderedInvestigations OI with(NOLOCK) ON OI.VisitID=C.PatientVisitId
+	----        AND OI.OrgID=C.OrgID
+	--INNER JOIN BillingDetails B with(NOLOCK) ON B.FinalBillID=C.FinalBillID --AND B.FeeID = OI.PKGID
+	--AND B.OrgID=C.OrgID AND PA.PatientID = C.PatientID --and OI.PkgName IS NOT NULL
+
+	
+	UPDATE #TempOrders SET TestCode=Tmp.TestCode
+	FROM (
+	SELECT T.Id,T.Type, IOM.TestCode FROM #TempOrders T
+	INNER JOIN InvestigationOrgMapping IOM(NOLOCK) ON 
+		IOM.OrgID=T.OrgId
+		AND IOM.InvestigationID=T.ID
+		WHERE T.TYPE='INV'
+		UNION ALL 
+		SELECT T.Id,T.Type,IOG.TestCode FROM  #TempOrders T
+	     INNER JOIN InvOrgGroup IOG(NOLOCK) ON 
+		IOG.AttGroupID=T.ID
+		WHERE (T.TYPE='GRP' OR T.TYPE='PKG')
+		)TMP
+	WHERE Tmp.Id=#TempOrders.Id
+	AND TMP.Type=#TempOrders.Type
+
+
+	SELECT PatientID,				Salutation,		Name,       Age,			DateOfBirth,  Gender,          PatientAddress,    MobileNumber,      EMailID,
+		   City,					State,			Country,    PinCode,		ClientName,   RefPhysicianID,  RefPhysicianName,  HospitalID,        HospitalName,
+	       ExternalPatientNumber,   VisitType,      URNType,	URNNumber,      TestCode,     TestName,        Amount,	          Quantity,
+	       GrossAmount,             DiscountAmount, NetAmount,  AmountReceived, DueAmount,	  OrgID,           PaymentStatus,     ExternalVisitID,   BedWardInfo,   
+		   ClientCode,		ISNULL(PatientCategory,'') as PatientCategory, @pOrgAddrID as LocationID  
+	FROM #TempOrders order by 1 
+
+
+	SELECT DISTINCT AR.AmtReceived,AR.ChequeorCardNumber,AR.ReferenceID,P.PaymentName as PaymentMode, T.PatientID
+	FROM #TempOrders T
+	INNER JOIN AmountReceivedDetails AR with(NOLOCK) ON AR.FinalBillID=T.FinalBillID
+			AND T.OrgId=AR.OrgID
+	INNER JOIN FinalBill F with(NOLOCK) ON F.FinalBillID=AR.FinalBillID
+			AND F.OrgID=AR.OrgID
+	INNER JOIN PaymentType P with(NOLOCK) ON P.PaymentTypeId=AR.TypeID AND ISNULL(P.LanguageCode,'en-GB') = 'en-GB'
+
+    SELECT @TotalRecords as TotalRecords,CAST(CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as Int) as TotalPages, 
+           ISNULL(@MaxRecordCount,0) as AllowableRecordCount
+
+	DROP TABLE #TempOrders 
+END

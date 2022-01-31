@@ -1,0 +1,461 @@
+CREATE PROC [dbo].[PGetReceivedTatReportMIS]                       
+(                            
+@Fdate Datetime,                            
+@Tdate Datetime,                            
+@ClientID Int,                            
+@VisitType Int,                          
+@ContextInfo [dbo].[UDT_Context] READONLY                             
+)              
+---- Created by : Velmurugan D          
+---- Created on : 27th Aug 2019          
+---- Updated by : Velmurugan D          
+---- Updated by : 30th Aug 2019          
+---- Description : Get Approve status tat report          
+---- Update Description : Remove unwanted query          
+---- Sample query :           
+--declare @p dbo.UDT_Context          
+--insert into @p values(233,N'Lilavati Hospital',N'',432,5036,N'Administrator',0,45642,NULL,N'',432,0,N'',NULL,NULL,1,75,11,N'en-GB',0,NULL,NULL,NULL,NULL)          
+--EXEC          
+--PGetReceivedTatReportMIS          
+--'29-08-2019 00:00:00',          
+--'29-08-2019 23:59:59',          
+--0,          
+---1,          
+--@p                         
+AS                            
+BEGIN          
+                      
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                         
+  SET NOCOUNT ON;                      
+  SET XACT_ABORT ON;                    
+                    
+IF (@ClientID = 0 OR @ClientID = -1)                      
+Set @ClientID=NULL                      
+                      
+DECLARE @OrgID INT                      
+SELECT  @OrgID=OrgID FROM @ContextInfo                   
+          
+CREATE TABLE #TempTestDetails          
+(          
+  PatientID BIGINT,          
+  AddressID BIGINT,          
+  VisitNumber VARCHAR(25),          
+  VisitType VARCHAR(10),          
+  RegisteredDate DATETIME,          
+  Visitid BIGINT,          
+  AccessionNumber BIGINT,          
+  TestID INT,          
+  TestName NVARCHAR(60),          
+  TestType VARCHAR(5),          
+  OrgID INT,          
+  RegisterdLocation INT,          
+  ProcessingLocation INT,          
+  PkgId INT,          
+  UID nvarchar(500)          
+)          
+    
+DECLARE @TempDifferenceDateResult AS Table          
+(          
+  SNo INT IDENTITY(1,1),          
+  Visitid BIGINT,          
+  TestID INT,          
+  TestName NVARCHAR(60),          
+  TestType VARCHAR(5),          
+  OrgID INT,          
+  PatientNumber NVARCHAR(60),          
+  VisitNumber NVARCHAR(20),          
+  Age NVARCHAR(20),          
+  Gender VARCHAR(10),          
+  VisitType VARCHAR(10),          
+  Location  VARCHAR(30),          
+  RegisteredDate DATETIME,          
+  BarCode  VARCHAR(30),          
+  SampleCollectionTime DATETIME,          
+  SampleTransferredTime DATETIME,          
+  SampleReceivedTime DATETIME,          
+  ExpectedTATDate DATETIME,          
+  DeptID INT,          
+  ExpectedTAT INT,          
+  ActualTAT INT,          
+  ElapsedTime INT,          
+  RegisterdLocation INT,          
+  ProcessingLocation INT,          
+  PkgId INT           
+)          
+          
+CREATE TABLE  #TempResult         
+(          
+  SNo INT IDENTITY(1,1),          
+  Visitid BIGINT,          
+  TestID INT,          
+  TestName NVARCHAR(60),          
+  TestType VARCHAR(5),          
+  OrgID INT,          
+  PatientNumber NVARCHAR(60),          
+  VisitNumber NVARCHAR(20),          
+  Age NVARCHAR(20),          
+  Gender VARCHAR(10),          
+  VisitType VARCHAR(10),          
+  Location  VARCHAR(30),          
+  RegisteredDate DATETIME,          
+  BarCode  VARCHAR(60),          
+  SampleCollectionTime DATETIME,          
+  SampleTransferredTime DATETIME,          
+  SampleReceivedTime DATETIME,          
+  ExpectedTATDate DATETIME,          
+  DeptID INT,          
+  ExpectedTAT INT,          
+  ActualTAT INT,          
+  ElapsedTime INT,          
+  RegisterdLocation INT,          
+  ProcessingLocation INT,          
+  PkgId INT          
+)          
+          
+          
+IF(@visittype = -1 )            
+BEGIN            
+IF(ISNULL(@ClientID,'')<>'')                      
+BEGIN           
+          
+---GRP---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID           
+ AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType IN (0,1) AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG1.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID           
+ AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType IN (0,1) AND ISNULL(OI.PkgID,0)<>0          
+          
+          
+---INV---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID AND ISNULL(IOM.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID           
+ AND OI.Status IN ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType IN (0,1) AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID           
+ AND OI.Status IN ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType IN (0,1) AND ISNULL(OI.PkgID,0)<>0          
+          
+END          
+ELSE          
+BEGIN          
+---GRP---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType in (0,1) AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG1.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType IN (0,1) AND ISNULL(OI.PkgID,0)<>0          
+          
+            
+ ---INV---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID AND ISNULL(IOM.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType IN (0,1)  AND ISNULL(OI.PkgID,0)=0           
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType IN (0,1)  AND ISNULL(OI.PkgID,0)<>0           
+          
+          
+END          
+END          
+ELSE          
+BEGIN          
+IF(ISNULL(@ClientID,'')<>'')     
+BEGIN          
+          
+---GRP---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG1.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)<>0          
+          
+          
+---INV---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID AND ISNULL(IOM.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID   
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN VisitClientMapping VCM WITH (NOLOCK) ON  VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND VCM.ClientID=@ClientID AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)<>0          
+          
+END          
+ELSE          
+BEGIN          
+---GRP---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status IN ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.ID AND IOG.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG1.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status IN ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='GRP' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)<>0          
+          
+  ---INV---          
+ INSERT INTO #TempTestDetails(PatientID,AddressID,VisitNumber,VisitType,RegisteredDate,Visitid,AccessionNumber,TestID,TestName,TestType,OrgID,RegisterdLocation,ProcessingLocation,PkgId,UID)          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID AND ISNULL(IOM.Scheduleid,0)<>0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)=0          
+ UNION          
+ SELECT PV.PatientID,PV.OrgAddressID,PV.VisitNumber,PV.VisitType,OI.CreatedAt,OI.Visitid,OI.AccessionNumber,OI.ID,OI.Name,OI.Type,@OrgID,PV.OrgAddressID,OI.ResCaptureLoc,OI.PkgID,OI.UID          
+  FROM PatientVisit PV WITH (NOLOCK)          
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON PV.PatientVisitid=OI.VisitID AND PV.OrgID=OI.OrgID          
+ INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=OI.ID AND IOM.OrgID=OI.OrgID          
+ INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID=OI.PkgID AND IOG.OrgID=OI.OrgID AND ISNULL(IOG.Scheduleid,0)!=0          
+ WHERE PV.OrgID=@OrgID  AND PV.Createdat BETWEEN @Fdate AND @Tdate AND OI.Status in ('SampleReceived','Pending','Completed','Approve','Validate','PartiallyCompleted','PartiallyValidated','PartiallyApproved')           
+ AND OI.Type='INV' AND PV.LabVisitType =@VisitType AND ISNULL(OI.PkgID,0)<>0          
+          
+END          
+END          
+          
+ -- select count(1) from #TempTestDetails  
+ --return  
+          
+ INSERT INTO #TempResult(Visitid,TestID,TestName,TestType,OrgID,PatientNumber,VisitNumber,Age,Gender,VisitType,Location,RegisteredDate,BarCode,SampleCollectionTime,SampleTransferredTime,SampleReceivedTime,DeptID          
+ ,RegisterdLocation,ProcessingLocation,PkgId)          
+ SELECT DISTINCT Temp.Visitid,Temp.TestID,Temp.TestName,Temp.TestType,Temp.OrgID,P.PatientNumber,Temp.VisitNumber,P.Age,P.SEX,Temp.VisitType,OA.Location,Temp.RegisteredDate,PISM.Barcode          
+ ,MOI.Collectedat,MOI.Transitat,MOI.Receivedat,MISOD.Deptid,Temp.RegisterdLocation,Temp.ProcessingLocation,Temp.PkgId   
+ FROM  #TempTestDetails Temp          
+ INNER JOIN MISOrderedinvestigations MOI WITH (NOLOCK) ON MOI.Visitid=Temp.VisitID AND MOI.Orgid=Temp.OrgID   
+ AND MOI.ID=Temp.TestID          
+ and moi.AccessionNumber=temp.AccessionNumber  
+ INNER JOIN MISordereddept MISOD WITH (NOLOCK) ON MISOD.AccessionNumber=MOI.AccessionNumber          
+ INNER JOIN Patientinvsample PIS WITH (NOLOCK) ON PIS.PatientVisitID=Temp.VisitID AND PIS.OrgID=Temp.OrgID          
+ INNER JOIN PatientInvSampleMapping PISM WITH (NOLOCK) ON PISM.VisitID=Temp.VisitID AND PISM.OrgID=Temp.OrgID AND Temp.TestID=PISM.ID AND PISM.SID=PIS.SampleID AND PISM.UID=Temp.UID          
+ INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON Temp.OrgID=OA.OrgID AND Temp.AddressID=OA.AddressID          
+ INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID=Temp.PatientID AND P.OrgID=Temp.OrgID          
+ WHERE ISNULL(MOI.Transitat,0)<>0          
+    
+       
+   
+  
+ UPDATE Temp SET Temp.ExpectedTAT = ((ISNULL(TMF.ProcessingHours,0)*60)+ISNULL(TMF.ProcessingMins,0)) FRom #TempResult Temp          
+INNER JOIN TatMISTimeconfiguration TMF ON TEMP.OrgID=TMF.OrgID AND Temp.DeptID=TMF.DeptID AND TMF.InvestigationStatusID=5      
+    
+ UPDATE Temp SET ExpectedTATDate= DATEADD(MINUTE,ExpectedTAT,SampleTransferredTime) FROM #TempResult Temp          
+ INNER JOIN TatMISTimeconfiguration TMF ON TEMP.OrgID=TMF.OrgID AND Temp.DeptID=TMF.DeptID AND TMF.InvestigationStatusID=5      
+ WHERE Temp.SampleTransferredTime IS NOT NULL    
+    
+  INSERT INTO @TempDifferenceDateResult(Visitid,TestID,TestName,TestType,OrgID,PatientNumber,VisitNumber,Age,Gender,VisitType,Location,RegisteredDate,BarCode,SampleCollectionTime,SampleTransferredTime,SampleReceivedTime,DeptID          
+ ,RegisterdLocation,ProcessingLocation,PkgId)      
+ SELECT Visitid,TestID,TestName,TestType,OrgID,PatientNumber,VisitNumber,Age,Gender,VisitType,Location,RegisteredDate,BarCode,SampleCollectionTime,SampleTransferredTime,SampleReceivedTime,DeptID          
+ ,RegisterdLocation,ProcessingLocation,PkgId     
+  FROM #TempResult WHERE SampleReceivedTime>ExpectedTATDate  
+  --DATEDIFF(DAY,SampleTransferredTime,SampleReceivedTime)>0      
+    
+DECLARE @TotalCount INT;          
+DECLARE @LoopCount INT=1;          
+DECLARE @Test_ID INT;          
+DECLARE @Test_Type VARCHAR(5);          
+DECLARE @InvestigationStatusID INT=6; ---Sample received Status          
+DECLARE @Dept_ID INT;          
+DECLARE @p_TATCalculationDateTime DATETIME;          
+DECLARE @p_TATDateTime DATETIME;          
+DECLARE @p_Isdebug BIT=0;      
+declare @p_ProcessingLocationId  INT      
+          
+SELECT @TotalCount = COUNT(SNO) FROM @TempDifferenceDateResult           
+SELECT @ClientID=ISNULL(@ClientID,0)      
+WHILE(@LoopCount<=@TotalCount)          
+BEGIN           
+               
+  IF EXISTS (SELECT 1 FROM @TempDifferenceDateResult WHERE SNo=@LoopCount AND PkgID<>0)          
+  BEGIN          
+    SELECT @Test_ID=PkgID,@Test_Type='GRP',@Dept_ID=DeptID,@p_TATCalculationDateTime=SampleTransferredTime,@p_ProcessingLocationId=ProcessingLocation FROM @TempDifferenceDateResult          
+    WHERE SNo=@LoopCount;          
+   END          
+ ELSE          
+ BEGIN           
+      SELECT @Test_ID=TestID,@Test_Type=TestType,@Dept_ID=DeptID,@p_TATCalculationDateTime=SampleTransferredTime,@p_ProcessingLocationId=ProcessingLocation FROM @TempDifferenceDateResult          
+      WHERE SNo=@LoopCount;          
+ END          
+          
+   --SELECT @Test_ID=TestID,@Test_Type=TestType,@Dept_ID=DeptID,@p_TATCalculationDateTime=SampleTransferredTime FROM #TempResult          
+   --WHERE SNo=@LoopCount;          
+          
+   EXEC dbo.pGetStatusBasedTATDateTime          
+        @OrgID,              
+        @Test_ID,                
+        @Test_Type,              
+        @ClientID,              
+        @Dept_ID,          
+        @p_TATCalculationDateTime,            
+        @p_TATDateTime OUTPUT,            
+        @InvestigationStatusID,          
+        @p_Isdebug,            
+        @ContextInfo,         
+        @p_ProcessingLocationId  
+  
+  
+  UPDATE  @TempDifferenceDateResult SET ExpectedTATDate=@p_TATDateTime WHERE SNo=@LoopCount;          
+          
+  SELECT @LoopCount = @LoopCount+1;          
+          
+END          
+          
+          
+--UPDATE Temp SET Temp.ExpectedTAT = ((ISNULL(TMF.ProcessingHours,0)*60)+ISNULL(TMF.ProcessingMins,0)) FRom #TempResult Temp          
+--INNER JOIN TatMISTimeconfiguration TMF ON TEMP.OrgID=TMF.OrgID AND Temp.DeptID=TMF.DeptID AND TMF.InvestigationStatusID=5          
+          
+--UPDATE Temp SET Temp.ExpectedTAT = CASE WHEN TATL.Transittimetype='D' THEN Transittimevalue*1440          
+--            WHEN TATL.Transittimetype='H' THEN Transittimevalue*60           
+--   WHEN TATL.Transittimetype='M' THEN Transittimevalue           
+--   ELSE Transittimevalue END FROM #TempResult Temp          
+--INNER JOIN Tatlogisticdetails TATL ON TATL.Fromorgaddressid=Temp.RegisterdLocation AND TATL.Toorgaddressid=Temp.ProcessingLocation          
+--WHERE TATL.IsActive=1          
+          
+UPDATE Temp SET Temp.ActualTAT = DATEDIFF(MINUTE,Temp.SampleTransferredTime,Temp.SampleReceivedTime) FRom #TempResult Temp           
+WHERE Temp.SampleTransferredTime IS NOT NULL AND Temp.SampleReceivedTime IS NOT NULL        
+    
+UPDATE Temp SET Temp.ExpectedTATDate=TempTAT.ExpectedTATDate FROM #TempResult Temp      
+ INNER JOIN @TempDifferenceDateResult TempTAT ON Temp.Visitid=TempTAT.Visitid   
+ AND Temp.OrgID=TempTAT.OrgID AND Temp.TestID=TempTAT.TestID AND Temp.TestType=TempTAT.TestType     
+    
+UPDATE Temp SET Temp.ElapsedTime = Temp.ActualTAT-Temp.ExpectedTAT FRom #TempResult Temp           
+WHERE Temp.SampleTransferredTime IS NOT NULL AND Temp.SampleReceivedTime IS NOT NULL          
+  
+--select ActualTAT,ExpectedTAT,ActualTAT-ExpectedTAT as ,* from #TempResult    
+--return  
+--select * from @TempDifferenceDateResult  
+--return  
+          
+DECLARE @TotalTestCount DECIMAL(18,2)                                
+DECLARE @TotalTatCount DECIMAL(18,2)                                
+DECLARE @Percentage DECIMAL(18,2)=0            
+    
+   SELECT distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount                          
+FROM PatientVisit PV                             
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID                            
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate                         
+--and OI.Status !='Recheck'                         
+group by PV.PatientVisitID                   
+              
+select @TotalTestCount=Sum(Count1) from #Totalcount    
+        
+--SELECT @TotalTestCount=COUNT(PatientNumber) FROM #TempResult           
+          
+SELECT @TotalTatCount = COUNT(PatientNumber) FROM #TempResult WHERE ElapsedTime>0                             
+                           
+IF(@TotalTestCount>0)          
+BEGIN          
+    SELECT @Percentage=Convert(varchar,((@TotalTatCount * 100)/@TotalTestCount))            
+END          
+          
+SELECT DISTINCT ROW_NUMBER()OVER (ORDER BY PatientNumber) AS SNO,  PatientNumber,VisitNumber,Age,CASE WHEN Gender='M' THEN 'MALE' ELSE 'FEMALE' END AS Gender,          
+CASE WHEN VisitType=0 THEN 'OP' ELSE 'IP' END VisitType,Location,(Convert(VARCHAR,RegisteredDate,103) +' '+Convert(VARCHAR,RegisteredDate,8)) AS RegisteredDate,BarCode,TestName          
+,(Convert(Varchar,SampleCollectionTime,103) +' '+Convert(Varchar,SampleCollectionTime,8)) AS          
+ 'Sample Collection Time',(Convert(VARCHAR,SampleTransferredTime,103) +' '+Convert(VARCHAR,SampleTransferredTime,8)) AS 'Sample Transfer Time'          
+ ,(Convert(VARCHAR,SampleReceivedTime,103) +' '+Convert(VARCHAR,SampleReceivedTime,8)) AS 'Sample Received Time'          
+ ,(Convert(VARCHAR,ExpectedTATDate,103) +' '+Convert(VARCHAR,ExpectedTATDate,8)) AS 'Expected TAT DateTime'          
+ ,ExpectedTAT AS 'ExpectedTAT (Mins)',ActualTAT AS 'ActualTAT (Mins)' ,ElapsedTime AS 'ElapsedTime (Mins)'          
+ From #TempResult WHERE ElapsedTime>0 AND ISNULL(ExpectedTAT,0)<>0      
+ ORDER BY SNO      
+          
+CREATE TABLE #TATApproval (TotalTestCount nvarchar(50),TotaTatTestCount Nvarchar(50),Percentage Nvarchar(50))                                
+INSERT INTO #TATApproval (TotalTestCount,TotaTatTestCount,Percentage)                      
+SELECT Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalTatCount)),Convert(Varchar,@Percentage)           
+          
+IF EXISTS (SELECT 1 FROM #TempResult WHERE ElapsedTime>0)                            
+BEGIN                            
+          
+SELECT '' as SNO, '' as PatientNumber,'' as VisitNumber,'' as Age,'' as Gender,'' as VisitType,'' as Location,'' as RegisteredDate,              
+'' as BarCode,'' as TestName,'' as 'Sample Collection Time','' as 'Sample Transfer Time','' AS 'Sample Received Time'          
+,'' AS 'Expected TAT DateTime',  '' AS 'ExpectedTAT (Mins)' , UserName as 'ActualTAT(Mins)',Count as 'ElapsedTime (Mins)'                      
+FROM                                     
+   (SELECT [TotalTestCount] as [Total Test Count], [TotaTatTestCount] as [Total SampleReceived TAT Test Count], [Percentage] as [% TAT Percentage]                    
+   FROM #TATApproval) p                         
+UNPIVOT                       
+   (Count FOR UserName IN                             
+      ([Total Test Count], [Total SampleReceived TAT Test Count], [% TAT Percentage])                                    
+)AS unpvt;          
+          
+END             
+          
+DROP TABLE #TATApproval          
+DROP TABLE #TempTestDetails          
+          
+END   
+  
+  
+  
+  
+  
+  

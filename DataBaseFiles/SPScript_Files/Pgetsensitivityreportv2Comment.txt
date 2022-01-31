@@ -1,0 +1,1005 @@
+CREATE PROCEDURE [dbo].[Pgetsensitivityreportv2Comment] (@pVisitID        BIGINT,    
+    
+                                                  @InvestigationID BIGINT,    
+    
+                                                  @TemplateID      INT,    
+    
+                                                  @OrgID           INT)    
+    
+AS    
+    
+  BEGIN    
+    
+      DECLARE @idoc INT    
+    
+      DECLARE @doc VARCHAR(MAX)    
+    
+      DECLARE @OrganName VARCHAR(500)    
+    
+      DECLARE @sensitiveTo VARCHAR(500)    
+    
+      DECLARE @ResistantTo VARCHAR(500)    
+    
+      DECLARE @ModerateTo VARCHAR(500)    
+    
+      DECLARE @xmlSensitive XML    
+    
+      DECLARE @xmlResistant XML    
+    
+      DECLARE @xmlModerate XML    
+    
+      DECLARE @delimiter CHAR(1)    
+    
+      SET @delimiter = ','    
+    
+      DECLARE @tblInvestigationValues TABLE    
+    
+        (    
+    
+           [InvestigationValueID]          [BIGINT],    
+    
+           [Name]                          [VARCHAR](500) NULL,    
+    
+           [Value]                         [NVARCHAR](max) NULL,    
+    
+           [InvestigationID]               [BIGINT] NULL,    
+    
+           [GroupID]                       [INT] NULL,    
+    
+           [PatientVisitID]                [BIGINT] NULL,    
+    
+           [UOMID]                         [INT] NULL,    
+    
+           [Status]                        [VARCHAR](100) NULL,    
+    
+           [CreatedBy]                     [BIGINT] NULL,    
+    
+           [CreatedAt]                     [DATETIME] NULL,    
+    
+           [ModifiedBy]                    [BIGINT] NULL,    
+    
+           [ModifiedAt]                    [DATETIME] NULL,    
+    
+           [UOMCode]                       [VARCHAR](50) NULL,    
+    
+           [GroupName]                     [VARCHAR](255) NULL,    
+    
+           [Orgid]                         [INT] NULL,    
+    
+           [IPInvSampleCollectionMasterID] [BIGINT] NULL,    
+    
+           [PackageID]                     [INT] NULL,    
+    
+           [PackageName]                   [VARCHAR](255),    
+    
+           [SequenceNo]                    [INT],    
+    
+           [UID]                           [VARCHAR](255)    
+    
+        )    
+    
+      DECLARE @tblPatientInvestigation TABLE    
+    
+        (    
+    
+           [PatientVisitID]                 [BIGINT],    
+    
+           [InvestigationID]                [BIGINT],    
+    
+           [InvestigationName]              [VARCHAR](250),    
+    
+           [CreatedBy]                      [BIGINT],    
+    
+           [CreatedAt]                      [DATETIME],    
+    
+           [ModifiedBy]                     [BIGINT],    
+    
+           [ModifiedAt]                     [DATETIME],    
+    
+           [InvestigationMethodID]          [BIGINT],    
+    
+           [InvestigationSampleContainerID] [INT],    
+    
+           [SampleID]                       [INT],    
+    
+           [InvestigationSiteID]            [INT],    
+    
+           [IsCompleted]                    [CHAR](1),    
+    
+           [CollectedDateTime]              [DATETIME],    
+    
+           [Status]                         [VARCHAR](100),    
+    
+           [ComplaintId]                    [INT],    
+    
+           [GroupID]                        [INT],    
+    
+           [GroupName]                      [VARCHAR](250),    
+    
+           [Reason]                         [VARCHAR](250),    
+    
+           [ReportStatus]                   [VARCHAR](255),    
+    
+           [ReferenceRange]                 [VARCHAR](max),    
+    
+           [MethodName]                     [VARCHAR](255),    
+    
+           [IPInvSampleCollectionMasterID]  [BIGINT],    
+    
+           [OrgID]                          [INT],    
+    
+           [WorklistDeletedStatus]  [VARCHAR](50),    
+    
+           [PerformingPhysicainName]        [VARCHAR](500),    
+    
+           [KitID]                          [BIGINT],    
+    
+           [KitName]                        [VARCHAR](255),    
+    
+           [InstrumentID]   [BIGINT],    
+    
+           [InstrumentName]                 [VARCHAR](255),    
+    
+           [Interpretation]                 [VARCHAR](max),    
+    
+           [PrincipleID]                    [BIGINT],    
+    
+           [PrincipleName]                  [VARCHAR](255),    
+    
+           [QCData]                         [VARCHAR](max),    
+    
+           [PackageID]                      [INT],    
+    
+           [PackageName]                    [VARCHAR](255),    
+    
+           [ApprovedBy]                     [BIGINT],    
+    
+           [PatientInvID]                   [BIGINT],    
+    
+           [OrderedAt]                      [DATETIME],    
+    
+           [UID]                            [VARCHAR](255),    
+    
+           [GroupComment]                   [VARCHAR](255),    
+    
+           [ApprovedAt]                     [DATETIME],    
+    
+           [AccessionNumber]                [BIGINT],    
+    
+           [IsAbnormal]                     [VARCHAR](80)    
+    
+        )    
+    
+      DECLARE @tblOrdPerfOrgGrpInvDtls TABLE    
+    
+        (    
+    
+           OrderedOrgID        INT,    
+    
+           PerformedOrgID      INT,    
+    
+           AttuneGroupID       INT,    
+    
+           InvType             VARCHAR(10),    
+    
+           PerformedOrgGroupID INT,    
+    
+           PerformedOrgUID     VARCHAR(max),    
+    
+           OrderedOrgGroupID   INT,    
+    
+           OrderedOrgUID       VARCHAR(max)    
+    
+        )    
+    
+      DECLARE @tblAffectedVisits TABLE    
+    
+        (    
+    
+           VisitID BIGINT,    
+    
+           OrgID   BIGINT    
+    
+        )    
+    
+      DECLARE @tblResultSelectID TABLE    
+    
+        (    
+    
+           InvestigationID BIGINT    
+    
+        )    
+    
+    
+    
+      INSERT INTO @tblResultSelectID (InvestigationID)     
+      SELECT @InvestigationID     
+        
+      INSERT INTO @tblAffectedVisits     
+   SELECT @pVisitID, @OrgID    
+    
+      UNION    
+    
+      SELECT PatientVisitID, OrgID     
+      FROM   PatientVisit WITH (nolock)     
+      WHERE  ReferVisitID = @pVisitID    
+    
+    
+      INSERT INTO @tblInvestigationValues    
+    
+      SELECT [InvestigationValueID],    
+    
+             [Name],    
+    
+             [Value],    
+    
+             [InvestigationID],    
+    
+             [GroupID],    
+    
+             [PatientVisitID],    
+    
+             [UOMID],    
+    
+             [Status],    
+    
+             [CreatedBy],    
+    
+             [CreatedAt],    
+    
+             [ModifiedBy],    
+    
+             [ModifiedAt],    
+    
+             [UOMCode],    
+    
+             [GroupName],    
+    
+             INV1.[Orgid],    
+    
+             [IPInvSampleCollectionMasterID],    
+    
+             [PackageID],    
+    
+             [PackageName],    
+    
+             [SequenceNo],    
+    
+             [UID]    
+    
+      FROM   InvestigationValues INV1 WITH (nolock)    
+    
+             INNER JOIN @tblAffectedVisits v2    
+    
+                     ON INV1.PatientVisitID = v2.VisitID    
+    
+                        AND INV1.orgid = v2.orgid     
+    
+      INSERT INTO @tblPatientInvestigation    
+    
+      SELECT TOP 1 [PatientVisitID],    
+    
+                   PINV1.[InvestigationID],    
+    
+                   [InvestigationName],    
+    
+                   [CreatedBy],    
+    
+                   [CreatedAt],    
+    
+                   [ModifiedBy],    
+    
+                   [ModifiedAt],    
+    
+         [InvestigationMethodID],    
+    
+     [InvestigationSampleContainerID],    
+    
+                   [SampleID],    
+    
+                   [InvestigationSiteID],    
+    
+                   [IsCompleted],    
+    
+                   [CollectedDateTime],    
+    
+                   [Status],    
+    
+                   [ComplaintId],    
+    
+                   [GroupID],    
+    
+                   [GroupName],    
+    
+                   [Reason],    
+    
+                   [ReportStatus],    
+    
+                   [ReferenceRange],    
+    
+                   [MethodName],    
+    
+                   [IPInvSampleCollectionMasterID],    
+    
+                   PINV1.[OrgID],    
+    
+                   [WorklistDeletedStatus],    
+    
+                   [PerformingPhysicainName],    
+    
+                   [KitID],    
+    
+                   [KitName],    
+    
+                   [InstrumentID],    
+    
+                   [InstrumentName],    
+    
+                   [Interpretation],    
+    
+                   [PrincipleID],    
+    
+                   [PrincipleName],    
+    
+                   [QCData],    
+    
+                   [PackageID],    
+    
+                   [PackageName],    
+    
+                   [ApprovedBy],    
+    
+                   [PatientInvID],    
+    
+                   [OrderedAt],    
+    
+       [UID],    
+    
+                   [GroupComment],    
+    
+                   [ApprovedAt],    
+    
+                   [AccessionNumber],    
+    
+                   [IsAbnormal]    
+    
+      FROM   PatientInvestigation PINV1 WITH (nolock)    
+    
+             INNER JOIN @tblAffectedVisits v2    
+    
+                     ON PINV1.PatientVisitID = v2.VisitID    
+    
+             INNER JOIN @tblResultSelectID tbl    
+    
+                     ON tbl.InvestigationID = PINV1.InvestigationID    
+    
+      WHERE  PINV1.OrgID = @OrgID    
+    
+      ORDER  BY CreatedAt DESC    
+    
+      INSERT INTO @tblOrdPerfOrgGrpInvDtls    
+    
+                  (OrderedOrgID,    
+    
+                   PerformedOrgID,    
+    
+                   AttuneGroupID,    
+    
+                   InvType,    
+    
+                   PerformedOrgGroupID)    
+    
+      SELECT @OrgID,    
+    
+             OA.OrgID,    
+    
+             OI.ID,    
+    
+             OI.Type,    
+    
+             CASE    
+    
+               WHEN OI.Type = 'GRP' THEN IOG.OrgGroupID    
+    
+               ELSE OI.ID    
+    
+             END    
+    
+      FROM   OrderedInvestigations OI WITH (nolock)    
+    
+             INNER JOIN OrganizationAddress OA WITH (nolock)    
+    
+                     ON OI.ResCaptureLoc = OA.AddressID    
+    
+             LEFT JOIN InvOrgGroup IOG WITH (nolock)    
+    
+                    ON IOG.AttGroupID = OI.ID    
+    
+                       AND IOG.OrgID = OA.OrgID    
+    
+      WHERE  OI.VisitID = @pVisitID    
+        
+      UPDATE T SET T.OrderedOrgGroupID = IOG.OrgGroupID     
+      FROM @tblOrdPerfOrgGrpInvDtls T     
+   INNER JOIN InvOrgGroup IOG WITH (nolock)    
+    
+                     ON T.AttuneGroupID = IOG.AttGroupID    
+    
+                        AND IOG.OrgID = @OrgID    
+    
+      WHERE  T.InvType != 'INV'    
+    
+    
+    
+      UPDATE T    
+    
+      SET    T.PerformedOrgUID = OI.UID    
+    
+      FROM   @tblOrdPerfOrgGrpInvDtls T    
+    
+             INNER JOIN OrderedInvestigations OI WITH (nolock)    
+    
+                     ON T.PerformedOrgID = OI.OrgID    
+    
+                        AND T.AttuneGroupID = OI.ID    
+    
+                        AND t.InvType = OI.Type    
+    
+             INNER JOIN @tblResultSelectID TRS    
+    
+                     ON TRS.InvestigationID = OI.ID    
+    
+             INNER JOIN @tblAffectedVisits TAV    
+    
+                     ON TAV.VisitID = OI.VisitID    
+    
+AND TAV.OrgID = T.PerformedOrgID    
+    
+    
+    
+      UPDATE T    
+    
+      SET    T.OrderedOrgUID = OI.UID    
+    
+      FROM   @tblOrdPerfOrgGrpInvDtls T    
+    
+             INNER JOIN OrderedInvestigations OI WITH (nolock)    
+    
+                     ON T.OrderedOrgID = OI.OrgID    
+    
+                        AND T.AttuneGroupID = OI.ID    
+    
+                        AND OI.VisitID = @pVisitID    
+    
+             INNER JOIN @tblAffectedVisits TAV    
+    
+                     ON TAV.VisitID = OI.VisitID    
+    
+      AND TAV.OrgID = T.OrderedOrgID    
+    
+    
+    
+      UPDATE @tblOrdPerfOrgGrpInvDtls    
+    
+      SET    PerformedOrgUID = OrderedOrgUID    
+    
+      WHERE  OrderedOrgID = PerformedOrgID    
+    
+    
+    
+      --SELECT * FROM @tblOrdPerfOrgGrpInvDtls                                                                            
+    
+      --Select * from @tblInvestigationValues                                                                               
+    
+      IF( 1 < (SELECT Count(1)    
+    
+               FROM   @tblAffectedVisits) )    
+    
+        BEGIN    
+    
+            PRINT 'eelse'    
+    
+    
+    
+            UPDATE T    
+    
+            SET    PatientVisitID = @pVisitID,    
+    
+                   Orgid = @OrgID,    
+    
+                   UID = T1.OrderedOrgUID    
+    
+            FROM   @tblInvestigationValues T    
+    
+                   INNER JOIN @tblOrdPerfOrgGrpInvDtls T1    
+    
+                           ON T.UID = T1.PerformedOrgUID    
+    
+                              AND T.InvestigationID = T1.PerformedOrgGroupID    
+    
+            WHERE  T1.InvType = 'INV'    
+    
+        END    
+    
+    
+    
+      DECLARE @tblHeader TABLE    
+    
+        (    
+    
+           Organism      VARCHAR(500),    
+    
+           Microscopy    VARCHAR(MAX),    
+    
+           CultureReport VARCHAR(MAX),    
+    
+           ReportStatus  VARCHAR(500),    
+    
+           SensitveTo    VARCHAR(500),    
+    
+ ResistantTo   VARCHAR(500),    
+    
+           ModerateTo    VARCHAR(500)    
+    
+        )    
+    
+      DECLARE @tblDrugDetail TABLE    
+    
+        (    
+    
+           RowID       INT,    
+    
+           Organism    VARCHAR(500),    
+    
+           SensitiveTo VARCHAR(500),    
+    
+           ResistantTo VARCHAR(500),    
+    
+           ModerateTo  VARCHAR(500)    
+    
+        )    
+    
+      DECLARE @tblSensitive TABLE    
+    
+        (    
+    
+           RowID       INT,    
+    
+           Organism    VARCHAR(500),    
+    
+           SensitiveTo VARCHAR(500)    
+    
+        --,SensitiveToDia varchar(255)                                                       
+    
+        )    
+    
+      DECLARE @tblResistant TABLE    
+    
+        (    
+    
+           RowID       INT,    
+    
+           Organism    VARCHAR(500),    
+    
+           ResistantTo VARCHAR(500)    
+    
+        --, ResistantToDia varchar(255)                                                  
+    
+        )    
+    
+      DECLARE @tblModerate TABLE    
+    
+        (    
+    
+           RowID      INT,    
+    
+           Organism   VARCHAR(500),    
+    
+           ModerateTo VARCHAR(500)    
+    
+        --, ModerateToDia varchar(255)                                                        
+    
+        )    
+    
+      --declare @doc varchar(max)                                                        
+    
+      DECLARE @TempDetail TABLE    
+    
+        (    
+    
+           PatientVisitID    BIGINT,    
+    
+           InvestigationID   BIGINT,    
+    
+           InvestigationName VARCHAR(500),    
+    
+           ReportName        VARCHAR(500),    
+    
+           TemplateID        INT,    
+    
+           ReportStatus      VARCHAR(500),    
+    
+           GroupID           INT    
+    
+        )    
+    
+      DECLARE @docHandle INT    
+    
+      DECLARE @xmlDocument NVARCHAR(max) -- or xml type                                                
+    
+      INSERT INTO @TempDetail    
+    
+      SELECT piv.PatientVisitID,    
+    
+             piv.InvestigationID,    
+    
+             piv.InvestigationName,    
+    
+             Isnull (im.reporttemplatename, (SELECT Reporttemplatename    
+    
+                                             FROM   InvReportMaster WITH (nolock)    
+    
+                                             WHERE  IsDefault = 'Y'    
+    
+                                                    AND OrgID = @OrgID)) AS ReportName,    
+    
+             Isnull(im.templateid, (SELECT TemplateID    
+    
+                                    FROM   InvReportMaster WITH (nolock)    
+    
+                WHERE  IsDefault = 'Y'    
+    
+                                           AND OrgID = @OrgID))          AS TemplateID,    
+    
+             piv.ReportStatus,    
+    
+             piv.GroupID    
+    
+      FROM   PatientInvestigation piv WITH (nolock)    
+    
+             INNER JOIN invreportmapping irm WITH (nolock)    
+    
+                     ON irm.investigationid = piv.InvestigationID    
+    
+             INNER JOIN invreportmaster im WITH (nolock)    
+    
+                     ON im.templateid = irm.templateid    
+    
+                        AND im.OrgID = @OrgID    
+    
+             INNER JOIN PatientVisit PV WITH (nolock)    
+    
+                     ON piv.PatientVisitID = PV.PatientVisitId    
+    
+             INNER JOIN Patient P WITH (nolock)    
+    
+                     ON P.PatientID = PV.PatientID    
+    
+             INNER JOIN @tblAffectedVisits tbl    
+    
+                     ON tbl.visitid = PV.patientvisitid    
+    
+                        AND tbl.orgid = pv.OrgID    
+    
+    
+    
+      --WHERE piv.PatientVisitID=@pVisitID                                                        
+    
+      --AND P.OrganizationID=@OrgID                                                     
+    
+      DECLARE @InvestigationList TABLE    
+    
+        (    
+    
+           InvestigationID BIGINT    
+    
+        )    
+    
+    
+    
+      INSERT INTO @InvestigationList    
+    
+      SELECT ID    
+    
+      FROM   OrderedInvestigations WITH (nolock)    
+    
+      WHERE  AccessionNumber IN (SELECT InvestigationID    
+    
+                                 FROM   @tblResultSelectID)    
+    
+    
+    
+      DECLARE @tempvar TABLE    
+    
+        (    
+    
+           id BIGINT    
+    
+        )    
+    
+    
+    
+      INSERT INTO @tempvar    
+    
+      SELECT OrgGroupID    
+    
+      FROM   InvOrgGroup (NOLOCK)    
+    
+      WHERE  AttGroupID IN(SELECT InvestigationID    
+    
+                          FROM   @InvestigationList)    
+    
+    
+    
+      --select * from @tempvar        
+    
+          
+    
+      SET @xmlDocument = (SELECT TOP 1 Value    
+    
+                          FROM   @tblInvestigationValues invValues    
+    
+                                 INNER JOIN @TempDetail tmp    
+    
+                                         ON tmp.InvestigationID = invValues.InvestigationID    
+    
+                                            AND tmp.PatientVisitID = invValues.PatientVisitID    
+    
+                          WHERE  invValues.Value LIKE '%<StainDetails>%'    
+    
+                                 AND invValues.GroupID IN(SELECT id    
+    
+                                                          FROM   @tempvar)    
+    
+                                 AND tmp.TemplateID = @TemplateID    
+    
+                                 AND invValues.status NOT IN( 'Recheck', 'Retest' ))    
+    
+    
+    
+      --select  @xmlDocument                      
+    
+      --return    
+    
+      --Create an internal representation of the XML document.                                                     
+    
+      EXEC Sp_xml_preparedocument    
+    
+        @docHandle OUTPUT,    
+    
+        @xmlDocument    
+    
+    
+    
+      -- Use OPENXML to provide rowset consisting of customer data.                                                
+    
+      DECLARE @Temp TABLE    
+    
+        (    
+    
+           Type        NVARCHAR(max),    
+    
+           Result    NVARCHAR(max)     
+    
+        )    
+      
+       
+   INSERT INTO @Temp    
+    
+      SELECT *    
+    
+      FROM   OPENXML(@docHandle, N'/InvestigationResults/InvestigationDetails/StainDetails/Stain', 1)    
+    
+                WITH (Type        NVARCHAR(max),     
+       Result    NVARCHAR(max)    
+     )    
+     
+        
+      EXEC Sp_xml_removedocument    
+    
+        @docHandle    
+         
+    
+       
+    
+   /**    
+    
+    
+     --DECLARE @RenderedTemp TABLE    
+    
+      --  (    
+    
+      --     OrganismName   NVARCHAR(max),    
+    
+      --     AntiBioticName NVARCHAR(max),    
+    
+      --     Zone           NVARCHAR(max),    
+    
+      --     Sensitivity    NVARCHAR(max),    
+    
+      --     NameSeq        INT,    
+    
+      --     FamilySeq      INT    
+    
+      --  )    
+    
+    
+    
+          
+    
+      -- select * from @Temp                                      
+    
+      -- Remove the internal representation of the XML document.                                                
+    
+    
+    
+      ----DECLARE @Type NVARCHAR(500)     
+      ----DECLARE @FamilyName NVARCHAR(500)     
+      ----DECLARE OrganismDetailCursor CURSOR FOR     
+      ----  SELECT DISTINCT Type     
+      ----  FROM   @Temp     
+      ----OPEN OrganismDetailCursor     
+      ----FETCH NEXT FROM OrganismDetailCursor INTO @Type     
+      ----WHILE @@FETCH_STATUS = 0     
+        ----BEGIN     
+        ----    --insert into @RenderedTemp  values('<b><u>'+@Name+'</u></b>','','')                                               
+    
+        ----    DECLARE @FamilySeq INT    
+    
+        ----    DECLARE FamilyNameCursor CURSOR FOR    
+    
+        ----      --SELECT DISTINCT Family    
+    
+        ----      --FROM   @Temp    
+    
+        ----      --WHERE  Name = @Name    
+    
+    
+    
+        ----    OPEN FamilyNameCursor    
+    
+    
+    
+        ----    FETCH NEXT FROM FamilyNameCursor INTO @FamilyName    
+    
+    
+    
+        ----    WHILE @@FETCH_STATUS = 0    
+    
+        ----      BEGIN    
+    
+        ----          SELECT @FamilySeq = FamilySeq    
+    
+        ----          FROM   @Temp    
+    
+        ----          WHERE  Name = @Name    
+    
+        ----                 AND Family = @FamilyName    
+    
+    
+    
+        ----          INSERT INTO @RenderedTemp    
+    
+        ----          VALUES     (@Name,    
+    
+        ----                      '<b><u>' + @FamilyName + '</u></b>',    
+    
+        ----                      '',    
+    
+        ----                      '',    
+    
+        ----                      0,    
+    
+        ----                      @FamilySeq)    
+    
+    
+    
+        ----          ----INSERT INTO @RenderedTemp    
+    
+        ----          ----SELECT DISTINCT Name,    
+    
+        ----          ----                DrugName,    
+    
+        ----          ----                Zone,    
+    
+        ----          ----                Sensitivity,    
+    
+        ----          ----            NameSeq,    
+    
+        ----          ----                FamilySeq    
+    
+        ----          ----FROM   @Temp    
+    
+        ----          ----WHERE  Name = @Name --or Family=@FamilyName                        
+    
+        ----          ----ORDER  BY NameSeq    
+    
+    
+    
+        ----          -- select * from @RenderedTemp                                                 
+    
+        ----          FETCH NEXT FROM FamilyNameCursor INTO @FamilyName    
+    
+        ----      END    
+    
+    
+    
+        ----    CLOSE FamilyNameCursor    
+    
+    
+    
+        ----    DEALLOCATE FamilyNameCursor    
+    
+    
+    
+        ----    FETCH NEXT FROM OrganismDetailCursor INTO @Name    
+    
+        ----END    
+    
+    
+    
+      --CLOSE OrganismDetailCursor    
+    
+    
+    
+      --DEALLOCATE OrganismDetailCursor    
+   **/    
+       
+   DECLARE @TestCode VARCHAR(50)    
+    
+      DECLARE @OrgGroupID INT     
+    
+      SET @OrgGroupID = (SELECT TOP 1 invValues.GroupID    
+    
+                         FROM   InvestigationValues invValues WITH (nolock)    
+    
+                                INNER JOIN @TempDetail tmp    
+    
+                                        ON tmp.InvestigationID = invValues.InvestigationID    
+    
+                                           AND tmp.PatientVisitID = invValues.PatientVisitID    
+    
+                         WHERE  invValues.Value LIKE '%<StainDetails>%'    
+    
+                                AND invValues.GroupID IN(SELECT id    
+    
+                                                         FROM   @tempvar)    
+    
+                                AND tmp.TemplateID = @TemplateID)     
+    
+      SELECT @TestCode = CM.CodeName    
+    
+      FROM   CodeMapper CMR (NOLOCK)    
+    
+             INNER JOIN CodeMaster CM (NOLOCK)    
+    
+                     ON CM.CodeMasterID = CMR.CodeMasterID    
+    
+      WHERE  CM.CodeSchemeID = 1    
+    
+             AND CM.CodeType = 'GRP'    
+    
+             AND CMR.IdentifyingType = 'GRP'    
+    
+             AND CMR.IdentifyingID = @OrgGroupID     
+    --select @TestCode    
+      --SELECT OrganismName,    
+    
+      --       AntiBioticName,    
+    
+      --       Zone,    
+    
+      --       Sensitivity,    
+    
+      --       NameSeq,    
+    
+      --       FamilySeq,    
+    
+      --       @TestCode AS TestCode    
+    
+      --FROM   @RenderedTemp    
+    
+      --ORDER  BY FamilySeq    
+   select *,@TestCode as TestCode from @Temp    
+    
+  END 

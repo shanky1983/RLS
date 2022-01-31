@@ -1,0 +1,117 @@
+
+CREATE PROCEDURE [dbo].[pGetPatientLoginPDFOrgAWSfileInfo_LIMSAPI] 
+(
+   @OrgCode NVARCHAR(50),
+   @Type NVARCHAR(50),
+ --  @LoginName NVARCHAR(50),
+ --  @Password NVARCHAR(50),
+   @ReferenceNumber NVARCHAR(50)
+
+)
+AS  
+BEGIN
+
+
+--exec pGetAttachmentPatientLoginPDF_LIMSAPI  'AttuneDemo','Report','P2022101352','UhjJLCcZM8o=','21000510'   
+   ----pGetAttachmentPatientLoginPDF_LIMSAPI  'LIMSAPI',937526,'5Ay4ss8ZEg0=','2000335'
+   --D:\Liskernel-demo\LISPDF\\REPORT\202\ROUNDB\2020/05/26\Report-2000264_Test_Show_GENERAL_26May2020_104331.pdf
+
+   DECLARE @pOrgID BIGINT = NULL,@pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL,@pVisitId BIGINT
+   DECLARE @REPORTPDFFOLDERPATH NVARCHAR(2000)
+
+   IF @ReferenceNumber = '0' OR @ReferenceNumber = '-1'
+       SET @ReferenceNumber = ''
+
+ IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @OrgCode)
+    BEGIN
+       SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+          @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @OrgCode
+	END
+
+ SELECT @REPORTPDFFOLDERPATH=Value    
+                  FROM   CommunicationConfig cc     
+                  WHERE  OrgID = @pOrgID    
+                         AND Name = 'PDFFOLDERPATH'    
+                         AND Isnull(IsActive, 'Y')='Y'    
+
+--IF not exists (@pVisitNumber IS NULL OR @pVisitNumber='')
+ -- SELECT @pVisitId=PatientVisitId FROM BOOKINGS WITH(Nolock) WHERE BookingID=@pBookingID AND OrgID =@pOrgID
+--ELSE 
+select top 1 @pVisitId= PV.PatientVisitId FROM PatientVisit PV     
+ --  inner join  login L WITH(Nolock) on L.LoginName=@LoginName and l.OrgID=@pOrgID and L.IsLocked='N'    
+--  inner join  Patient P WITH(Nolock) on P.PatientNumber=L.LoginName     
+--   left join LoginRole LR WITH(Nolock) on LR.LoginID=L.LoginID    
+--   left join Role R WITH(Nolock) on R.Rolename='Patient' and LR.RoleId=R.RoleID    
+       
+  WHERE PV.VisitNumber=@ReferenceNumber --AND PV.OrgId=@pOrgID and P.PatientID=PV.PatientID    
+ -- select @pVisitId    
+create table #temp(IdentityID bigint,Path nvarchar(1000))  
+  
+--select @pVisitId as VisitId,@REPORTPDFFOLDERPATH as FilePathName    
+  --return    
+if (@Type='Report')    
+begin    
+  --SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)    
+  --    WHERE IdentityID = @pVisitId AND OrgID=@pOrgID     
+  -- AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='ROUNDBPDF'    
+  -- AND ContextType='P'    
+ -- select 'h'  
+-- set @REPORTPDFFOLDERPATH='\\amznfsxqjporesu.ad.attunelive.com\d$\share\PDF\REPORT\220\2021/04/23\Report-21JC378022_Atharva_PJFEB22_22Apr2021_201946.pdf'
+ SELECT top 1 N.IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + N.Template + N.AttachmentName AS FilePathName FROM Notifications N(Nolock)
+   --  SELECT top 1 N.IdentityID  AS VisitId,@REPORTPDFFOLDERPATH  AS FilePathName FROM Notifications N(Nolock)
+inner join Notifications AT (Nolock)  on AT.IdentityID =N.IdentityID   AND AT.OrgID=@pOrgID     
+--left join #temp AT (Nolock)  on AT.IdentityID =N.IdentityID    
+      WHERE N.IdentityID = @pVisitId AND N.OrgID=@pOrgID     
+  AND N.Status='Completed'  --AND AT.Completiontime IS NOT NULL AND AT.ActionType='ROUNDBPDF'    
+  -- AND AT.ContextType='P' and AT.Category='Report' AND AT.ActionType='ROUNDBPDF'    
+  AND N.ContextType='CP' and N.Category='Report' AND N.ActionType='Pdf'    
+   end    
+      
+else if (@Type='Bill')    
+begin    
+ SELECT top 1 N.IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + AT.Template +  AT.AttachmentName AS FilePathName FROM Notifications N(Nolock)    
+ inner join Notifications AT (Nolock)  on AT.IdentityID =N.IdentityID     AND AT.OrgID=@pOrgID   
+      WHERE N.IdentityID = @pVisitId AND N.OrgID=@pOrgID     
+   AND N.Status='Completed'  --AND AT.Completiontime IS NOT NULL AND AT.ActionType='ROUNDBPDF'    
+   AND AT.ContextType='CP' and AT.Category='Bill' AND AT.ActionType='pdf'    
+    
+ --SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)    
+ --     WHERE IdentityID = @pVisitId AND OrgID=@pOrgID     
+ --  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='Pdf'    
+ --  AND ContextType='P'    
+   end    
+   else if  (@Type='INVOICE')    
+   begin    
+    SELECT top 1 N.IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + AT.Template + AT.AttachmentName AS FilePathName FROM Notifications N(Nolock)    
+ inner join Notifications AT with(Nolock)  on AT.IdentityID =N.IdentityID  AND AT.OrgID=@pOrgID     
+      WHERE N.IdentityID = @pVisitId AND N.OrgID=@pOrgID     
+  AND N.Status='Completed'  --AND AT.Completiontime IS NOT NULL AND AT.ActionType='ROUNDBPDF'    
+   AND AT.ContextType='INV' and AT.Category='Invoice' AND AT.ActionType='pdf'    
+    
+   -- SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)    
+   --   WHERE IdentityID = @pVisitId AND OrgID=@pOrgID     
+   --AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='PDF'    
+   --AND ContextType='INV'    
+   end    
+    
+END     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
+

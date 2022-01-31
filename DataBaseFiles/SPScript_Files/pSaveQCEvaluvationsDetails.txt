@@ -1,0 +1,31 @@
+
+CREATE PROCEDURE [dbo].[pSaveQCEvaluvationsDetails]
+(
+ @pQCEvaluvationsDetails [dbo].[UDTQCEvaluvationsDetails] READONLY, 
+ @ContextInfo [UDT_Context] READONLY
+)
+AS
+BEGIN
+DECLARE @OrgID INT,@OrgAddID INT    ,@CreatedBy BIGINT      
+        
+SELECT @OrgID=CI.OrgID,@OrgAddID=CI.OrgAddressID,@CreatedBy=CI.LoginID FROM @ContextInfo CI  
+
+INSERT INTO QCRuleMasterHistory
+SELECT QCR.QCRID,QCR.LotId,Analyte,ManufacturerRefRange,ManufacturerMean,Run,LabRefRange,LabMean,LabSD,LJChartCalc,QCR.OrgId,IsActive,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,QCLevelID,QCR.QCLevel,LabCV FROM QCRuleMaster QCR WITH (NOLOCK)
+INNER JOIN @pQCEvaluvationsDetails Temp ON QCR.LotID=Temp.LotID AND QCR.Analyte=Temp.InvestigationID AND QCR.OrgID=Temp.OrgID
+AND QCR.QCLevel=Temp.QCLevel
+
+UPDATE QCR SET QCR.LabMean=Temp.Mean,QCR.LabSD=StandardDeviation,QCR.LabCV=Temp.CoVariation,QCR.ModifiedBy=@CreatedBy,QCR.ModifiedAt=GetDate(),LJChartCalc='Lab'
+FROM QCRuleMaster QCR WITH (NOLOCK)
+INNER JOIN @pQCEvaluvationsDetails Temp ON QCR.LotID=Temp.LotID AND QCR.Analyte=Temp.InvestigationID AND QCR.OrgID=Temp.OrgID
+AND QCR.QCLevel=Temp.QCLevel
+
+
+--SELECT * FROM @pQCEvaluvationsDetails Temp
+--LEFT JOIN QCRuleMaster QCR  WITH (NOLOCK) ON QCR.LotID=Temp.LotID AND QCR.Analyte=Temp.InvestigationID AND QCR.OrgID=Temp.OrgID
+--AND QCR.QCLevel=Temp.QCLevel
+--WHERE QCR.QCRID IS NULL
+
+--SELECT * FROM QCRuleMaster
+
+END

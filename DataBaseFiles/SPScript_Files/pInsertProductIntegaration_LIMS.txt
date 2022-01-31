@@ -1,0 +1,56 @@
+
+CREATE PROCEDURE pInsertProductIntegaration_LIMS
+(
+	@ProductID bigint,
+	@Orgid int,
+	@ContextInfo  [dbo].[UDT_Context] READONLY
+)
+AS 
+BEGIN
+
+DECLARE @ProductJsonText Nvarchar(MAX)
+
+SET @ProductJsonText =(	SELECT 
+		CentreCode as OrgCode,ProductCode,ProductName,ProductID,LSU as LeastSellingUnit,
+		MfgName as ManufacturerName,CategoryID as ProductCategoryId,TypeID as ProductTypeId, 
+		(
+			SELECT 
+				  (Select AttributesValue   From ProductsAttributesDetails where  ProductID=@ProductID AND AttributesKey='HasExpiryDate') as HasExpiryDate,
+				  (Select AttributesValue   From ProductsAttributesDetails where  ProductID=@ProductID AND AttributesKey='HasBatchNo') as HasBatchNo,
+				  P.TaxPercent,
+				  '' as IsLabAnalyser,
+				  ShelfPeriod,
+				  ShelfPeriodCode as ShelfPeriodType,
+				  Case When IsScheduleHDrug ='N' Then 'N' Else 'Y' End  IsScheduleDrug,
+				  Case When IsScheduleHDrug ='N' Then '' Else IsScheduleHDrug End  ScheduleDrugType,
+				  IsNorcotic,
+				  'Y' as IsConsumable,
+				  (Select AttributesValue   From ProductsAttributesDetails where  ProductID=@ProductID AND AttributesKey='CostPrice') as CostPrice,
+				  (Select AttributesValue   From ProductsAttributesDetails where  ProductID=@ProductID AND AttributesKey='SellingPrice') as SellingPrice,
+				  UsageCount as TestCount,
+				  ReorderConsumptionlevel 
+			FROM Products
+			WHERE ProductID=@ProductID
+			FOR JSON AUTO 
+		) AS ProductAttributeList,
+		(
+		  SELECT UOMCode as PurchaseUomCode ,
+				 ConvesionQty   
+		  FROM ProductUOMMapping 
+		  WHERE ProductID=@ProductID
+		  FOR JSON AUTO 
+		) AS PurchaseUomList
+	FROM Products P
+	INNER JOIN Organization O ON O.OrgID=P.OrgID
+	WHERE P.OrgID=@Orgid AND ProductID=@ProductID
+	FOR JSON PATH, ROOT ('ProductInfo')  
+	)
+
+	
+Insert into	[SynProductIntegaration_LIMS] (ProductID,OrgID,ProductJsonText ,[Status] ,	CreatedBy ,	CreatedAt )
+Values (@ProductID,@Orgid,@ProductJsonText,'Pending',(Select LoginID From @ContextInfo ),GETDATE())
+
+	
+END
+
+

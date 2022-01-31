@@ -1,0 +1,7 @@
+CREATE PROCEDURE [dbo].[pGetLastBarcode] @ContextInfo [UDT_Context] READONLY
+	WITH EXECUTE AS OWNER
+AS
+BEGIN
+	SELECT isnull(max(CONVERT(BIGINT, barcode)), 1)
+ FROM StockReceivedBarcodeMapping    
+END

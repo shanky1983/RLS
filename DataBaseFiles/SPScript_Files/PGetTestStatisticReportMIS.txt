@@ -1,0 +1,131 @@
+CREATE Procedure PGetTestStatisticReportMIS            
+(            
+@Fdate Datetime,            
+@Tdate Datetime,            
+@ClientID int,            
+@VisitType Int,          
+@ContextInfo [dbo].[UDT_Context] READONLY             
+)            
+As            
+Begin       
+IF (@ClientID = 0 OR @ClientID = -1)        
+Set @ClientID=NULL       
+      
+Declare @OrgID int          
+select  @OrgID=OrgID from @ContextInfo      
+      
+Create Table #temptest      
+(      
+PatientID Bigint,      
+PatientVisitID Bigint,      
+TestName Nvarchar(255),      
+TestID Int,      
+TestType Nvarchar(10),      
+VisitType Nvarchar(50),      
+PatientStatus nvarchar(100)      
+)      
+if(@VisitType = -1)      
+Begin      
+Insert into #temptest (PatientID,PatientVisitID,TestName,TestID,TestType,VisitType,PatientStatus)      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+CASE when PV.LabVisitType=0 then 'OPD' Else 'IPD' End as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus       
+FROM Patient P WITH (NOLOCK)       
+Inner join PatientVisit PV WITH (NOLOCK) on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID        
+inner join OrderedInvestigations OI WITH (NOLOCK) on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID        
+--inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID        
+inner join VisitClientMapping VCM WITH (NOLOCK) on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID        
+left join Bookings B WITH (NOLOCK) on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID        
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate and B.PatientVisitID is NULL       
+and ISNULL(P.PatientStatus,'') <> 'VS'  and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType in (0,1)         
+UNION ALL      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+'HomeCollection' as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus      
+FROM Patient P WITH (NOLOCK)        
+Inner join PatientVisit PV WITH (NOLOCK) on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID        
+Inner join OrderedInvestigations OI WITH (NOLOCK) on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID        
+--Inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID        
+inner join VisitClientMapping VCM WITH (NOLOCK) on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID     
+INNER JOIN ClientMaster CM WITH (NOLOCK) ON VCM.ClientID=CM.ClientiD AND VCM.OrgID=CM.OrgID       
+----Inner join Bookings B on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID        
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate        
+and ISNULL(P.PatientStatus,'') <> 'VS'  and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType in (0,1)        
+UNION ALL      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+'VISA' as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus      
+FROM Patient P      
+Inner join PatientVisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID      
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID      
+--Inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID      
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID      
+left join Bookings B on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID      
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate      
+and P.PatientStatus='VS' and B.PatientVisitID is NULL and VCM.ClientID=coalesce( @ClientID,VCM.ClientID)  and PV.LabVisitType in (0,1)    
+End      
+Else      
+Begin      
+Insert into #temptest (PatientID,PatientVisitID,TestName,TestID,TestType,VisitType,PatientStatus)      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+CASE when PV.LabVisitType=0 then 'OPD' Else 'IPD' End as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus       
+FROM Patient P      
+Inner join PatientVisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID      
+inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID      
+--inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID      
+left join Bookings B on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID   
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID    
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate and B.PatientVisitID is NULL and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType          
+and ISNULL(P.PatientStatus,'') <> 'VS'      
+UNION ALL      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+'HomeCollection' as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus      
+FROM Patient P      
+Inner join PatientVisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID      
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID      
+--Inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID      
+Inner join Bookings B on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID      
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID 
+INNER JOIN ClientMaster CM WITH (NOLOCK) ON VCM.ClientID=CM.ClientiD AND VCM.OrgID=CM.OrgID   
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType       
+and ISNULL(P.PatientStatus,'') <> 'VS'       
+UNION ALL      
+SELECT Distinct P.PatientID,PV.PatientVisitID,OI.Name,OI.ID,OI.Type,      
+'VISA' as VisitType,      
+CASE when P.PatientStatus='' then 'NR' Else 'NR' End as PatientStatus      
+FROM Patient P      
+Inner join PatientVisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.OrgID      
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID      
+--Inner join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID      
+left join Bookings B on B.PatientVisitID=PV.PatientVisitID and B.PatientID=PV.PatientID and B.OrgID=PV.OrgID    
+inner join VisitClientMapping VCM on VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID   
+WHERE PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate      
+and P.PatientStatus='VS' and B.PatientVisitID is NULL  and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType      
+End      
+select TestName,TestType,Count(TestID) as Counts,VisitType into #tempselva from #temptest group by TestName,TestType,VisitType order by TestType,TestName      
+      
+select        
+* into #tempselva1 from (select  distinct TestName,TestType,      
+VisitType,Counts as Result      
+from #tempselva with(nolock)      
+)  as t       
+pivot (max(Result) for [VisitType] in([OPD],[IPD],[HomeCollection],[VISA])      
+)as pvt      
+order by [TestName]      
+Create Table #Finalstep (Sno int identity(1,1),TESTNAME Nvarchar(250),TYPE Nvarchar(10),IPD INT,OPD INT,HOMECOLLECTION INT,VISA INT,TOTALTESTCOUNT INT)
+Insert into #Finalstep
+select TestName as TESTNAME,TestType as TYPE,Isnull(IPD,0) as IPD,Isnull(OPD,0) as OPD,      
+Isnull(HomeCollection,0) as HOMECOLLECTION,Isnull(VISA,0) as VISA,      
+Sum(Convert(int,isnull(OPD,0))+Convert(int,isnull(IPD,0))+Convert(int,isnull(HomeCollection,0))+Convert(int,isnull(VISA,0))) as TOTALTESTCOUNT      
+from #tempselva1 group by TestName,TestType,OPD,IPD,HomeCollection,VISA order by TestType,TestName  
+
+
+select SNO, TESTNAME, TYPE, IPD, OPD, HOMECOLLECTION as 'HOME COLLECTION',VISA,
+TOTALTESTCOUNT as 'TOTAL TEST COUNT' from #Finalstep 
+Drop table #temptest      
+Drop table #tempselva      
+Drop table #tempselva1 
+Drop table #Finalstep     
+End

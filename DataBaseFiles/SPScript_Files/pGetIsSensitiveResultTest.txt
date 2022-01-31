@@ -1,0 +1,1098 @@
+   
+CREATE PROCEDURE [dbo].[pGetIsSensitiveResultTest] @RoleID               [BIGINT],    
+                                                @OrgID                [INT],    
+                                                @UID                  [BIGINT],    
+                                                @Category             [NVARCHAR] (25),    
+                                                @OrgAddID             [BIGINT],    
+                                                @SpecialityID         [INT],    
+                                                @DeptID               [INT],    
+                                                @ClientID             [BIGINT],    
+                                                @TaskDate             [NVARCHAR] (20),    
+                                                @PatientNumber        [NVARCHAR] (100),    
+                                                @pinvLocationID       [INT],    
+                                                @startRowIndex        [INT],    
+                                                @pageSize             [INT],    
+                                                @totalRows            [INT] OUTPUT,    
+                                                @LoginDetail          [dbo].[LOGINDETAIL] READONLY,    
+                                                @TrustedOrgActionsUTD [dbo].[TRUSTEDORGACTIONS] READONLY,    
+                                                @Preference           [NVARCHAR] (20),
+												@patientID            [Bigint],
+												@visitID              [Bigint],
+												@tID                  [Bigint],    
+                                                @ContextInfo          [dbo].[UDT_CONTEXT] READONLY    
+WITH EXECUTE AS OWNER    
+AS   
+BEGIN  
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED     
+   SET NOCOUNT ON;  
+   SET XACT_ABORT ON;   
+BEGIN TRY  
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)  
+    
+    DECLARE @select NVARCHAR(MAX)    
+    DECLARE @select1 NVARCHAR(MAX)    
+    DECLARE @select2 NVARCHAR(MAX)    
+    DECLARE @Invoiceselect2 NVARCHAR(MAX)    
+    DECLARE @select3 NVARCHAR(MAX)    
+    DECLARE @where NVARCHAR(MAX)    
+    DECLARE @where1 NVARCHAR(MAX)    
+    DECLARE @where2 NVARCHAR(MAX)    
+    DECLARE @query NVARCHAR(MAX)    
+    DECLARE @query1 NVARCHAR(MAX)    
+    DECLARE @InvoiceQuery NVARCHAR(MAX)    
+    DECLARE @gPatientID BIGINT    
+    DECLARE @statusP NVARCHAR(10)    
+    DECLARE @statusPr NVARCHAR(10)    
+    DECLARE @tempdate DATETIME    
+    DECLARE @LabID NVARCHAR(100)    
+    DECLARE @Labno NVARCHAR(100)    
+    DECLARE @join NVARCHAR(MAX)    
+    DECLARE @join2 NVARCHAR(MAX)    
+    DECLARE @AdditionalInfo NVARCHAR(MAX)    
+    DECLARE @WhereIsTimedTask NVARCHAR(MAX)    
+    DECLARE @WhereTaskID NVARCHAR(MAX)    
+    
+  BEGIN    
+      
+      DECLARE @ServerDate DATETIME    
+    
+      SET @ServerDate = dbo.Fn_getserverdate(@ContextInfo)    
+    
+      DECLARE @LanguageCode NVARCHAR(max)    
+    
+      SELECT @LanguageCode = LanguageCode    
+      FROM   @ContextInfo    
+    
+      IF ( Isnull(@Category, '') = '' )    
+        BEGIN    
+            SELECT @Category = -1    
+        END    
+    
+      DECLARE @TempInvestigationStatus TABLE    
+        (    
+           STATUS NVARCHAR(100)    
+        )    
+      DECLARE @TaskActionIDofRole TABLE    
+        (    
+           TaskActionID INT    
+        )    
+    
+      INSERT INTO @TaskActionIDofRole    
+      SELECT TaskActionID    
+      FROM   TaskActionOrgMapping     
+      WHERE  RoleID = @RoleID    
+             AND OrgID = @OrgID     
+
+      INSERT INTO @TempInvestigationStatus    
+                  (STATUS)    
+      SELECT InvS.STATUS    
+      FROM   TaskEntityMap TEM     
+             INNER JOIN InvestigationStatus InvS     
+                     ON TEM.MappingID = InvS.InvestigationStatusID    
+             INNER JOIN @TaskActionIDofRole TMP    
+                     ON TMP.TaskActionID = TEM.TaskActionID    
+   WHERE  TEM.MappingType = 'InvestigationStatus'  and TEM.OrgID= @OrgID      
+    
+      DECLARE @tempStatus NVARCHAR(max)    
+    
+      SELECT @tempStatus = COALESCE(@tempStatus + ',', '') + '''' + STATUS    
+                           + ''''    
+      FROM   @TempInvestigationStatus    
+    
+      /****** Code End *****/    
+      DECLARE @pTempDetpID AS TABLE    
+        (    
+           DeptID BIGINT    
+        )    
+      DECLARE @pTempDetpCode AS TABLE    
+        (    
+           Deptcode BIGINT    
+        )    
+      DECLARE @OrgIDs NVARCHAR(100)    
+      DECLARE @strDeptID NVARCHAR(MAX)    
+      DECLARE @DeptQuery NVARCHAR(MAX)    
+      DECLARE @AddressID NVARCHAR(MAX)    
+      DECLARE @IsDeptFilter NVARCHAR    
+    
+      SET @IsDeptFilter = 'N'    
+    
+      CREATE TABLE #TrustedOrgIDs    
+        (    
+           OrgID INT    
+        )    
+    
+      INSERT INTO #TrustedOrgIDs    
+      SELECT LoggedOrgID    
+      FROM   @TrustedOrgActionsUTD    
+    
+      --Get OrgID Based on TrustedOrgDetails & TrustedOrgActions                                                                                                 
+      --select @OrgIDs = LoggedOrgID from @TrustedOrgActionsUTD                                                                                             
+      --select @OrgIDs = coalesce ( @OrgIDs + ',','') + convert(NVARCHAR, TOD.SharingOrgID)    
+      INSERT INTO #TrustedOrgIDs    
+      SELECT TOD.SharingOrgID    
+      FROM   TrustedOrgDetails TOD    
+             INNER JOIN TrustedOrgActions TOA    
+                     ON TOA.TrustedOrgDetailsID = TOD.TrustedOrgDetailsID    
+             INNER JOIN @TrustedOrgActionsUTD T    
+                     ON TOD.LoggedOrgID = T.LoggedOrgID    
+                        AND TOA.RoleID = T.RoleID    
+                        AND TOA.IdentifyingType = T.IdentifyingType    
+                        AND TOA.IdentifyingActionID = T.IdentifyingActionID    
+    
+      IF EXISTS ((SELECT 1  FROM   TaskActions  WHERE  ActionName IN ( 'Release')))    
+        --IF EXISTS((SELECT 1 FROM TaskActionOrgMapping TAO INNER JOIN       
+        --                          TaskActions TA ON TA.TaskActionID =TAO.TaskActionID                                                                  
+        --                          WHERE TA.ActionName in ('Approvel','Validate')  AND TAO.RoleID= @RoleID and TAO.OrgID=@OrgID ))                                                                                     
+        BEGIN    
+            SET @IsDeptFilter = 'Y'    
+        END     
+      --Get DeptID Based on RoleDeptMap & LoginDeptMap                                                                                         
+      IF ( @IsDeptFilter = 'Y' )    
+        BEGIN    
+            IF ( @DeptID = -1 )    
+              BEGIN    
+                  IF NOT EXISTS (SELECT 1    
+                                 FROM   LoginDeptMap LDM     
+                                        INNER JOIN RoleDeptMap RDM     
+                                                ON RDM.RoleDetpID = LDM.RoleDetpID    
+                                        INNER JOIN @LoginDetail LD    
+                                                ON LD.RoleID = rdm.RoleID    
+                                                   AND LDM.loginID = LD.LoginID)    
+                    BEGIN    
+                        INSERT INTO @pTempDetpCode    
+                        SELECT DISTINCT idm.Deptcode    
+                        FROM   dbo.InvDeptMaster IDM     
+                               INNER JOIN dbo.RoleDeptMap RDM     
+                                       ON rdm.DeptID = idm.DeptID    
+                               INNER JOIN @LoginDetail LD    
+                                       ON LD.RoleID = rdm.RoleID    
+                                          AND LD.Orgid = idm.OrgID    
+                    END    
+                  ELSE    
+                    BEGIN    
+                        INSERT INTO @pTempDetpCode    
+                        SELECT DISTINCT idm.Deptcode    
+                        FROM   dbo.InvDeptMaster IDM     
+                               INNER JOIN RoleDeptMap RDM     
+  ON rdm.DeptID = idm.DeptID    
+                          INNER JOIN LoginDeptMap LDM     
+                                       ON LDM.RoleDetpID = RDM.RoleDetpID    
+                               INNER JOIN @LoginDetail LD    
+                                       ON LD.RoleID = rdm.RoleID    
+                                          AND LD.Orgid = idm.OrgID    
+AND LD.LoginID = LDM.loginID    
+                    END                                                                                              
+                  DECLARE @strDeptcode NVARCHAR(MAX)    
+    
+                  SELECT @strDeptcode = COALESCE(@strDeptcode + ',', '')    
+                                        + CONVERT(NVARCHAR, Deptcode)    
+                  FROM   @pTempDetpCode    
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @strDeptcode = Deptcode    
+                  FROM   InvDeptMaster     
+                  WHERE  DeptID = @DeptID  and OrgID=@OrgID   
+              END     
+            SELECT @DeptQuery = 'select DeptID from InvDeptMaster  IDM    
+ INNER JOIN #TrustedOrgIDs TM on IDM.OrgID =TM.OrgId    
+ where  DeptCode in (' + @strDeptcode + ')'    
+    
+            INSERT INTO @pTempDetpID    
+            EXEC (@DeptQuery)     
+            SELECT @strDeptID = COALESCE(@strDeptID + ',', '')    
+                                + CONVERT(NVARCHAR, DeptID)    
+            FROM   @pTempDetpID    
+        END      
+      --Get OrgAddressID Based on LoginLocationMap and TrustedOrgActions                                                                    
+      IF ( @OrgAddID = -1 )    
+        BEGIN    
+            IF NOT EXISTS (SELECT 1    
+                           FROM   LoginLocationMapping LLM     
+                                  INNER JOIN LoginRole LR     
+                                          ON LR.LoginRoleID = LLM.LoginRoleID    
+                                  INNER JOIN @LoginDetail LD    
+                                          ON LD.RoleID = LR.RoleID    
+                                             AND LD.LoginID = LR.LoginID)    
+              BEGIN    
+                  IF EXISTS (SELECT 1    
+                             FROM   TrustedOrgDetails TOD     
+                                    INNER JOIN TrustedOrgActions TOA     
+                                            ON TOD.TrustedOrgDetailsID = TOA.TrustedOrgDetailsID    
+                                    INNER JOIN @TrustedOrgActionsUTD T    
+                                            ON TOD.LoggedOrgID = T.LoggedOrgID    
+                                               AND TOA.RoleID = T.RoleID    
+                                               AND TOA.IdentifyingType = T.IdentifyingType    
+                                               AND TOA.IdentifyingActionID = T.IdentifyingActionID)    
+                    BEGIN    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+                                            + CONVERT(NVARCHAR(max), OrganizationAddress.AddressID)    
+                        FROM   OrganizationAddress     
+                        WHERE  OrganizationAddress.OrgID = @OrgID    
+    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+                                            + CONVERT(NVARCHAR(max), OrganizationAddress.AddressID)    
+                        FROM   OrganizationAddress     
+                        WHERE  OrganizationAddress.OrgID IN (SELECT TOD.SharingOrgID    
+                                                             FROM   TrustedOrgDetails TOD     
+                                                                    INNER JOIN TrustedOrgActions TOA     
+                                                                            ON TOD.TrustedOrgDetailsID = TOA.TrustedOrgDetailsID    
+                                                                    INNER JOIN @TrustedOrgActionsUTD T    
+               ON TOD.LoggedOrgID = T.LoggedOrgID    
+                                                                               AND TOA.RoleID = T.RoleID    
+                                                                               AND TOA.IdentifyingType = T.IdentifyingType    
+            AND TOA.IdentifyingActionID = T.IdentifyingActionID    
+                                                                               AND TOD.ShareTypeID <> T.LoggedOrgID)    
+                    END    
+                  ELSE    
+                    BEGIN    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+                                            + CONVERT(NVARCHAR(max), OrganizationAddress.AddressID)    
+                        FROM   OrganizationAddress     
+                        WHERE  OrganizationAddress.OrgID = @OrgID    
+                    END    
+              END    
+            ELSE    
+              BEGIN    
+                  IF EXISTS (SELECT 1    
+                             FROM   TrustedOrgDetails TOD     
+                                    INNER JOIN TrustedOrgActions TOA     
+                                            ON TOD.TrustedOrgDetailsID = TOA.TrustedOrgDetailsID    
+                                    INNER JOIN @TrustedOrgActionsUTD T    
+                                            ON TOD.LoggedOrgID = T.LoggedOrgID    
+                                               AND TOA.RoleID = T.RoleID    
+                                               AND TOA.IdentifyingType = T.IdentifyingType    
+                                               AND TOA.IdentifyingActionID = T.IdentifyingActionID)    
+                    BEGIN    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+                                            + CONVERT(NVARCHAR(max), OA.AddressID)    
+                        FROM   OrganizationAddress OA     
+                               INNER JOIN LoginLocationMapping LLM     
+                                       ON LLM.AddressID = OA.AddressID    
+                               INNER JOIN LoginRole LR     
+                                       ON LR.LoginRoleID = LLM.LoginRoleID    
+                               INNER JOIN @LoginDetail LD    
+                                       ON LD.RoleID = LR.RoleID    
+                                          AND LD.LoginID = LR.LoginID    
+    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+                                            + CONVERT(NVARCHAR(max), OrganizationAddress.AddressID)    
+                        FROM   OrganizationAddress     
+                        WHERE  OrganizationAddress.OrgID IN (SELECT TOD.SharingOrgID    
+                                                             FROM   TrustedOrgDetails TOD     
+                                                                    INNER JOIN TrustedOrgActions TOA     
+                                                                            ON TOD.TrustedOrgDetailsID = TOA.TrustedOrgDetailsID    
+                                                                    INNER JOIN @TrustedOrgActionsUTD T    
+                                                                            ON TOD.LoggedOrgID = T.LoggedOrgID    
+                                                                               AND TOA.RoleID = T.RoleID    
+             AND TOA.IdentifyingType = T.IdentifyingType    
+                                                       AND TOA.IdentifyingActionID = T.IdentifyingActionID    
+                                                                               AND TOD.ShareTypeID <> T.LoggedOrgID)    
+                    END    
+                  ELSE    
+                    BEGIN    
+                        SELECT @AddressID = COALESCE(@AddressID + ',', '')    
+           + CONVERT(NVARCHAR(max), OA.AddressID)    
+                        FROM   OrganizationAddress OA                                    INNER JOIN LoginLocationMapping LLM     
+                                       ON LLM.AddressID = OA.AddressID    
+                               INNER JOIN LoginRole LR     
+                                       ON LR.LoginRoleID = LLM.LoginRoleID    
+                               INNER JOIN @LoginDetail LD    
+                                       ON LD.RoleID = LR.RoleID    
+                                          AND LD.LoginID = LR.LoginID    
+                    END    
+              END    
+        END    
+    
+      DECLARE @tempID TABLE    
+        (    
+           vID NVARCHAR(max)    
+        )    
+    
+      WHILE Charindex('/', @PatientNumber) > 0    
+        BEGIN    
+            INSERT INTO @tempID    
+            SELECT Substring(@PatientNumber, 1, ( Charindex('/', @PatientNumber) - 1 ))    
+    
+            SET @PatientNumber = Substring(@PatientNumber, Charindex('/', @PatientNumber) + 1, Len(@PatientNumber))    
+        END    
+    
+      INSERT INTO @tempID    
+      SELECT @PatientNumber    
+    
+      SELECT @LabID = Count(*)    
+      FROM   @tempID    
+    
+      IF @LabID > 1    
+        BEGIN    
+            SELECT @Labno = Max(vID)    
+            FROM   @tempID    
+    
+            SET @PatientNumber = ''    
+        END    
+      ELSE    
+        BEGIN    
+            SET @Labno = ''    
+        END    
+    
+      ----------------------------------------IS Corpoarate Org---------------------------                                                                                                         
+      DECLARE @Iscorporate NCHAR(5)    
+    
+      SELECT @Iscorporate = COm.ConfigValue    
+      FROM   ConfigOrgMaster COM     
+             INNER JOIN ConfigKeyMaster CKM     
+                     ON COM.ConfigKeyID = CKM.ConfigKeyID    
+             INNER JOIN #TrustedOrgIDs TM    
+                     ON COM.OrgID = TM.OrgId    
+      WHERE  CKM.ConfigKey = 'IsCorporateOrg'    
+    
+      --and CONVERT(NVARCHAR,COM.OrgID) in (@OrgIDs)             
+      -------------------------------------------------------------------------------------                                                                                                                                                     
+      -- Code added by Vijay TV for issue ID 613 on 22-Dec-2010 Begins                                                                                             
+      SET NOCOUNT ON    
+      SET DATEFORMAT dmy -- Set the date to British format as the Input parameter always has dd/mm/yyyy. This setting will apply only for this SP.                                                                                                             
+
+
+
+ 
+   
+  
+       
+      DECLARE @FromDateTime NVARCHAR(30),    
+              @ToDateTime   NVARCHAR(30)    
+    
+      --Select @FromDateTime = @TaskDate + ' 00:00:00' -- Add day's starting time                                                                                                
+      --Select @ToDateTime = @TaskDate + ' 23:59:59' -- Add day's ending time                                                                                                                            
+      -- Code added by Vijay TV for issue ID 613 on 22-Dec-2010 ends                                                                             
+      --UPDATE Tasks SET TaskStatusID = (SELECT TaskStatusID FROM TaskStatus WHERE StatusName = 'DELETED')                                                                                                                                                    
+
+
+
+ 
+  
+  
+  
+          
+      --WHERE CONVERT(NVARCHAR,TaskDate,103) < CONVERT(NVARCHAR,dbo.Fn_getserverdate(@ContextInfo)-2,103)                                                                                          
+      --AND TaskStatusID IN (SELECT TaskStatusID FROM TaskStatus WHERE StatusName = 'PENDING')        
+      IF ( @TaskDate != '-1' )    
+        BEGIN    
+            SET @TaskDate = CONVERT(NVARCHAR, @ServerDate, 103)    
+    
+            IF ( @PatientNumber <> '' )    
+              BEGIN    
+                  SELECT @FromDateTime = CONVERT(NVARCHAR, @ServerDate - 365, 103)    
+                                         + ' 00:00:00' -- Add day's starting time                         
+                  SELECT @ToDateTime = @TaskDate + ' 23:59:59' -- Add day's ending time                 
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @FromDateTime = CONVERT(NVARCHAR, @ServerDate - 7, 103)    
+                                         + ' 00:00:00' -- Add day's starting time                         
+                  SELECT @ToDateTime = @TaskDate + ' 23:59:59' -- Add day's ending time                                                                                            
+              END    
+        END    
+      ELSE    
+        BEGIN    
+            SELECT @FromDateTime = @TaskDate + ' 00:00:00' -- Add day's starting time                                                                     
+            SELECT @ToDateTime = @TaskDate + ' 23:59:59' -- Add day's ending time                                                                                                                
+        END    
+    
+      SET @statusP = 'PENDING'    
+      SET @statusPr = 'INPROGRESS'    
+    
+      SELECT @where = ''    
+    
+      SELECT @where1 = ''    
+    
+      SELECT @where2 = ''    
+    
+      SELECT @select1 = ''    
+    
+      SELECT @select2 = ''    
+    
+      SELECT @select3 = ''    
+    
+      DECLARE @TempTable TABLE    
+        (    
+           TaskID            BIGINT,    
+           TaskActionID      INT,    
+           TaskDescription   NVARCHAR(1000),    
+           TaskDate          DATETIME,    
+           PatientID         BIGINT,    
+           PatientVisitID    BIGINT,    
+           AssignedTo        BIGINT,    
+           HighlightColor    NVARCHAR(max),    
+           Category          NVARCHAR(25),    
+           RedirectURL       NVARCHAR(1000),    
+           ActionName        NVARCHAR(50),    
+           SpecialityID      INT,    
+           RoleID            BIGINT,    
+           RoleName          NVARCHAR(50),    
+           Location          NVARCHAR(50),    
+           PatientNumber     NVARCHAR(30),    
+           NAME              NVARCHAR(255),    
+           OrgID             INT,    
+           OrgName           NVARCHAR(100),    
+           LabNo             NVARCHAR(30),    
+           InvestigationName NVARCHAR(max),    
+           RefernceID        NVARCHAR(255),    
+           CreatedName       NVARCHAR(50),    
+           IsShowedTime      NVARCHAR(25),    
+           Stat              DATETIME,    
+           Colour            NVARCHAR(50)    
+        )    
+      DECLARE @GetDate NVARCHAR(50)    
+    
+      SELECT @GetDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))    
+    
+      SELECT @select = '    
+      
+  DECLARE @TempOrg as Table    
+  (OrgID INT)    
+    
+  INSERT INTO  @TempOrg    
+    
+  Select OrgId  from #TrustedOrgIDs    
+      
+      
+SELECT DISTINCT T.TaskID,                                            
+T.TaskActionID,T.TaskDescription,T.TaskDate,T.PatientID,T.PatientVisitID,T.AssignedTo,Case    
+WHEN T.TaskStatusID=5 THEN ISNULL((SELECT top 1 Name FROM Users  WHERE LoginID=T.ModifiedBy), '''')   ELSE '''' END AS HighlightColor,    
+TA.Category,T.RedirectURL,TA.ActionName,T.SpecialityID,T.RoleID,R.RoleName ,OA.Location,P.PatientNumber,P.Name,T.orgID as OrgID,Org.Name as OrgName,       
+'''' as InvestigationName,T.RefernceID,'''' ,      
+CASE WHEN (DATEADD(minute, -5,T.ShowedTime))<'''+ @GetDate + ''' then ' + '''' + 'Y' + '''' + ' else '+ '''' + 'N' + '''' + ' end as IsShowedTime ,    
+ShowedTime as Stat ,HighlightColor as  Colour     
+FROM TASKS T '    
+    
+      SELECT @join = '                                                                                 
+                                                                             
+INNER JOIN TaskActions TA  ON T.TaskActionID = TA.TaskActionID    AND ISNULL(T.Type,'''')=''''  AND TA.ActionName in (''Release'')                                                                                                
+                                                             
+  INNER JOIN OrderedInvestigations  OI1  on OI1.Visitid=T.PatientVisitId   AND T.OrgID=OI1.OrgID --and T.RefernceID=OI1.LabNo 
+  
+  INNER JOIN PatientInvestigation  PIN  on PIN.AccessionNumber=OI1.AccessionNumber  AND PIN.OrgID=OI1.OrgID          
+                                                                              
+  INNER JOIN Role R  ON T.RoleID = R.RoleID AND R.OrgID = T.OrgID                                                                   
+                                                                              
+  INNER JOIN PatientVisit  On PatientVisit.PatientVisitId=T.PatientVisitID AND Patientvisit.OrgID = T.OrgID                                                                                                                            
+                                                                              
+  INNER JOIN Patient P  ON P.PatientID = PatientVisit.PatientID AND P.OrgID = PatientVisit.OrgID AND T.OrgID=P.OrgID          
+                                                                              
+  INNER JOIN OrganizationAddress OA  on OA.AddressID =   PatientVisit.OrgAddressID AND OA.OrgID = T.OrgID                                                                  
+                                                                              
+  INNER JOIN Organization Org  on   Org.OrgID= T.OrgID                                                                                          
+                                                                              
+  LEFT OUTER JOIN Speciality  ON Speciality.SpecialityID=T.SpecialityID    
+      
+  INNER JOIN @TempOrg TM on T.OrgID = TM.OrgID    
+    
+  --INNER JOIN #TrustedOrgIDs TM on T.OrgID = TM.OrgID      
+                                                                
+  --INNER JOIN Users U on T.CreatedBy=U.LoginID '    
+    
+      IF ( @IsDeptFilter = 'Y' )    
+        BEGIN    
+            SELECT @join = @join + Nchar(13)    
+                           + ' --INNER JOIN OrderedInvestigations OI  on OI.VisitID = PatientVisit.PatientVisitId                                                   
+                                                                              
+  INNER JOIN PatientInvestigation PI  on OI1.AccessionNumber = PI.AccessionNumber       
+                                                                              
+  INNER JOIN InvestigationOrgMapping  IOM  on IOM.InvestigationID = PI.InvestigationID and IOM.OrgID  = PI.OrgID '    
+        END    
+    
+      IF ( @ClientID > 0 )    
+        BEGIN    
+            SELECT @join = @join    
+                           + 'INNER JOIN VisitClientMapping vcm  on Vcm.VisitID=patientvisit.PatientVisitId  and vcm.OrgID=patientvisit.OrgID '    
+        END    
+    
+      IF ( @Preference = 'STAT' )    
+        BEGIN    
+            SELECT @join = @join + Nchar(13)    
+                           + ' INNER JOIN (Select Distinct BD.LabNo FROM FinalBill FB                                                                               
+ INNER JOIN BillingDetails BD  on BD.FinalBillID=FB.FinalBillID AND BD.IsSTAT='    
+                           + '''Y''' + ') As LNo On Lno.LabNo=OI1.LabNo'    
+        END    
+    
+      IF EXISTS (SELECT 1    
+                 FROM   @TempInvestigationStatus    
+                 WHERE  STATUS = 'Approve')    
+        BEGIN    
+            SELECT @join = @join    
+                           + ' LEFT JOIN InvOrgAuthorization IOA  on IOM.InvestigationID=IOA.InvestigationID AND IOA.OrgID=IOM.OrgID AND IOA.UserID='    
+                           + CONVERT(NVARCHAR(15), @UID) + ''    
+        END    
+    
+      DECLARE @RoleCase NVARCHAR(300)    
+    
+      SET @RoleCase = ''    
+    
+      IF NOT EXISTS (SELECT 1    
+                     FROM   TrustedOrgDetails TOD     
+    INNER JOIN TrustedOrgActions TOA     
+                                    ON TOA.TrustedOrgDetailsID = TOD.TrustedOrgDetailsID   
+                            INNER JOIN @TrustedOrgActionsUTD T    
+                                    ON T.LoggedOrgID = TOD.LoggedOrgID    
+                                       AND TOA.IdentifyingType = T.IdentifyingType    
+                                       AND TOA.IdentifyingActionID = T.IdentifyingActionID    
+                                       AND TOA.RoleID = @RoleID)    
+        BEGIN    
+            SELECT @RoleCase = ' AND T.RoleID='    
+                               + CONVERT(NVARCHAR, @RoleID)    
+        END    
+      ELSE    
+        BEGIN    
+            DECLARE @lstTaskActionID NVARCHAR(MAX)    
+    
+            SELECT @lstTaskActionID = Stuff((SELECT ', '    
+                                                    + Cast(IdentifyingActionID AS NVARCHAR)    
+                                             FROM   @TrustedOrgActionsUTD TOA2    
+                                             WHERE  TOA1.RoleID = TOA2.RoleID    
+                                             FOR XML PATH('')), 1, 1, '')    
+            FROM   @TrustedOrgActionsUTD TOA1    
+    
+            SELECT @RoleCase = ' AND T.TaskActionID IN('    
+                               + @lstTaskActionID + ')'    
+        END    
+    
+      SELECT @where = Nchar(13) + @where + ' WHERE T.OrgID  = TM.OrgID  AND (T.AssignedTo=' + CONVERT(NVARCHAR, @UID) + ' OR ISNULL(T.AssignedTo,0)=0 )                                                
+                                        
+  AND ((T.TaskStatusID =1)  OR (T.TaskStatusID=5 AND T.ModifiedBy=' + CONVERT(NVARCHAR, @UID) + ') ) '    
+    
+      SELECT @where = Nchar(13) + @where    
+                      + ' AND OI1.Orgid = TM.OrgID  AND OI1.Status in ('+ @tempStatus + ') '    
+    
+      --AND ((T.TaskStatusID =1) OR (T.TaskStatusID=5 AND (T.ModifiedBy=' + Convert(NVARCHAR,@UID) + ' OR T.ModifiedBy=T.ModifiedBy)) ) ' 
+      
+      SELECT @where = Nchar(13) + @where + Nchar(13) + @RoleCase    
+    
+      SELECT @where1 = Nchar(13) + @where + Nchar(13) + @RoleCase    
+    
+      SELECT @where2 = Nchar(13) + @where + Nchar(13) + @RoleCase    
+     
+      DECLARE @pName NVARCHAR(max)    
+    
+      PRINT @PatientNumber    
+    
+      IF ( @PatientNumber != '' )    
+        BEGIN    
+            SELECT @pName = ' OR ( P.Name LIKE ''%' + @PatientNumber + '%'')'    
+        END    
+      ELSE    
+        BEGIN    
+            SELECT @pName = ''    
+        END    
+    
+      IF ( @PatientNumber != '-1' )    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = CASE    
+                                    WHEN @Iscorporate = 'Y' THEN @where + '(( P.URNO LIKE ''' + @PatientNumber    
+                                                                 + '%'')OR ( P.Name LIKE ''' + @PatientNumber    
+   + '%''))'    
+                                    ELSE @where + '( ( P.PatientNumber IN ('''    
+                                         + CONVERT(NVARCHAR, @PatientNumber) + ''')) '    
+                                         + @pName + '                                                                                                                         
+                                                                              
+  OR ( OI1.LabNo = '''    
+                                         + CONVERT(NVARCHAR, @Labno)    
+                                         + ''') OR ( PatientVisit.VisitNumber = '''    
+                                         + CONVERT(NVARCHAR, @PatientNumber) + '''))'    
+                          END    
+             END    
+            ELSE    
+              BEGIN    
+                  SELECT @where = CASE    
+                                    WHEN @Iscorporate = 'Y' THEN @where + 'AND (( P.URNO LIKE '''    
+                                                                 + @PatientNumber + '%'')OR( P.Name LIKE '''    
+                                                                 + @PatientNumber + '%''))'    
+                                    ELSE @where + 'AND ( ( P.PatientNumber IN ('''    
+                                         + CONVERT(NVARCHAR, @PatientNumber) + '''))'    
+                                         + @pName + '                                                                                                                 
+                                                       
+  OR ( OI1.LabNo = '''    
+                                         + CONVERT(NVARCHAR, @Labno)    
+                                         + ''') OR ( PatientVisit.VisitNumber = '''    
+                                         + CONVERT(NVARCHAR, @PatientNumber) + '''))'    
+                                  END    
+              END    
+        END    
+      IF ( Ltrim(Rtrim(@TaskDate)) != '-1' )    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = @where + ' TaskDate Between '''    
+                                  + @FromDateTime + ''' ' + ' AND ''' + @ToDateTime    
+                                  + ''' '    
+    
+                  SELECT @where1 = @where1 + ' TaskDate Between '''    
+                                   + @FromDateTime + ''' ' + ' AND ''' + @ToDateTime    
+                                   + ''' '    
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @where = @where + ' AND TaskDate Between '''    
+                                  + @FromDateTime + ''' ' + ' AND ''' + @ToDateTime    
+                                  + ''' '    
+    
+                  SELECT @where1 = @where1 + ' AND TaskDate Between '''    
+                                   + @FromDateTime + ''' ' + ' AND ''' + @ToDateTime    
+                                   + ''' '    
+              END    
+        END    
+    
+      IF ( @Category != '-1' )    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = @where + ' isNull(TA.Category,'''')= '''    
+                                  + @Category + ''''    
+    
+                  SELECT @where1 = @where1 + ' isNull(TA.Category,'''')= '''    
+                                   + @Category + ''''    
+              END    
+            ELSE    
+              BEGIN    
+         SELECT @where = @where    
+                                  + ' AND isNull(TA.Category,'''')= '''    
+                                  + @Category + ''''    
+    
+                  SELECT @where1 = @where1    
+                                   + ' AND isNull(TA.Category,'''')= '''    
+                                   + @Category + ''''    
+              END    
+        END    
+    
+      IF ( @OrgAddID = -1 )    
+        BEGIN    
+         IF ( @where = '' )    
+              BEGIN    
+     SELECT @where = @where    
+                                  + ' isnull(OI1.ResCaptureLoc,PatientVisit.OrgAddressID) in ('    
+                                  + CONVERT(NVARCHAR(max), @AddressID) + ')'    
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @where = @where    
+                                  + ' AND  isnull(OI1.ResCaptureLoc,PatientVisit.OrgAddressID) in ('    
+                                  + CONVERT(NVARCHAR(MAX), @AddressID) + ')'    
+              END    
+        END    
+      ELSE    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = @where    
+                    + ' isnull(OI1.ResCaptureLoc,PatientVisit.OrgAddressID) in ('    
+    + CONVERT(NVARCHAR(MAX), @OrgAddID) + ')'    
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @where = @where    
+                                  + ' AND  isnull(OI1.ResCaptureLoc,PatientVisit.OrgAddressID) in ('    
+                                  + CONVERT(NVARCHAR(MAX), @OrgAddID) + ')'    
+              END    
+        END 
+
+      IF ( @ClientID > 0 )    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = @where + ' VCM.ClientID= '    
+                                  + CONVERT(NVARCHAR, @ClientID) + ''    
+              END    
+            ELSE    
+              BEGIN    
+                  SELECT @where = @where + '  AND VCM.ClientID= '    
+             + CONVERT(NVARCHAR, @ClientID) + ''    
+              END    
+        END    
+    
+      IF ( @SpecialityID != -1 )    
+        BEGIN    
+            IF ( @where = '' )    
+              BEGIN    
+                  SELECT @where = @where + ' Speciality.SpecialityID= '    
+                                  + CONVERT(NVARCHAR, @SpecialityID) + ''    
+              END    
+            ELSE    
+              BEGIN   
+                  SELECT @where = @where + ' AND Speciality.SpecialityID= '    
+                                  + CONVERT(NVARCHAR, @SpecialityID) + ''    
+              END    
+        END     
+      IF ( @IsDeptFilter = 'Y' )    
+        BEGIN     
+            IF ( @where = '' AND Isnull(@strDeptID,'')<>'')    
+              BEGIN     
+                  SELECT @where    
+    
+                  SELECT @where = @where + ' AND IOM.DeptID in  (' + @strDeptID + ')'    
+              END    
+            ELSE  
+			IF(Isnull(@strDeptID,'')<>'')  
+              BEGIN    
+                  SELECT @where = @where + ' AND IOM.DeptID  in (' + @strDeptID + ')' + ' AND OI1.Status=''Approve'''               
+              END    
+        END     
+     -- Commented By Jayaramanan L
+      --IF EXISTS (SELECT 1    
+      --            FROM   @TempInvestigationStatus    
+      --           WHERE  STATUS = 'Approve')    
+      --  BEGIN    
+      --      IF ( @where = '' )    
+      --        BEGIN    
+      --            SELECT @where    
+    
+      --            SELECT @where = @where    
+      --                            + 'ISNULL(IOA.InvestigationID,'''') = CASE WHEN T.TaskActionID =62 THEN  '''' ELSE ISNULL(IOA.InvestigationID,'''') END'    
+      --        END    
+      --      ELSE    
+      --        BEGIN    
+      --  SELECT @where = @where    
+      --                            + ' AND ISNULL(IOA.InvestigationID,'''') = CASE WHEN T.TaskActionID =62 THEN  '''' ELSE ISNULL(IOA.InvestigationID,'''') END'    
+      --        END    
+      --  END    
+    
+      DECLARE @RoleName NVARCHAR(100)    
+      DECLARE @PhyscianJoin NVARCHAR(max)    
+    
+      SET @PhyscianJoin = ''    
+    
+      SELECT TOP 1 @RoleName = Isnull(C.RoleName, '')    
+      FROM   @ContextInfo C    
+    
+      IF @RoleName = 'Physician'    
+        BEGIN    
+     SELECT @PhyscianJoin = Nchar(13)    
++ ' INNER JOIN Speciality S                                                                                               
+                                                 
+      ON S.SpecialityID=T.SpecialityID                                                
+      INNER JOIN dbo.PhysicianSpeciality PS  ON PS.SpecialityID =T.SpecialityID                                                                               
+                                                                              
+      INNER JOIN Physician PH  ON PH.PhysicianID =PS.PhysicianID  AND PH.LoginID ='    
+                                   + CONVERT(NVARCHAR, @UID)    
+        END    
+    
+      SELECT @AdditionalInfo = Isnull((SELECT TOP 1 AdditionalInfo    
+                  FROM   @ContextInfo), '')    
+    
+      IF ( @AdditionalInfo = 'Y' )    
+        BEGIN    
+            SELECT @WhereIsTimedTask = ' AND ShowedTime < DATEADD(minute, (20),(SELECT dbo.fn_GetServerDate(@ContextInfo))) and ISNULL(ShowedTime,'''')<>'''''    
+    
+            SELECT @where = @where + @WhereIsTimedTask    
+        END  
+
+	  IF(@visitID>0)
+	  BEGIN 
+	  Select @where =''
+	  SELECT @where = ' WHERE OI1.VisitID=' + CONVERT(NVARCHAR,@visitID) 
+	  END 
+	  IF(@patientID>0)
+	  BEGIN  
+	  SELECT @where = @where + ' AND PatientVisit.PatientID=' + CONVERT(NVARCHAR,@patientID)
+	  END
+	  IF(@tID>0)
+	  BEGIN  
+	  SELECT @where = @where + ' AND T.TaskID=' + CONVERT(NVARCHAR,@tID)
+	  END
+	  SELECT @where = @where + ' AND ( PIN.IsSensitive=''Y'' OR OI1.IsSensitive=''Y'') AND T.TaskStatusID<>2'
+     
+      SELECT @query =ISNULL(@Select,'') + ISNULL(@select3,'') + ISNULL(@select2,'') + ISNULL(@join,'')    
+                      +ISNULL( @PhyscianJoin,'') +ISNULL( @where,'')  
+
+           --                           Select @Select,@select3,@select2,@join,@PhyscianJoin,@where
+									  --Select @query  return
+      INSERT INTO @TempTable    
+                  (TaskID,    
+                   TaskActionID,    
+     TaskDescription,    
+                   TaskDate,    
+                   PatientID,    
+     PatientVisitID,    
+                   AssignedTo,    
+                   HighlightColor,    
+                   Category,    
+                   RedirectURL,    
+                   ActionName,    
+                   SpecialityID,    
+                   RoleID,    
+                   RoleName,    
+                   Location,    
+                   PatientNumber,    
+                   NAME,    
+                   Orgid,    
+                   OrgName,    
+                   InvestigationName,    
+                   RefernceID,    
+                   CreatedName,    
+                   IsShowedTime,    
+                   Stat,    
+                   Colour)    
+      EXECUTE Sp_executesql @query;    
+    
+      DECLARE @stattable AS TABLE    
+        (    
+           Rowid             INT IDENTITY(1, 1),    
+           TaskID            BIGINT,    
+           TaskActionID      INT,    
+           TaskDescription   NVARCHAR(1000),    
+           taskdate          DATETIME,    
+           PatientID         BIGINT,    
+           PatientVisitID    BIGINT,    
+           AssignedTo        BIGINT,    
+           HighlightColor    NVARCHAR(100),    
+           Category          NVARCHAR(500),    
+           RedirectURL       NVARCHAR(500),    
+           ActionName        NVARCHAR(500),    
+           SpecialityID      INT,    
+           RoleID            BIGINT,    
+           RoleName          NVARCHAR(500),    
+           Location          NVARCHAR(500),    
+           PatientNumber     NVARCHAR(500),    
+           NAME              NVARCHAR(500),    
+           OrgID             INT,    
+           OrgName           NVARCHAR(500),    
+           LabNo             NVARCHAR(500),    
+           InvestigationName NVARCHAR(500),    
+           RefernceID        NVARCHAR(250),    
+           CreatedName       NVARCHAR(500),    
+           IsShowedTime      NVARCHAR(10),    
+           stat              DATETIME,    
+           colour            NVARCHAR(500)    
+        )    
+    
+      INSERT INTO @stattable    
+                  (TaskID,    
+                   TaskActionID,    
+                  TaskDescription,    
+                   taskdate,    
+                   PatientID,    
+                   PatientVisitID,    
+                   AssignedTo,    
+                   HighlightColor,    
+                   Category,    
+                   RedirectURL,    
+                   ActionName,    
+                   SpecialityID,    
+                   RoleID,    
+                   RoleName,    
+                   Location,    
+                   PatientNumber,    
+                   NAME,    
+                   OrgID,    
+                   OrgName,    
+                   LabNo,    
+                   InvestigationName,    
+                   RefernceID,    
+                   CreatedName,    
+                   IsShowedTime,    
+                   stat,    
+                   colour)    
+      SELECT TaskID,    
+             TaskActionID,    
+             TaskDescription,    
+             taskdate,    
+             PatientID,    
+             PatientVisitID,    
+             AssignedTo,    
+             HighlightColor,    
+             Category,    
+             RedirectURL,    
+             ActionName,    
+             SpecialityID,    
+             RoleID,    
+             RoleName,    
+             Location,    
+             PatientNumber,    
+             NAME,    
+             OrgID,    
+             OrgName,    
+             LabNo,    
+             InvestigationName,    
+             RefernceID,    
+             CreatedName,    
+             IsShowedTime,    
+             stat,    
+             Colour    
+      FROM   @TempTable    
+      WHERE  Isnull(stat, '') <> ''    
+      ORDER  BY stat    
+    
+      ----union            
+      INSERT INTO @stattable    
+                  (TaskID,    
+                   TaskActionID,    
+                   TaskDescription,    
+                   taskdate,    
+ PatientID,    
+                   PatientVisitID,    
+                   AssignedTo,    
+                   HighlightColor,    
+                   Category,    
+                   RedirectURL,    
+                   ActionName,    
+                   SpecialityID,    
+                   RoleID,    
+                   RoleName,    
+                   Location,    
+                   PatientNumber,    
+                   NAME,    
+                   OrgID,    
+                   OrgName,    
+                   LabNo,    
+                   InvestigationName,    
+                   RefernceID,    
+                   CreatedName,    
+                   IsShowedTime,    
+                   stat,    
+                   colour)    
+      SELECT TaskID,    
+             TaskActionID,    
+             TaskDescription,    
+             taskdate,    
+             PatientID,    
+             PatientVisitID,    
+             AssignedTo,    
+             HighlightColor,    
+             Category,    
+             RedirectURL,    
+             ActionName,    
+             SpecialityID,    
+             RoleID,    
+             RoleName,    
+           Location,    
+             PatientNumber,    
+             NAME,    
+             OrgID,    
+             OrgName,    
+             LabNo,    
+             InvestigationName,    
+             RefernceID,    
+             CreatedName,    
+             IsShowedTime,    
+             stat,    
+             Colour    
+      FROM   @TempTable    
+      WHERE  Isnull(stat, '') = ''    
+      ORDER  BY TaskID    
+    
+      UPDATE @stattable    
+      SET    IsShowedTime = 'YY'    
+      WHERE  Isnull(colour, '') <> ''    
+    
+	
+      SET ROWCOUNT 0    
+    
+      SELECT DISTINCT @totalRows = Count(*)    
+      FROM   @stattable    
+    
+      SET @pageSize = 1    
+    
+      --IF(@totalRows=1)                                                              
+      --BEGIN                                        
+      --SET @pageSize=2                                         
+      --END                                                                                      
+      DECLARE @first_id INT    
+    
+      SET @startRowIndex = ( @startRowIndex ) * @pageSize    
+    
+      IF @startRowIndex = 0    
+        SET @startRowIndex = 1    
+    
+      SET ROWCOUNT @startRowIndex    
+    
+      SELECT @first_id = @startRowIndex;   
+
+      SET ROWCOUNT @pageSize    
+    
+      DECLARE @GetTaskID BIGINT    
+      DECLARE @pInprogressStatusID INT    
+      DECLARE @TaskActioID BIGINT    
+    
+      SELECT @pInprogressStatusID = Max(TaskStatusID)    
+      FROM   TaskStatus    
+      WHERE  StatusName = 'INPROGRESS'    
+    
+      SELECT @GetTaskID = (SELECT TOP 1 TaskID    
+                           FROM   (SELECT Row_number()    
+                                            OVER (    
+                                              ORDER BY Rowid ASC ) AS Rowid,    
+                                          TaskID    
+                                   FROM   @stattable) AS t    
+                           WHERE  Rowid = @first_id    
+                           ORDER  BY TaskID)    
+                                                                
+      SELECT @TaskActioID = Min(TaskActionID)    
+      FROM   TaskActionOrgMapping     
+      WHERE  RoleID = @RoleID    
+             AND OrgID = @OrgID    
+    
+      UPDATE T    
+      SET    T.TaskStatusID = 1,    
+             T.ModifiedAt = NULL,    
+             T.ModifiedBy = NULL    
+      FROM   TASKS T WITH(ROWLOCK)    
+      WHERE  ORGID = @OrgID    
+             AND TaskActionID = @TaskActioID    
+             AND ModifiedBy = @UID    
+             AND TaskStatusID = @pInprogressStatusID    
+             AND RoleID = @RoleID    
+    
+      UPDATE T    
+      SET    T.TaskStatusID = @pInprogressStatusID,    
+             T.ModifiedAt = @ServerDate,    
+             T.ModifiedBy = @UID    
+      FROM   TASKS T WITH(ROWLOCK)    
+      WHERE  TaskID = @GetTaskID    
+    
+      SELECT *    
+      FROM   (SELECT Rowid,    
+                     TaskID,    
+                     TaskActionID,    
+                     TaskDescription,    
+                     TaskDate,    
+                     PatientID,    
+                     PatientVisitID,                       AssignedTo,    
+                     HighlightColor,    
+                     Category,    
+                     RedirectURL,    
+                     ActionName,    
+                     SpecialityID,    
+                     RoleID,    
+                     RoleName,    
+                     Location,    
+                     PatientNumber,    
+                     NAME,    
+                     OrgID,    
+                     OrgName,    
+                     LabNo,    
+          InvestigationName,    
+                     RefernceID,    
+                     CreatedName,    
+                     IsShowedTime AS ShowedTime,    
+                     stat,    
+                     Colour    
+              FROM   @stattable) AS t    
+      WHERE  Rowid = @first_id    
+    
+      --ORDER BY RowID asc                                   
+      --Order by TaskID desc                                                                                                                                          
+      --select  @query                                                             
+     
+  
+  END    
+END TRY  
+BEGIN CATCH                                   
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),  
+ @sptrace ='pGetIsSensitiveResultTest @RoleID = '+CAST(@RoleID AS VARCHAR) +'@OrgID = '+CAST(@OrgID AS VARCHAR) +'@UID = '+CAST(@UID AS VARCHAR)  
+
+  
+    
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH       
+END  
+  

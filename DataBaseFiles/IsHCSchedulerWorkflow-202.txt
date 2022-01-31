@@ -1,0 +1,43 @@
+IF NOT EXISTS(select 1 from ConfigKeyMaster where Configkey = 'IsHCSchedulerWorkflow')
+ 
+   Begin
+     
+   declare @ConfigkeyId int
+     
+   select @ConfigkeyId= max(configkeyid)+1 from ConfigKeyMaster
+   
+     
+        insert into ConfigKeyMaster(configkeyid,ConfigKey,DisplayText,IsInternal)
+ 
+       select @ConfigkeyId,'IsHCSchedulerWorkflow','HC Technician Scheduler Workflow','N'
+
+    End        
+
+    go
+
+ 
+
+   
+ DECLARE @ConfigKeyID BIGINT, @OrgID BIGINT
+
+ 
+
+   
+
+ SET @ConfigKeyID=(SELECT ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='IsHCSchedulerWorkflow')
+ 
+   SET @OrgID=(SELECT OrgID FROM organization WHERE OrgID=202 )
+
+ 
+
+ --Name='Diag'
+
+    IF NOT EXISTS(SELECT 1 FROM ConfigOrgMaster where ConfigKeyID=@ConfigKeyID AND OrgID=@OrgID) AND @ConfigKeyID > 0
+    Begin
+    
+    INSERT INTO ConfigOrgMaster(ConfigKeyID, ConfigValue, OrgID, CreatedAt, CreatedBy) 
+        VALUES (@ConfigKeyID, 'Y', @OrgID, getdate(), -1)
+ 
+   End
+  
+  go

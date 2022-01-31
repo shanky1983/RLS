@@ -1,0 +1,311 @@
+ CREATE PROCEDURE [dbo].[pGetRefundVoucherPrint_Franchisee] @pFinalBillID [nvarchar](30),
+                                                @pRefundNo    [nvarchar](30),
+                                                @pOrgID       [INT],
+                                                @ContextInfo  [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      
+	 
+		  DECLARE @FinalBillID BIGINT
+		  DECLARE @pPatientID BIGINT
+		  DECLARE @pRefundNoPaSSed nvarchar(30)
+		  DECLARE @tblbilling TABLE
+			(
+			   FinalBillID      INT,
+			   BillingDetailsID BIGINT,
+			   BilledAmount     DECIMAL(18, 2) DEFAULT 0.00,
+			   SunofBilledAmt   DECIMAL(18, 2) DEFAULT 0.00,
+			   Discount         DECIMAL (18, 2) DEFAULT 0.00,
+			   ItemwiseDiscount DECIMAL (18, 2) DEFAULT 0.00
+			)
+
+		  SET @pRefundNoPaSSed= @pRefundNo
+
+		  DECLARE @ChkRoundOff NVARCHAR(10)
+
+		  SELECT @ChkRoundOff = COM.ConfigValue
+		  FROM   ConfigkeyMaster CM
+				 INNER JOIN ConfigOrgMaster COM
+						 ON CM.ConfigKeyID = COM.ConfigKeyID
+		  WHERE  COM.OrgID = @pOrgID
+				 AND CM.ConfigKey = 'TPARoundOffPattern'
+
+		  PRINT CONVERT(nvarchar, @pRefundNo) + 'Step1'
+
+		  IF ( @pRefundNo = '-1'
+				OR @pRefundNo = '-2'
+				OR @pRefundNo = ''
+				OR @pRefundNo = '0' )
+			BEGIN
+				SELECT @FinalBillID = Min(ARD.FinalBillID)
+				FROM   AmountRefundDetails ARD WITH(NOLOCK)
+					   INNER JOIN FinalBill FB WITH(NOLOCK)
+							   ON ARD.FinalBillID = FB.FinalBillID
+								  AND FB.FinalBillID = @pFinalBillID
+								  AND FB.OrgID = @pOrgID
+
+				INSERT @tblbilling
+					   (FinalBillID,
+						BillingDetailsID,
+						BilledAmount,
+						SunofBilledAmt,
+						Discount)
+				SELECT BD.FinalBillID,
+					   BD.BillingDetailsID,
+					   Sum(BD.Amount * BD.Quantity),
+					   FB.GrossBillValue,
+					   fb.DiscountAmount
+				FROM   BillingDetails_Franchisee BD WITH(NOLOCK)
+					   INNER JOIN FinalBill_Franchisee FB WITH(NOLOCK)
+							   ON FB.FinalBillID = BD.FinalBillID
+				WHERE  FB.FinalBillID = @FinalBillID
+					   AND FB.OrgID = @pOrgID --and FB.VisitID=@pvisitID                          
+				GROUP  BY BD.FinalBillID,
+						  FB.GrossBillValue,
+						  fb.DiscountAmount,
+						  BD.BillingDetailsID
+
+				UPDATE tb
+				SET    tb.ItemwiseDiscount = ( Discount / SunofBilledAmt * BilledAmount )
+				FROM   @tblbilling tb
+
+				PRINT CONVERT(nvarchar, @FinalBillID)
+
+				SELECT @pPatientID = PatientID
+				FROM   FinalBill WITH(NOLOCK)
+				WHERE  FinalBillID = @FinalBillID
+			END
+		  ELSE
+			BEGIN
+				PRINT CONVERT(nvarchar, @FinalBillID) + 'Step2'
+
+				SELECT @FinalBillID = FinalBillID
+				FROM   AmountRefundDetails WITH(NOLOCK)
+				WHERE  RefundNo = @pRefundNo
+					   AND OrgID = @pOrgID
+
+				SELECT @pPatientID = PatientID
+				FROM   FinalBill WITH(NOLOCK)
+				WHERE  FinalBillID = @FinalBillID
+
+				INSERT @tblbilling
+					   (FinalBillID,
+						BillingDetailsID,
+						BilledAmount,
+						SunofBilledAmt,
+						Discount,
+						ItemwiseDiscount)
+				SELECT BD.FinalBillID,
+					   BD.BillingDetailsID,
+					   Sum(BD.Amount * BD.Quantity),
+					   FB.GrossBillValue,
+					   fb.DiscountAmount,
+					   BD.DiscountAmount
+				FROM   BillingDetails_Franchisee BD WITH(NOLOCK)
+					   INNER JOIN FinalBill_Franchisee FB WITH(NOLOCK)
+		   ON FB.FinalBillID = BD.FinalBillID
+				WHERE  FB.FinalBillID = @FinalBillID
+					   AND FB.OrgID = @pOrgID --and FB.VisitID=@pvisitID                              
+				GROUP  BY BD.FinalBillID,
+						  FB.GrossBillValue,
+						  fb.DiscountAmount,
+						  BD.BillingDetailsID,
+						  BD.DiscountAmount
+			--SELECT Discount/SunofBilledAmt*BilledAmount FROM @tblbilling      
+			--update tb set tb.ItemwiseDiscount=(Discount/SunofBilledAmt*BilledAmount) FROM @tblbilling tb     
+			END
+
+		  DECLARE @type nvarchar(10)
+
+		  SELECT @type = RefundType
+		  FROM   AmountRefundDetails WITH(NOLOCK)
+		  WHERE  FinalBillID = @FinalBillID
+				 AND RefundNo = @pRefundNo
+
+		  IF( @pRefundNo = '-1'
+			   OR @pRefundNo = '-2'
+			   OR @pRefundNo = ''
+			   OR @pRefundNo = '0' )
+			SELECT @pRefundNo = Max(RefundNo)
+			FROM   AmountRefundDetails WITH(NOLOCK)
+			WHERE  FinalBillID = @FinalBillID
+
+		  PRINT CONVERT(nvarchar, @pRefundNo)
+
+		  PRINT CONVERT(nvarchar, @pRefundNoPaSSed)
+
+		  IF( @type != 'PHARMACY'
+			  AND @pRefundNoPaSSed != '-2' )
+			BEGIN
+				SELECT FB.BillNumber,
+					   BD.FinalBillID,
+					   FB.Status,
+					   BD.BillingDetailsID,
+					   BD.FeeType,
+					   BD.FeeDescription,
+					   BD.Amount,
+					   dbo.Fn_getforename(ard1.AuthorisedBy)       AS FORENAME,
+					   (Select Case when ard1.CancelAmount=0 Then ard1.AmtRefund Else ard1.CancelAmount End)  AS RefundedAmt,
+					   ard1.ReasonforRefund,
+					   tb.BilledAmount - tb.ItemwiseDiscount       AS AmountReceived,
+					   --ard1.DiscountAdjustedAmt                    AS DiscountAmount,
+					   BD.DiscountAmount,
+					   (SELECT Sum(ards.AmtRefund)
+						FROM   AmountRefundDetails ards WITH(NOLOCK)
+						WHERE  ards.FinalBillID = @FinalBillID
+							   AND OrgID = @pOrgID
+							   AND RefundNo = @pRefundNo
+							   AND ards.BillStatus != 'CANCELLED') AS ReturnQuantity,
+					   ard1.RefundadjustedAmt                      AS TransferAmount,
+					   BD.DiscountAmount                           AS ItemDiscount
+				FROM   BillingDetails_Franchisee BD WITH(NOLOCK)
+					   -- INNER JOIN PatientVisit PV ON PV.ParentVisitId = @pVisitID                                      
+					   INNER JOIN FinalBill FB WITH(NOLOCK)
+							   ON BD.FinalBillID = FB.FinalBillID
+								  AND FB.OrgID = @pOrgID
+					   INNER JOIN AmountRefundDetails ard1 WITH(NOLOCK)
+							   ON ( ard1.BillingDetailsID = BD.BillingDetailsID )
+								  AND ard1.RefundNo = @pRefundNo
+					   INNER JOIN @tblbilling tb
+							   ON tb.FinalBillID = fb.FinalBillID
+								  AND tb.BillingDetailsID = BD.BillingDetailsID
+				WHERE  BD.FinalBillID = @FinalBillID
+			END
+		  ELSE IF( @pRefundNoPaSSed = 0 )
+			BEGIN
+				SELECT DISTINCT FB.BillNumber,
+								BD.FinalBillID,
+								FB.Status,
+								BD.BillingDetailsID,
+								BD.FeeType,
+								BD.FeeDescription,
+								BD.Amount,
+								dbo.Fn_getforename(BD.CreatedBy)            AS FORENAME,
+								ard1.AmtRefund                              AS RefundedAmt,
+								ard1.ReasonforRefund,
+								tb.BilledAmount - tb.ItemwiseDiscount       AS AmountReceived,
+								FF.DiscountAmount,
+			  ard1.RefundadjustedAmt                      AS TranCurrencyAmount,
+								(SELECT Sum(ards.AmtRefund)
+								 FROM   AmountRefundDetails ards WITH(NOLOCK)
+								 WHERE  ards.FinalBillID = @FinalBillID
+										AND OrgID = @pOrgID
+	  AND RefundNo != @pRefundNo
+							   AND ards.BillStatus != 'CANCELLED') AS ReturnQuantity
+				FROM   BillingDetails_Franchisee BD WITH(NOLOCK)
+					   INNER JOIN FinalBill FB WITH(NOLOCK)
+							   ON BD.FinalBillID = FB.FinalBillID
+								  AND FB.OrgID = @pOrgID
+					   INNER JOIN Finalbill_Franchisee FF (NOLOCK)
+					          ON FB.FinalBillID=FF.FinalBillID
+							     AND FB.OrgID=FF.OrgID
+					   INNER JOIN AmountRefundDetails ard1 WITH(NOLOCK)
+							   ON ( ard1.FinalBillID = BD.FinalBillID )
+								  AND ard1.BillStatus = 'CANCELLED'
+					   INNER JOIN @tblbilling tb
+							   ON tb.FinalBillID = fb.FinalBillID
+								  AND tb.BillingDetailsID = BD.BillingDetailsID
+				WHERE  BD.FinalBillID = @FinalBillID
+			END
+		  ELSE
+			BEGIN
+				SELECT FB.BillNumber,
+					   FB.FinalBillID,
+					   FB.Status,
+					   BD.FeeDescription,
+					   NULL,
+					   NULL,
+					   NULL,
+					   dbo.Fn_getforename(ard1.CreatedBy) AS FORENAME,
+					   ard1.AmtRefund                     AS RefundedAmt,
+					   ard1.ReasonforRefund
+				FROM   FinalBill FB WITH(NOLOCK)
+					   -- INNER JOIN PatientVisit PV ON PV.ParentVisitId = @pVisitID                                      
+					   --INNER JOIN FinalBill FB ON BD.FinalBillID = FB.FinalBillID AND FB.OrgID = @pOrgID                 
+					   INNER JOIN AmountRefundDetails ard1 WITH(NOLOCK)
+							   ON ard1.FinalBillID = FB.FinalBillID
+								  AND ard1.RefundNo = @pRefundNo
+					   INNER JOIN BillingDetails BD WITH(NOLOCK)
+							   ON FB.FinalBillID = BD.FinalBillID
+				WHERE  FB.FinalBillID = @FinalBillID
+			END
+
+		  IF ( Isnull(@ChkRoundOff, '') = 'Normal' )
+			BEGIN
+				SELECT CASE
+                     WHEN Isnull(@ChkRoundOff, '') = 'Normal' THEN Round((Isnull(ARD.CancelAmount,0)-Isnull(ARD.RefundadjustedAmt,0)), 0)        
+                     ELSE (Isnull(ARD.CancelAmount,0)-Isnull(ARD.RefundadjustedAmt,0))      
+					   END                                         AS AmtRefund,
+					   ARD.ReasonforRefund,
+					   FB.BillNumber,
+					   ARD.RefundNo,
+					   Ard.ChequeNo,
+					   Isnull(Ard.BankName, '')                    AS BankName,
+					   (SELECT Max(ards.RefundadjustedAmt)
+						FROM   AmountRefundDetails ards WITH(NOLOCK)
+						WHERE  ards.FinalBillID = @FinalBillID
+							   AND OrgID = @pOrgID
+							   AND RefundNo = @pRefundNo
+							   AND ards.BillStatus != 'CANCELLED') AS TranCurrencyAmount,
+					   FB.RoundOff                                 AS RefundRoundOFF
+				FROM   AmountRefundDetails ARD WITH(NOLOCK)
+					   INNER JOIN FinalBill FB WITH(NOLOCK)
+							   ON FB.FinalBillID = ARD.FinalBillID
+				WHERE  FB.FinalBillID = @FinalBillID
+					   AND ARD.RefundNo = @pRefundNo
+			END
+		  ELSE
+			BEGIN
+				SELECT CASE
+                     WHEN Isnull(@ChkRoundOff, '') = 'Normal' THEN Round((Isnull(ARD.CancelAmount,0)-Isnull(ARD.RefundadjustedAmt,0)), 0)        
+                     ELSE Isnull(ARD.CancelAmount,0)-Isnull(ARD.RefundadjustedAmt,0)       
+					   END                                         AS AmtRefund,
+				 ARD.ReasonforRefund,
+				 FB.BillNumber,
+				 ARD.RefundNo,
+				 Ard.ChequeNo,
+				 Isnull(Ard.BankName, '')                    AS BankName,
+				 (SELECT Max(ards.RefundadjustedAmt)
+			FROM   AmountRefundDetails ards WITH(NOLOCK)
+				  WHERE  ards.FinalBillID = @FinalBillID
+						 AND OrgID = @pOrgID
+						 AND RefundNo = @pRefundNo
+						 AND ards.BillStatus != 'CANCELLED') AS TranCurrencyAmount
+		  FROM   AmountRefundDetails ARD WITH(NOLOCK)
+				 INNER JOIN FinalBill FB WITH(NOLOCK)
+						 ON FB.FinalBillID = ARD.FinalBillID
+		  WHERE  FB.FinalBillID = @FinalBillID
+					   AND ARD.RefundNo = @pRefundNo
+			END
+
+		  SELECT DISTINCT S2.DisplayText + Isnull(Name, '')AS Name,
+						  Isnull(SEX, '')                  AS SEX,
+						  RegistrationDTTM,
+						  Isnull(PatientNumber, 0)         AS PatientNumber,
+						  Isnull(IPN.IPNumber, 0)          AS IPNumber,
+						  --CONVERT(Smallint,DATEDIFF(YEAR,DOB,(SELECT dbo.fn_GetServerDate(@ContextInfo))))AS Age,                           
+						  P.Age                            AS Age,
+						  DOB
+		  FROM   Patient P WITH(NOLOCK)
+				 LEFT JOIN InPatientNumber IPN WITH(NOLOCK)
+						ON P.PatientID = IPN.PatientID
+				 LEFT JOIN SalutationOrgMapping S2 WITH(NOLOCK)
+						ON P.TitleCode = S2.TitleID
+				 LEFT JOIN @ContextInfo ctx1
+						ON ctx1.OrgID = S2.OrgID
+						   AND ctx1.LanguageCode = S2.LanguageCode
+		  WHERE  P.PatientID = @pPatientID
+		 
+  END
+
+
+
+
+
+
+
+
+
+
+

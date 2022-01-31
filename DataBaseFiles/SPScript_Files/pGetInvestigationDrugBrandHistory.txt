@@ -1,0 +1,31 @@
+CREATE PROCEDURE [dbo].[pGetInvestigationDrugBrandHistory]    
+ @pdrugid [bigint],    
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN  
+
+;WITH tblDifference AS
+(
+    SELECT ROW_NUMBER() OVER(ORDER BY id) AS RowNumber, BrandName,Code,OrgID,ModifiedBy,DrugId,ModifiedAt,fmid 
+    FROM InvestigationDrugBrandHistory where drugid=@pdrugid
+)
+
+SELECT cur.DrugId,cur.BrandName,cur.Code,l.LoginName,fm.FamilyName, cur.ModifiedAt, case when previous.BrandName <> cur.BrandName then ' Name Changed : '+previous.BrandName +' to '+cur.BrandName 
+when  previous.Code <> cur.Code then ' Code Changed : '+previous.Code +' to '+cur.Code 
+when  previous.fmid <> cur.fmid then ' Family Name Changed : '+fm1.FamilyName +' to '+fm.FamilyName end as Description
+FROM tblDifference cur
+inner join login l
+on cur.modifiedby=l.loginid  
+inner join investigationdrugfamilymaster fm
+on cur.fmid=fm.familyid
+and fm.orgid=cur.orgid
+INNER JOIN @ContextInfo UDT ON UDT.OrgID=cur.OrgID
+LEFT OUTER JOIN tblDifference previous
+ON cur.RowNumber = previous.RowNumber + 1
+inner join investigationdrugfamilymaster fm1
+on previous.fmid=fm1.familyid
+and fm1.orgid=previous.orgid
+ORDER BY cur.BrandName               
+END
+

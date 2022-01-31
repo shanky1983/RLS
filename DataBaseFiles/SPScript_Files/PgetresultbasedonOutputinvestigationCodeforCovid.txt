@@ -1,0 +1,473 @@
+CREATE PROCEDURE PgetresultbasedonOutputinvestigationCodeforCovid                                                                                                                                            
+(@pVisitID        BIGINT,             
+ @InvestigationID BIGINT,             
+ @TemplateID      INT,             
+ @OrgID           INT)             
+AS              
+  BEGIN             
+      DECLARE @tblInvestigationValues TABLE             
+        (             
+           [investigationvalueid]          [BIGINT],             
+           [name]                          [nvarchar](500) NULL,             
+           [value]                         [NVARCHAR](max) NULL,             
+           [investigationid]               [BIGINT] NULL,             
+           [groupid]                       [INT] NULL,             
+           [patientvisitid]                [BIGINT] NULL,             
+           [uomid]                         [INT] NULL,             
+           [status]                        [nvarchar](50) NULL,             
+           [createdby]                     [BIGINT] NULL,             
+           [createdat]                     [DATETIME] NULL,             
+           [modifiedby]                    [BIGINT] NULL,             
+           [modifiedat]                    [DATETIME] NULL,             
+           [uomcode]                       [nvarchar](50) NULL,             
+           [groupname]                     [nvarchar](255) NULL,             
+           [orgid]                         [INT] NULL,             
+           [ipinvsamplecollectionmasterid] [BIGINT] NULL,             
+           [packageid]                     [INT] NULL,             
+           [packagename]                   [nvarchar](255),             
+           [sequenceno]                    [INT],             
+           [uid]                           [nvarchar](255) 
+		   ,OutputInvestigationCode varchar(100)            
+        )             
+      DECLARE @tblOrdPerfOrgGrpInvDtls TABLE             
+        (             
+           orderedorgid        INT,             
+           performedorgid      INT,             
+           attunegroupid       INT,             
+           invtype             nvarchar(10),             
+           performedorggroupid INT,             
+           performedorguid     nvarchar(max),             
+           orderedorggroupid   INT,             
+           orderedorguid       nvarchar(max)             
+        )             
+      DECLARE @tblAffectedVisits TABLE             
+        (             
+           visitid BIGINT,             
+           orgid   BIGINT             
+        )             
+      DECLARE @tblResultSelectID TABLE             
+        (             
+           accessionno BIGINT             
+        )             
+      --Select dbo.Fn_getserverdate(@ContextInfo)                                                        
+      DECLARE @OrderedPatientInv TABLE             
+        (             
+           [patientvisitid]                 [BIGINT],             
+           [investigationid]                [BIGINT],             
+           [investigationname]              [nvarchar](250),             
+           [investigationmethodid]          [BIGINT],             
+           [investigationsamplecontainerid] [INT],             
+           [sampleid]                       [INT],             
+           [groupid]                        BIGINT,             
+           [groupname]                      [nvarchar](250),             
+           [reason]                         [nvarchar](250),             
+           [referencerange]                 [nvarchar](max),             
+           [methodname]                     [nvarchar](255),             
+           [orgid]                          [INT],             
+           [worklistdeletedstatus]          [nvarchar](50),             
+           [performingphysicainname]        [nvarchar](500),             
+           [kitid]                          [BIGINT],             
+           [kitname]                        [nvarchar](255),             
+           [instrumentid]                   [BIGINT],             
+           [instrumentname]                 [nvarchar](255),             
+           [interpretation]                 [nvarchar](max),             
+           [principleid]                    [BIGINT],             
+     [principlename]                  [nvarchar](255),             
+           [qcdata]                         [nvarchar](max),             
+      [packageid]                      [INT],             
+           [packagename]                    [nvarchar](255),             
+           [approvedby]                     [BIGINT],             
+           [patientinvid]                 [BIGINT],             
+           [uid]                            [nvarchar](255),             
+           [groupcomment]                   [nvarchar](255),             
+   [approvedat]                     [DATETIME],             
+           [accessionnumber]                [BIGINT]             
+        )             
+            
+      INSERT INTO @tblResultSelectID             
+                  (accessionno)             
+      SELECT @InvestigationID             
+            
+      DECLARE @tblreportmapping Table (InvestigationID nvarchar(300),TemplateID INT,Orgid INT)                  
+          INSERT INTO @tblreportmapping                  
+          exec pGetInvestigationTemplate  @pVisitID,@OrgID           
+      --SELECT 'A', * FROM  @tblResultSelectID                                                                                                                         
+      INSERT INTO @OrderedPatientInv             
+      SELECT [patientvisitid],             
+             [investigationid],             
+             [investigationname],             
+             [investigationmethodid],             
+             [investigationsamplecontainerid],             
+             [sampleid],             
+             [groupid],             
+             [groupname],             
+             [reason],             
+             [referencerange],             
+             [methodname],             
+             [orgid],             
+             [worklistdeletedstatus],             
+             [performingphysicainname],             
+             [kitid],             
+             [kitname],             
+             [instrumentid],             
+             [instrumentname],             
+             [interpretation],             
+             [principleid],             
+             [principlename],             
+             [qcdata],             
+             [packageid],             
+             [packagename],             
+             [approvedby],             
+             [patientinvid],             
+             [uid],             
+             [groupcomment],             
+             [approvedat],             
+             [accessionnumber]             
+      FROM   patientinvestigation WITH (nolock)             
+      WHERE  accessionnumber IN (SELECT accessionnumber             
+                                 FROM   orderedinvestigations OI WITH (nolock)             
+                                        INNER JOIN @tblResultSelectID tbl             
+                                                ON tbl.accessionno =             
+                                                   OI.referredaccessionno)             
+            
+      --SELECT 'B'                                                                                                  
+      INSERT INTO @tblAffectedVisits             
+      SELECT @pVisitID,             
+             @OrgID             
+      UNION             
+      SELECT patientvisitid,             
+             OrgID             
+      FROM   patientvisit WITH (nolock)       
+      WHERE  refervisitid = @pVisitID             
+            
+      --Select 'D', * from @tblAffectedVisits                                                                                                                          
+      INSERT INTO @tblInvestigationValues             
+      SELECT INV1.[investigationvalueid],             
+           INV1.[name],             
+             INV1.[value],             
+             INV1.[investigationid],             
+             INV1.[groupid],             
+             INV1.[patientvisitid],             
+             INV1.[uomid],             
+             INV1.[status],             
+             INV1.[createdby],             
+    INV1.[createdat],             
+             INV1.[modifiedby],             
+             INV1.[modifiedat],             
+             INV1.[uomcode],             
+             INV1.[groupname],             
+             INV1.[orgid],             
+             INV1.[ipinvsamplecollectionmasterid],             
+             INV1.[packageid],             
+             INV1.[packagename],             
+             INV1.[sequenceno],             
+             INV1.[uid]  
+			 ,IOM.OutputInvestigationCode           
+      FROM   investigationvalues INV1 WITH (nolock)             
+             INNER JOIN @tblAffectedVisits v2             
+                     ON INV1.patientvisitid = v2.visitid 
+			INNER JOIN InvestigationOrgMapping IOM on IOM.InvestigationID=INV1.InvestigationID and IOM.OrgID=INV1.OrgID		             
+         Where INV1.StatusType is null   
+      --Select 'E',* FROM  @tblInvestigationValues                                    
+      INSERT INTO @tblOrdPerfOrgGrpInvDtls             
+                  (orderedorgid,             
+                   performedorgid,             
+                   attunegroupid,             
+                   invtype,             
+                   performedorggroupid)             
+      SELECT @OrgID,             
+             OA.OrgID,             
+             OI.id,             
+             OI.type,             
+             CASE             
+               WHEN OI.type = 'GRP' THEN IOG.orggroupid             
+               ELSE OI.id             
+             END             
+      FROM   orderedinvestigations OI WITH (nolock)             
+             INNER JOIN organizationaddress OA WITH (nolock)             
+                     ON OI.rescaptureloc = OA.addressid             
+             LEFT JOIN invorggroup IOG WITH (nolock)             
+                    ON IOG.attgroupid = OI.id             
+                       AND IOG.orgid = OA.OrgID             
+      WHERE  OI.visitid = @pVisitID             
+            
+      --SELECT 'F' ,* FROM     @tblOrdPerfOrgGrpInvDtls                                                                                                               
+      UPDATE t             
+      SET    t.orderedorggroupid = IOG.orggroupid             
+      FROM   @tblOrdPerfOrgGrpInvDtls T             
+             INNER JOIN invorggroup IOG WITH (nolock)             
+                     ON T.attunegroupid = IOG.attgroupid             
+                        AND IOG.orgid = @OrgID             
+      WHERE  t.invtype != 'INV'             
+            
+      UPDATE t             
+      SET    t.performedorguid = OI.uid             
+      FROM   @tblOrdPerfOrgGrpInvDtls T             
+             INNER JOIN orderedinvestigations OI WITH (nolock)             
+                     ON T.performedorgid = OI.orgid             
+                        AND T.attunegroupid = OI.id             
+                        AND t.invtype = OI.type             
+             INNER JOIN @tblResultSelectID TRS             
+                     ON TRS.accessionno = OI.referredaccessionno             
+             INNER JOIN @tblAffectedVisits TAV             
+                     ON TAV.visitid = OI.visitid   
+                        AND TAV.orgid = T.performedorgid             
+            
+      UPDATE t             
+      SET    t.orderedorguid = OI.uid             
+      FROM   @tblOrdPerfOrgGrpInvDtls T             
+             INNER JOIN orderedinvestigations OI WITH (nolock)             
+                     ON T.orderedorgid = OI.orgid             
+                        AND T.attunegroupid = OI.id             
+                        AND OI.visitid = @pVisitID             
+             INNER JOIN @tblAffectedVisits TAV             
+                     ON TAV.visitid = OI.visitid             
+                        AND TAV.orgid = T.orderedorgid             
+            
+      UPDATE @tblOrdPerfOrgGrpInvDtls             
+      SET    performedorguid = orderedorguid             
+      WHERE  orderedorgid = performedorgid             
+            
+      --Select 'G', Count(1) FROM @tblAffectedVisits                                                                                                    
+      --select 'G',* from @tblAffectedVisits                                                                                               
+      IF( 1 < (SELECT Count(1)             
+               FROM  @tblAffectedVisits) )             
+        BEGIN             
+            PRINT 'else'             
+            
+            UPDATE t             
+            SET    patientvisitid = @pVisitID,             
+                   orgid = @OrgID,             
+                   uid = T1.orderedorguid             
+            FROM   @tblInvestigationValues T             
+                   INNER JOIN @tblOrdPerfOrgGrpInvDtls T1             
+                           ON T.uid = T1.performedorguid             
+                              AND T.investigationid = T1.performedorggroupid             
+            WHERE  T1.invtype = 'INV'             
+        END             
+            
+      DECLARE @TempDetail TABLE             
+        (             
+           rno1              INT IDENTITY (1, 1),             
+           patientvisitid    BIGINT,             
+           investigationid   BIGINT,             
+           investigationname nvarchar(500),             
+           reportname        nvarchar(500),             
+           templateid        INT,             
+           reportstatus      nvarchar(500),             
+           groupid           INT,             
+           interpretation    NVARCHAR(max),             
+           sequenceno        INT,             
+           accessionnumber   BIGINT,             
+           remarks           nvarchar(255)             
+        )             
+            
+      INSERT INTO @TempDetail             
+      SELECT DISTINCT piv.patientvisitid,             
+                      piv.investigationid,             
+                      piv.investigationname,             
+                      Isnull (im.reporttemplatename, (SELECT reporttemplatename             
+                                                      FROM             
+                      invreportmaster WITH (nolock)             
+             WHERE  isdefault = 'Y'             
+                                                             AND orgid = @OrgID)             
+                      )             
+                      AS             
+                      ReportName,             
+                      Isnull(im.templateid, (SELECT templateid             
+                                             FROM             
+                      invreportmaster WITH (nolock)             
+                                             WHERE  isdefault = 'Y'             
+                                                    AND orgid = @OrgID))             
+                      AS             
+                      TemplateID,             
+                      piv.reportstatus,             
+                      piv.groupid,             
+              Isnull(piv.interpretation, '')             
+                      AS             
+                      Interpretation,             
+                      IGMM.sequenceno,             
+                      piv.accessionnumber,             
+                      piv.medicalremarks             
+      FROM   patientinvestigation piv WITH (nolock)             
+             INNER JOIN invgroupmapmaster IGMM WITH (nolock)             
+                     ON IGMM.groupid = PIV.groupid             
+                        AND piv.investigationid = IGMM.investigationid             
+             INNER JOIN @tblreportmapping irm             
+                     ON irm.investigationid = piv.investigationid and irm.OrgID=@OrgID                
+             INNER JOIN invreportmaster im WITH (nolock)             
+                     ON im.templateid = irm.templateid             
+       AND im.orgid = @OrgID             
+             INNER JOIN patientvisit PV WITH (nolock)             
+                     ON piv.patientvisitid = PV.patientvisitid             
+             INNER JOIN patient P WITH (nolock)             
+                     ON P.patientid = PV.patientid             
+             INNER JOIN invorggroup iog WITH (nolock)             
+                     ON im.orgid = iog.orgid             
+                        AND ( iog.outputgroupingcode IS NULL             
+                               OR iog.outputgroupingcode = 'NULL' )             
+             INNER JOIN @tblResultSelectID tbrs             
+                     ON tbrs.accessionno = piv.accessionnumber             
+      WHERE  piv.patientvisitid = @pVisitID             
+             AND iog.orggroupid = piv.groupid             
+             AND P.OrgID = @OrgID  and PIV.StatusType is null           
+      ORDER  BY IGMM.sequenceno             
+            
+      --SELECT 'I',* FROM   @TempDetail                                                                                    
+      --Select * from @TempDetail                                                                                                   
+      DECLARE @PATTERNSIDS TABLE             
+        (             
+           patternid BIGINT,             
+           invid     BIGINT             
+        )             
+      DECLARE @docHandle INT             
+      DECLARE @xmlDocument NVARCHAR(max)             
+      -- or xml type                                        
+      DECLARE @InvestigationList TABLE             
+        (             
+           investigationid    BIGINT,             
+           outputgroupingcode nvarchar(255),             
+           orggroupid         BIGINT             
+        )             
+            
+      INSERT INTO @InvestigationList             
+      SELECT oinv.id,             
+             iog.outputgroupingcode,             
+             iog.orggroupid             
+      FROM   orderedinvestigations oinv WITH (nolock)             
+             INNER JOIN invorggroup iog             
+                     ON iog.attgroupid = oinv.id             
+             INNER JOIN invgroupmapmaster igmm             
+                     ON igmm.groupid = iog.orggroupid             
+                        AND iog.orgid = @OrgID             
+      WHERE  accessionnumber IN (SELECT accessionno             
+                                 FROM   @tblResultSelectID)             
+            
+      --SELECT 'J', * FROM @InvestigationList                                                            
+      --select InvestigationID ,'L',* from @InvestigationList                                                                                                     
+      --DECLARE @tempvar TABLE             
+      --  (             
+      --     id BIGINT             
+      --  )             
+            
+      --IF EXISTS (SELECT 1             
+      --           FROM   @InvestigationList    
+      --           WHERE  Isnull(outputgroupingcode, '') <> '')             
+      --  BEGIN             
+      --      INSERT INTO @tempvar             
+      --      SELECT igmm.investigationid             
+      --      FROM   invgroupmapmaster igmm             
+      --             INNER JOIN @InvestigationList inv             
+      --                     ON inv.orggroupid = igmm.groupid             
+      --      WHERE  Isnull(igmm.parent, 'N') = 'Y'             
+      --  END             
+      --ELSE             
+      --  BEGIN             
+      --      INSERT INTO @tempvar             
+      --      SELECT iog.orggroupid             
+      --      FROM   invorggroup iog             
+      --      WHERE  attgroupid IN (SELECT investigationid             
+      --                            FROM   @InvestigationList)             
+      --             AND iog.orgid = @OrgID             
+      --  END             
+            
+      --DECLARE @tempInvid TABLE             
+      --  (             
+      --     invid BIGINT             
+      --  )             
+            
+      --INSERT INTO @tempInvid             
+      --SELECT tmpt.investigationid             
+      --FROM   @TempDetail tmpt             
+      --       INNER JOIN investigationorgmapping iom             
+      --               ON iom.investigationid = tmpt.investigationid             
+      --WHERE  tmpt.groupid IN (SELECT id             
+      --                        FROM   @tempvar)             
+      --       AND iom.outputinvestigationcode IN( 'TableResults', 'TableMarker' )             
+      --       AND iom.orgid = @OrgID             
+            
+      DECLARE @Count INT                                                        
+      INSERT INTO @PATTERNSIDS             
+      SELECT DISTINCT patternid,             
+                      investigationid             
+      FROM   patternmapping PM                
+      WHERE  PM.InvestigationID IN(SELECT investigationid                 
+                                FROM   @tblInvestigationValues                 
+                                WHERE  orgid = @OrgID)  and PM.OrgID=@OrgID               
+                      
+                  
+      Declare @Tempresult table            
+      (            
+           Patternid BIGINT,            
+           NAME    nvarchar(500),             
+           Value NVARCHAR(max),            
+           Investigationid   BIGINT,             
+           Interpretation    NVARCHAR(max),             
+           Sequenceno        INT,             
+           Groupid           INT,             
+           Templateid   INT,            
+           Remarks           nvarchar(255),             
+           Rno1 INT,             
+           RowsCount  INT 
+		   ,OutputInvestigationCode varchar(100)           
+      )            
+                             
+      Insert into @Tempresult            
+      SELECT 0           AS PATTERNID,             
+             'TEST NAME' AS NAME,             
+             NAME        AS value,             
+             0           AS InvestigationID,             
+      ''          AS InterPretation,             
+             0           AS SequenceNo,             
+             0           AS GroupID,             
+             0           AS Templateid,            
+             ''          AS Remarks,             
+             0           AS RNo1,            
+             0           AS RowsCount 
+			 ,null           
+      FROM   orderedinvestigations AS a             
+      WHERE  accessionnumber =@InvestigationID              
+                  
+      Insert into @Tempresult                                                                        
+      SELECT DISTINCT *             
+      FROM   (SELECT PIDS.patternid,             
+                     Upper(invValues.NAME)AS NAME,             
+                     ISNULL(invValues.value,'') AS VALUE,             
+                     invValues.investigationid,             
+                     tmp.interpretation,          
+                     tmp.sequenceno,             
+                     tmp.groupid,             
+                     tmp.templateid,             
+                     tmp.remarks,             
+                     tmp.rno1,             
+                     @Count     AS RowsCount  
+					    ,IGM.OutputInvestigationCode
+              FROM   investigationvalues invValues WITH (nolock)             
+                     INNER JOIN @TempDetail tmp             
+                             ON tmp.investigationid = invValues.investigationid             
+                                AND tmp.patientvisitid =             
+                                    invValues.patientvisitid             
+                     LEFT JOIN @PATTERNSIDS PIDS             
+                            ON PIDS.invid = tmp.investigationid             
+                     INNER JOIN @tblInvestigationValues IGM             
+                             ON IGM.investigationid = PIDS.invid             
+                                AND IGM.groupid = tmp.groupid             
+              WHERE  invValues.value NOT LIKE '<InvestigationResults>%'    
+            AND invValues.value NOT IN ('-','--')  
+                     AND tmp.templateid = @TemplateID             
+                     AND Isnull(invValues.statustype, '') = ''             
+                     AND tmp.accessionnumber = @InvestigationID  
+                     AND invValues.orgid = @OrgID and Isnull(OutputInvestigationcode,'')<>'') AS T        
+      ORDER  BY T.groupid,             
+                T.sequenceno,             
+                T.rno1             
+
+select  Top 1 rno1,OutputInvestigationCode, stuff((select '#'+ Name +'#'+T.Value from @Tempresult T  Where PatternID<>0  
+Group by rno1,OutputInvestigationCode,InvestigationID,Name, Value
+ for XML path('')),1,1,'') as Value  from @Tempresult TB  Where PatternID<>0   --where Rowno=@ROWNO           
+
+                           
+  END         
+        
+        
+        

@@ -1,0 +1,82 @@
+
+--EXEC PgetSmartReport_Kernal_API @NotificationID=4362987
+CREATE PROCEDURE [dbo].[PgetSmartReport_Kernal_API]
+(
+@NotificationID BIGINT
+
+)
+AS
+BEGIN
+
+DECLARE @Accessnumber Table(
+Sno BIGINT Identity(1,1),
+AccessionNumber BIGINT
+)
+
+DECLARE @VisitID BIGINT=''
+
+
+DECLARE @OrgID BIGINT=0
+DECLARE @Count BIGINT
+DECLARE @sno BIGINT=1
+DECLARE @Acccessno BIGINT
+DECLARE @AccessString nvarchar(max)=''
+DECLARE @AttachmentName varchar(max) =''
+DECLARE @Path varchar(max) =''
+
+select @VisitID=IdentityID,@OrgID=OrgID from Notifications WITH(NOLOCK) where NotificationID=@NotificationID
+
+
+
+
+INSERT INTO @Accessnumber(AccessionNumber)
+select AccessionNumber from OrderedInvestigations WITH(NOLOCK) Where VisitID=@VisitID AND OrgID=@OrgID
+
+
+  SELECT @AccessString = (SELECT 
+                               Stuff((SELECT N', ' + Ltrim(Rtrim(accessionnumber )) 
+                                      FROM   @Accessnumber  
+                                      FOR xml path(''), type).value('text()[1]','nvarchar(max)'), 1, 2  , N'') 
+                               AS AccessionNumber) 
+  --SELECT @AccessString
+
+--select @Count=Count(1) from OrderedInvestigations
+--WHILE(@sno<=@Count)
+--BEGIN
+
+--Select @Acccessno=AccessionNumber from @Accessnumber WHERE Sno=@sno
+--SET @AccessString=CAST(@AccessString AS VARCHAR) + CAST(@Acccessno AS VARCHAR)+','
+--SET @sno=@sno+1
+
+--END
+
+--SET @AccessString = 
+--     CASE @AccessString WHEN null THEN null 
+--     ELSE (
+--         CASE LEN(@AccessString) WHEN 0 THEN @AccessString 
+--            ELSE LEFT(@AccessString, LEN(@AccessString) - 1) 
+--         END 
+--     ) END
+--pd
+ 
+exec Getpatientbiographyforreport_Kernal_API @pVisitID=@VisitID,@OrgID=@OrgID
+
+--trends
+--EXEC Pgetresulttrends_Kernal_API @pVisitID=@VisitID,@OrgID=@OrgID,@IsServiceRequest='Y'
+
+--summaryNormal
+EXEC pGetOrderedInvestigationsandClosed_Kernal_API @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=139,@InvestigationID=N'0', @GroupOrgIDs =N'',@IsServiceRequest= 'N'
+
+--summaryAbNormal
+EXEC pGetInvestigationValuesReportCommonSummary_Kernal_API @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=139,@InvestigationID=N'0', @GroupOrgIDs =N'',@IsServiceRequest= 'N'
+
+
+--labResults
+exec pGetInvestigationValuesReportCommon_Kins_API @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=143,@InvestigationID=@AccessString
+
+
+select @Path=Template,@AttachmentName=AttachmentName  from Notifications N WITH(NOLOCK) WHERE N.NotificationID=@NotificationID
+
+select REPLACE(@Path,'/','\') Path ,@AttachmentName AttachmentName,@NotificationID NotificationID,@OrgID OrgID,@VisitID PatientVisitID
+
+END

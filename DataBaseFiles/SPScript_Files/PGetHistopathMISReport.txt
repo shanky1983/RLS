@@ -1,0 +1,104 @@
+CREATE Procedure [dbo].[PGetHistopathMISReport]               
+(                
+@Fdate Datetime,                      
+@Tdate Datetime,                      
+@ClientID int,                      
+@VisitType Int,                    
+@ContextInfo [dbo].[UDT_Context] READONLY                       
+)                      
+As                      
+Begin                      
+                
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                   
+  SET NOCOUNT ON;                
+  SET XACT_ABORT ON;                
+      
+         
+IF (@ClientID = 0 OR @ClientID = -1)      
+Set @ClientID=NULL               
+                  
+    
+     Declare @Datediff int     
+set @Datediff = datediff(day, @Fdate, @Tdate)    
+    
+  Declare @OrgID int                
+                
+  select @OrgID=OrgID from @ContextInfo       
+      
+     
+  create table #Tempfinal (SlNo int,PatientID nvarchar(500),VisitNumber nvarchar (50),OPIPNumber nvarchar(100),Name nvarchar(200),Age nvarchar(40),Gender nchar(4),VisitType nvarchar (10),                
+Location nvarchar (500),RegisteredDate varchar(100),ReceivedDate varchar(100),GroupName nvarchar (100),TestDetails nvarchar (500),    
+Speciment nvarchar (500),    
+Diagnosis nvarchar (500)    
+)                
+        
+    
+if(@Datediff <= 31)    
+BEGIN    
+if(@VisitType = -1)    
+begin    
+   
+insert into #Tempfinal    
+Select Distinct ROW_NUMBER() OVER(ORDER BY VisitNumber ASC) as 'SLNo',PV.ExternalVisitId  
+,PV.VisitNumber,PV.PreviousLabNumber,    
+p.Name as 'Patient Name',P.Age,P.Sex as Gender,                        
+Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType  
+,    
+OA.Location,(Convert(Varchar,(PV.Createdat),103)+' '+ Convert(Varchar,(PV.Createdat),8))  as 'RegisteredDate',  
+(Convert(Varchar,(MOI.Receivedat),103)+' '+ Convert(Varchar,(MOI.Receivedat),8)) as 'ReceivedDate',    
+PI.GroupName,PI.Investigationname as Testdetails,HPD.SampleName as 'Specimen',HPD.ClinicalDiagnosis    
+    
+from Patientvisit PV                 
+                
+Inner Join OrderedInvestigations OI on OI.VisitID=Pv.PatientVisitId and OI.OrgID=PV.OrgID                              
+Inner Join Patientinvestigation PI on  PI.AccessionNumber=OI.Accessionnumber           
+Inner join HistoSpecimenDetails HPD on HPD.PatientVisitID=OI.VisitID  and HPD.ID=OI.ID AND HPD.Type=OI.Type                                       
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID                
+Inner Join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and PV.OrgID=OA.OrgID                            
+       
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID   
+INNER JOIN MISOrderedinvestigations MOI WITH (NOLOCK) ON MOI.Visitid=PV.PatientVisitID   
+AND MOI.Orgid=PV.OrgID   
+ AND MOI.ID=OI.ID     
+ AND MOI.AccessionNumber=OI.AccessionNumber               
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID                
+where PV.Orgid=@OrgID and PV.Createdat between @FDate and @Tdate       
+and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and  PV.LabVisitType in (0,1)     
+   
+end    
+else    
+begin    
+    
+    
+insert into #Tempfinal    
+Select Distinct ROW_NUMBER() OVER(ORDER BY VisitNumber ASC) as 'SLNo',PV.ExternalVisitId,PV.VisitNumber,PV.PreviousLabNumber,    
+p.Name as 'Patient Name',P.Age,P.Sex as Gender,                        
+Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,    
+OA.Location,(Convert(Varchar,(PV.Createdat),103)+' '+ Convert(Varchar,(PV.Createdat),8))  as 'RegisteredDate',(Convert(Varchar,(MOI.Receivedat),103)+' '+ Convert(Varchar,(MOI.Receivedat),8)) as 'ReceivedDate',    
+PI.GroupName,PI.Investigationname as Testdetails,HPD.SampleName as 'Specimen',HPD.ClinicalDiagnosis    
+    
+from Patientvisit PV                 
+                
+Inner Join OrderedInvestigations OI on OI.VisitID=Pv.PatientVisitId and OI.OrgID=PV.OrgID                              
+Inner Join Patientinvestigation PI on  PI.AccessionNumber=OI.Accessionnumber           
+Inner join HistoSpecimenDetails HPD on HPD.PatientVisitID=OI.VisitID  and HPD.ID=OI.ID AND HPD.Type=OI.Type                                       
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID                
+Inner Join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and PV.OrgID=OA.OrgID                            
+       
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID   
+INNER JOIN MISOrderedinvestigations MOI WITH (NOLOCK) ON MOI.Visitid=PV.PatientVisitID AND MOI.Orgid=PV.OrgID   
+ AND MOI.ID=OI.ID     
+ AND MOI.AccessionNumber=OI.AccessionNumber               
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID            
+where PV.Orgid=@OrgID and PV.Createdat between @FDate and @Tdate       
+and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and  PV.LabVisitType in (@VisitType)     
+end    
+    
+    
+    
+end    
+    
+select * from #Tempfinal    
+delete from #Tempfinal    
+end  
+  

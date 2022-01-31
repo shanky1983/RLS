@@ -1,0 +1,118 @@
+CREATE PROCEDURE [dbo].[pGetPatientBillReportDetailsOne] (@pVisitID     [BIGINT],
+                                           @pBillID      [BIGINT],
+                                           @pOrgID       INT)
+AS
+  BEGIN
+  DECLARE @patientdemo TABLE
+  (
+  Name Nvarchar(255)
+  ,PatientNo Nvarchar(100)
+  ,VisitNo Nvarchar(100)
+  ,Age Nvarchar(40)
+  ,SEX Nvarchar(2)
+  ,RefDoctor Nvarchar(255)
+  ,PatientHistory Nvarchar(255)
+  ,ContactNo Nvarchar(40)
+  ,Email Nvarchar(255)
+  ,BillNo Nvarchar(100)
+  ,ModeofDelivery Nvarchar(100)
+  ,BillDate DateTime
+  ,BilledBy Nvarchar(255)
+  ,Clientname Nvarchar(255)
+  ,Location Nvarchar(255)
+  ,Remarks Nvarchar(255)
+  ,IsCredit nchar(1)
+  ,FinalBillID Bigint
+  ,Code Nvarchar(255)  
+  ,IsHide nchar(2)
+  )
+  INSERT INTO @patientdemo (Name,PatientNo,VisitNo,Age,SEX,RefDoctor,ContactNo,Email,BillNo,ModeofDelivery,BillDate,BilledBy,Clientname,Code,Location,FinalBillID,IsHide)
+      SELECT Distinct SA.TitleName + ' '+ P.Name                                          AS Name,
+             P.PatientNumber                                 AS PatientNo,
+             PV.VisitNumber                                  AS VisitNo,
+             P.Age                                           AS Age,
+             P.SEX                                           AS SEX,
+			 PV.ReferingPhysicianName                        AS RefDoctor,
+             --( CASE
+             --    WHEN 'Dr.' + Isnull(PV.ReferingPhysicianName, '') = 'Dr.' THEN ''
+             --    ELSE 'Dr.' + Isnull(PV.ReferingPhysicianName, '')
+             --  END )                                         AS RefDoctor,
+             --PV.PatientHistory                               AS PatientHistory,
+             PA.MobileNumber                                 AS ContactNo,
+             P.EMail                                         AS Email,
+             FB.BillNumber                                   AS BillNo,
+             Isnull(Stuff((SELECT ',' + DisplayText
+                           FROM   (SELECT AMT.ActionType AS DisplayText
+                                   FROM   Patient P WITH (NOLOCK)
+                                          INNER JOIN FinalBill FB WITH (NOLOCK)
+                                                  ON P.PatientID = FB.PatientID
+                                                     AND FB.OrgID = P.OrgID
+                                          INNER JOIN dbo.PatientDisPatchDetails PDD WITH (NOLOCK)
+                                                  ON PDD.VisitID = FB.VisitID
+                                                     AND PDD.DispatchType = 'M'
+                                                     AND PDD.VisitID = @pVisitID
+                                          INNER JOIN dbo.ActionManagerType AMT WITH (NOLOCK)
+                                                  ON CONVERT(NVARCHAR(250), PDD.DispatchValue) = CONVERT(NVARCHAR(250), AMT.ActionTypeID)
+                                   WHERE  FB.VisitID = @pVisitID
+                                   UNION ALL
+                                   SELECT Isnull(M.DisplayText, '') DisplayText
+                                   FROM   Patient P WITH (NOLOCK)
+                                          INNER JOIN FinalBill FB WITH (NOLOCK)
+                                                  ON P.PatientID = FB.PatientID
+                                                     AND FB.OrgID = P.OrgID
+                                          INNER JOIN dbo.PatientDisPatchDetails PDD1 WITH (NOLOCK)
+                                                  ON PDD1.VisitID = FB.VisitID
+                                                     AND PDD1.DispatchType = 'T'
+                                                     AND PDD1.VisitID = @pVisitID
+                                          INNER JOIN MetaData M WITH (NOLOCK)
+                                                  ON M.Code = PDD1.DispatchValue
+                                                     AND m.Domain = 'DespatchType'
+               WHERE  FB.VisitID = @pVisitID)T
+                           FOR XML PATH('')), 1, 1, ''), '') AS ModeofDelivery,
+             FB.CreatedAt                                    AS BillDate,
+			 Isnull(S.DisplayText + U.Name, 'Cashier') AS BilledBy,
+			 CM.Clientname,CM.ClientCode as Code,OA.Location,FB.FinalBillID,CM.IsHide as IsHide
+      FROM   PATIENT P WITH(NOLOCK)
+             INNER JOIN PatientVisit PV WITH (NOLOCK)
+                     ON P.PATIENTID = PV.patientID 
+             INNER JOIN PatientAddress PA WITH (NOLOCK)
+                     ON PA.PatientID = P.PatientID
+                        AND PA.AddressType = 'P'
+             INNER JOIN FinalBill FB WITH (NOLOCK)
+                  ON FB.PatientID = PA.PatientID
+                        AND FB.VisitID = PV.PatientVisitId AND P.OrgID=Fb.OrgID
+			 INNER JOIN OrganizationAddress OA WITH(NOLOCK) ON OA.AddressID = FB.OrgAddressID			
+			 INNER JOIN VisitClientMapping VCM WITH(NOLOCK) ON FB.OrgID=VCM.OrgID AND FB.VisitID=FB.VisitID  AND FB.FinalBillID=VCM.FinalBillID
+			 INNER JOIN ClientMaster CM WITH(NOLOCK) ON CM.clientID=VCM.ClientiD and CM.Orgid=FB.OrgID
+			 INNER JOIN users U WITH(NOLOCK) ON U.LoginID=Fb.CreatedBy
+			 INNER JOIN Salutation SA WITH (NOLOCK) ON SA.TitleID = p.TITLECode
+		     LEFT JOIN SalutationOrgMapping S WITH(NOLOCK) 
+					ON	S.TitleID			= U.TitleCode AND 
+						S.OrgID				= U.OrgID
+			
+		
+      WHERE  P.OrgID = @pOrgID
+             AND PV.PatientVisitId = @pVisitID             
+			 AND Fb.FinalBillID=@pBillID 
+
+			 Declare @tempdetail Table (FinalBillID Bigint,Remarks Nvarchar(255),DetailHistory Nvarchar(255),IsCredit Nchar(1))
+			 INSERT INTO @tempdetail(FinalBillID,Remarks,DetailHistory,IsCredit)
+			 Select Distinct FB.FinalBillID,Isnull(BD.Remarks,'') as Remarks,Isnull(PH.DetailHistory,'') as DetailHistory,rtrim(ltrim(FB.IsCreditBill)) as IsCredit FROM FinalBill FB WITH(NOLOCK)
+			 INNER JOIN BillingDetails BD WITH(NOLOCK) on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID
+			 LEFT JOIN Patienthistoryext PH WITH(NOLOCK) ON PH.PatientVisitID=FB.VisitID and PH.PatientID=FB.PatientID AND PH.OrgID=FB.OrgID
+			 WHERE FB.OrgID = @pOrgID AND FB.VisitId = @pVisitID AND Fb.FinalBillID=@pBillID
+			 
+			 IF EXISTS (SELECT 1 FROM @tempdetail)
+			 BEGIN
+			 UPDATE PD SET PD.PatientHistory=TD.DetailHistory,PD.Remarks=TD.Remarks,PD.IsCredit=TD.IsCredit FROM @patientdemo PD
+			 INNER JOIN @tempdetail TD ON TD.FinalBillID=PD.FinalBillID
+			 END
+			
+			SELECT Distinct Name,PatientNo,VisitNo,Age,SEX,RefDoctor,PatientHistory,ContactNo,Email,BillNo,ModeofDelivery,BillDate,BilledBy,Clientname,Code,Location,Remarks,IsCredit,ltrim(rtrim(IsHide)) as IsHide FROM @patientdemo 
+  END
+
+
+
+
+
+

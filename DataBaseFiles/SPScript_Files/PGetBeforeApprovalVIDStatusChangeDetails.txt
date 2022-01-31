@@ -1,0 +1,148 @@
+CREATE Proc PGetBeforeApprovalVIDStatusChangeDetails            
+(            
+@Fdate Datetime,                  
+@Tdate Datetime,                  
+@ClientID Int,                  
+@VisitType Int,               
+@ContextInfo [dbo].[UDT_Context] READONLY             
+)            
+As            
+Begin            
+            
+Declare @OrgID int            
+select @OrgID=Orgid from @ContextInfo            
+--Set @Tdate= @Tdate +' 23:59:59'         
+--select @Fdate      
+--select    @Tdate      
+IF (@ClientID = 0 OR @ClientID = -1)          
+Set @ClientID=NULL   
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+   -----ManipulateReason column introduced to change Username for integration User (Bug in Integration API - pUpdatePatientDetailsForIntegration              
+Declare @Temp As Table (PatientVisitID bigint,PatientNumber nvarchar(255),PatientName varchar(255),VisitNumber varchar(100),Age varchar(20),Gender varchar(20),VisitType varchar(5),                  
+Location varchar(100),ClientName varchar(255),RegisteredDate DateTime,TestType varchar(10),TestID bigint,Reason varchar(255),Accessionnumber bigint,GroupName Varchar(255),UserName varchar(150),                  
+ActionDateTime DateTime,  
+ModifiedBy BIGINT,ManipulateReason NVARCHAR(300))  
+      if(@Datediff <=31)
+	  BEGIN
+IF(@VisitType = -1)      
+Begin             
+Insert Into @Temp             
+Select ISH.PatientVisitID,PV.ExternalVisitID,PA.Name,PV.VisitNumber,PA.Age,PA.SEX,Case When PV.LabVisitType=0 Then 'OP' When PV.LabVisitType=1 Then 'IP' Else 'OP/IP' End,            
+OA.Location,CM.ClientName,(Convert(Varchar,PV.VisitDate,103) +' '+Convert(Varchar,PV.VisitDate,8)),ISH.Type,ISH.InvestigationID,ISNULL(RM.Reason,''),OI.AccessionNumber                  
+,Case when OI.Type='GRP' then OI.Name else '' end,US.name,(Convert(Varchar,ISH.ModifiedAt,103) +' '+Convert(Varchar,ISH.ModifiedAt,8)),ISH.ModifiedBy,ISH.Reason                 
+from InvestigationStatusHistory ISH with(NOLOCK)            
+inner join PatientVisit PV WITH(NOLOCK) ON PV.PatientVisitID=ISH.PatientVisitID            
+INNER JOIN Patient PA WITH(NOLOCK) ON PA.OrgID=PV.OrgID And PA.PatientID=PV.PatientID             
+INNER JOIN OrganizationAddress OA WITH(NOLOCK) ON OA.AddressID=PV.OrgAddressID            
+INNER JOIN Users US WITH(NOLOCK) ON US.LoginID=ISH.ModifiedBy and US.OrgID=ISH.OrgID            
+INNER JOIN OrderedInvestigations OI WITH(NOLOCK) ON OI.VisitID=ISH.PatientVisitID and OI.Type=ISH.Type and OI.ID=ISH.InvestigationID     
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK) ON VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID    
+INNER JOIN ClientMaster  CM WITH(NOLOCK) ON CM.CLientID=VCM.CLientID and  CM.OrgID=VCM.OrgID   
+--left join MetaValue_Common    MV WITH(NOLOCK) ON  MV.IsActive='Y' and MV.Langcode='en-GB' and MV.ORGID=ISH.ORGID and ISH.Reason=MV.Code        
+--Left Join MetaType_Common MT WITH(NOLOCK) ON MV.MetaTypeId=MT.MetaTypeId  and MT.Code ='INVSTAUS' and MT.IsActive='Y'     
+left join ReasonMaster RM WITH(NOLOCK) ON RM.Status='A' and ISH.Reason=RM.ReasonCode        
+where ISH.OrgID=@OrgID and ISH.Modifiedat between @Fdate and @Tdate  and ISH.OrginalStatus<>'Approve' and ISH.AlteredStatus<>'Cancel' and VCM.ClientID=coalesce( @ClientID,VCM.ClientID)  and PV.LabVisitType in (0,1)                  
+END            
+Else      
+Begin            
+Insert Into @Temp             
+Select ISH.PatientVisitID,PV.ExternalVisitID,PA.Name,PV.VisitNumber,PA.Age,PA.SEX,Case When PV.LabVisitType=0 Then 'OP' When PV.LabVisitType=1 Then 'IP' Else 'OP/IP' End,            
+OA.Location,CM.ClientName,(Convert(Varchar,PV.VisitDate,103) +' '+Convert(Varchar,PV.VisitDate,8)),ISH.Type,ISH.InvestigationID,ISNULL(RM.Reason,''),OI.AccessionNumber                  
+,Case when OI.Type='GRP' then OI.Name else '' end,US.name,(Convert(Varchar,ISH.ModifiedAt,103) +' '+Convert(Varchar,ISH.ModifiedAt,8)),ISH.ModifiedBy,ISH.Reason                  
+from InvestigationStatusHistory ISH with(NOLOCK)                  
+inner join PatientVisit PV WITH(NOLOCK) ON PV.PatientVisitID=ISH.PatientVisitID            
+INNER JOIN Patient PA WITH(NOLOCK) ON PA.OrgID=PV.OrgID And PA.PatientID=PV.PatientID             
+INNER JOIN OrganizationAddress OA WITH(NOLOCK) ON OA.AddressID=PV.OrgAddressID            
+INNER JOIN Users US WITH(NOLOCK) ON US.LoginID=ISH.ModifiedBy and US.OrgID=ISH.OrgID            
+INNER JOIN OrderedInvestigations OI WITH(NOLOCK) ON OI.VisitID=ISH.PatientVisitID and OI.Type=ISH.Type and OI.ID=ISH.InvestigationID             
+INNER JOIN VisitClientMapping VCM WITH(NOLOCK) ON VCM.VisitID=OI.VisitID and VCM.OrgID=OI.OrgID    
+INNER JOIN ClientMaster  CM WITH(NOLOCK) ON CM.CLientID=VCM.CLientID and  CM.OrgID=VCM.OrgID    
+left join ReasonMaster RM WITH(NOLOCK) ON RM.Status='A' and ISH.Reason=RM.ReasonCode         
+--left join MetaValue_Common    MV WITH(NOLOCK) ON  MV.IsActive='Y' and MV.Langcode='en-GB' and MV.ORGID=ISH.ORGID and ISH.Reason=MV.Code        
+--Left Join MetaType_Common MT WITH(NOLOCK) ON MV.MetaTypeId=MT.MetaTypeId  and MT.Code ='INVSTAUS' and MT.IsActive='Y'         
+where ISH.OrgID=@OrgID and ISH.Modifiedat between @Fdate and @Tdate  and ISH.OrginalStatus<>'Approve' and ISH.AlteredStatus<>'Cancel' and VCM.ClientID=coalesce( @ClientID,VCM.ClientID)  and PV.LabVisitType=@VisitType            
+End    
+ ----  
+ declare @IntegrationLoginId bigint  
+ declare @IntegrationUser NVARCHAR(100)  
+  
+  
+ ----- Bug Fix for Integration Starts Srini  
+ select @IntegrationLoginId=LoginId from login where LoginName='Integration'  
+ SELECT @IntegrationUser=Name from Users where LoginId=@IntegrationLoginId  
+  
+  
+  
+ Update @Temp set UserName=@IntegrationUser Where ManipulateReason='IntegrationUpdate' and UserName <> @IntegrationUser  
+ --select * from @Temp where patientvisitid=282039  
+ ----- Bug Fix for Integration Ends  
+ --return  
+  
+select Distinct * Into #TempFinal from (            
+Select Distinct T.PatientNumber as 'RequestNo',T.PatientName,T.VisitNumber,T.Age,T.Gender,T.VisitType,T.Location,(Convert(Varchar,T.RegisteredDate,103) +' '+Convert(Varchar,T.RegisteredDate,8)) as 'RegisteredDate'          
+,T.ClientName,T.GroupName,PI.InvestigationName as Name,IV.Value as NewValue,Case When PatternID=1 or PatternID=2 or PatternID=3 then A.Value else '-' end OldValue,                  
+'BeforeApproval' as ErrorType, T.Reason,T.UserName,(Convert(Varchar,T.ActionDateTime,103) +' '+Convert(Varchar,T.ActionDateTime ,8)) as 'Event Date and Time'            
+ from @Temp T           
+INNER JOIN PatientInvestigation PI WITH(NOLOCK) ON PI.PatientVisitID=T.PatientVisitID and PI.OrgID=@OrgID and PI.AccessionNumber=T.AccessionNumber             
+LEFT JOIN InvestigationValues IV WITH(NOLOCK) ON IV.InvestigationID=PI.InvestigationID and IV.OrgID=@OrgID  and IV.GroupID=PI.GroupID and IV.PatientVisitID=PI.PatientVisitID                    
+OUTER Apply (                    
+select Top 1 IVH.Value,PA.PatternID from InvestigationValueHistory IVH WITH(NOLOCK)           
+inner join PatternMapping PA WITH(NOLOCK) ON PA.OrgID=IVH.OrgID and PA.InvestigationID=IVH.InvestigationID          
+Where IVH.PatientVisitID=T.PatientVisitID and IVH.OrgID=@OrgID and IVH.InvestigationID=PI.InvestigationID           
+Order by CreatedAt,ModifiedBy Asc )A            
+Where Isnull(PI.StatusType,'')='' and Isnull(T.GroupName,'')=''and Isnull(IV.StatusType,'')=''          
+UNion ALL          
+Select  Distinct T.PatientNumber as 'RequestNo',T.PatientName,T.VisitNumber,T.Age,T.Gender,T.VisitType,T.Location,(Convert(Varchar,T.RegisteredDate,103) +' '+Convert(Varchar,T.RegisteredDate,8)) as 'RegisteredDate'          
+,T.ClientName,T.GroupName,'-' Name,'-' as NewValue,'-' OldValue,          
+'BeforeApproval' as ErrorType, T.Reason,T.UserName,(Convert(Varchar,T.ActionDateTime,103) +' '+Convert(Varchar,T.ActionDateTime,8)) as 'Event Date and Time'            
+ from @Temp T            
+Where   Isnull(T.GroupName,'')<>''          
+) t          
+Order by VisitNumber,RegisteredDate           
+          
+Declare @TotalTestCount Decimal(18,2)                      
+Declare @TotalBeforeApprovalCount Decimal(18,2)                      
+Declare @Percentage Decimal(18,2)          
+                   
+ SELECT distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount                      
+FROM PatientVisit PV                         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID                        
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate                     
+--and OI.Status !='Recheck'                     
+group by PV.PatientVisitID               
+          
+select @TotalTestCount=Sum(Count1) from #Totalcount                    
+select @TotalBeforeApprovalCount=Count(Name) from #TempFinal                  
+select @Percentage=Convert(varchar,((@TotalBeforeApprovalCount * 100)/@TotalTestCount))                  
+                  
+Create table #BeforeApproval (TotalTestCount nvarchar(50),TotalBeforeApprovalCount Nvarchar(50),BeforeApprovalPercentage Nvarchar(50))                      
+insert into #BeforeApproval (TotalTestCount,TotalBeforeApprovalCount,BeforeApprovalPercentage)            
+select Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalBeforeApprovalCount)),Convert(Varchar,@Percentage)                   
+                  
+Select  Row_Number() over (order by RequestNo desc) as 'SLNO' ,* from #TempFinal                          
+                      
+            
+If ((select Count(1) from #TempFinal)>=1)                  
+Begin                  
+SELECT '' as SLNo, '' as RequestNo,'' as PatientName,'' as VisitNumber,'' as Age,'' as Gender,'' as VisitType,'' as Location,'' as ClientName,    
+'' as RegisteredDate,'' as GroupName,'' as Name,  '' NewValue,'' OldValue, '' ErrorType,'' as Reason,   UserName,Count as 'Event Date and Time'                  
+           
+FROM                           
+   (SELECT [TotalTestCount] as [Total Test Count], [TotalBeforeApprovalCount] as [Deflaged before approval], [BeforeApprovalPercentage] as [% deflag before approval]          
+   FROM #BeforeApproval) p                          
+UNPIVOT                          
+   (Count FOR UserName IN                   
+      ([Total Test Count], [Deflaged before approval], [% deflag before approval])                          
+)AS unpvt;              
+End              
+                
+         
+Drop table #TempFinal              
+Drop table #Totalcount          
+Drop table #BeforeApproval        
+
+END
+END  
+   
+   

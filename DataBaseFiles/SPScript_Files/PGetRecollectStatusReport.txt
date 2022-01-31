@@ -1,0 +1,132 @@
+CREATE Procedure PGetRecollectStatusReport           
+(            
+@Fdate Datetime,                  
+@Tdate Datetime,                  
+@ClientID int,                  
+@VisitType Int,                
+@ContextInfo [dbo].[UDT_Context] READONLY                   
+)                  
+As                  
+Begin                  
+            
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED               
+  SET NOCOUNT ON;            
+  SET XACT_ABORT ON;            
+IF (@ClientID = 0 OR @ClientID = -1)  
+Set @ClientID=NULL           
+              
+
+			  Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+  Declare @OrgID int            
+            
+  select @OrgID=OrgID from @ContextInfo            
+  create table #Tempfinal (RequestNo varchar(20),Name varchar (100),VisitNumber nvarchar (50),Age nvarchar(40),Gender nchar(4),VisitType nvarchar (10),    
+Location nvarchar (500),ClientName nvarchar (100),RegisteredDate varchar(100),Barcode nvarchar (100),TestDetails nvarchar (500),AbberantStatus nvarchar (200),
+Reason nvarchar (1000),UserName nvarchar (100),AbberantActionTime varchar(100))
+
+if(@Datediff <= 31)
+BEGIN
+if(@VisitType = -1)
+
+Begin
+insert into #TempFinal     
+                 
+            
+Select Distinct PV.ExternalVisitID as RequestNo,P.Name as PatientName,PV.VisitNumber,P.Age,P.Sex as Gender,Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,    
+OA.Location,CM.ClientName,(Convert(Varchar,(PV.Createdat),103) + ' '+ Convert(Varchar,(PV.Createdat),8)) as 'RegisteredDate',PIV.Barcode            
+,OI.Name as 'TestDetails', Case when PI.Status='Retest' then 'Recollect' else PI.Status END 'AbberantStatus' ,PI.Reason,U.Name as 'UserName'   
+
+
+,(Convert(varchar,(PI.ModifiedAt),103) +' '+ Convert(varchar,(PI.ModifiedAt),8)) as 'AbberantActionTime'            
+ from Patientvisit PV             
+            
+Inner Join OrderedInvestigations OI on OI.VisitID=Pv.PatientVisitId and OI.OrgID=PV.OrgID                          
+Inner Join Patientinvestigation PI on PI.PatientVisitID=OI.VisitID and PI.AccessionNumber=OI.Accessionnumber and PI.Orgid=OI.OrgID and OI.Status=PI.Status            
+Inner Join PatientInvSamplemapping PIV on PIV.visitid=OI.VisitId and  PIV.OrgID=PV.OrgID and OI.UID=PIV.UID and OI.ID=PIV.ID                                    
+Inner join SampleTracker ST on ST.PatientvisitID=PIV.visitID and  ST.SampleID=PIV.SID and ST.OrgID=PIV.OrgID                                         
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID            
+Inner Join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and PV.OrgID=OA.OrgID                        
+Inner Join Users U on U.LoginID = PI.ModifiedBy and U.OrgID=OI.OrgID     
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID         
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID            
+where PV.Orgid=@OrgID and PV.Createdat between @FDate and @Tdate and OI.Status='Retest'   
+and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and  PV.LabVisitType in (0,1) and ST.InvSampleStatusID !=4     
+END      
+Else       
+begin      
+insert into #TempFinal                 
+Select Distinct PV.ExternalVisitID as RequestNo,P.Name as PatientName,PV.VisitNumber,P.Age,P.Sex as Gender,Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,      
+OA.Location,CM.ClientName,(Convert(Varchar,(PV.Createdat),103) + ' '+ Convert(Varchar,(PV.Createdat),8)) as 'RegisteredDate',PIV.Barcode,      
+OI.Name as 'TestDetails', Case when PI.Status='Retest' then 'Recollect' else PI.Status END 'AbberantStatus' ,PI.Reason,U.Name as 'UserName',   
+
+
+(Convert(varchar,(PI.ModifiedAt),103) +' '+ Convert(varchar,(PI.ModifiedAt),8)) as 'AbberantActionTime'            
+ from Patientvisit PV             
+            
+Inner Join ORderedinvestigations OI on OI.VisitID=Pv.PatientVisitId and OI.OrgID=PV.OrgID              
+            
+Inner Join Patientinvestigation PI on PI.PatientVisitID=OI.VisitID and PI.AccessionNumber=OI.Accessionnumber and PI.Orgid=OI.OrgID and OI.Status=PI.Status            
+            
+Inner Join PatientInvSamplemapping PIV on PIV.visitid=OI.VisitId and  PIV.OrgID=PV.OrgID and OI.UID=PIV.UID and OI.ID=PIV.ID            
+Inner join SampleTracker ST on ST.PatientvisitID=PIV.visitID and  ST.SampleID=PIV.SID and ST.OrgID=PIV.OrgID                      
+            
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID            
+            
+Inner Join OrganizationAddress OA on OA.AddressID=PV.OrgAddressID and PV.OrgID=OA.OrgID            
+            
+Inner Join Users U on U.LoginID = PI.ModifiedBy and U.OrgID=OI.OrgID            
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID               
+left join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID           
+where PV.Orgid=@OrgID and PV.Createdat between @FDate and @Tdate and OI.Status='Retest'   
+and VCM.ClientID=coalesce( @ClientID,VCM.ClientID) and PV.LabVisitType=@VisitType         and ST.InvSampleStatusID !=4  
+END      
+      
+      
+Declare @TotalTestCount Decimal(18,2)                      
+Declare @TotalRecollectCount Decimal(18,2)                      
+Declare @Percentage Decimal(18,2)                   
+                  
+SELECT distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount                      
+FROM PatientVisit PV                         
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID                        
+where PV.OrgID=@OrgID and PV.Createdat between @Fdate and @Tdate                     
+group by PV.PatientVisitID                  
+          
+                  
+select @TotalTestCount=Sum(Count1) from #Totalcount                    
+select @TotalRecollectCount=Count(AbberantStatus) from #TempFinal                  
+select @Percentage=Convert(varchar,((@TotalRecollectCount * 100)/@TotalTestCount))                     
+                  
+                  
+Create table #Recollect (TotalTestCount nvarchar(50),TotalRecollectCount Nvarchar(50),RecollectPercentage Nvarchar(50))                      
+insert into #Recollect (TotalTestCount,TotalRecollectCount,RecollectPercentage)                      
+select Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalRecollectCount)),Convert(Varchar,@Percentage)                       
+                        
+                  
+            
+Select ROW_NUMBER() OVER(ORDER BY RequestNo ASC) as 'SLNo',RequestNo,Name as 'Patient Name',VisitNumber,Age,Gender,VisitType,Location,ClientName, RegisteredDate, Barcode, TestDetails,                
+AbberantStatus as 'Test Status', Reason, UserName, AbberantActionTime  as 'Event Date and Time'          
+   from #TempFinal             
+                
+If ((select Count(1) from #TempFinal)>=1)            
+Begin            
+SELECT '' as SLNo,'' as RequestNo,'' as 'Patient Name','' as VisitNumber,'' as Age,'' as Gender,'' as VisitType,'' as Location,'' as ClientName,'' as RegisteredDate,'' as Barcode,'' as TestDetails,                
+'' as 'Test Status','' as Reason,Details as UserName,Count as 'Event Date and Time'          
+            
+             
+FROM  (SELECT [TotalTestCount] as [Total Test Count], [TotalRecollectCount] as [Total Recollect Count], [RecollectPercentage] as [%Recollect Test]                  
+   FROM #Recollect) p                    
+UNPIVOT                    
+   (Count FOR Details IN         
+      ([Total Test Count], [Total Recollect Count], [%Recollect Test])        
+)AS unpvt;      
+End   
+ 
+Drop table #TempFinal      
+Drop table #Totalcount  
+Drop table #Recollect
+    
+End
+END

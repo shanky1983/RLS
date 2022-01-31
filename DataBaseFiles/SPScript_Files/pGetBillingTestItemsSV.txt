@@ -1,0 +1,55 @@
+CREATE Procedure pGetBillingTestItemsSV
+@OrgID int,
+@FeeID int,
+@FeeType nvarchar(200),
+@ContaxtInfo UDT_CONTEXT READONLY	
+
+As
+Begin
+
+ Declare @ClientID int
+    
+        SELECT @ClientID = ClientID    
+    
+        FROM   ClientMaster WITH(NOLOCK)    
+    
+        WHERE  ClientCode = 'GENERAL'    
+    
+               AND OrgID = @OrgID  
+
+ Declare @RateID int
+    
+        SELECT @RateID = RateID    
+    
+        FROM   RateMaster WITH(NOLOCK)    
+    
+        WHERE  RateName = 'General'    
+    
+               AND OrgID = @OrgID 
+
+
+IF(@FeeType='INV')
+BEGIN
+select IOM.DisplayText AS FeeDescription, IRM.Rate, @FeeType As FeeType, @FeeID AS FeeId
+from InvestigationOrgMapping IOM
+inner join InvRateMaster IRM on IRM.ID=IOM.InvestigationID and irm.OrgiD=IOM.OrgID  
+where IOM.OrgID =@OrgID and IRM.RateID=@RateID and IOM.InvestigationID=@FeeID
+END
+ELSE IF(@FeeType='GRP')
+BEGIN
+select IOG.DisplayText AS FeeDescription, IRM.Rate,  @FeeType As FeeType, @FeeID AS FeeId
+from InvOrgGroup IOG
+inner join InvRateMaster IRM on IRM.ID=IOG.OrgGroupID
+where IOG.OrgID =@OrgID and IRM.RateID=@RateID and IOG.OrgGroupID=@FeeID
+END
+ELSE IF(@FeeType='PKG')
+BEGIN
+select IOG.DisplayText AS FeeDescription, IRM.Rate,  @FeeType As FeeType, @FeeID AS FeeId
+from InvOrgGroup IOG
+inner join CodeMapper CM on CM.IdentifyingID=iog.OrgGroupID AND CM.IdentifyingType='PKG'
+INNER JOIN CodeMaster CDM ON CDM.CodeMasterID=CM.CodeMasterID AND CDM.CodeType='PKG'
+inner join InvRateMaster IRM on IRM.ID= IOG.OrgGroupID  
+where IOG.OrgID =@OrgID  and IRM.RateID=@RateID and IOG.OrgGroupID=@FeeID
+END
+End
+			 

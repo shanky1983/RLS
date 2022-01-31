@@ -1,0 +1,182 @@
+--exec PCalculateFormulatest 204163,202,322
+CREATE procedure [dbo].[PUpdateCalculateFormulaTestDepend] 
+@Groupid bigint  ,
+@Orgid   bigint,     
+@Pvisitid bigint                                                                                               
+as                                                                                                
+begin                                                                                                           
+                                                                                                
+  Declare @Caluatetable table(                                                                                                
+CalValue Decimal(18,2),                                                                                                
+InvestigationID bigint,                                                                                                
+PatientVisitid bigint,                                                                                                
+GroupID bigint,                                                                                                
+orgid bigint,                                                                                          
+ReferenceRange nvarchAR(max),                                                                                  
+AccessionNumber Bigint ,                                                                                
+Isabnormal varchar(10)                                                                                            
+)                                                                                               
+  Declare @Caluatetable1 table(                                                                                                
+CalValue Decimal(18,2),                                                                                                
+InvestigationID bigint,                                                                                                
+PatientVisitid bigint,                                                                                                
+GroupID bigint,                                                                                                
+orgid bigint,                                                                                          
+ReferenceRange nvarchAR(max) ,                                                                                  
+AccessionNumber Bigint ,                                                                                
+Isabnormal varchar(10)                                                                                                   
+) 
+DECLARE @sqlcmd varchar(max)                                                                                                
+declare @Rule nvarchar(max);declare  @GroupName nvarchar(max);Declare @porgid bigint;Declare @InvestigationID bigint;                                                                                          
+Declare @ReferenceRange nvarchar(max)                                                                                   
+Declare @AccessionNo bigint                                                                                               
+Declare @PatientVisitid bigint;                                                                                                
+Declare @TempCaluatetable table(                                            
+CalValue Decimal(18,2),                    
+InvestigationID bigint,                                                                  
+PatientVisitid bigint,                              
+GroupID bigint,                                                       
+orgid bigint ,                                                                     
+ReferenceRange nvarchAR(max),                            
+AccessionNumber Bigint ,                                                        
+Isabnormal varchar(10)                           
+)                                                                                                                               
+create table #temp_DevValueforcalc(Value decimal(18,2),InvestigationID bigint,GroupID int,PatientVisitID bigint,Orgid Bigint,  
+AccessionNumber Bigint,FormulaInvId int)                                                  
+insert into #temp_DevValueforcalc                                                                                                
+select distinct Convert(Decimal(18,2),Rtrim(Ltrim(Replace(Replace(nullif(value,''),'<',''),'>','')))),                                                              
+IV.InvestigationID,IV.GroupID,IV.PatientVisitID,IV.Orgid,OI.AccessionNumber,GDT.InvestigationID as FormulaInvId from Investigationvalues IV (nolock)                                                                                 
+Inner join PatientInvestigation PI (Nolock) on PI.PatientVisitID =IV.PatientVisitID and PI.OrgID=IV.Orgid and PI.InvestigationID =IV.InvestigationID --and PI.PatientInvID=IV.PatientInvID                                                                    
+
+
+
+inner join OrderedInvestigations OI (nolock) on OI.VisitID =PI.PatientVisitID and OI.AccessionNumber =PI.AccessionNumber and OI.OrgID=PI.OrgID and OI.Type='GRP'                                                              
+inner join Groupdepndtest GDT (nolock) on GDT.GroupID=IV.GroupID and IV.InvestigationID in (ISNULL(GDT.Depndtest1,0)   
+,ISNULL(Depndtest2,0),ISNULL(Depndtest3,0))                                               
+where IV.status in ('Approve','Completed','Pending') and IV.GroupID =@groupid  -- and PI.CreatedAt >GETDATE()-3   
+and iv.Orgid=@orgid  and OI.Status!='Approve'   
+ and isnumeric(Rtrim(Ltrim(Replace(Replace(nullif(value,''),'<',''),'>',''))))=1             
+ --and PI.RefAccessionNo is null   
+ and ISNULL(PI.StatusType,'')not in ('RR','RC')  and  ISNULL(IV.StatusType,'')not in ('RR','RC')  and PI.GroupID=@Groupid and PI.PatientVisitID=@Pvisitid 
+      
+select distinct PatientVisitID,GroupID,FormulaInvId,COUNT(1)as Testcount into #tempfinal from #temp_DevValueforcalc                                
+group by GroupID,PatientVisitID,FormulaInvId     
+                                                                                        
+select distinct T.*  into #temprerunrecord from #tempfinal T                                                                                                 
+inner join PatientInvestigation PI (nolock)on PI.PatientVisitID=T.PatientVisitID and PI.GroupID=T.GroupID and isnull(Pi.statustype,'') in ('RR','RC')  
+                                                                            
+delete TD from #temp_DevValueforcalc TD                                                            
+inner join #temprerunrecord TR on TD.PatientVisitID=TR.PatientVisitID and TD.GroupID=TR.GroupID                                                                  
+                                                                        
+                                                                  
+select distinct  TD.* into #temp_DevValueforcalc1 from #temp_DevValueforcalc  TD                                              
+inner join #tempfinal T on T.GroupID=TD.GroupID and T.PatientVisitID=TD.PatientVisitID    and TD.FormulaInvId=T.FormulaInvId                                           
+inner join Groupdepndtest G (nolock) on G.Groupid=T.GroupID and G.DepndCount=T.Testcount  and G.InvestigationID=TD.FormulaInvId    
+inner join PatientInvestigation PINV (nolock) on PINV.PatientVisitID=TD.PatientVisitID and PINV.InvestigationID=TD.FormulaInvId  
+                           
+DECLARE @cols AS NVARCHAR(MAX), @query  AS NVARCHAR(MAX)                                                                                                               
+select @cols = STUFF((SELECT distinct ',' + QUOTENAME(InvestigationID)                                                                                 
+                    from #temp_DevValueforcalc1                                                                                                                               
+            FOR XML PATH(''), TYPE                                                                                                                                                                 
+            ).value('.', 'NVARCHAR(MAX)')                                                                                             
+        ,1,1,'')                                                                            
+                                                                                                     
+                                                                                                
+                                                                                                                                                                       
+  if(@cols is not null)                                                                                             
+  Begin                                                                                                                                                                       
+set @query = 'SELECT  ' + @cols + ',GroupID,PatientVisitID,Orgid,AccessionNumber,FormulaInvId                                                               
+            into ##TempCalculate1 from                                                                     
+     (                                                                                                                                                                                                
+                Select InvestigationID,Value,GroupID,PatientVisitID,Orgid,AccessionNumber,FormulaInvId                                                                                                                                      
+             from #temp_DevValueforcalc1                                                          
+             ) dta                                                                                                            
+             pivot                                                                             
+             (                                               
+                MAX(Value)                                                                  
+                for InvestigationID in (' + @cols + ')                                           
+             ) pvt '                                                                                                                                 
+                                                                          
+                                                                                                            
+EXEC(@query)                            
+select * into #TempCalculate2 from  ##TempCalculate1                                                                                                
+drop table ##TempCalculate1                                                                               
+drop table #temp_DevValueforcalc1                                                                                                                 
+                                                                   
+                                                                    
+select GD.CalRule,GD.InvestigationID as INVid,GD.Groupid as GrpID,GD.ReferenceRange,Tem.* into #TempCalculate3 from #TempCalculate2 Tem                                                
+--inner join GroupformulaandDepndcount GT (Nolock)on GT.Groupid=Tem.GroupID                                                
+inner join Groupdepndtest GD (Nolock) on GD.groupid=Tem.GroupID and GD.orgid=Tem.orgid  and GD.investigationId=Tem.FormulaInvId     
+  
+                                  
+DECLARE db_cursor CURSOR FOR                                                  
+select CalRule,INVid,Patientvisitid,GrpID,Orgid,ReferenceRange,AccessionNumber from #TempCalculate3  
+OPEN db_cursor                                                   
+FETCH NEXT FROM db_cursor INTO @Rule,@InvestigationID,@PatientVisitid, @GroupID,@porgid ,@ReferenceRange,@AccessionNo                                                                                                 
+                                     
+WHILE @@FETCH_STATUS = 0                                                                                                   
+BEGIN                                                                                     
+                                                 
+      SET @sqlcmd = 'SELECT ' + @Rule + ' FROM #TempCalculate3 where  patientvisitid='+Convert(varchar(10),@PatientVisitid)+' '                                                
+      insert into @TempCaluatetable(CalValue)                                                                                                
+      EXECUTE (@sqlcmd);                                                                                                                                                
+      update @TempCaluatetable set InvestigationID=@InvestigationID,PatientVisitid=@PatientVisitid,GroupID=@GroupID,orgid=@porgid,ReferenceRange=@ReferenceRange                                                            
+                                                                                      
+                                                         
+      insert into @Caluatetable1                                                                               
+      select distinct * from @TempCaluatetable where CalValue is not null;                                                
+                                   
+       delete from @TempCaluatetable   ;                      
+      FETCH NEXT FROM db_cursor INTO @Rule,@InvestigationID,@PatientVisitid, @GroupID,@porgid ,@ReferenceRange ,@AccessionNo                                                                                                 
+END                                   
+                                  
+CLOSE db_cursor                                                            
+DEALLOCATE db_cursor                                                                                                
+
+insert into InvestigationValues(Name,Value,InvestigationID,GroupID,PatientVisitID,UOMID,Status,CreatedBy,Createdat,UOMCode                                                                                                      
+      ,GroupName,Orgid,UID,DeviceID,DeviceValue,DeviceActualValue,PatientInvID,PackageID,PackageName,SequenceNo,Dilution,Precision,ConvValue,ConvUOMCode)                                                                                      
+   select InvestigationName,CT.CalValue,PI.InvestigationID,PI.GroupID,Pi.PatientVisitID,0,'Pending',1,GETDATE(),null                                                                                                      
+       ,PI.GroupName,PI.OrgID,PI.UID,PI.DeviceID,null,null,null,PI.PackageID,PI.PackageName,0,null,null,null,null from PatientInvestigation PI (nolock)             
+     inner join @Caluatetable1 CT on CT.GroupID=PI.GroupID and CT.PatientVisitid=PI.PatientVisitID and CT.orgid=PI.OrgID and PI.InvestigationID=CT.InvestigationID                                                                     
+   left join Investigationvalues IV (nolock) on IV.PatientVisitID=CT.PatientVisitid and IV.InvestigationID=CT.InvestigationID and CT.GroupID=IV.GroupID and isnull(IV.statustype,'') not in ('RR','RC')                                                       
+ 
+
+where isnull(PI.statustype,'') not in ('RR','RC') and CT.CalValue is not null  and IV.investigationid is null    
+
+update PI set  Pi.Status='Pending',PI.IsAutoAuthorize='Y'
+from PatientInvestigation PI (nolock)             
+     inner join @Caluatetable1 CT on CT.GroupID=PI.GroupID and CT.PatientVisitid=PI.PatientVisitID and CT.orgid=PI.OrgID and PI.InvestigationID=CT.InvestigationID where isnull(PI.statustype,'') not in ('RR','RC') 
+return                                                    
+                                                                                                 
+  drop table #TempCalculate2   
+  drop table #TempCalculate3 
+  Drop table #temp_DevValueforcalc  
+Drop table #tempfinal                                                                                                
+Drop table #temprerunrecord  
+  
+ -- declare @patientInvCount int   
+ -- declare @InvAuthorizeCount int 
+ -- declare @InvvaluesCount int =0   
+ --   declare @FormulaCount int  
+	--select @FormulaCount=count(1) FROM @Caluatetable1
+  
+ -- select  @patientInvCount=count(1) from PatientInvestigation where PatientVisitID=@PatientVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC')   
+ -- select  @InvAuthorizeCount=count(1) from PatientInvestigation where PatientVisitID=@PatientVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC') and IsAutoAuthorize='Y'
+ -- --select  @InvvaluesCount=count(1) from Investigationvalues where PatientVisitID=@PatientVisitid and GroupID=@Groupid and isnull(statustype,'') not in ('RR','RC')                                                                                      
+ --  if(@patientInvCount=@InvAuthorizeCount+@FormulaCount+1)
+ --  SET @InvvaluesCount=1
+                                       
+--	insert into @FinalCaluatetable1
+--	select * from @FinalCaluatetable1
+									                                                   
+--   select InvestigationName,CT.CalValue as Value ,PI.InvestigationID,PI.GroupID,Pi.PatientVisitID,'Approve' as Status,GETDATE() as CreatedAt,                            
+--   PI.GroupName,PI.Orgid,PI.UID,PI.AccessionNumber                                                                                  
+--	    from PatientInvestigation PI (nolock)                                                                                       
+--   inner join @Caluatetable1 CT on CT.GroupID=PI.GroupID and CT.PatientVisitid=PI.PatientVisitID and CT.orgid=PI.OrgID and PI.InvestigationID=CT.InvestigationID                                                                           
+--   left join Investigationvalues IV (nolock) on IV.PatientVisitID=CT.PatientVisitid and IV.InvestigationID=CT.InvestigationID and CT.GroupID=IV.GroupID and isnull(IV.statustype,'') not in ('RR','RC')                                                     
+ 
+ 
+--where isnull(PI.statustype,'') not in ('RR','RC') and CT.CalValue is not null  and IV.investigationid is null        
+                                                                   
+ End                         
+ End

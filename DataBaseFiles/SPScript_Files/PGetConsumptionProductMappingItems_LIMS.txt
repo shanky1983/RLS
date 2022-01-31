@@ -1,0 +1,50 @@
+CREATE PROCEDURE PGetConsumptionProductMappingItems_LIMS
+(
+   @OrgCode Nvarchar(100)
+)
+AS 
+BEGIN
+
+DECLARE  @Orgid int
+
+SELECT @Orgid= AttuneOrgID FROM VendorOrgMapping WHERE IntegrationTypeCode=@OrgCode
+
+SELECT DISTINCT
+     IPM.InvestigationProductMapID,
+	IM.ProductCode  as DeviceCode,
+	IM.InstrumentName as DeviceName,
+	IOM.TestCode,
+	IOM.DisplayText as TestName,
+	@OrgCode	as OrgCode,
+	IPM.CreatedAt,
+    ISNULL(IPM.ModifiedAt,IPM.CreatedAt)  as ModifiedAt
+FROM SynProductConsumptionMappingLIMS SCM
+INNER JOIN IVYInvestigationProductMapping IPM  ON IPM.InvestigationProductMapID=SCM.InvestigationProductMapID
+INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID=IPM.InvestigationID AND IOM.OrgID= @OrgID
+INNER JOIN InvInstrumentMaster IM ON IM.OrgID=@OrgID AND IPM.DeviceID=IM.ProductCode
+--INNER JOIN Organization O ON O.OrgID=@OrgID
+LEFT JOIN InvestigationMethod IIM ON IPM.MethodID=IM.MethodID AND IM.OrgID=@OrgID
+WHERE SCM.Orgid=@Orgid  AND SCM.Status='Pending'
+
+
+SELECT DISTINCT 	
+   P.ProductName,P.ProductCode,P.CategoryID,IPMD.ConsumptionQty,IUOM.UOMCode,IPMD.CalibrationQty,IPMD.IsActive,
+   ProductConsumptionMappingID,SCM.InvestigationProductMapDetailID,SCM.InvestigationProductMapID,
+   IPMD.CreatedAt,
+   ISNULL(IPMD.ModifiedAt,IPMD.CreatedAt)  as ModifiedAt
+   INTO #TPCM
+FROM SynProductConsumptionMappingLIMS SCM
+INNER JOIN IVYInvestigationProductMappingDetails IPMD ON IPMD.InvestigationProductMapID=SCM.InvestigationProductMapID AND IPMD.InvestigationProductMapDetailID=SCM.InvestigationProductMapDetailID
+INNER JOIN Products P ON P.ProductID=IPMD.ProductID AND P.Orgid=@OrgID
+INNER JOIN InventoryUOM IUOM ON IUOM.UOMID=IPMD.ConsumptionUOMID
+WHERE SCM.Orgid=@Orgid AND SCM.Status='Pending'
+Order by ProductConsumptionMappingID asc
+
+Update SPC set Status ='In-process' From SynProductConsumptionMappingLIMS SPC
+INNER JOIN #TPCM T ON T.InvestigationProductMapDetailID =SPC.InvestigationProductMapDetailID
+WHERE T.InvestigationProductMapDetailID =SPC.InvestigationProductMapDetailID
+
+Select * From #TPCM
+
+END
+GO

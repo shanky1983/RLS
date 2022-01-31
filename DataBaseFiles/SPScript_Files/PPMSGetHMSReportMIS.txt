@@ -1,0 +1,154 @@
+CREATE Procedure [dbo].[PPMSGetHMSReportMIS]              
+
+(              
+@Fdate Datetime              
+,@Tdate Datetime    
+,@porgid bigint      
+,@Pparamtype VARCHAR(100)      
+,@Pparamvalue VARCHAR(100)      
+,@pExcelReportId [INT] = NULL      
+,@pExcelReportName VARCHAR(255) = NULL      
+,@pToExecute VARCHAR(10) = NULL   
+,@ClientId INT = NULL
+)              
+As              
+Begin        
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED           
+  SET NOCOUNT ON;        
+  SET XACT_ABORT ON;       
+           
+ SELECT  @Tdate = dateadd(day, 1, @Tdate)  
+      
+Declare @temp as table (      
+ PatientVisitId BigInt,[Patient ID] Varchar(255),[Manual Patient Id] varchar(255),[Patient Name] Varchar(255),[Gender] char(1),Age varchar(50),      
+[Patient Address] Nvarchar(max),[Facilty Code] Varchar(50),[Facility Name] Nvarchar(255),[Referral Name] Nvarchar(255),[Referral Address] varchar(255)      
+ ,DOB Date,[Panel Code] Varchar(50),[Panel Name] Varchar(255),[Test Code] varchar(50),[Test Name] Varchar(255)      
+ ,Parameter varchar(255),[Test Results] Varchar(max),[Flags (H/L)] varchar(4),[Bill Id] varchar(50),[Bill Time] DateTime,[Accession Number] varchar(50),[Sample Collected Date & Time] Datetime      
+ ,[Report Submit Date & Time] DateTime,[Patient Mobile No.] varchar(50),[Pin Code] varchar(20) ,AccessionNumber BigInt,FinalBillID Bigint,PKGAttuneID bigint,UID nvarchar(500)      
+ ,GroupID bigint,ReferringPhysicianID bigint,ReferVisitID bigint,ReferredAccessionNo bigint,[JHH ID] Varchar(100),[Employee ID] Varchar(100),[External Order ID] Varchar(100),ClientID bigint      
+,InvestigationID bigint
+  )      
+         
+Select Distinct PV.[PatientVisitId],P.PatientNumber as [Patient ID],P.ExternalPatientnumber as [Manual Patient Id],P.Name as [Patient Name],P.[Sex] As 'Gender',P.Age,      
+(Isnull(PA.Add1,'')+Isnull(PA.Add2,'')) As Address,CM.ClientCode as [Facilty Code],CM.ClientName As [Facility Name],PV.ReferingPhysicianName As [Referral Name]      
+ ,P.DOB,Isnull(PA.Mobilenumber,PA.LandLineNumber) as [Patient Mobile No.],PA.PostalCode as [Pin Code],Isnull(PKGID,'') as PKGID,Isnull(PkgName,'') as [Panel Name],      
+ PV.VisitNumber as [Accession Number], OI.AccessionNumber,PV.OrgID ,VCM.FinalBillID,PV.ReferingPhysicianID,ReferVisitID ,OI.ReferredAccessionNo,P.HealthHubID as [JHH ID],P.EmployeeID as [Employee ID],VCM.ClientID      
+ Into #Temp      
+from PatientVisit PV WITH (NOLOCK)      
+inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid      
+inner Join VisitclientMapping VCM WITH (NOLOCK) ON VCM.Visitid=PV.PatientVisitid and VCM.Orgid=PV.OrgID      
+Inner Join Clientmaster CM WITH(NOLOCK) ON CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID       
+inner Join PatientAddress PA WITH (NOLOCK) ON PA.PatientID=PV.PatientID and PA.AddressType='P'       
+Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid      
+where PV.orgid=@pOrgId and PV.Createdat between Cast(@Fdate AS DATETIME) and Cast(@Tdate AS DATETIME)       
+And Isnull(VCM.IsActive,'Y')<>'N' And OI.Status='Approve'  and ((ISNULL(@ClientId,0) > 0 AND ISNULL(cm.ClientID,0) = @ClientId) OR ISNULL(@ClientId,0) =0)    
+--And Isnull(PV.ReferVisitID,'')=''      
+        
+      
+Insert Into @temp      
+( PatientVisitId,[Patient ID],[Manual Patient Id],[Patient Name],[Gender],Age,      
+[Patient Address],[Facilty Code],[Facility Name],[Referral Name]      
+ ,DOB,[Panel Name],[Test Name]      
+ ,Parameter,[Test Results],[Flags (H/L)],[Accession Number]      
+ ,[Report Submit Date & Time],[Patient Mobile No.],[Pin Code],AccessionNumber,FinalBillID,PKGAttuneID,UID,GroupID,ReferringPhysicianID,Refervisitid,      
+ [JHH ID],[Employee ID],ClientID,InvestigationID  
+ )       
+select T.PatientVisitId,T.[Patient ID],T.[Manual Patient Id],T.[Patient Name],T.[Gender],T.Age,      
+T.Address,T.[Facilty Code],T.[Facility Name],T.[Referral Name]      
+ ,T.DOB,T.[Panel Name],
+ CASE WHEN Isnull(V.GroupName,'') = '' THEN ISNULL(V.Name,'') ELSE  Isnull(V.GroupName,'') END  -- if investigation ordered other than group means, parameter and investigation name both are same
+ ,V.Name as Parameter,V.value as [Test Results],PI.IsAbnormal,T.[Accession Number] ,PI.ApprovedAt,T.[Patient Mobile No.],T.[Pin Code],T.AccessionNumber,T.FinalBillID,T.PKGID,PI.UID      
+ ,PI.GroupID,T.ReferingPhysicianID,T.Refervisitid,T.[JHH ID],T.[Employee ID],T.ClientID      
+ ,CASE WHEN Isnull(V.GroupId,0) = 0 THEN ISNULL(V.InvestigationID,'') ELSE  0 END  -- if investigation ordered other than group means, parameter and investigation name both are same
+ from #Temp T       
+ Inner Join PatientInvestigation PI WITH(NOLOCK) ON PI.AccessionNumber=T.AccessionNumber      
+inner Join InvestigationValues v WITH (NOLOCK) ON v.InvestigationID=PI.InvestigationID and v.GroupID=PI.GroupID and  v.PatientVisitID  = PI.PatientVisitId and PI.Orgid =v.Orgid       
+where PI.InvestigationID in (select InvestigationID from OrderableTcodeForFormL Where OrgID=@pOrgId) And PI.Status='Approve' AND      
+PI.statustype is null and V.statustype is Null      
+      
+Drop Table #Temp      
+      
+      
+      
+Update T Set T.[Bill Id]=FB.BillNumber,T.[Bill Time]=FB.CreatedAt      
+from @Temp T      
+Inner Join FinalBill FB WITH(NOLOCK) ON FB.FinalBillID=T.FinalBillID       
+Where FB.OrgID=@pOrgId and T.Refervisitid is null      
+      
+      
+Update T Set T.[Facilty Code]=CM.ClientCode,T.[Facility Name]=CM.ClientName,T.[Bill Id]=FB.BillNumber,T.[Bill Time]=FB.CreatedAt      
+from @Temp T      
+inner Join VisitclientMapping VCM WITH (NOLOCK) ON VCM.Visitid=T.ReferVisitID -- and VCM.Orgid=PV.OrgID      
+Inner Join Clientmaster CM WITH(NOLOCK) ON CM.ClientID=VCM.ClientID --and CM.OrgID=VCM.OrgID       
+Inner Join FinalBill FB WITH(NOLOCK) ON FB.FinalBillID=VCM.FinalBillID and VCM.VisitID=FB.VisitID      
+Where Isnull(VCM.IsActive,'Y')<>'N'  and T.Refervisitid is not null      
+      
+      
+Update T Set  [Sample Collected Date & Time]=PIS.CollectedDateTime,T.PKGAttuneID=OI.PkgID, T.[Panel Name]=Isnull(OI.PkgName,'')      
+from @temp T      
+Inner Join OrderedInvestigations OI WITH(NOLOCK) ON T.ReferredAccessionNo=OI.AccessionNumber       
+Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.AccessionNumber=OI.AccessionNumber and PISM.UID=OI.UID and PISM.ID=OI.ID and PISM.Type=OI.Type      
+Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID=PISM.VisitID and PIS.UID=PISM.UID and PIS.SampleID=PISM.SID and PIS.BarcodeNumber=PISM.Barcode      
+--Inner Join SampleTracker ST WITH(NOLOCK) ON ST.PatientVisitID=PISM.VisitID and ST.SampleID=PISM.SID and ST.InvSampleStatusID=3      
+Where OI.Status Not in ('Retest') and PISM.Barcode<>'0'      
+      
+Update T Set T.[Sample Collected Date & Time]=(Case When isnull([Sample Collected Date & Time],'')='' then PIS.CollectedDateTime end)       
+From @temp  T      
+Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.VisitID=T.PatientVisitID and PISM.AccessionNumber=T.AccessionNumber and PISM.UID=T.UID      
+Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.PatientVisitID=PISM.VisitID and PIS.UID=PISM.UID and PIS.SampleID=PISM.SID and PIS.BarcodeNumber=PISM.Barcode      
+Where PISM.Barcode<>'0'      
+      
+Update T Set T.[Test Code]=IOG.TestCode      
+from @temp T      
+Inner Join InvOrgGroup IOG WITH(NOLOCK) ON IOG.OrgGroupID=T.GroupID      
+Where T.GroupID<>'0'      
+      
+Update T Set T.[Test Code]=IGM.TestCode      
+from @temp T      
+Inner Join InvGroupMaster IGM WITH(NOLOCK) ON IGM.GroupID=T.PKGAttuneID and IGM.Type='PKG'      
+Where IGM.Type='PKG' and T.PKGAttuneID<>'0'      
+      
+--arun changes-- if investigation ordered other than group means, parameter and investigation name both are same
+Update T Set T.[Test Code]=INV.TestCode        
+from @temp T        
+Inner Join investigationmaster INV WITH(NOLOCK) ON INV.InvestigationID=T.InvestigationID        
+Where ISNULL(T.GroupID,0) = 0 
+Update T Set T.[Referral Address]=Ad.Address1      
+from @temp T      
+Inner Join AddressDetails AD WITH(NOLOCK) ON AD.ReferenceID=T.ReferringPhysicianID and AD.ReferenceType='Rephy'      
+--Where AD.OrgID=@pOrgId      
+      
+-- ExternalOrderID -- Start ---      
+      
+Update T Set T.[External Order ID]=isnull(B.ExternalRefNo ,PV.Externalvisitid)      
+from @temp T      
+inner join patientvisit PV on PV.patientvisitid=T.PatientVisitID and PV.OrgID=@pOrgId      
+left  Join Bookings B WITH(NOLOCK) ON B.PatientVisitID=T.PatientVisitID and B.OrgID=@pOrgId      
+      
+      
+--- ExternalOrderID -- End ---      
+      
+--if(@ClientID=0)      
+--BEGIN      
+      
+Select [Patient ID],[Manual Patient Id],[Patient Name],[Gender],Age,[Patient Address],[Facilty Code],[Facility Name],[Referral Name],Isnull([Referral Address],'') As [Referral Address],convert(varchar(30),DOB,101) As DOB,'' as [Order Id]      
+,Isnull([Panel Code],'') As [Panel Code],[Panel Name],Isnull([Test Code],'') As [Test Code],[Test Name],Parameter,[Test Results],'-' as [Reference Range (Lower)],'-' as [Reference Range (Higher)],'-' As Units,[Flags (H/L)],      
+'1' [Dispatched],[Bill Id],(Convert(varchar(30),[Bill Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Bill Time],100),8)),7)) As [Bill Time],[Accession Number],      
+(Convert(varchar(30),[Sample Collected Date & Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Sample Collected Date & Time],100),8)),7)) As [Sample Collected Date & Time]      
+ ,(Convert(varchar(30),[Report Submit Date & Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Report Submit Date & Time],100),8)),7)) As [Report Submit Date & Time]      
+ ,[Patient Mobile No.],[Pin Code], ISNULL([JHH ID],'') AS [JHH ID],ISNULL([Employee ID],'') AS [Employee ID],ISNULL([External Order ID],'') as [External Order ID]      
+from @temp      
+--END      
+--ELSE       
+      
+--BEGIN      
+--Select [Patient ID],[Manual Patient Id],[Patient Name],[Gender],Age,[Patient Address],[Facilty Code],[Facility Name],[Referral Name],Isnull([Referral Address],'') As [Referral Address],convert(varchar(30),DOB,101) As DOB,'' as [Order Id]      
+--,Isnull([Panel Code],'') As [Panel Code],[Panel Name],Isnull([Test Code],'') As [Test Code],[Test Name],Parameter,[Test Results],'-' as [Reference Range (Lower)],'-' as [Reference Range (Higher)],'-' As Units,[Flags (H/L)],      
+--'1' [Dispatched],[Bill Id],(Convert(varchar(30),[Bill Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Bill Time],100),8)),7)) As [Bill Time],[Accession Number],      
+--(Convert(varchar(30),[Sample Collected Date & Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Sample Collected Date & Time],100),8)),7)) As [Sample Collected Date & Time]      
+-- ,(Convert(varchar(30),[Report Submit Date & Time],105)+' ' +RIGHT('0'+LTRIM(RIGHT(CONVERT(varchar,[Report Submit Date & Time],100),8)),7)) As [Report Submit Date & Time]      
+-- ,[Patient Mobile No.],[Pin Code], ISNULL([JHH ID],'') AS [JHH ID],ISNULL([Employee ID],'') AS [Employee ID],ISNULL([External Order ID],'') as [External Order ID]      
+--from @temp where ClientID=@ClientID      
+--END      
+      
+END 

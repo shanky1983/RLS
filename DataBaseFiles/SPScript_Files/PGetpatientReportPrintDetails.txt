@@ -1,0 +1,19 @@
+  CREATE PROCEDURE [dbo].[PGetpatientReportPrintDetails]
+   @pVisitID    BIGINT,
+   @pOrgID         [INT], 
+   @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+ 
+  select p.PatientID,pv.PatientVisitID,pv.VisitNumber,S.TitleName,p.Name as PatientName,P.Age,P.SEX as Gender,Pa.MobileNumber,pv.VisitDate,pv.ReferingPhysicianName,  
+  pv.OrgID AS OrganizationID,pv.OrgAddressID as AddressID, 0 as FinalBillID,0 as NetValue,0 as AmountReceived   
+	,'Closed' as Status--,ISNULL(PDD.Status,'Closed') as Status
+	,(select top 1 Code as PrinterCode from LocationPrintMap with(nolock) where PrinterType='Kiosk') as PrinterCode
+	from Patient P with(nolock) 
+	INNER JOIN PatientAddress PA with(nolock) on P.PatientID=PA.PatientID
+	INNER JOIN PatientVisit pv with(nolock) on P.patientid=pv.PatientID and p.OrgID = pv.OrgID
+	INNER JOIN Salutation S WITH (NOLOCK)ON P.TITLECode = S.TitleID  
+	where PV.PatientVisitId=@pVisitID and pv.OrgID=@pOrgID AND PA.AddressType = 'P' and ReferOrgID='-1'
+   
+	END

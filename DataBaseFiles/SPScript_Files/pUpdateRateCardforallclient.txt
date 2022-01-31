@@ -1,0 +1,37 @@
+CREATE PROCEDURE [dbo].[pUpdateRateCardforallclient] (
+@pOrgID INT,
+@ID Varchar(50),
+@Rate Decimal(16,2)
+)
+AS
+
+BEGIN
+
+IF EXISTS ( SELECT 1 FROM ConfigKeyMaster CKM WITH (NOLOCK)
+INNER JOIN ConfigOrgMaster COM WITH (NOLOCK) ON COM.ConfigKeyID=CKM.ConfigKeyID
+WHERE COM.OrgID=@pOrgID and CKM.ConfigKey='TestRateUpdateforallClient' and COM.ConfigValue='Y')
+BEGIN 
+ 
+ DECLARE @Temp AS Table
+ (
+   ID INT IDENTITY(1,1),
+   Value Varchar(20)
+   )  
+
+ INSERT INTO @Temp
+ SELECT DISTINCT item
+ FROM fnSplit  (@ID,'-')  
+
+  DECLARE @INVID BIGINT;
+  DECLARE @Type Varchar(10);
+
+  SELECT @INVID = (select value from @Temp where ID=1)
+  SELECT @Type = (select value from @Temp where ID=2)
+
+	  Update IRM SET IRM.Rate=@Rate,ModifiedBy=1000,ModifiedAt=Getdate() FROM RateMaster RM WITH (NOLOCK)
+	  INNER JOIN InvRateMaster IRM WITH (NOLOCK) ON RM.RateID=IRM.RateID --and IRM.OrgiD=RM.orgid
+	  WHERE RM.OrgiD=@pOrgID and IRM.ID=@INVID and RM.RateName!='GENERAL' AND IRM.Type=@Type
+ END
+
+END
+

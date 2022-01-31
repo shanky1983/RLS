@@ -1,0 +1,1556 @@
+
+ create PROCEDURE [dbo].[Pgetsamplestransfer] (@pFromDate         VARCHAR(50),        
+                                              @pToDate           VARCHAR(50),        
+                                              @OrgID             INT,        
+                                              @pStatusID         INT,        
+                                              @pLocationID       INT,        
+                                              @pLocationType     VARCHAR(10),        
+                                              @visitID           VARCHAR(255),        
+                                              @patientName       VARCHAR(255),        
+                                              @VisitType         INT,        
+                                              @priority          INT,        
+                                              @sourceName        VARCHAR(255),        
+                                              @InvestigationName VARCHAR(255),        
+                                              @InvestigationID   BIGINT,        
+                                              @InvestigationType VARCHAR(10),        
+                                              @refPhyName        VARCHAR(255),        
+                                              @refPhyID          BIGINT,        
+                                              @refPhyOrg         BIGINT,        
+                                              @SampleID          BIGINT,        
+                                              @SearchType        INT,        
+        
+                                              -- 1-Visit No, 2-Sample ID  ,                                                                               
+                                              @pageSize          INT,        
+                                              @startRowIndex     INT,        
+                                              @totalRows         INT OUTPUT,        
+                                              @SmpleID           INT,        
+                                              @pProLocationID    INT,        
+                                              @poutsourceid      INT,        
+                                              @barcodeno         VARCHAR(100),        
+                                              @containerID       INT,        
+                                              @proLocation       INT,        
+                                              @ContextInfo       [UDT_CONTEXT] READONLY)        
+AS        
+  BEGIN        
+      SET NOCOUNT ON        
+        
+   /* BEGIN | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */        
+  DECLARE @VisitNumber VARCHAR(255)        
+  SET @VisitNumber =   @visitID;        
+  /* END | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */          
+        
+/*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+      DECLARE @currentLocationID BIGINT        
+        
+      SET @currentLocationID=(SELECT LocationID        
+                              FROM   @ContextInfo)        
+/*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+      DECLARE @pTestsStatus VARCHAR(100)        
+      DECLARE @ResCaptureLoc INT        
+      DECLARE @TestsStatus TABLE        
+        (        
+           Status VARCHAR (100)        
+        )        
+      DECLARE @SampleStatusIDs TABLE        
+        (        
+           StatusID INT        
+        )        
+        
+      SELECT @pFromDate = @pFromDate + ' 00:00:00',        
+             @pToDate = @pToDate + ' 23:59:59'        
+        
+      IF ( @pStatusID > 0 )        
+        BEGIN        
+            INSERT INTO @TestsStatus        
+                        (Status)        
+            SELECT Status        
+            FROM   InvestigationStatus WITH (NOLOCK)        
+            WHERE  InvestigationStatusID = @pStatusID        
+        
+            SELECT @pTestsStatus = Status        
+   FROM   @TestsStatus        
+        
+            IF ( @pTestsStatus = 'SampleCollected' )        
+              BEGIN        
+                  INSERT INTO @SampleStatusIDs        
+                  SELECT 1        
+              END        
+            ELSE IF ( @pTestsStatus = 'Yet to Transfer' )        
+         BEGIN        
+                  INSERT INTO @SampleStatusIDs        
+                  SELECT 1        
+                  UNION ALL        
+                  SELECT 3        
+         END        
+            ELSE IF ( @pTestsStatus = 'SampleReceived' )        
+              BEGIN        
+                  INSERT INTO @SampleStatusIDs        
+                  SELECT 3        
+        
+                  SELECT @ResCaptureLoc = @pLocationID        
+              END        
+        END        
+      ELSE        
+        BEGIN        
+            INSERT INTO @TestsStatus        
+                        (Status)        
+            SELECT 'SampleCollected'        
+            UNION ALL        
+            SELECT 'Yet to Transfer'        
+        
+            INSERT INTO @SampleStatusIDs        
+                        (StatusID)        
+            SELECT 1        
+            UNION ALL        
+            SELECT 3        
+        END        
+        
+      /* Visit No */        
+      IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID <> ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SearchType = 1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+ -- Select 0  
+ -- print '0'  
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                Case when P.PatientStatus = 'VIP' then 'VIPP' else PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                   AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''       AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+     OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                          OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+     /* BEGIN | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */        
+                    WHERE  PV.VisitNumber = @VisitNumber        
+     /* END | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */        
+                           AND PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+ /*BEGIN | DefectID [6527] | Arjun Kumar K | Datein 20160824 | M | Visitnumber and Client Search Not working in Sample Transfer*/        
+      /* Visit No And Clientname*/        
+      IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID <> ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName <> ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SearchType = 1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+ -- Select 1      
+  --print '11'      
+               SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID             AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                   P.PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name             AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                        AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.OrgID = @OrgID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           CROSS APPLY (SELECT VC.ClientID        
+                                        FROM   dbo.VisitClientMapping VC WITH (NOLOCK)        
+                                        WHERE  VC.VisitID = PV.PatientVisitID        
+                                               AND VC.ClientID = @sourceName        
+                                               AND VC.OrgID = @OrgID        
+                                               AND Isnull(VC.IsActive, 'Y') != 'N'        
+                                        GROUP  BY VC.ClientID) VCM        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+     /* BEGIN | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */        
+                    WHERE  PV.VisitNumber = @VisitNumber        
+     /* END | NA | Vijay | 20180108 | Created | Visit Search Using Last 5 Digits  */        
+                           AND PV.VisitType = @VisitType        
+          /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                    AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+ /*END | DefectID [6527] | Arjun Kumar K | Datein 20160824 */        
+      /* Barcode Number */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1       
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno <> ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+ -- Select 2      
+  --Print '22'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                      AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                   Case when P.PatientStatus = 'VIP' then 'VIPP' else PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                 OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                                      AND PIS.BarcodeNumber = @barcodeno        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.OrgID = @OrgID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                          INNER JOIN @TestsStatus TS        
+                                  ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+      /* FromDate , ToDate  */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+ -- Select 3      
+  --Print '33'      
+ -- Select * From @TestsStatus      
+            SELECT     
+   ISM.SampleDesc                              AS SampleDesc,        
+             ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                  Case when P.PatientStatus = 'VIP' then 'VIPP' else PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                     -- AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+    /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)      
+               
+                           inner JOIN @TestsStatus TS        
+                                   ON TS.Status =  OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0      
+       
+         
+        END        
+      /* FromDate,ToDate,Processed At */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation <> -1 )        
+        BEGIN        
+      
+  --Select 4      
+      
+  --Print '44'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+ TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                 Case when P.PatientStatus = 'VIP' then 'VIPP' else PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                     STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                    --  AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = @proLocation        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows =   0        
+                                 
+        END        
+      /* FromDate,ToDate,PatientName */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName <> ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+      
+  --Select 5      
+  --Print '55'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   TMP.PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID     AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                  Case when TMP.PatientStatus = 'VIP' then 'VIPP' else TMP.PatientStatus END as PatientStatus,        
+                   TMP.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                     PV.IsSTAT,        
+                           P.Name        AS PatientName,        
+                        Case when  P.PatientStatus = 'VIP' then 'VIPP' else  P.PatientStatus END as PatientStatus,        
+                           P.PatientNumber,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           INNER JOIN dbo.Patient P WITH (NOLOCK)        
+                                   ON P.PatientID = PV.PatientID        
+                                      AND P.Name LIKE @patientName + '%'        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)                                         ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+            LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                 LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+      /* FromDate,ToDate,ClientName  */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName <> ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+  --Select 6      
+  --Print '66'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                  Case when P.PatientStatus = 'VIP' then 'VIPP' else P.PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                               STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           CROSS APPLY (SELECT VC.ClientID        
+                                        FROM   dbo.VisitClientMapping VC WITH (NOLOCK)        
+                                        WHERE  VC.VisitID = PV.PatientVisitID        
+                                  AND VC.ClientID = @sourceName        
+                                               AND VC.OrgID = @OrgID        
+                                               AND Isnull(VC.IsActive, 'Y') != 'N'        
+                                        GROUP  BY VC.ClientID) VCM        
+            INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+      /* FromDate,ToDate,SampleName */        
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID <> -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+  --Select 7      
+  --Print '77'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID              AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                      Case when P.PatientStatus = 'VIP' then 'VIPP' else P.PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)  AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                                      AND PIS.SampleCode = @SampleID        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+      LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+      /* FromDate,ToDate,ContainerName */      
+      
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName = ''        
+           AND @InvestigationID = -1        
+           AND @InvestigationType = ''        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID <> -1        
+       AND @proLocation = -1 )        
+        BEGIN        
+ -- Select '8'      
+ --Print '88'      
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+         CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                TMP.InvSampleStatusID,        
+                      Case when P.PatientStatus = 'VIP' then 'VIPP' else P.PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+                   OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                           PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                               STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+                                                  STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                                      AND PIS.SampleContainerID = @containerID        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+      /* FromDate,ToDate,TestName,INV,GRP  */        
+    
+      
+      ELSE IF ( @pFromDate <> ''        
+           AND @pToDate <> ''        
+           AND @pLocationType = ''        
+           AND @visitID = ''        
+           AND @patientName = ''        
+           AND @priority = -1        
+           AND @sourceName = ''        
+           AND @InvestigationName <> ''        
+           AND @InvestigationID <> -1        
+           AND @InvestigationType IN ( 'INV', 'GRP' )        
+           AND @refPhyName = ''        
+           AND @refPhyID = -1        
+           AND @refPhyOrg = -1        
+           AND @SampleID = -1        
+           AND @SmpleID = -1        
+           AND @pProLocationID = -1        
+           AND @poutsourceid = -1        
+           AND @barcodeno = ''        
+           AND @containerID = -1        
+           AND @proLocation = -1 )        
+        BEGIN        
+    
+  -- Select 10    
+   --Print '111'    
+            SELECT ISM.SampleDesc                              AS SampleDesc,        
+                   ISSM.InvSampleStatusDesc                    AS [Status],        
+                   Isnull(ISC.ContainerName, '')               AS SampleContainerName,        
+                   CASE        
+                     WHEN TMP.Status = 'Yet to Transfer' THEN 'Yet to Transfer'        
+                     ELSE ISSM.InvSampleStatusDesc        
+                   END                                         AS InvSampleStatusDesc,        
+                   ''                                          AS DeptName,        
+                   Cast('' AS INT)                             AS SampleTrackerID,        
+                   TMP.CreatedAt                               AS CreatedAt,        
+                   CASE TMP.BarcodeNumber        
+                     WHEN '0' THEN '--'        
+                     ELSE TMP.BarcodeNumber        
+                   END                                         AS BarcodeNumber,        
+                   P.Name                                      AS PatientName,        
+                   TMP.PatientVisitID,        
+                   TMP.SampleID                                AS SampleID,        
+                   TMP.UID                                     AS [gUID],        
+                   TMP.Reason,        
+                   TMP.InvSampleStatusID,        
+                        Case when P.PatientStatus = 'VIP' then 'VIPP' else P.PatientStatus END as PatientStatus,        
+                   P.PatientNumber,        
+                   Isnull(LRO.RefOrgName, '')                  AS OutSourcedOrgName,        
+                   OAD.Location                                AS LocationName,        
+                   Cast('' AS BIGINT)                          AS TaskID,        
+                   TMP.Name                                    AS InvestigationName,        
+                   TMP.Status                                  AS [TestStatus],        
+          OAD1.Location                               AS ProcessedAT,        
+                   TMP.SamplePickupDate,        
+                   ''                                          AS ClientName,        
+                   TMP.ID                                      AS INVID,        
+                   TMP.[Type],        
+                   Isnull(TMP.VisitNumber, TMP.PatientVisitID) AS VisitNumber,        
+                   Isnull(TMP.IsSTAT, 'N')                     AS RefOrgName,        
+                   OAD1.AddressID,        
+                   TotalRows        
+            FROM   (SELECT PV.PatientVisitID,        
+                           ST.CreatedAt,        
+                           ST.InvSampleStatusID,        
+                           PIS.SampleCode,        
+                           PV.PatientID,        
+                           OI.ReferralID,        
+                           OI.ResCaptureLoc,        
+                           PIS.CollectedLocID,        
+                           PIS.SampleContainerID,        
+                           OI.Status,        
+                           PIS.BarcodeNumber,        
+                           PIS.SampleID,        
+                       PIS.UID,        
+                           ST.Reason,        
+                           OI.Name,        
+                           PIS.CreatedAt AS SamplePickupDate,        
+                           OI.ID,        
+                           OI.Type,        
+                           PV.VisitNumber,        
+                           PV.IsSTAT,        
+                           Count(1)        
+                             OVER ()     AS TotalRows        
+                    FROM   dbo.PatientVisit PV WITH (NOLOCK)        
+                           CROSS APPLY (SELECT STRC.PatientVisitID,        
+                                               STRC.SampleID,        
+                                               Max(STRC.CreatedAt) AS CreatedAt,        
+                                               STRC.InvSampleStatusID,        
+                                               STRC.CollectedIn,        
+                                       STRC.Reason        
+                                        FROM   dbo.SampleTracker STRC WITH (NOLOCK)        
+                                               INNER JOIN @SampleStatusIDs SSID        
+                                                       ON SSID.StatusID = STRC.InvSampleStatusID        
+                                        WHERE  STRC.PatientVisitID = PV.PatientVisitId        
+                                               AND STRC.OrgID = @OrgID        
+                                               AND STRC.CollectedIn = @pLocationID        
+                                               AND STRC.CreatedAt BETWEEN @pFromDate AND @pToDate        
+                                        GROUP  BY STRC.PatientVisitID,        
+                                                  STRC.SampleID,        
+                                                  STRC.InvSampleStatusID,        
+          STRC.CollectedIn,        
+                                                  STRC.Reason) ST        
+                           INNER JOIN dbo.PatientInvSample PIS WITH (NOLOCK)        
+                                   ON PIS.SampleID = ST.SampleID        
+                                      --AND PIS.IsActive = 1        
+                           INNER JOIN dbo.PatientInvSampleMapping PISM WITH (NOLOCK)        
+                                   ON PISM.SID = PIS.SampleID        
+                                      /*BEGIN | DefectID [396] | Arjun Kumar K | Datein 20161003 | M |  201603070045--Sample trasfer issue */        
+                                      AND Isnull(PISM.CurrentLocationID, @currentLocationID) = @currentLocationID        
+                           /*END | DefectID [396] | Arjun Kumar K | Datein 20161003 */        
+                           INNER JOIN dbo.OrderedInvestigations OI WITH (NOLOCK)        
+                                   ON OI.VisitID = PISM.VisitID        
+                                      AND OI.ID = PISM.ID        
+                                      AND OI.Type = PISM.Type        
+                                      AND OI.UID = PISM.UID        
+                                      AND OI.ID = @InvestigationID        
+                                      AND OI.Type = @InvestigationType        
+                                      AND OI.ResCaptureLoc = Isnull(@ResCaptureLoc, OI.ResCaptureLoc)        
+                           INNER JOIN @TestsStatus TS        
+                                   ON TS.Status = OI.Status        
+                    WHERE  PV.VisitType = @VisitType        
+                    ORDER  BY CreatedAt ASC        
+                   OFFSET ( (@startRowIndex * @pageSize ) -  @pageSize ) ROWS FETCH NEXT @pageSize ROWS ONLY        
+                   ) TMP        
+                   INNER JOIN InvSampleStatusmaster ISSM WITH (NOLOCK)        
+                           ON ISSM.InvSampleStatusID = TMP.InvSampleStatusID        
+                   INNER JOIN Patient P WITH (NOLOCK)        
+                           ON P.PatientID = TMP.PatientID        
+                   INNER JOIN OrganizationAddress OAD1 WITH (NOLOCK)        
+                           ON OAD1.AddressID = TMP.ResCaptureLoc        
+                   INNER JOIN OrganizationAddress OAD WITH (NOLOCK)        
+                           ON OAD.AddressID = TMP.CollectedLocID        
+                   LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)        
+                          ON ISM.SampleCode = TMP.SampleCode        
+                             AND ISM.OrgID = @OrgID        
+                   LEFT JOIN LabReferenceOrg LRO WITH (NOLOCK)        
+                          ON LRO.LabRefOrgID = TMP.ReferralID        
+                   LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)        
+                          ON ISC.SampleContainerID = TMP.SampleContainerID        
+                             AND ISC.OrgID = @OrgID        
+        
+            SELECT @totalRows = 0        
+        END        
+        
+      SET NOCOUNT OFF        
+  END 

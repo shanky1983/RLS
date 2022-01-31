@@ -1,0 +1,11 @@
+CREATE PROCEDURE [dbo].[pGetMetaDataMaster_LIMSAPI] @ContextInfo      [UDT_CONTEXT] READONLY
+AS
+BEGIN
+ 
+    SELECT DISTINCT MD.MetaDataID,MD.Domain,MD.Code,MD.DisplayText AS Name,MDOM.DisplayText,LM.Name AS LangName,MD.LangCode
+   FROM MetaData MD WITH(NOLOCK)  LEFT JOIN MetaDataOrgMapping MDOM WITH(NOLOCK) ON MD.MetaDataID=MDOM.MetadataID
+   LEFT JOIN LanguageMaster LM WITH(NOLOCK) ON LM.Code=MD.LangCode
+   ORDER BY MD.MetaDataID ASC
+   ---
+
+END

@@ -1,0 +1,1756 @@
+create PROCEDURE [dbo].[pGetReportTemplate] @pVisitID    [BIGINT],  
+                                            @OrgID       [INT],  
+											@Language NVARCHAR(100),
+                                            @ContextInfo [UDT_CONTEXT] readonly  
+WITH EXECUTE AS owner  
+AS  
+  BEGIN  
+  SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+  SET NOCOUNT ON
+  BEGIN TRY
+ 
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)     
+            
+      DECLARE @ConfigKeyValue NVARCHAR(10)  
+      DECLARE @LanguageCode NVARCHAR(20)  
+      DECLARE @xml XML;  
+      DECLARE @ano NVARCHAR(max)        
+    
+      SELECT @LanguageCode = ISNULL(languagecode, 'en-GB')  
+      FROM   @ContextInfo  
+  
+	  IF @Language=''
+	      SET @Language=@LanguageCode
+      DECLARE @hDoc                 AS INT,  
+              @PatientId            BIGINT,  
+              @VisitCount           INT,  
+              @IsCumulative         BIT,  
+              @IsCummulativeService VARCHAR(100),  
+              @ActionType           VARCHAR(20),  
+              @ReportType           VARCHAR(20)  
+  
+      SELECT @PatientId = patientid,  
+             @IsCumulative = iscumulative  
+      FROM   patientvisit   
+      WHERE  patientvisitid = @pVisitID  
+             AND orgid = @OrgID  
+  
+      SELECT @VisitCount = Count(patientvisitid)  
+      FROM   patientvisit  
+      WHERE  patientid = @PatientId  
+             AND patientvisitid < @pVisitID  
+  
+      SELECT @IsCummulativeService = additionalinfo  
+      FROM   @ContextInfo  
+  
+      SELECT @ReportType = departmentcode  
+      FROM   @ContextInfo  
+  
+      SELECT @ActionType = departmentname  
+      FROM   @ContextInfo  
+  
+      --Set @IsCummulativeService='Cumulative'   
+      --Select @VisitCount as VisitCount, @IsCumulative as Cummulative ,@IsCummulativeService  AS IsCummulativeService  
+      --Added BY QBITZ Prakash.K Start   
+      IF( @LanguageCode = ''  
+           OR @LanguageCode = NULL )  
+        SET @LanguageCode='en-GB'  
+    
+      DECLARE @AccessionNumber NVARCHAR(Max);        
+      DECLARE @MetaData TABLE  
+        (  
+           id          INT NOT NULL IDENTITY(1, 1),  
+           domain      NVARCHAR(200),  
+           displaytext NVARCHAR(400)  
+        )  
+      DECLARE @TempAccessionNumber TABLE  
+        (  
+           accessionnumber NVARCHAR(MAx)      
+        )  
+  
+      INSERT INTO @MetaData  
+      SELECT domain,  
+             displaytext  
+      FROM   metadata
+      WHERE  domain = 'NotificationReportType'  
+  
+      IF EXISTS(SELECT 1  
+                FROM   @MetaData  
+                WHERE  displaytext LIKE '%' + @ReportType + '%')  
+        BEGIN  
+            SELECT @AccessionNumber = Isnull(additionalcontext, '')  
+            FROM   notifications 
+            WHERE  identityid = @pVisitID  
+                   AND actiontype = @ActionType  
+                   AND status IN( 'Picked', '' )  
+                   AND @ReportType NOT IN( 'Duplicate', 'Final', 'Amended', 'Cumulative' )  
+                   AND status NOT IN ( 'DIFFERED' )  
+  
+            IF @AccessionNumber <> ''  
+              BEGIN  
+                  SET @xml=@AccessionNumber;  
+  
+                  SELECT @ano = @xml.value('(/ContextInfo/AccessionNumber)[1]', 'varchar(max)')  
+  
+                  IF @ano <> ''  
+                    BEGIN  
+                        INSERT INTO @TempAccessionNumber  
+                                    (accessionnumber)  
+                        SELECT Rtrim(Ltrim(splitdata))  
+                        FROM   dbo.Fnsplitstring(@ano, ',')  
+                    END  
+              END  
+        END  
+  
+      --Added BY QBITZ Prakash.K End   
+      IF( @LanguageCode = ''  
+           OR @LanguageCode = NULL )  
+        SET @LanguageCode='en-GB'  
+  
+      SET @ConfigKeyValue = (SELECT com.configvalue  
+                             FROM   configkeymaster ckm  
+                                    INNER JOIN configorgmaster com  
+                                            ON ckm.configkeyid = com.configkeyid  
+                                               AND com.orgid = @OrgID  
+                                               AND Isnull(ckm.configkey, '') = 'PDF_NoMerging_Report')  
+  
+      DECLARE @Invstatustable AS TABLE  
+        (  
+           investigationstatusid INT,             status                NVARCHAR(200),  
+           langcode              NVARCHAR(20),  
+           displaytext           NVARCHAR(500)  
+        )  
+  
+      SET @OrgID =(SELECT orgid  
+                   FROM   patientvisit  
+                   WHERE  patientvisitid = @pVisitID)  
+  
+      INSERT INTO @Invstatustable  
+      SELECT DISTINCT investigationstatusid,  
+                      status,  
+                      langcode,  
+                      displaytext  
+      FROM   invstatusorgmapping 
+      WHERE  ISNULL(langcode,'en-GB')=ISNULL(@LanguageCode,'en-GB')
+             AND OrgID = @OrgID  
+  
+      DECLARE @TaskTemp TABLE  
+        (  
+           visitid     BIGINT,  
+           referenceid BIGINT  
+        )  
+      DECLARE @RoleId BIGINT  
+  
+      SELECT @RoleId = roleid  
+      FROM   @ContextInfo  
+  
+      INSERT INTO @TaskTemp  
+      SELECT patientvisitid,  
+             refernceid  
+      FROM   tasks   
+      WHERE  patientvisitid = @pVisitID  
+             AND taskactionid = 62  
+             AND taskstatusid IN ( 1, 5 )  
+             AND orgid = @OrgID  
+  
+      DECLARE @TempTable TABLE  
+        (  
+           PatientVisitID           BIGINT,  
+           InvestigationID          BIGINT,  
+           CreatedAt                DATETIME,  
+           AccessionNumber          BIGINT,  
+           IsStat                   NCHAR(2),  
+           InvestigationName        NVARCHAR(max),  
+           ReportTemplateName       NVARCHAR(max),  
+           TemplateID               INT,  
+           PatientID                BIGINT,  
+           DeptID                   INT,  
+           Status                   NVARCHAR(100),  
+           DeptName                 NVARCHAR(500),  
+           PrintCount               INT,  
+           PkgName                  NVARCHAR(255),  
+           TemplateName             NVARCHAR(150),  
+           IsSeperatePrint          NCHAR(2),  
+           IsReportable             NCHAR(1),  
+           PatientInvId             BIGINT,  
+           RefferredAccessionNumber BIGINT,  
+           PkgId                    BIGINT,  
+           IsCopublish              NVARCHAR(3),  
+           TemplateSeq              INT,  
+           IsConfidentialTest       NVARCHAR(3),  
+           IsBlindingClient         NVARCHAR(10),  
+           LangCode                 NVARCHAR(10)  
+        )  
+      DECLARE @IsSelectAuthorisation NVARCHAR(3)='N'  
+      DECLARE @ClientId BIGINT  
+      DECLARE @ClientTempTable TABLE  
+        (  
+           blockfrom DATETIME,  
+           blockto   DATETIME,  
+           status    NCHAR(10)  
+        )  
+  
+      SELECT @ClientId = VCM.clientid  
+      FROM   patient P  
+             INNER JOIN patientvisit PV   
+                     ON P.patientid = PV.patientid  
+             INNER JOIN visitclientmapping VCM
+                     ON VCM.visitid = pv.patientvisitid  
+      WHERE  VCM.visitid = @pVisitID  
+             AND VCM.orgid = @OrgID  
+             AND VCM.isactive IS NULL  
+  
+      --select @ClientId                                                                                  
+      INSERT INTO @ClientTempTable  
+      SELECT cm.blockfrom,  
+             cm.blockto,  
+             CM.status  
+      FROM   clientmaster CM 
+      WHERE  CM.clientid = @ClientId  
+             AND cm.orgid = @OrgID  
+             AND CM.status = 'S'  
+  
+      DECLARE @Cstatus NCHAR(10)  
+  
+      SELECT @Cstatus = status  
+      FROM   @ClientTempTable  
+  
+      IF( Isnull(@Cstatus, '') = '' )  
+        SET @Cstatus='XX'  
+  
+      DECLARE @IOGTable AS TABLE  
+        (  
+           attgroupid    BIGINT,  
+           orgid           INT,  
+           iscopublish     NVARCHAR(5),  
+           accessionnumber BIGINT  
+        )  
+  
+      INSERT INTO @IOGTable  
+      SELECT DISTINCT OI.pkgid,  
+                      Oi.orgid,  
+                      IOG.iscopublish,  
+                      OI.accessionnumber  
+      FROM   orderedinvestigations OI 
+             INNER JOIN invorggroup IOG 
+          ON IOG.attgroupid = OI.pkgid  
+                        AND IOG.orgid = OI.orgid  
+      WHERE  Isnull(pkgid, 0) > 0  
+             AND OI.visitid = @pVisitID  
+             AND OI.orgid = @OrgID  
+  
+      IF NOT EXISTS(SELECT accessionnumber  
+                    FROM   patientinvestigation 
+                    WHERE  orgid = @OrgID  
+                           AND patientvisitid = @pVisitID  
+                           AND accessionnumber IS NOT NULL)  
+        BEGIN  
+            --print 'No access'                                                                                                                                     
+            --[pGetReportTemplate] 3282,26                                                                 
+            IF ( @Cstatus <> 'S' )  
+              BEGIN  
+                  INSERT INTO @TempTable  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  Isnull(piv.groupname, piv.investigationname)  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress  
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT top 1 reporttemplatename  
+                                                                  FROM   invreportmaster 
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT top 1 templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID                               
+                                          AND RPH.orgid = @OrgID)       AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT top 1 templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  Oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM   orderedinvestigations OI   
+                         INNER JOIN patientinvestigation piv   
+                                 ON Piv.accessionnumber = OI.accessionnumber  
+                         LEFT OUTER JOIN invreportmapping irm   
+                                      ON irm.investigationid = piv.investigationid  
+                                         AND IRM.orgid = @OrgID  
+                         LEFT OUTER JOIN invreportmaster im   
+                                      ON im.templateid = irm.templateid  
+                                         AND im.orgid = @OrgID   AND   ISNULL(im.Langcode,'en-GB')=@Language
+                         INNER JOIN invorggroup OG   
+                                 ON OG.orggroupid = piv.groupid  
+                         --INNER JOIN OrderedInvestigations OI     
+                         --        ON OI.ID = OG.AttGroupID    
+                         --           AND OI.VisitID = piv.PatientVisitID    
+                         --           AND OI.Status NOT IN( 'Retest', 'InActive',    
+                         --                                 'Cancel'    
+                         --                               )    
+                         --           AND Isnull(OI.ReferredType, '') NOT IN (    
+                         --               'Recheck', 'Retest', 'InActive' )    
+                         INNER JOIN patientvisit PV   
+                                 ON PV.patientvisitid = piv.patientvisitid  
+                                    AND PV.orgid = piv.orgid  
+                         INNER JOIN patient P   
+                                 ON P.patientid = PV.patientid  
+                                    AND P.orgid = PV.orgid  
+                         INNER JOIN investigationorgmapping IOM   
+                                 ON IOM.investigationid = PIv.investigationid  
+                                    AND IOM.orgid = @OrgID  
+                         -- and IOM.IsNonReportable <> 'Y'                                                                                                                    
+                         INNER JOIN invdeptmaster IDM   
+                                 ON IDM.deptid = IOM.deptid  
+                                    AND IDM.orgid = @OrgID  
+                                    AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                         LEFT JOIN @IOGTable TIOG  
+                                ON TIOG.accessionnumber = OI.accessionnumber  
+                         INNER JOIN @Invstatustable ISO  
+                                 ON ISO.status = OI.status  
+                           AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         --AND piv.GroupID != 0    
+                         AND OI.orgid = @OrgID  
+                         AND OI.type = 'GRP'  
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+                  UNION ALL  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                        OI.accessionnumber,  
+                                  OI.isstat,  
+                                  Isnull(piv.groupname, piv.investigationname)  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID                                                                        
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  Oi.pkgid,  
+           Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                             AND OI.id = piv.investigationid  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.ID = piv.InvestigationID    
+                  --AND OI.Status NOT IN( 'Retest', 'InActive',    
+                  --                      'Cancel'    
+                  --                    )    
+                  --AND Isnull(OI.ReferredType, '') NOT IN (    
+                  --    'Recheck', 'Retest', 'InActive' )    
+                  --AND OI.VisitID = piv.PatientVisitID    
+                  --AND Isnull(piv.UID, '') = Isnull(OI.UID, '')    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  -- and IOM.IsNonReportable <> 'Y'                                                                                                                      
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         AND piv.groupid = 0  
+                         AND piv.orgid = @OrgID  
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+                  --AND OI.VisitID = piv.PatientVisitID    
+                  --AND Isnull(piv.UID, '') = Isnull(OI.UID, '')    
+                  UNION ALL  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat  
+                                  --,ISNULL(piv.GroupName,piv.InvestigationName) as InvestigationName                                                                         
+                                  ,  
+                                  CASE  
+                                    WHEN Isnull(piv.groupname, '') = '' THEN piv.investigationname  
+                                    ELSE piv.groupname  
+                                  END  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID            
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language
+             INNER JOIN invorggroup OG   
+                          ON OG.attgroupid = piv.packageid  
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.ID = OG.AttGroupID    
+                  --           AND OI.VisitID = piv.PatientVisitID    
+                  --           AND OI.Status NOT IN( 'Retest', 'InActive',    
+          --                                 'Cancel'    
+                  --                               )    
+                  --           AND Isnull(OI.ReferredType, '') NOT IN (    
+                  --               'Recheck', 'Retest', 'InActive' )    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  --  and IOM.IsNonReportable <> 'Y'                                                                                                                    
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         AND OI.pkgid != 0  
+                         AND OI.orgid = @OrgID  
+                         AND OI.type = 'GRP'  
+                         --ON OI.ID = OG.AttGroupID    
+                         --AND OI.VisitID = piv.PatientVisitID    
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+              END  
+            ELSE  
+              BEGIN  
+                  INSERT INTO @TempTable  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  Isnull(piv.groupname, piv.investigationname)  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                        WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+       OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID                                                                                                   
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language
+                  INNER JOIN invorggroup OG   
+                          ON OG.orggroupid = piv.groupid  
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.ID = OG.AttGroupID    
+                  --           AND OI.VisitID = piv.PatientVisitID    
+                  --           AND OI.Status NOT IN( 'Retest', 'InActive',    
+                  --                                 'Cancel'    
+                  --                               )    
+                  --           AND Isnull(OI.ReferredType, '') NOT IN (    
+                  --               'Recheck', 'Retest', 'InActive' )    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN visitclientmapping VCM   
+                          ON VCM.visitid = PV.patientvisitid  
+                             AND VCM.orgid = PV.orgid  
+                  INNER JOIN billingdetails BD   
+                          ON BD.finalbillid = VCM.finalbillid  
+     AND BD.orgid = VCM.orgid  
+                             AND BD.isstat = 'Y'  
+                             AND oi.id = BD.feeid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  -- and IOM.IsNonReportable <> 'Y'                                                                                                     
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         AND piv.groupid != 0  
+                         AND OI.orgid = @OrgID  
+                         AND BD.isstat = 'Y'  
+                         --ON OI.ID = OG.AttGroupID    
+                         --AND OI.VisitID = piv.PatientVisitID    
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+                  UNION ALL  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  Isnull(piv.groupname, piv.investigationname)  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress  
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                       AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID                                                                                                   
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                             AND OI.id = piv.investigationid  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.ID = piv.InvestigationID    
+                  --           AND OI.Status NOT IN( 'Retest', 'InActive' )    
+                  --           AND Isnull(OI.ReferredType, '') NOT IN (    
+                  --               'Recheck', 'Retest', 'InActive' )    
+                  --           AND OI.VisitID = piv.PatientVisitID    
+                  --           AND Isnull(piv.UID, '') = Isnull(OI.UID, '')    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN visitclientmapping VCM   
+                          ON VCM.visitid = PV.patientvisitid  
+                             AND VCM.orgid = PV.orgid  
+                  INNER JOIN billingdetails BD   
+                          ON BD.finalbillid = VCM.finalbillid  
+                             AND BD.orgid = VCM.orgid  
+                             AND BD.isstat = 'Y'  
+                             AND oi.id = BD.feeid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  -- and IOM.IsNonReportable <> 'Y'                                                                                           
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+     AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         AND piv.groupid = 0  
+                         AND OI.orgid = @OrgID  
+                         AND BD.isstat = 'Y'  
+                         --ON OI.ID = piv.InvestigationID    
+                         AND OI.status NOT IN( 'Retest', 'InActive' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+                         AND OI.visitid = piv.patientvisitid  
+                         AND Isnull(piv.uid, '') = Isnull(OI.uid, '')  
+                  UNION ALL  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat  
+                                  --,ISNULL(piv.GroupName,piv.InvestigationName) as InvestigationName                                                                                                                                                  
+                                  ,  
+                                  CASE  
+                                    WHEN Isnull(piv.groupname, '') = '' THEN piv.investigationname  
+                                    ELSE piv.groupname  
+                                  END  
+                                  + ' ('  
+                                  + CASE  
+                                      WHEN OI.status = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          --AND RPH.InvestigationID=piv.GroupID                                                                                                   
+      AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  '',  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  INNER JOIN invreportmaster im   
+                          ON im.templateid = irm.templateid  
+                             AND im.orgid = @OrgID   AND ISNULL(Langcode,'en-GB')=@Language
+                  INNER JOIN invorggroup OG   
+                          ON OG.attgroupid = piv.packageid  
+                  --INNER JOIN OrderedInvestigations OI     
+                  --ON OI.ID = OG.AttGroupID    
+                  --   AND OI.VisitID = piv.PatientVisitID    
+                  --   AND OI.Status NOT IN( 'Retest', 'InActive',    
+                  --                         'Cancel'    
+                  --                       )    
+                  --   AND Isnull(OI.ReferredType, '') NOT IN (    
+      --       'Recheck', 'Retest', 'InActive' )    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN visitclientmapping VCM   
+                          ON VCM.visitid = PV.patientvisitid  
+                             AND VCM.orgid = PV.orgid  
+                  INNER JOIN billingdetails BD   
+                          ON BD.finalbillid = VCM.finalbillid  
+                             AND BD.orgid = VCM.orgid  
+                             AND BD.isstat = 'Y'  
+                             AND oi.id = BD.feeid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  --  and IOM.IsNonReportable <> 'Y'                                                                                    
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI.visitid = @pVisitID  
+                         AND OI.pkgid != 0  
+                         AND OI.orgid = @OrgID  
+                         AND OI.type = 'GRP'  
+                         AND BD.isstat = 'Y'  
+                         --ON OI.ID = OG.AttGroupID    
+                         --AND OI.VisitID = piv.PatientVisitID    
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'Retest', 'InActive' )  
+              END  
+        END  
+      ELSE  
+        BEGIN  
+            --print 'access'                                                                                                              
+            IF ( @Cstatus <> 'S' )  
+              BEGIN  
+                  --select 'PSS'   
+                  --select * from @IOGTable   
+                  --return   
+                  INSERT INTO @TempTable  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  OI.NAME + ' ('  
+                                  + CASE  
+                                      WHEN ISO.displaytext = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+               WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT   templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.visitid = @pVisitID  
+                                          -- AND RPH.VisitID = OI.VisitID    
+                                          AND RPH.orgid = @OrgID  
+                                          AND RPH.type = 'Print'  
+                                          AND RPH.accessionnumber = OI.accessionnumber)       AS PrintCount,  
+                                  oi.pkgname                                                  AS PkgName,  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                AND orgid = @OrgID AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM   orderedinvestigations OI   
+                         INNER JOIN patientinvestigation piv   
+                                 ON Piv.accessionnumber = OI.accessionnumber  
+                         LEFT OUTER JOIN invreportmapping irm   
+                                      ON irm.investigationid = piv.investigationid  
+                                         AND IRM.orgid = @OrgID  
+                         LEFT OUTER JOIN invreportmaster im   
+                                      ON im.templateid = irm.templateid  
+                                         AND im.orgid = @OrgID   AND ISNULL(Langcode,'en-GB')=@Language
+                         INNER JOIN patientvisit PV   
+                                 ON PV.patientvisitid = OI.visitid  
+                         --AND PV.OrgID = piv.OrgID    
+                         INNER JOIN patient P   
+                                 ON P.patientid = PV.patientid  
+                         --AND P.OrgID = PV.OrgID    
+                         INNER JOIN investigationorgmapping IOM   
+                                 ON IOM.investigationid = PIv.investigationid  
+                                    AND IOM.orgid = @OrgID  
+                         --and IOM.IsNonReportable <> 'Y'                            
+                         INNER JOIN invdeptmaster IDM   
+                                 ON IDM.deptid = IOM.deptid  
+                               AND IDM.orgid = @OrgID  
+                                    AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                         LEFT JOIN @IOGTable TIOG  
+                                ON TIOG.accessionnumber = OI.accessionnumber  
+                         INNER JOIN @Invstatustable ISO  
+                                 ON ISO.status = OI.status  
+                                    --AND ISO.orgid = @Orgid /* Code c*/   
+                                    AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  OI. visitid = @pVisitID  
+                         --and piv.GroupID!=0                                                                                     
+                         AND OI.orgid = @OrgID  
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck', 'InActive' )  
+              --OI.Status='Approve'                                                                    
+              --return;--suresh   
+              END  
+            ELSE  
+              BEGIN  
+                  --select 'LS'   
+                  INSERT INTO @TempTable  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  OI.NAME + ' ('  
+                                  + CASE  
+                                      WHEN ISO.displaytext = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext                                      END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress  
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                                  P.patientid,  
+                                  IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  oi.pkgname                                                  AS PkgName,  
+                                  Isnull (im.templatename, (SELECT templatename  
+                   FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID   AND ISNULL(Langcode,'en-GB')=@Language 
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.AccessionNumber = piv.AccessionNumber    
+                  --           AND OI.Status NOT IN( 'Retest', 'InActive',    
+                  --                                 'Cancel'    
+                  --                               )    
+                  --           AND Isnull(OI.ReferredType, '') NOT IN    
+                  --               ( 'Recheck' )    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN visitclientmapping VCM   
+                          ON VCM.visitid = PV.patientvisitid  
+                             AND VCM.orgid = PV.orgid  
+                  INNER JOIN billingdetails BD   
+                          ON BD.finalbillid = VCM.finalbillid  
+                             AND BD.orgid = VCM.orgid  
+                             AND BD.isstat = 'Y'  
+                             AND oi.id = BD.feeid  
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  piv.patientvisitid = @pVisitID  
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck' )  
+                         AND piv.orgid = @OrgID  
+                         AND BD.isstat = 'Y'  
+                  UNION ALL  
+                  SELECT DISTINCT piv.patientvisitid,  
+                                  piv.investigationid,  
+                                  OI.createdat,  
+                                  OI.accessionnumber,  
+                                  OI.isstat,  
+                                  OI.NAME + ' ('  
+                                  + CASE  
+                                      WHEN ISO.displaytext = 'Approve' THEN 'Approved'  
+                                      ELSE ISO.displaytext  
+                                    END  
+                                  + ' @ '  
+                                  + (SELECT location  
+                                     FROM   organizationaddress   
+                                     WHERE  addressid = Isnull(Oi.rescaptureloc, PV.orgaddressid))  
+                                  + ')'                                                       AS InvestigationName,  
+                                  Isnull (im.reporttemplatename, (SELECT reporttemplatename  
+                                                                  FROM   invreportmaster   
+                                                                  WHERE  isdefault = 'Y'  
+                                                                         AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language)) AS ReportTemplateName,  
+                                  Isnull(im.templateid, (SELECT templateid  
+                                                         FROM   invreportmaster   
+                                                         WHERE  isdefault = 'Y'  
+                                                                AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))          AS TemplateID,  
+                         P.patientid,  
+           IDM.deptid,  
+                                  OI.status,  
+                                  IDM.deptname,  
+                                  (SELECT Count(RPH.accessionnumber)  
+                                   FROM   reportprinthistory RPH   
+                                   WHERE  RPH.type = 'Print'  
+                                          AND RPH.visitid = @pVisitID  
+                                          AND RPH.visitid = piv.patientvisitid  
+                                          AND RPH.accessionnumber = piv.accessionnumber  
+                                          AND RPH.orgid = @OrgID)                             AS PrintCount,  
+                                  oi.pkgname                                                  AS PkgName,  
+                                  Isnull (im.templatename, (SELECT templatename  
+                                                            FROM   invreportmaster   
+                                                            WHERE  isdefault = 'Y'  
+                                                                   AND orgid = @OrgID  AND ISNULL(Langcode,'en-GB')=@Language))       AS TemplateName,  
+                                  Isnull(IM.isseperateprint, 'N')                             AS IsSeperatePrint,  
+                                  '',  
+                                  PIV.patientinvid,  
+                                  OI.referredaccessionno,  
+                                  oi.pkgid,  
+                                  Isnull(TIOG.iscopublish, 'N')                               AS IsCopublish,  
+                                  im.templateseq,  
+                                  IOM.isconfidentialtest                                      AS IsConfidentialTest,  
+                                  Isnull(OI.isblindingclient, '')                             AS IsBlindingClient,  
+                                  IDM.langcode  
+                  FROM  
+                  --PatientInvestigation piv     
+                  orderedinvestigations OI   
+                  INNER JOIN patientinvestigation piv   
+                          ON Piv.accessionnumber = OI.accessionnumber  
+                  LEFT OUTER JOIN invreportmapping irm   
+                               ON irm.investigationid = piv.investigationid  
+                                  AND IRM.orgid = @OrgID  
+                  LEFT OUTER JOIN invreportmaster im   
+                               ON im.templateid = irm.templateid  
+                                  AND im.orgid = @OrgID   AND ISNULL(Langcode,'en-GB')=@Language
+                  --INNER JOIN OrderedInvestigations OI     
+                  --        ON OI.AccessionNumber = piv.AccessionNumber    
+                  --           AND OI.Status NOT IN( 'Retest', 'InActive',    
+                  --                                 'Cancel'    
+                  --                               )    
+                  --           AND Isnull(OI.ReferredType, '') NOT IN    
+                  --               ( 'Recheck' )    
+                  INNER JOIN patientvisit PV   
+                          ON PV.patientvisitid = piv.patientvisitid  
+                             AND PV.orgid = piv.orgid  
+                  INNER JOIN patient P   
+                          ON P.patientid = PV.patientid  
+                             AND P.orgid = PV.orgid  
+                  INNER JOIN visitclientmapping VCM   
+                          ON VCM.visitid = PV.patientvisitid  
+                             AND VCM.orgid = PV.orgid  
+                  INNER JOIN billingdetails BD   
+                          ON BD.finalbillid = VCM.finalbillid  
+                             AND BD.orgid = VCM.orgid  
+                             AND oi.id = BD.feeid  
+                  --    AND BD.IsSTAT='Y'                                                                                                          
+                  INNER JOIN investigationorgmapping IOM   
+                          ON IOM.investigationid = PIv.investigationid  
+                             AND IOM.orgid = @OrgID  
+                  INNER JOIN invdeptmaster IDM   
+                          ON IDM.deptid = IOM.deptid  
+                             AND IDM.orgid = @OrgID  
+                             AND Isnull(IDM.langcode, 'en-GB') = @LanguageCode  
+                  LEFT JOIN @IOGTable TIOG  
+                         ON TIOG.accessionnumber = OI.accessionnumber  
+                  INNER JOIN @Invstatustable ISO  
+                          ON ISO.status = OI.status  
+                             AND Isnull(ISO.langcode, 'en-GB') = @LanguageCode  
+                  WHERE  piv.patientvisitid = @pVisitID  
+                         AND OI.status NOT IN( 'Retest', 'InActive', 'Cancel' )  
+                         AND Isnull(OI.referredtype, '') NOT IN ( 'Recheck' )  
+                         AND piv.orgid = @OrgID  
+              --and piv.IsAbnormal='P'                                 
+              END  
+        END  
+  
+      UPDATE tmp  
+      SET    tmp.reporttemplatename = TDM.reporttemplatename  
+      FROM   @TempTable TMP  
+             INNER JOIN templatedetailmaster TDM   
+                     ON TDM.parenttemplateid = TMP.templateid  
+                        /*BEGIN | Big ID[553] | BalaMahesh | Datein 20160406 | M | Org to org trasfer report format issue 201604050046 */  
+                        AND orgid = @OrgID  
+             /*END | Big ID[553] | BalaMahesh | Datein 20160406 */  
+             INNER JOIN clientreporttemplate CRT   
+                     ON CRT.parenttemplateid = TDM.parenttemplateid  
+                        AND CRT.childreportid = TDM.childreportid  
+             INNER JOIN orderedinvestigations OI   
+            ON OI.visitid = @pVisitID  
+                        AND OI.orgid = @OrgID  
+                        AND Isnull(OI.pkgid, 0) = CRT.id  
+                        AND OI.accessionnumber = TMP.accessionnumber  
+      WHERE  CRT.type = 'PKG'  
+             AND Isnull(OI.pkgid, 0) > 0  
+  
+      UPDATE tmp  
+      SET    tmp.reporttemplatename = TDM.reporttemplatename  
+      FROM   @TempTable TMP  
+             INNER JOIN templatedetailmaster TDM   
+                     ON TDM.parenttemplateid = TMP.templateid  
+                        AND orgid = @OrgID  
+             INNER JOIN clientreporttemplate CRT   
+                     ON CRT.parenttemplateid = TMP.templateid  
+                        AND CRT.childreportid = TDM.childreportid  
+             INNER JOIN orderedinvestigations OI   
+                     ON OI.visitid = @pVisitID  
+                        AND OI.orgid = @OrgID  
+                        AND OI.id = CRT.id  
+                        AND oi.accessionnumber = tmp.accessionnumber  
+                        AND crt.type = oi.type  
+      --INNER JOIN PatientInvestigation pINV  on pINV.AccessionNumber = OI.AccessionNumber    and crt.Type = oi.Type                            
+      --AND pinv.PatientVisitID = oi.VisitID and oi.OrgID = pinv.OrgID                       
+      WHERE  CRT.type = 'GRP'  
+             AND OI.type = 'GRP' --and  isnull(OI.PkgID,0)=0            
+      UPDATE tt  
+      SET    refferredaccessionnumber = 0  
+      FROM   @TempTable TT  
+             INNER JOIN patientvisit PV   
+                     ON TT.patientvisitid = PV.patientvisitid  
+             INNER JOIN orderedinvestigations OI   
+                     ON PV.patientvisitid = OI.visitid  
+                        AND PV.orgid = OI.orgid  
+                        AND OI.accessionnumber = TT.accessionnumber  
+      WHERE  Isnull(PV.refervisitid, 0) > 0  
+             AND PV.orgid = @OrgID  
+             AND Isnull(OI.referredtype, '') = ''  
+  
+      UPDATE t1  
+      SET    t1.reporttemplatename = t2.reporttemplatename  
+      FROM   @TempTable t1  
+             INNER JOIN orderedinvestigations OI   
+          ON t1.investigationid = OI.id  
+                        AND OI.type = 'INV'  
+                        AND OI.referredtype = 'ReflexTest'  
+                        AND OI.visitid = @pVisitID  
+                        AND OI.orgid = @OrgID  
+             INNER JOIN (SELECT DISTINCT accessionnumber,  
+                                         reporttemplatename  
+                         FROM   @TempTable t2  
+                         WHERE  t2.refferredaccessionnumber = 0) t2  
+                     --WHERE  t2.ReferredType <> 'ReflexTest') t2    
+                     ON OI.referredaccessionno = t2.accessionnumber  
+             INNER JOIN investigationorgmapping IOM   
+                     ON IOM.investigationid = t1.investigationid  
+      WHERE  t1.refferredaccessionnumber <> 0  
+             AND Isnull(IOM.outputinvestigationcode, '') = 'RFTest'  
+             AND IOM.orgid = @OrgID  
+  
+      UPDATE tmp  
+      SET    tmp.reporttemplatename = TDM.reporttemplatename  
+      FROM   @TempTable TMP  
+             INNER JOIN templatedetailmaster TDM   
+                     ON TDM.parenttemplateid = TMP.templateid  
+             INNER JOIN clientreporttemplate CRT   
+                     ON CRT.parenttemplateid = TDM.parenttemplateid  
+                        AND CRT.childreportid = TDM.childreportid  
+      WHERE  CRT.id = @ClientId  
+             AND CRT.type = 'Client'  
+  
+      --IF EXISTS (SELECT 1    
+      --           FROM   @ReferVisitTable)    
+      --  BEGIN    
+      UPDATE tmp  
+      SET    tmp.reporttemplatename = TDM.reporttemplatename  
+      FROM   @TempTable TMP  
+             INNER JOIN templatedetailmaster TDM   
+                     ON TDM.parenttemplateid = TMP.templateid  
+             INNER JOIN clientreporttemplate CRT   
+                     ON CRT.parenttemplateid = TDM.parenttemplateid  
+                        /*BEGIN | Big ID[553] | BalaMahesh | Datein 20160406 | M | Org to org trasfer report format issue 201604050046 */  
+                        AND TDM.orgid = CRT.orgid  
+                        /*END | Big ID[553] | BalaMahesh | Datein 20160406 */  
+                        AND CRT.childreportid = TDM.childreportid  
+             INNER JOIN orderedinvestigations OI   
+                     ON  
+             --OI.VisitID = @ReferVisitID    
+             --AND OI.OrgID = @ReferOrgID    
+             Isnull(OI.pkgid, 0) = CRT.id  
+             AND OI.accessionnumber = TMP.accessionnumber  
+      --INNER JOIN @ReferVisitTable RTMP    
+      --        ON OI.VisitID = RTMP.RefervisitID    
+      --           AND OI.OrgID = RTMP.OrgID    
+      /*BEGIN | Big ID[553] | BalaMahesh | Datein 20160406 | M | Org to org trasfer report format issue 201604050046 */  
+      --AND TDM.orgid = RTMP.OrgID    
+      /*END | Big ID[553] | BalaMahesh | Datein 20160406 */  
+      WHERE  CRT.type = 'PKG'  
+             AND Isnull(OI.pkgid, 0) > 0  
+  
+      UPDATE tmp  
+      SET    tmp.reporttemplatename = TDM.reporttemplatename  
+      FROM   @TempTable TMP  
+             INNER JOIN templatedetailmaster TDM   
+                     ON TDM.parenttemplateid = TMP.templateid  
+             --AND OrgID = @ReferOrgID    
+             INNER JOIN clientreporttemplate CRT   
+                     ON CRT.parenttemplateid = TMP.templateid  
+                        AND CRT.childreportid = TDM.childreportid  
+                        /*BEGIN | Big ID[553] | BalaMahesh | Datein 20160406 | M | Org to org trasfer report format issue 201604050046 */  
+                        AND TDM.orgid = CRT.orgid  
+             /*END | Big ID[553] | BalaMahesh | Datein 20160406 */  
+             INNER JOIN orderedinvestigations OI   
+                     ON  
+             --OI.VisitID = @ReferVisitID    
+             --AND OI.OrgID = @ReferOrgID    
+             OI.id = CRT.id  
+             AND oi.accessionnumber = tmp.accessionnumber  
+             AND crt.type = oi.type  
+      --INNER JOIN @ReferVisitTable RTMP    
+      --        ON OI.VisitID = RTMP.ReferVisitID    
+      --           AND OI.OrgID = RTMP.OrgID    
+      WHERE  CRT.type = 'GRP'  
+             AND OI.type = 'GRP'  
+  
+  /*BEGIN | Big ID[553] | BalaMahesh | Datein 20160406 | M | Org to org trasfer report format issue 201604050046 */  
+      -- AND TDM.OrgID = RTMP.OrgID    
+  /*END | Big ID[553] | BalaMahesh | Datein 20160406 */  
+      --AND TDM.orgid = RTMP.OrgID    
+      UPDATE tt  
+      SET    refferredaccessionnumber = 0  
+      FROM   @TempTable TT  
+             INNER JOIN patientvisit PV   
+                     ON TT.patientvisitid = PV.patientvisitid  
+             --INNER JOIN @ReferVisitTable RTMP    
+             --        ON RTMP.OrgId = PV.OrganizationID    
+             INNER JOIN orderedinvestigations OI   
+                     ON PV.patientvisitid = OI.visitid  
+                        AND PV.orgid = OI.orgid  
+                        AND OI.accessionnumber = TT.accessionnumber  
+      WHERE  Isnull(PV.refervisitid, 0) > 0  
+             --AND PV.OrganizationID = @ReferOrgID    
+             AND Isnull(OI.referredtype, '') = ''  
+  
+      UPDATE t1  
+      SET    t1.reporttemplatename = t2.reporttemplatename  
+      FROM   @TempTable t1  
+             INNER JOIN orderedinvestigations OI   
+                     ON t1.investigationid = OI.id  
+                        AND OI.type = 'INV'  
+                        AND OI.referredtype = 'ReflexTest'  
+             --AND OI.VisitID = @ReferVisitID    
+             --AND OI.OrgID = @ReferOrgID    
+             --INNER JOIN @ReferVisitTable RTMP    
+             --        ON OI.VisitID = RTMP.ReferVisitID    
+             --           AND OI.OrgID = RTMP.OrgId    
+             INNER JOIN (SELECT DISTINCT accessionnumber,  
+                                         reporttemplatename  
+                         FROM   @TempTable t2  
+                         WHERE  t2.refferredaccessionnumber = 0) t2  
+                     -- WHERE  t2.ReferredType <> 'ReflexTest') t2    
+                     ON OI.referredaccessionno = t2.accessionnumber  
+             INNER JOIN investigationorgmapping IOM   
+                     ON IOM.investigationid = t1.investigationid  
+      WHERE  t1.refferredaccessionnumber <> 0  
+             AND Isnull(IOM.outputinvestigationcode, '') = 'RFTest'  
+  
+      --   IF(@IsCumulative >0 And isnull(@IsCummulativeService,'')='Cumulative' )   
+      --Begin    
+      --       Declare @ReportTemplateName Nvarchar(1000)   
+      --       Select @ReportTemplateName=ReportTemplateName from   
+      --      invreportmaster   where Type ='CumulativeReport' and Orgid=@OrgID   
+      --    UPDATE T    
+      --    SET    T.ReportTemplateName = @ReportTemplateName   
+      --    FROM   @TempTable T    
+      --End   
+      IF( Isnull(@IsCummulativeService, '') = 'Cumulative' )  
+        BEGIN  
+            DECLARE @ReportTemplateName NVARCHAR(1000)  
+  
+            SELECT @ReportTemplateName = reporttemplatename  
+            FROM   invreportmaster   
+            WHERE  type = 'CumulativeReport'  
+                   AND orgid = @OrgID  
+  
+            IF EXISTS (SELECT 1  
+                       FROM   @TempTable T  
+                              INNER JOIN investigationorgmapping IOM  
+                                      ON T.investigationid = IOM.investigationid  
+                       WHERE  Isnull(IOM.trend, 0) = 1  
+                              AND IOM.orgid = @OrgID)  
+              BEGIN  
+                  UPDATE t  
+                  SET    t.reporttemplatename = @ReportTemplateName  
+                  FROM   @TempTable T  
+              END  
+        END  
+  
+      -- AND IOM.OrgID = RTMP.OrgID    
+      -- END    
+      DECLARE @tblAccNo AS TABLE  
+        (  
+           accessionno BIGINT,  
+           deptid      BIGINT  
+        )  
+  
+      INSERT @tblAccNo  
+      SELECT accessionnumber,  
+             Max(deptid)  
+      FROM   (SELECT DISTINCT accessionnumber,  
+                              deptid  
+              FROM   @TempTable) AS A  
+      GROUP  BY accessionnumber  
+      HAVING Count(deptid) > 1  
+  
+      UPDATE t1  
+      SET    t1.deptid = T2.deptid  
+      FROM   @TempTable T1  
+             INNER JOIN @tblAccNo T2  
+                     ON T1.accessionnumber = T2.accessionno  
+  
+      DECLARE @ReportAccessionNumber NVARCHAR(500)  
+  
+      SELECT TOP 1 @ReportAccessionNumber = Isnull(accessionnumber, 0)  
+      FROM   printsnapshot   
+      WHERE  visitid = @pVisitID  
+             AND category = 'isstatpdf'  
+      ORDER  BY seq_num DESC  
+  
+      UPDATE @TempTable  
+      SET    isstat = 'N'  
+      WHERE  Rtrim(Isnull(isstat, 'N')) != 'Y'  
+  
+      DECLARE @StationaryID INT  
+  
+      SET @StationaryID=(SELECT CASE  
+                                  WHEN CA.attributecode = 'WST' THEN 0  
+                                  ELSE 1  
+                                END  
+                         FROM   clientattributesdetails CAT   
+                                INNER JOIN clientattributes CA   
+                                        ON CAT.attributesid = CA.attributeid  
+                         WHERE  clientid IN (SELECT TOP 1 clientid  
+                                             FROM   visitclientmapping   
+                                             WHERE  visitid = @pVisitID)  
+                                AND attributecode IN( 'WOST', 'WST' )  
+                                AND CAT.orgid = @OrgID)  
+  
+      IF( @StationaryID IS NULL )  
+        SET @StationaryID=1  
+  
+      UPDATE t  
+      SET    t.isreportable = IAD.isreportable  
+      FROM   @TempTable t  
+             INNER JOIN investigationattributesdetails iad  
+                     ON iad.investigationid = t.investigationid  
+                        AND iad.patientinvid = t.patientinvid  
+  
+      -----------------Added Thillai kapil.T      
+      ---------------------------------------Apex----------------------------------------------                        
+      IF( @ConfigKeyValue = 'Y' )  
+        BEGIN  
+            IF EXISTS(SELECT 1  
+                      FROM   @ContextInfo  
+                      WHERE  additionalinfo = 'Y')  
+              BEGIN  
+                  SELECT T.patientvisitid,  
+                         T.investigationid,  
+                         T.createdat,  
+                         T.accessionnumber,  
+                         Rtrim(T.isstat)                   AS PriorityTest,  
+                         Isnull(@ReportAccessionNumber, 0) AS ReportAccessionNumber,  
+                         investigationname,  
+                         reporttemplatename,  
+                         templateid,  
+                         patientid,  
+                         deptid,  
+                         T.status,  
+                         deptname,  
+                         T.printcount,  
+                         T.pkgname,  
+                         templatename,  
+                         --@StationaryID AS StationaryID                                                                                                             
+                         0                                 AS StationaryID,  
+                         Isnull(isseperateprint, 'N')      AS IsSeperatePrint,  
+                         patientinvid  
+                  FROM   @TempTable T  
+                  WHERE  Isnull(isreportable, '') != 'N'  
+              END  
+            ELSE  
+              BEGIN  
+                  DECLARE @Testdata1 TABLE  
+                    (  
+                       data    INT,  
+                       visitid NVARCHAR(max)  
+                    )  
+                  DECLARE @Testdata TABLE  
+                    (  
+                       visitid INT,  
+                       data    NVARCHAR(max)  
+                    )  
+  
+                  INSERT @Testdata  
+                  --select 1, 1, '54555,54556'                                  
+                  SELECT TOP 1 R.visitid,  
+                               R.accessionnumber  
+                  FROM   reportsnapshot R  
+                         CROSS apply (SELECT Count(1) AS cnt  
+                                      FROM   reportsnapshot RSS   
+                                      WHERE  visitid = @pVisitID  
+                                             AND RSS.type IN ( 'Pdf', 'ROUNDBPDF' )  
+                                             AND RSS.[status] = 'Ready') t  
+                  WHERE  r.orgid = @OrgID  
+                         AND r.visitid = @pVisitID  
+                         AND t.cnt >= 2  
+                         AND r.status = 'Ready'  
+                  ORDER  BY id;  
+  
+                  WITH tmp(visitid, accessionnumber, data) AS (SELECT visitid,  
+                                                                      LEFT(data, Charindex(',', data + ',') - 1),  
+                                                                      Stuff(data, 1, Charindex(',', data + ','), '')  
+                                                               FROM   @Testdata  
+                                                               UNION ALL  
+                                                               SELECT visitid,  
+                                                                      LEFT(data, Charindex(',', data + ',') - 1),  
+                                                                      Stuff(data, 1, Charindex(',', data + ','), '')  
+                                                               FROM   tmp  
+                                                               WHERE  data > '')  
+                  INSERT INTO @Testdata1  
+                  SELECT DISTINCT Replace(t.accessionnumber, ' ', ''),  
+                                  t.visitid  
+                  FROM   tmp t  
+  
+                  SELECT patientvisitid,  
+                         investigationid,  
+                         T.createdat,  
+                         T.accessionnumber,  
+                         Rtrim(T.isstat)                   AS PriorityTest,  
+                         Isnull(@ReportAccessionNumber, 0) AS ReportAccessionNumber,  
+                         investigationname,  
+                         reporttemplatename,  
+                         T.templateid,  
+                         patientid,  
+                         deptid,  
+                         T.status,  
+                         deptname,  
+                         T.printcount,  
+                         T.pkgname,  
+                         templatename,  
+                         --@StationaryID AS StationaryID                                                                                          
+                         0                                 AS StationaryID,  
+                         Isnull(isseperateprint, 'N')      AS IsSeperatePrint,  
+                         patientinvid  
+                  FROM   @TempTable T  
+                         -- inner join ReportSnapshot r on  r.VisitID =t.PatientVisitID AND r.AccessionNumber=T.AccessionNumber  and  r.OrgID =71                                
+                         INNER JOIN orderedinvestigations OI  
+                                 ON oi.visitid = t.patientvisitid  
+                                    AND OI.accessionnumber = T.accessionnumber  
+                                    AND OI.orgid = 71  
+                                    --and oi.Status ='Approve'                                    
+                                    --  and oi.Print_task =null                                   
+                                    AND Isnull(OI.print_taskid, 0) < 2  
+                  --inner join   @Testdata1 td on td.visitid =t.PatientVisitID  and t.AccessionNumber =td.Data                                 
+                  WHERE  Isnull(isreportable, '') != 'N'  
+              --and t.AccessionNumber not in (select Data   from @Testdata1 td)                                 
+              END  
+        END  
+      --else                                                                        
+      --  Begin                                        
+      --update @TempTable set TemplateID=92 where TemplateID=105 and @OrgID=73                                                                      
+      --       SELECT T.PatientVisitID ,T.InvestigationID ,                                                                                                
+      -- T.CreatedAt , T.AccessionNumber,RTRIM(T.IsStat) as PriorityTest, ISNULL(@ReportAccessionNumber,0) AS ReportAccessionNumber,                                                          
+      -- InvestigationName ,ReportTemplateName ,                                                                                                                                                                            
+      -- TemplateID ,PatientID ,DeptID, T.Status ,DeptName,T.PrintCount,T.PkgName ,TemplateName,                                                                                                            
+      --  --@StationaryID AS StationaryID                                   
+      -- 0 AS StationaryID,    
+      -- IsNull(IsSeperatePrint,'N') as IsSeperatePrint,PatientInvId                                              
+      --  FROM @TempTable T where ISNULL(IsReportable,'')!='N'                            
+      --      END          
+      ---------------------------------------Apex----------------------------------------------         
+      ELSE  
+        BEGIN  
+            ----- End by thillai kkapil..T      
+            IF EXISTS(SELECT 1  
+                      FROM   @TaskTemp)  
+              BEGIN  
+                  SELECT @IsSelectAuthorisation = 'Y'  
+              END  
+  
+            IF EXISTS(SELECT additionalinfo  
+                      FROM   @ContextInfo  
+                      WHERE  additionalinfo = 'QA')  
+              BEGIN  
+                  SELECT DISTINCT PatientVisitID,  
+                                  TT.InvestigationID,  
+                                  CreatedAt,  
+                                  TT.AccessionNumber,  
+                                  Rtrim(TT.IsStat)                  AS PriorityTest,  
+                                  Isnull(@ReportAccessionNumber, 0) AS ReportAccessionNumber,  
+                                  TT.InvestigationName,  
+                                  TT.ReportTemplateName,  
+                                  TT.TemplateID,  
+                                  TT.PatientID,  
+                                  TT.DeptID,  
+                                  TT.Status,  
+                                  TT.DeptName,  
+                                  TT.PrintCount,  
+                                  TT.PkgName,  
+                                  TT.TemplateName,  
+                                  --@StationaryID AS StationaryID                                 
+                                  0                                 AS StationaryID,  
+                                  Isnull(TT.IsSeperatePrint, 'N')   AS IsSeperatePrint,  
+                                  TT.PatientInvId,  
+                                  TT.PkgId,  
+                                  TT.IsCopublish,  
+                                  @IsSelectAuthorisation            AS IsActive,  
+                                  TT.TemplateSeq                    TemplateSeq,  
+                                  TT.IsConfidentialTest             AS IsConfidentialTest,  
+                                  TT.IsBlindingClient               AS IsBlindingClient  
+                  FROM   @TempTable TT  
+                         LEFT JOIN invorgauthorization IOA   
+                                ON IOA.investigationid = TT.investigationid  
+                                   AND IOA.userid = (SELECT loginid  
+                                                     FROM   @ContextInfo)  
+                                   AND IOA.roleid = @RoleID  
+                  WHERE  Isnull(IOA.investigationid, '') = CASE  
+                                                             WHEN status <> 'Co-authorize' THEN ''  
+                                                             ELSE Isnull(IOA.investigationid, '')  
+                                                           END  
+                  ORDER  BY templateseq ASC  
+              END  
+            ELSE  
+              BEGIN  
+                  DECLARE @IsIntegration NCHAR  
+                  DECLARE @PDFTemplate NVARCHAR(300)  
+                  DECLARE @PDFTemplateID INT  
+  
+                  SET @IsIntegration = (SELECT com.configvalue  
+                                        FROM   configkeymaster ckm  
+                                               INNER JOIN configorgmaster com  
+                                                       ON ckm.configkeyid = com.configkeyid  
+                                                          AND com.orgid = @OrgID  
+                                                          AND Isnull(ckm.configkey, '') = 'IsIntegrationTest')  
+  
+                  IF ( @IsIntegration = 'Y' )  
+                 BEGIN  
+                        SET @PDFTemplateID=(SELECT templateid  
+                                            FROM   invreportmaster  
+                                            WHERE  orgid = @OrgID  
+                                                   AND reporttemplatename = 'PDF')  
+                        SET @PDFTemplate='PDF'  
+  
+                        UPDATE tem  
+                        SET    templateid = @PDFTemplateID,reporttemplatename = @PDFTemplate  
+                        FROM   @TempTable tem  
+                               INNER JOIN orderedinvestigations OI  
+                                       ON OI.accessionnumber = tem.accessionnumber  
+                                          AND OI.visitid = tem.patientvisitid  
+                        WHERE  OI.orgid = @OrgID  
+                               AND OI.isintegrationtest = 1  
+                    END  
+  
+                  --Added By QBITZ Prakash.K   
+                  IF EXISTS(SELECT 1  
+                            FROM   @TempAccessionNumber)  
+                    BEGIN  
+                        PRINT 'a'  
+  
+                        Select PatientVisitID,  
+                               TT.InvestigationID,  
+                               TT.CreatedAt,  
+                               TT.AccessionNumber,  
+                               Rtrim(IsStat)                     AS PriorityTest,  
+                               Isnull(@ReportAccessionNumber, 0) AS ReportAccessionNumber,  
+                               InvestigationName,  
+                               ReportTemplateName,  
+                               TemplateID,  
+                               PatientID,  
+                               TT.DeptID,  
+                               Status,  
+                               DeptName,  
+                               PrintCount,  
+                               PkgName,  
+                               TemplateName,  
+                               --@StationaryID AS StationaryID                                
+                               0                                 AS StationaryID,  
+                               Isnull(IsSeperatePrint, 'N')      AS IsSeperatePrint,  
+                               PatientInvId,  
+                               PkgId,  
+                               IsCopublish,  
+                               @IsSelectAuthorisation            AS IsActive,  
+                               TemplateSeq                       TemplateSeq,  
+                               IsConfidentialTest                AS IsConfidentialTest,  
+                               IsBlindingClient                  AS IsBlindingClient  ,
+                               Isnull(rm.reporturl, '')          AS IsDefault   
+                        FROM   @TempTable TT  
+						left join RisUrlMapping rm on TT.AccessionNumber =rm.AccessionNumber  and rm.OrgID=@OrgID
+                        WHERE  Isnull(isreportable, '') != 'N'  
+                               AND TT.accessionnumber IN(SELECT accessionnumber  
+                                                      FROM   @TempAccessionNumber)  
+                        ORDER  BY templateseq  
+                    END  
+                  ELSE  
+                    BEGIN  
+                        SELECT PatientVisitID,  
+                               TT.InvestigationID,  
+                               TT.CreatedAt,  
+                               TT.AccessionNumber,  
+                               Rtrim(IsStat)                     AS PriorityTest,  
+                               Isnull(@ReportAccessionNumber, 0) AS ReportAccessionNumber,  
+                               InvestigationName,  
+                               ReportTemplateName,  
+                               TemplateID,  
+                               PatientID,  
+                               TT.DeptID,  
+                               Status,  
+                               DeptName,  
+                               PrintCount,  
+                               PkgName,  
+                               TemplateName,  
+                               --@StationaryID AS StationaryID                                
+                               0                                 AS StationaryID,  
+                               Isnull(IsSeperatePrint, 'N')      AS IsSeperatePrint,  
+                               PatientInvId,  
+                               PkgId,  
+                               IsCopublish,  
+                               @IsSelectAuthorisation            AS IsActive,  
+                               TemplateSeq                       TemplateSeq,  
+                               IsConfidentialTest                AS IsConfidentialTest,  
+                               IsBlindingClient                  AS IsBlindingClient  ,
+                        Isnull(rm.reporturl, '')          AS IsDefault   
+                        FROM   @TempTable TT  
+						left join RisUrlMapping rm on TT.AccessionNumber =rm.AccessionNumber  and rm.OrgID=@OrgID
+                        WHERE  Isnull(isreportable, '') != 'N'  
+                        ORDER  BY templateseq  
+                    END  
+              END  
+        END  
+  
+      SELECT DISTINCT TemplateID,  
+                      ReportTemplateName,  
+                      TemplateName,  
+                      TemplateSeq  
+      FROM   @TempTable  
+      WHERE  Isnull(isreportable, '') != 'N'  
+      ORDER  BY templateseq ASC  
+  
+      --SELECT DISTINCT DeptID,DeptName,@StationaryID AS StationaryID  FROM @TempTable                                                                                                              
+      SELECT DISTINCT DeptID,  
+                      DeptName  
+      FROM   @TempTable  
+      WHERE  Isnull(isreportable, '') != 'N'  
+             AND Isnull(langcode, 'en-GB') = @LanguageCode  
+			 
+END TRY                                 
+BEGIN CATCH   
+SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetReportTemplate @pVisitID = '+cast(@pVisitID as varchar)+'@OrgID= '+cast(@OrgID as varchar)			                           
+exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 			 
+END  
+  

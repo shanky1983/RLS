@@ -1,0 +1,68 @@
+ 
+
+CREATE Proc [dbo].[pUpdateBulkRegIntegrationNotifications]    
+
+(@InstanceID       INT,    
+
+ @IntegrationNotification dbo.[UDTBulkRegIntegrationNotifications] Readonly,    
+
+ @Contextinfo UDT_Context Readonly)    
+
+ as     
+
+ Begin    
+
+  DECLARE @VisitID BIGINT,@Status NVARCHAR(200)
+  IF(@InstanceID=1)
+  BEGIN
+
+ Update BI set BI.ResultStatus =I.Status,BI.ResultErrorDescription=I.ErrorDescription,BI.ResultCompletedAt=GETDATE() 
+ ,BI.Repush=CASE WHEN I.Status='Completed' AND ISNULL(BI.RetryCnt,0)<1 THEN 0 ELSE 1 END
+ From BulkReg_IntegrationNotification BI     (NOLOCK)
+
+ inner join @IntegrationNotification I on BI.NotificationID = I.NotificationID 
+
+ where BI.NotificationID = I.NotificationID  and BI.ResultStatus ='Picked'    
+  END
+ ELSE IF(@InstanceID=2)
+   BEGIN
+    Update BI set BI.PDFStatus =I.Status,BI.PDFErrorDescription=I.ErrorDescription,BI.PDFCompletedAt=GETDATE()
+	,BI.PDFRepush=CASE WHEN I.Status='Completed' AND ISNULL(BI.PDFRetryCnt,0)<1 THEN 0 ELSE 1 END
+	From BulkReg_IntegrationNotification BI    (NOLOCK) 
+
+ inner join @IntegrationNotification I on BI.NotificationID = I.NotificationID 
+
+ where BI.NotificationID = I.NotificationID  and BI.PDFStatus ='Picked'  
+   END  
+    ELSE IF(@InstanceID=3)
+   BEGIN
+    Update BI set BI.SmartReportStatus =I.Status,BI.SmartReportErrordesc=I.ErrorDescription,BI.SmartReportCompletedAt=GETDATE() ,
+				  @VisitID=BI.VisitID,@Status=I.Status,BI.SmartRepush=CASE WHEN I.Status='Completed' AND ISNULL(BI.SmartRetryCnt,0)<1 THEN 0 ELSE 1 END
+	From BulkReg_IntegrationNotification BI (NOLOCK)   
+	 inner join @IntegrationNotification I on BI.NotificationID = I.NotificationID 
+	 where BI.NotificationID = I.NotificationID  and BI.SmartReportStatus ='Picked'  
+
+	/* UPDATE N
+	 SET N.Status='Completed'
+	 FROM Notifications N (NOLOCK) 
+	 WHERE N.IdentityID=@VisitID AND ActionType='smartreport' AND @Status='Completed'*/
+   END  
+   ELSE  
+   BEGIN
+    Update BI set BI.CovidStatus =I.Status,BI.CovidErrordesc=I.ErrorDescription,BI.CovidCompletedAt=GETDATE() 
+	,BI.CovidRepush=CASE WHEN I.Status='Completed' AND ISNULL(BI.CovidRetryCnt,0)<1 THEN 0 ELSE 1 END
+	FROM BulkReg_IntegrationNotification BI    (NOLOCK) 
+    INNER JOIN @IntegrationNotification I on BI.NotificationID = I.NotificationID 
+     WHERE BI.NotificationID = I.NotificationID  and BI.CovidStatus ='Picked'  
+   END  
+ End 
+
+
+
+
+
+
+
+
+
+

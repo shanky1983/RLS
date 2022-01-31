@@ -1,0 +1,154 @@
+    CREATE PROCEDURE [dbo].[pGetInvestigationInstructions] @PatientVisitID [BIGINT],
+                                                  @OrgID          [INT],
+                                                  @FeeID [INT],
+												  @FeeType VARCHAR(25),
+                                                  @ContextInfo    [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+
+  if @OrgID = 0 
+  Set @OrgID = (Select OrgID from @ContextInfo )
+
+  Create table #Temptable 
+  (
+  InvestigationName nvarchar(100),
+  Type nvarchar(100),
+  InvestigationID bigint,
+  VisitID bigint,
+  InvestigationComment nvarchar(MAx),
+  GroupName nvarchar(100),
+  GroupID bigint,
+  Performertype Nvarchar(100)
+  )
+
+  IF (@PatientVisitID !=0 and @OrgID != 0 )
+  BEGIN
+	insert into #Temptable
+		SELECT Name                                  AS InvestigationName,
+                   OI.Type,
+                   OI.ID                                 as InvestigationID,
+                   VisitID  ,                             
+                  
+                  R.RemarksText as InvestigationComment,
+				  '' as GroupName,
+				  0 as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   OrderedInvestigations OI 
+				  Inner Join InvRemarks IR on OI.ID=IR.ID and OI.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N') 
+				   WHERE  VisitID = @PatientVisitID and OI.Type = 'INV'
+                   AND OI.OrgID = @OrgID
+                                Union
+								   SELECT Name                                  AS InvestigationName,
+                   OI.Type,
+                   OI.ID                                 as InvestigationID,
+                   VisitID   ,                          
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   OrderedInvestigations OI 
+				  Inner Join InvOrgGroup IOG on IOG.AttGroupID=OI.ID and IOG.OrgID=OI.OrgID 
+				  Inner Join InvRemarks IR on OI.ID=IR.ID and OI.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I' ,'N')
+				   WHERE  VisitID = @PatientVisitID and OI.Type='GRP'                  
+				    AND OI.OrgID = @OrgID
+		 union
+   SELECT   (IOG.DisplayText + '  (' + IOM.DisplayText + ')')                               AS InvestigationName,
+                   OI.Type,
+                  IOM.InvestigationID                               as InvestigationID,
+                   VisitID   ,                           
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   OrderedInvestigations OI 
+				  Inner Join InvOrgGroup IOG on IOG.AttGroupID=OI.ID and IOG.OrgID=OI.OrgID and IOG.ShowGroupInstruction = 0
+				  Inner Join InvGroupMapMaster IGM on IGM.GroupID = IOG.OrgGroupID and IGM.Parent = 'N'
+				  Inner join InvestigationOrgMapping IOM on IGM.InvestigationID=IOM.InvestigationID and IOM.OrgID=@OrgID
+				  Inner Join InvRemarks IR on IOM.InvestigationID=IR.ID and IOM.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N') 
+				   WHERE  VisitID = @PatientVisitID and OI.Type='GRP'                  
+				    AND OI.OrgID = @OrgID
+
+					Union 
+					SELECT   (IOG.DisplayText + '  (' + IOM.DisplayText + ')')                                AS InvestigationName,
+                   OI.Type,
+                  IOM.AttGroupID                                  as InvestigationID,
+                   VisitID ,                              
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   OrderedInvestigations OI 
+				  Inner Join InvOrgGroup IOG on IOG.AttGroupID=OI.ID and IOG.OrgID=OI.OrgID and IOG.ShowGroupInstruction = 0
+				  Inner Join InvGroupMapMaster IGM on IGM.GroupID = IOG.OrgGroupID and IGM.Parent = 'Y'
+				  Inner join INVORgGroup IOM on IGM.InvestigationID=IOG.OrgGroupID and IOM.OrgID=@OrgID
+				  Inner Join InvRemarks IR on IOM.AttGroupID=IR.ID and IOM.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N')
+				   WHERE  VisitID = @PatientVisitID and OI.Type='GRP'                  
+				    AND OI.OrgID = @OrgID
+				END
+				IF (@FeeID !=0 and @FeeType != '')
+				BEGIN
+				insert into #Temptable
+
+				select IOM.DisplayText,'INV',IOM.InvestigationID,0,R.RemarksText,'',0, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END from 
+				InvestigationOrgMapping IOM 
+				Inner Join InvRemarks IR on IOM.InvestigationID=IR.ID and IOM.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N')
+				  where IOM.InvestigationID =@FeeID and @FeeType='INV' and IOM.OrgID=@OrgID
+				  Union
+				   SELECT   IOG.DisplayText                          AS InvestigationName,
+                   'GRP',
+                  IOG.AttGroupID                               as InvestigationID,
+                   0   ,                           
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   InvOrgGroup IOG 
+				 
+				  Inner Join InvRemarks IR on IOG.AttGroupID=IR.ID and IOG.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N')
+				   WHERE  IOG.AttGRoupID =@FeeID and @FeeType='GRP' and IOG.OrgID=@OrgID           
+				  Union
+					 SELECT   (IOG.DisplayText + '  (' + IOM.DisplayText + ')')                               AS InvestigationName,
+                   'GRP',
+                  IOM.InvestigationID                               as InvestigationID,
+                   0   ,                           
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM   InvOrgGroup IOG 
+				  Inner Join InvGroupMapMaster IGM on IGM.GroupID = IOG.OrgGroupID and IGM.Parent = 'N'
+				  Inner join InvestigationOrgMapping IOM on IGM.InvestigationID=IOM.InvestigationID and IOM.OrgID=@OrgID
+				  Inner Join InvRemarks IR on IOM.InvestigationID=IR.ID and IOM.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I' ,'N')
+				   WHERE  IOG.AttGRoupID =@FeeID and @FeeType='GRP' and IOG.ShowGroupInstruction=0   and IOG.OrgID=@OrgID 
+				   Union
+				             
+				    		SELECT   (IOG.DisplayText + '  (' + IOM.DisplayText + ')')                                AS InvestigationName,
+                   'GRP',
+                  IOM.AttGroupID                                  as InvestigationID,
+                   0 ,                              
+                  
+                  R.RemarksText as InvestigationComment,
+				  IOG.DisplayText as GroupName,
+				  IOG.AttGroupID as GroupID, Case when R.Remarkstype = 'I' then 'Instructions' else 'Informations' END
+                  FROM    
+				InvOrgGroup IOG 
+				  Inner Join InvGroupMapMaster IGM on IGM.GroupID = IOG.OrgGroupID and IGM.Parent = 'Y'
+				  Inner join INVORgGroup IOM on IGM.InvestigationID=IOG.OrgGroupID and IOM.OrgID=@OrgID
+				  Inner Join InvRemarks IR on IOM.AttGroupID=IR.ID and IOM.OrgID =IR.OrgID
+				  Inner join Remarks R on R.RemarksID=IR.RemarksID and R.RemarksType in ('I','N') 
+				   WHERE IOG.AttGRoupID =@FeeID and @FeeType='GRP'   and IOG.ShowGroupInstruction=0  and IOG.OrgID=@OrgID 
+	
+				END
+
+				SELECT ROW_NUMBER() OVER (  
+ORDER BY InvestigationName  
+) AS rowno1 , * from #Temptable
+				drop table #Temptable
+				END

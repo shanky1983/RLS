@@ -1,0 +1,116 @@
+CREATE PROCEDURE [dbo].[PpmsGetVisitdetailswithSampleName] (
+@Porgid INT,
+@pFdate DATETIME,
+@pTdate DATETIME
+)
+	
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+
+SELECT @pFdate = CONVERT(DATETIME, @pFdate, 103) + ' 00:00:00'
+SELECT @pTdate = CONVERT(DATETIME, @pTdate, 103) + ' 23:59:59:99'
+
+DECLARE @datedif INT
+ SET @datedif = (
+ SELECT DATEDIFF(Day, convert(NVARCHAR, @pFDate, 103), convert(NVARCHAR, @pTDate, 103))
+ )
+ IF (@Datedif <= 10)
+ BEGIN
+declare @Temp as Table (PatientVisitID int,PatientNumber varchar(255),PatientName Varchar(255),Age varchar(20),Gender varchar(10),LabNo varchar(200),
+BarcodeNumber varchar(255),GroupName varchar(Max),TestName varchar(Max),TestID int,InvestigationID int,
+SampleID int,SampleName varchar(255),SampleContainer varchar(255),SampleContainerID int,
+Department varchar(255),RegisteredLocation varchar(200),ProcessedLocation varchar(200),
+ClientName varchar(255),
+SampleCollectedby varchar(200),SampleReceivedby varchar(200),CompletedBy varchar(200),ApprovedBy varchar(200),AccessionNumber bigint
+,SampleCollectedat datetime,SampleReceivedAt datetime,CompletedAt datetime,ApprovedAt dateTime
+)
+
+declare @Temp1 as Table (PatientVisitID int,PatientNumber varchar(255),PatientName Varchar(255),Age varchar(20),Gender varchar(10),LabNo varchar(200),
+BarcodeNumber varchar(255),GroupName varchar(Max),TestName varchar(Max),TestID int,InvestigationID int,
+SampleID int,SampleName varchar(255),SampleContainer varchar(255),SampleContainerID int,
+Department varchar(255),RegisteredLocation varchar(200),ProcessedLocation varchar(200),
+ClientName varchar(255),
+SampleCollectedby varchar(200),SampleReceivedby varchar(200),CompletedBy varchar(200),ApprovedBy varchar(200),AccessionNumber bigint
+,RegisteredID int,ProcessingID int,SampleCollectedat datetime,SampleReceivedAt datetime,CompletedAt datetime,ApprovedAt dateTime
+)
+
+
+insert into @Temp(
+PatientVisitID,GroupName,TestName, AccessionNumber,InvestigationID,SampleID,SampleContainerID,Department
+)
+select PatientVisitID, PI.GroupName,PI.InvestigationName ,PI.AccessionNumber,PI.InvestigationID, PI.SampleID,PI.ContainerID ,IDM.DeptName
+from   MisPAtientinvestigation PI  --on  PI.PatientVisitid=T.PatientVisitid and PI.AccessionNumber=T.AccessionNumber and PI.OrgID=@Porgid  
+inner join InvestigationOrgMapping IOM  On IOM.InvestigationID=PI.InvestigationID and IOM.OrgID=PI.OrgID
+inner join InvdeptMaster IDM  on IDM.DeptID=IOM.DeptID and IDM.OrgID=IOM.OrgID
+where PI.OrgID=@Porgid and PI.ApprovedAt between @pFdate and @pTdate
+ 
+
+insert into @Temp1 (
+PatientVisitID,PatientNumber,PatientName,Age,Gender,LabNo ,GroupName,TestName,TestID,AccessionNumber,RegisteredLocation,ProcessedLocation,InvestigationID,ClientName
+,SampleID,SampleContainerID,Department,RegisteredID,ProcessingID
+)
+select PV.PatientVisitID ,PA.PatientNumber,PA.Name,PA.Age,PA.SEX,PV.ExternalVisitID ,T.GroupName,T.TestName,OI.ID,OI.AccessionNumber,PV.OrgAddressID,OI.RescaptureLoc
+,0,CM.ClientName ,T.SampleID,T.SampleContainerID,T.Department,PV.OrgAddressID,OI.ResCaptureLoc
+from  @Temp T
+inner join Patientvisit PV on  PV.PatientVisitId=T.PatientVisitID and PV.OrgID=@Porgid
+inner join Patient PA  on PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+inner join orderedinvestigations OI  on OI.VisitID=PV.PatientVisitId and  OI.OrgID=PV.OrgID and OI.VisitID=T.PatientVisitID and T.Accessionnumber=OI.AccessionNumber
+inner join VisitClientMapping VCM  on VCM.OrgID=PV.ORGID and  VCM.VisitiD=PV.PatientVisitID
+inner join ClientMaster CM  on CM.ClientID=VCM.CLientID and CM.OrgID=VCM.OrgID 
+where PV.OrgID=@Porgid 
+ 
+update T set T.BarcodeNumber=PIS.BarcodeNumber , T.SampleContainerID=PIS.SampleContainerID
+from @Temp1 T
+inner join PatientInvSample PIS  ON PIS.PatientVisitId=T.PatientVisitId and PIS.SampleCode=T.SampleID and PIS.OrgID=@Porgid
+
+update T set T.SampleName=ISM.SampleDesc,T.SampleContainer=ISC.ContainerName
+from @Temp1 T
+inner join InvsampleMaster ISM  on ISM.SampleCode=T.SampleID and ISM.OrgID=@Porgid
+left join InvestigationSampleContainer ISC  on ISC.SampleContainerID=T.SampleContainerID and ISC.OrgID=@Porgid
+
+update T set T.SampleCollectedby=LO.Name ,T.SampleCollectedat=MSO.Collectedat
+from @Temp1 T
+inner join MISOrderedInvestigations MSO  on MSO.AccessionNumber=T.AccessionNumber and MSO.Visitid=T.PatientVisitID
+inner join Users LO  ON LO.OrgID=MSO.OrgID and LO.LoginID =MSO.Collectedby
+where MSO.Orgid=@Porgid
+update T set T.SampleReceivedBy=LO.Name ,T.SampleReceivedAt=Isnull(MSO.Receivedat,MSO.Collectedat)
+from @Temp1 T
+inner join MISOrderedInvestigations MSO  on MSO.AccessionNumber=T.AccessionNumber and MSO.Visitid=T.PatientVisitID
+inner join Users LO  ON LO.OrgID=MSO.OrgID and LO.LoginID = Isnull(MSO.Receivedby,MSO.Collectedby)
+where MSO.Orgid=@Porgid
+update T set T.CompletedBy=LO.Name ,T.CompletedAt=MSO.Completedat
+from @Temp1 T
+inner join MISOrderedInvestigations MSO  on MSO.AccessionNumber=T.AccessionNumber and MSO.Visitid=T.PatientVisitID
+inner join Users LO  ON LO.OrgID=MSO.OrgID and LO.LoginID =MSO.Completedby
+where MSO.Orgid=@Porgid
+update T set T.ApprovedBy=LO.Name,T.ApprovedAt=MSO.ApprovedAt 
+from @Temp1 T
+inner join MISOrderedInvestigations MSO  on MSO.AccessionNumber=T.AccessionNumber and MSO.Visitid=T.PatientVisitID
+inner join Users LO  ON LO.OrgID=MSO.OrgID and LO.LoginID =MSO.ApprovedBy
+where MSO.Orgid=@Porgid
+  
+update T set T.RegisteredLocation=OA.Location,T.ProcessedLocation=OA1.Location
+from @Temp1 T
+inner join OrganizationAddress OA  on OA.AddressID=T.RegisteredID and OA.OrgID=@Porgid
+inner join OrganizationAddress OA1  on OA1.AddressID=T.ProcessingID and OA1.OrgID=@Porgid 
+  
+select  PatientNumber,PatientName,Age,Gender,LabNo,
+BarcodeNumber,GroupName,TestName,SampleName,SampleContainer,
+Department,RegisteredLocation,ProcessedLocation,
+ClientName,convert(varchar,SampleCollectedat,120) as SampleCollectedat,SampleCollectedby,convert(varchar,SampleReceivedAt,120) as SampleReceivedAt,SampleReceivedby,
+convert(varchar,CompletedAt,120) as CompletedAt,CompletedBy,convert(varchar,ApprovedAt,120) as ApprovedAt,ApprovedBy
+ from @Temp1  order by LabNo
+ END
+END TRY
+BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='PpmsGetVisitdetailswithSampleName @Porgid = '+CAST(@Porgid AS VARCHAR) +'@pFdate = '+CAST(@pFdate AS VARCHAR) +'@pTdate = '+CAST(
+@pTdate AS VARCHAR) 
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+End

@@ -1,0 +1,463 @@
+--[pGetNewHistoSubReport_Bak] 47355,90902,63,85      
+CREATE  PROCEDURE [dbo].[pGetTablePatternResultwithImage] (
+@pVisitID BIGINT
+,@InvestigationID BIGINT
+,@TemplateID INT
+,@OrgID INT
+)
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+SET NOCOUNT ON;    
+BEGIN  TRY  
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000) 
+DECLARE @tblInvestigationValues TABLE (
+[InvestigationValueID] [bigint]
+,[Name] [nvarchar](500) NULL
+,[Value] [nvarchar](max) NULL
+,[InvestigationID] [bigint] NULL
+,[GroupID] [int] NULL
+,[PatientVisitID] [bigint] NULL
+,[UOMID] [int] NULL
+,[Status] [nvarchar](50) NULL
+,[CreatedBy] [bigint] NULL
+,[CreatedAt] [datetime] NULL
+,[ModifiedBy] [bigint] NULL
+,[ModifiedAt] [datetime] NULL
+,[UOMCode] [nvarchar](50) NULL
+,[GroupName] [nvarchar](255) NULL
+,[Orgid] [int] NULL
+,[IPInvSampleCollectionMasterID] [bigint] NULL
+,[PackageID] [int] NULL
+,[PackageName] [nvarchar](255)
+,[SequenceNo] [int]
+,[UID] [nvarchar](255)
+)
+DECLARE @tblOrdPerfOrgGrpInvDtls TABLE (
+OrderedOrgID INT
+,PerformedOrgID INT
+,AttuneGroupID INT
+,InvType NVARCHAR(10)
+,PerformedOrgGroupID INT
+,PerformedOrgUID NVARCHAR(max)
+,OrderedOrgGroupID INT
+,OrderedOrgUID NVARCHAR(max)
+)
+DECLARE @tblAffectedVisits TABLE (
+VisitID BIGINT
+,OrgID BIGINT
+)
+DECLARE @tblResultSelectID TABLE (AccessionNo BIGINT)
+DECLARE @OrderedPatientInv TABLE (
+[PatientVisitID] [bigint]
+,[InvestigationID] [bigint]
+,[InvestigationName] [nvarchar](250)
+,[InvestigationMethodID] [bigint]
+,[InvestigationSampleContainerID] [int]
+,[SampleID] [int]
+,[GroupID] BIGINT
+,[GroupName] [nvarchar](250)
+,[Reason] [nvarchar](250)
+,[ReferenceRange] [nvarchar](max)
+,[MethodName] [nvarchar](255)
+,[OrgID] [int]
+,[WorklistDeletedStatus] [nvarchar](50)
+,[PerformingPhysicainName] [nvarchar](500)
+,[KitID] [bigint]
+,[KitName] [nvarchar](255)
+,[InstrumentID] [bigint]
+,[InstrumentName] [nvarchar](255)
+,[Interpretation] [nvarchar](max)
+,[PrincipleID] [bigint]
+,[PrincipleName] [nvarchar](255)
+,[QCData] [nvarchar](max)
+,[PackageID] [int]
+,[PackageName] [nvarchar](255)
+,[ApprovedBy] [bigint]
+,[PatientInvID] [bigint]
+,[UID] [nvarchar](255)
+,[GroupComment] [nvarchar](255)
+,[ApprovedAt] [datetime]
+,[AccessionNumber] [bigint]
+)
+DECLARE @tblreportmapping TABLE (
+InvestigationID NVARCHAR(300)
+,TemplateID INT
+,Orgid INT
+)
+INSERT INTO @tblreportmapping
+EXEC pGetInvestigationTemplate @pVisitID
+,@OrgID
+INSERT INTO @tblResultSelectID (AccessionNo)
+SELECT @InvestigationID
+INSERT INTO @OrderedPatientInv
+SELECT [PatientVisitID]
+,[InvestigationID]
+,[InvestigationName]
+,[InvestigationMethodID]
+,[InvestigationSampleContainerID]
+,[SampleID]
+,[GroupID]
+,[GroupName]
+,[Reason]
+,[ReferenceRange]
+,[MethodName]
+,[OrgID]
+,[WorklistDeletedStatus]
+,[PerformingPhysicainName]
+,[KitID]
+,[KitName]
+,[InstrumentID]
+,[InstrumentName]
+,[Interpretation]
+,[PrincipleID]
+,[PrincipleName]
+,[QCData]
+,[PackageID]
+,[PackageName]
+,[ApprovedBy]
+,[PatientInvID]
+,[UID]
+,[GroupComment]
+,[ApprovedAt]
+,[AccessionNumber]
+FROM PatientInvestigation WITH (NOLOCK)
+WHERE AccessionNumber IN (
+SELECT AccessionNumber
+FROM OrderedInvestigations OI WITH (NOLOCK)
+INNER JOIN @tblResultSelectID tbl ON tbl.AccessionNo = OI.ReferredAccessionNo
+)
+INSERT INTO @tblAffectedVisits
+SELECT @pVisitID
+,@OrgID
+UNION
+SELECT PatientVisitID
+,OrgID
+FROM PatientVisit WITH (NOLOCK)
+WHERE ReferVisitID = @pVisitID
+INSERT INTO @tblInvestigationValues
+SELECT [InvestigationValueID]
+,[Name]
+,[Value]
+,[InvestigationID]
+,[GroupID]
+,[PatientVisitID]
+,[UOMID]
+,[Status]
+,[CreatedBy]
+,[CreatedAt]
+,[ModifiedBy]
+,[ModifiedAt]
+,[UOMCode]
+,[GroupName]
+,INV1.[Orgid]
+,[IPInvSampleCollectionMasterID]
+,[PackageID]
+,[PackageName]
+,[SequenceNo]
+,[UID]
+FROM InvestigationValues INV1 WITH (NOLOCK)
+INNER JOIN @tblAffectedVisits v2 ON INV1.PatientVisitID = v2.VisitID
+INSERT INTO @tblOrdPerfOrgGrpInvDtls (
+OrderedOrgID
+,PerformedOrgID
+,AttuneGroupID
+,InvType
+,PerformedOrgGroupID
+)
+SELECT @OrgID
+,OA.OrgID
+,OI.ID
+,OI.Type
+,CASE 
+WHEN OI.Type = 'GRP'
+THEN IOG.OrgGroupID
+ELSE OI.ID
+END
+FROM OrderedInvestigations OI WITH (NOLOCK)
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OI.ResCaptureLoc = OA.AddressID
+LEFT JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID = OI.ID
+AND IOG.OrgID = OA.OrgID
+WHERE OI.VisitID = @pVisitID
+--SELECT 'F' ,* FROM     @tblOrdPerfOrgGrpInvDtls                                                           
+UPDATE T
+SET T.OrderedOrgGroupID = IOG.OrgGroupID
+FROM @tblOrdPerfOrgGrpInvDtls T
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON T.AttuneGroupID = IOG.AttGroupID
+AND IOG.OrgID = @OrgID
+WHERE T.InvType != 'INV'
+UPDATE T
+SET T.PerformedOrgUID = OI.UID
+FROM @tblOrdPerfOrgGrpInvDtls T
+INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON T.PerformedOrgID = OI.OrgID
+AND T.AttuneGroupID = OI.ID
+AND t.InvType = OI.Type
+INNER JOIN @tblResultSelectID TRS ON TRS.AccessionNo = OI.ReferredAccessionNo
+INNER JOIN @tblAffectedVisits TAV ON TAV.VisitID = OI.VisitID
+AND TAV.OrgID = T.PerformedOrgID
+UPDATE T
+SET T.OrderedOrgUID = OI.UID
+FROM @tblOrdPerfOrgGrpInvDtls T
+INNER JOIN OrderedInvestigations OI WITH (NOLOCK) ON T.OrderedOrgID = OI.OrgID
+AND T.AttuneGroupID = OI.ID
+AND OI.VisitID = @pVisitID
+INNER JOIN @tblAffectedVisits TAV ON TAV.VisitID = OI.VisitID
+AND TAV.OrgID = T.OrderedOrgID
+UPDATE @tblOrdPerfOrgGrpInvDtls
+SET PerformedOrgUID = OrderedOrgUID
+WHERE OrderedOrgID = PerformedOrgID
+IF (
+1 < (
+SELECT COUNT(1)
+FROM @tblAffectedVisits
+)
+)
+BEGIN
+PRINT 'eelse'
+--SELECT 'H'                                                                                                 
+UPDATE T
+SET PatientVisitID = @pVisitID
+,Orgid = @OrgID
+,UID = T1.OrderedOrgUID
+FROM @tblInvestigationValues T
+INNER JOIN @tblOrdPerfOrgGrpInvDtls T1 ON T.UID = T1.PerformedOrgUID
+AND T.InvestigationID = T1.PerformedOrgGroupID
+WHERE T1.InvType = 'INV'
+END
+DECLARE @TempDetail TABLE (
+PatientVisitID BIGINT
+,InvestigationID BIGINT
+,InvestigationName NVARCHAR(500)
+,ReportName NVARCHAR(500)
+,TemplateID INT
+,ReportStatus NVARCHAR(500)
+,GroupID INT
+)
+DECLARE @docHandle INT
+DECLARE @xmlDocument NVARCHAR(max) -- or xml type                                                                                
+INSERT INTO @TempDetail
+SELECT piv.PatientVisitID
+,piv.InvestigationID
+,piv.InvestigationName
+,ISNULL(im.reporttemplatename, (
+SELECT Reporttemplatename
+FROM InvReportMaster WITH (NOLOCK)
+WHERE IsDefault = 'Y'
+AND OrgID = @OrgID
+)) AS ReportName
+,ISNULL(im.templateid, (
+SELECT TemplateID
+FROM InvReportMaster WITH (NOLOCK)
+WHERE IsDefault = 'Y'
+AND OrgID = @OrgID
+)) AS TemplateID
+,piv.ReportStatus
+,piv.GroupID
+FROM PatientInvestigation piv WITH (NOLOCK)
+INNER JOIN @tblreportmapping irm ON irm.investigationid = piv.InvestigationID
+AND IRM.OrgID = @OrgID
+INNER JOIN invreportmaster im WITH (NOLOCK) ON im.templateid = irm.templateid
+AND im.OrgID = @OrgID
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON piv.PatientVisitID = PV.PatientVisitId
+INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID = PV.PatientID
+WHERE piv.PatientVisitID = @pVisitID
+AND P.OrgID = @OrgID
+DECLARE @InvestigationList TABLE (InvestigationID BIGINT)
+INSERT INTO @InvestigationList
+SELECT ID
+FROM OrderedInvestigations WITH (NOLOCK)
+WHERE AccessionNumber IN (
+SELECT AccessionNo
+FROM @tblResultSelectID
+)
+DECLARE @PatientinvestigationFiles TABLE (
+PatientVisitID BIGINT
+,InvestigationID BIGINT
+,FilePath NVARCHAR(200)
+,CreatedBy BIGINT
+,Orgid INT
+,ImageSource VARBINARY(max)
+,ImageID BIGINT
+,RowNo INT
+,ServerFilePath NVARCHAR(MAX)
+)
+DECLARE @tempvar TABLE (id BIGINT)
+INSERT INTO @tempvar
+SELECT OrgGroupID
+FROM InvOrgGroup
+WHERE AttGroupID IN (
+SELECT InvestigationID
+FROM @InvestigationList
+)
+DECLARE @tempInvid TABLE (Invid BIGINT)
+INSERT INTO @tempInvid
+SELECT DISTINCT TMPT.InvestigationID
+FROM @TempDetail TMPT
+INNER JOIN InvestigationOrgMapping IOG ON TMPT.InvestigationID = IOG.InvestigationID
+--AND isnull(IOG.OutputInvestigationCode,'')=''             
+WHERE GroupID IN (
+SELECT id
+FROM @tempvar
+)	--AND InvestigationName LIKE '%Results%'
+
+Declare @tblHeaderName nvarchar(max)   
+Set @tblHeaderName= (Select stuff((
+SELECT '#' + HeaderName 
+from TabularPatternConfigurationMaster IM-- Where OrgID=159 and InvestigationID=12178 Order By ID
+INNER JOIN @tempInvid INV ON IM.InvestigationID=INV.Invid
+Where OrgID=@OrgID --and InvestigationID=12178
+ Order By ID
+FOR XML path('')
+), 1, 1, '') )
+             
+
+DECLARE @FilePath NVARCHAR(MAX) 	    
+SELECT @FilePath= Replace(COM.ConfigValue,'\\','\') FROM ConfigKeyMaster CKM 
+INNER JOIN ConfigOrgMaster COM ON CKM.ConfigKeyID=COM.ConfigKeyID
+WHERE COM.OrgID=@OrgID AND  CKM.ConfigKey='TabularPattern_FilePath'
+
+--SET @FilePath='\\ATT-384\Attune\Lims_Product\TRFImages\TabularPattern\'
+
+INSERT INTO @PatientinvestigationFiles
+SELECT PatientVisitID
+,InvestigationID
+,FilePath
+,CreatedBy
+,Orgid
+,ImageSource
+,ImageID
+,Row_Number() OVER (
+ORDER BY ImageID ASC
+) AS RowNo
+,@FilePath+ServerFilePath as ServerFilePath
+FROM PatientInvestigationFiles
+WHERE patientvisitid = @pvisitid
+AND orgid = @OrgID and Investigationid In (select InvID from @tempInvid)
+SET @xmlDocument = (
+SELECT TOP 1 Value
+FROM InvestigationValues invValues WITH (NOLOCK)
+INNER JOIN @TempDetail tmp ON tmp.InvestigationID = invValues.InvestigationID
+AND tmp.PatientVisitID = invValues.PatientVisitID
+INNER JOIN InvestigationOrgMapping IOG ON invValues.InvestigationID = IOG.InvestigationID
+AND (tmp.InvestigationName LIKE '%RESULT%')
+WHERE tmp.InvestigationID IN (
+SELECT Invid
+FROM @tempInvid
+)
+AND tmp.TemplateID = @TemplateID
+)
+--Create an internal representation of the XML document.                                                                                        
+EXEC sp_xml_preparedocument @docHandle OUTPUT
+,@xmlDocument
+-- Use OPENXML to provide rowset consisting of customer data.                                               
+DECLARE @Temp TABLE (
+RNo1 INT IDENTITY(1, 1)
+,Value NVARCHAR(max)
+,Rowno NVARCHAR(max)
+,ColumnNo NVARCHAR(max)
+,ColumnCount NVARCHAR(100)
+,ColumnType NVARCHAR(100)
+,ImageSource VARBINARY(max)
+)
+DECLARE @PTemp TABLE (
+RNo INT IDENTITY(1, 1)
+,HeaderValue1 NVARCHAR(max)
+,HeaderValue2 NVARCHAR(max)
+,HeaderValue3 NVARCHAR(max)
+,HeaderValue4 NVARCHAR(max)
+,Remarks NVARCHAR(max)
+,Comments NVARCHAR(max)
+,ImageSource VARBINARY(max)
+,HeaderName1 NVARCHAR(max)
+,HeaderName2 NVARCHAR(max)
+,HeaderName3 NVARCHAR(max)
+,HeaderName4 NVARCHAR(max)
+,HeaderName5 NVARCHAR(max)
+,HeaderName6 NVARCHAR(max)
+,CoulmnCount NVARCHAR(10)
+)
+INSERT INTO @Temp (
+Value
+,Rowno
+,ColumnNo
+,ColumnCount
+)
+SELECT *
+FROM OPENXML(@docHandle, N'/InvestigationResults/Item', 1) WITH (
+Value NVARCHAR(max)
+,RowNo NVARCHAR(max)
+,ColumnNo NVARCHAR(max)
+,ColumnCount NVARCHAR(1000)
+)
+EXEC sp_xml_removedocument @docHandle
+--SELECT * FROM @Temp        
+CREATE TABLE #table (
+rowno INT
+,value NVARCHAR(max)
+)
+DECLARE @ROWNO INT
+DECLARE vendor_cursor1 CURSOR
+FOR
+SELECT DISTINCT Rowno
+FROM (
+SELECT ROW_NUMBER() OVER (
+ORDER BY Columncount
+) AS rowno1
+,value
+,Rowno
+FROM @Temp
+) AS T
+OPEN vendor_cursor1
+FETCH NEXT
+FROM vendor_cursor1
+INTO @ROWNO
+WHILE @@FETCH_STATUS = 0
+BEGIN
+INSERT INTO #table (
+Rowno
+,value
+)
+SELECT Rowno
+,stuff((
+SELECT '#' + T.Value
+FROM @Temp T
+WHERE Rowno = @ROWNO
+FOR XML path('')
+), 1, 1, '') AS value
+FROM @Temp TB
+WHERE Rowno = @ROWNO
+GROUP BY Rowno
+FETCH NEXT
+FROM vendor_cursor1
+INTO @ROWNO
+END
+CLOSE vendor_cursor1;
+DEALLOCATE vendor_cursor1;
+SELECT T.rowNo
+,T.Value
+,PIV.PatientVisitID
+,PIV.InvestigationID
+,PIV.FilePath
+,PIV.CreatedBy
+,PIV.Orgid
+,PIV.ImageSource
+,PIV.ImageID
+,@tblHeaderName as TableHeaderName,
+PIV.ServerFilePath
+FROM #TABLE T
+INNER JOIN @patientinvestigationfiles PIV ON --T.RowNo = PIV.Rowno
+PIV.Filepath=RIGHT(LEFT(T.value, LEN(T.value) - CHARINDEX('#', REVERSE(T.value))),CHARINDEX('#', REVERSE(LEFT(T.value, LEN(T.value) - CHARINDEX('#', REVERSE(T.value))))) - 1)
+--Right(RIGHT(T.value,LEN(T.value)-CHARINDEX('#',T.value)),len(RIGHT(T.value,LEN(T.value)-CHARINDEX('#',T.value)))-CHARINDEX('#',RIGHT(T.value,LEN(T.value)-CHARINDEX('#',T.value))))
+WHERE PIV.patientvisitid = @pvisitID
+AND orgid = @OrgID
+DROP TABLE #TABLE
+END TRY                                 
+  BEGIN CATCH   
+SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetNewHistoSubReport_tablepattern @pVisitID = '+cast(@pVisitID as varchar)+'@InvestigationID = '+cast(@InvestigationID as varchar)+'@
+TemplateID = '+cast(@TemplateID as varchar)+'@OrgID = '+cast(@OrgID as varchar)
+exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+END
+
+
+

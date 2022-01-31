@@ -1,0 +1,75 @@
+--[pGetPatientPDFbyVisitNo_LIMSAPI] 'LIMSAPI','report','2120005087'
+CREATE PROCEDURE [dbo].[pGetPatientPDFbyVisitNo_LIMSAPI] 
+(
+   @OrgCode NVARCHAR(50),
+   @Type NVARCHAR(50), 
+   @ReferenceNumber NVARCHAR(50)
+
+)
+AS  
+BEGIN 
+
+   DECLARE @pOrgID BIGINT = NULL,@pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL,@pVisitId BIGINT
+   DECLARE @REPORTPDFFOLDERPATH NVARCHAR(200),@pIdentityID BIGINT
+
+   IF @ReferenceNumber = '0' OR @ReferenceNumber = '-1'
+       SET @ReferenceNumber = ''
+
+	 IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @OrgCode)
+		BEGIN
+		   SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+			  @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+			FROM Integrationtypemaster ITM
+				INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+				INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+			WHERE ITM.IntegrationTypeName = @OrgCode
+		END
+
+		SELECT @REPORTPDFFOLDERPATH=Value
+					  FROM   CommunicationConfig cc 
+					  WHERE  OrgID = @pOrgID
+							 AND Name = 'PdfFolderPath'
+							 AND Isnull(IsActive, 'A') <> 'D'
+
+ 
+	  SELECT top 1 @pVisitId=PV.PatientVisitId FROM PatientVisit PV  
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID   
+	  WHERE PV.VisitNumber=@ReferenceNumber  
+
+	  select top 1 @pIdentityID=PV.PatientVisitId FROM PatientVisit PV  
+	  INNER JOIN  Patient P WITH(Nolock) on P.PatientID=PV.PatientID 
+	  INNER JOIN Bookings B WITH(Nolock) ON B.PatientID=P.PatientID
+	  where B.ExternalRefNo = @ReferenceNumber
+ 
+
+	IF (@Type='Report')
+	BEGIN
+	  /*SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='ROUNDBPDF'
+	   AND ContextType='CP'*/
+			SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+			  WHERE IdentityID =COALESCE(@pVisitId, @pIdentityID ) --AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+			  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='PDF' AND Category='Report'
+		   AND ContextType IN ('CP','P')
+	END
+	ELSE IF (@Type='Bill')
+	BEGIN
+	 SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID =COALESCE(@pVisitId, @pIdentityID ) --AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='Pdf' AND Category='Bill'
+	   AND ContextType='P'
+	END
+	ELSE IF(@Type='INVOICE')
+	BEGIN
+		SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+		  WHERE IdentityID =COALESCE(@pVisitId, @pIdentityID ) --AND OrgID=@pOrgID  --IdentityID = @pVisitId AND OrgID=@pOrgID 
+		  AND Status='Completed'  AND Completiontime IS NOT NULL AND ActionType='PDF' AND Category='Bill'
+	    
+   END
+
+END 
+
+
+
+

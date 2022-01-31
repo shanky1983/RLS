@@ -1,0 +1,26 @@
+CREATE Proc PgetOrganismCount  
+(  
+ @xmlDocument  NVARCHAR(max),  
+ @OrganismCount INT OUTPUT  
+         
+)  
+as  
+Begin  
+  
+DECLARE @docHandle INT  
+  
+  EXEC Sp_xml_preparedocument  
+        @docHandle OUTPUT,  
+        @xmlDocument  
+  
+   SELECT @OrganismCount= count(distinct Name)  
+      FROM   OPENXML(@docHandle, N'/InvestigationResults/InvestigationDetails/OrganDetails/Organ', 1)  
+                WITH (Name        NVARCHAR(max),  
+                      DrugName    NVARCHAR(max),  
+                      Zone        NVARCHAR(max),  
+                      Sensitivity NVARCHAR(max),  
+                      Family      NVARCHAR(max),  
+                      NameSeq     INT,  
+                      FamilySeq   INT)  
+  
+End

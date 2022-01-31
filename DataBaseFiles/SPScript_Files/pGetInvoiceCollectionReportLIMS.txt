@@ -1,0 +1,57 @@
+CREATE PROCEDURE [dbo].[pGetInvoiceCollectionReportLIMS] @pFDate [DATETIME]
+,@pTDate [DATETIME]
+,@pOrgId [INT]
+,@pLoginID [BIGINT]
+,@pRepType [nvarchar] (100)
+,@ClientID [BIGINT]
+,@OrgAddreSSID [INT]
+,@ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+--exec pGetOPCollectionReportLIMS '03/11/2012','03/11/2012',67,null,null,null,null,'Detailed',null,null,null,null,null,null                                                 
+SET NOCOUNT ON
+BEGIN
+declare @Configkeyvalue varchar(200)
+declare @Configkeyid bigint
+
+
+
+select  ROW_NUMBER() OVER (Order by ir.CreatedAt) as RowNUM ,u.Name as UserName,ir.CreatedBy,Sum(ir.ReceivedAmount) as ReceivedAmount from InvoiceReceipts ir
+inner join PaymentType pt on pt.PaymentTypeID=ir.PaymentTypeID
+inner join login l  on l.loginID=ir.CreatedBy
+inner join users u on l.loginID=u.LoginID
+where ir.createdat between @pFDate AND @pTDate  and ir.orgid=@pOrgId
+group by u.Name,ir.CreatedBy,ir.CreatedAt
+
+
+select ROW_NUMBER() OVER (Order by ir.CreatedAt) as RowNUM,cm.ClientID,cm.ClientName,sum(ir.ReceivedAmount) as ReceivedAmount from InvoiceReceipts ir
+inner join  invoice i on i.invoiceid=ir.InvoiceID
+inner join ClientMaster cm on cm.ClientID=i.ClientID
+where ir.createdat between @pFDate AND   @pTDate and ir.orgid=@pOrgId
+group by cm.ClientID,cm.ClientName,ir.CreatedAt
+
+select ROW_NUMBER() OVER (Order by ir.CreatedAt) as RowNUM,pt.PaymentTypeID,pt.PaymentName as UserName,sum(ir.ReceivedAmount) as ReceivedAmount from InvoiceReceipts ir
+--inner join  invoice i on i.invoiceid=ir.InvoiceID
+--inner join ClientMaster cm on cm.ClientID=i.ClientID
+inner join PaymentType pt on pt.PaymentTypeID=ir.PaymentTypeID
+where ir.createdat between @pFDate AND   @pTDate and ir.orgid=@pOrgId
+group by pt.PaymentTypeID,pt.PaymentName,ir.CreatedAt
+
+;WITH cte_result AS(
+select ROW_NUMBER() OVER (Order by ir.CreatedAt) as RowNUM,isnull(sum(ir.TDSAmount),0.00) as TDSAmount,isnull(sum(ir.WriteOffAmt),0.00) as WriteOffAmt,isnull(sum(ir.DiscountAmount),0.00) as DiscountAmount from InvoiceReceipts ir
+where ir.createdat between @pFDate AND   @pTDate and ir.orgid=@pOrgId
+group by ir.createdat
+)
+select PaymentType, ReceivedAmount
+FROM cte_result
+unpivot
+(
+   ReceivedAmount
+   for PaymentType in (TDSAmount, WriteOffAmt, DiscountAmount)
+) u
+
+
+END
+
+
+

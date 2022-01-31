@@ -1,0 +1,529 @@
+-- =============================================  
+-- Author      : Velmurugan D   
+-- Create date : 23-Aug-2019  
+-- Description : TAT Status Time Calculation  
+-- =============================================  
+CREATE PROCEDURE [dbo].[pGetStatusBasedTATDateTime]  
+(  
+ @p_OrgId                  INT             ,  
+ @p_TestId                 BIGINT          ,  
+ @p_TestType               VARCHAR(5)      ,  
+ @p_ClientId               BIGINT          ,  
+ @DeptID                   INT             ,  
+ @p_TATCalculationDateTime DATETIME        ,    /* Pass which date need to take TAT claculation. Ex : Reg.Date,CollectionDate,PickupDate */  
+ @p_TATDateTime       DATETIME OUTPUT ,    /* Output of ValidateDateTime */  
+ @InvestigationStatusID INT,  
+ @p_Isdebug                BIT = 0         ,    /* Used to debug procedure */  
+ @p_@ContextInfo           UDT_Context READONLY,  
+ @p_ProcessingLocationId  INT  
+)  
+  
+AS  
+   
+/*  
+  
+DECLARE @l_TATProcessDateTime DATETIME, @l_LogisticTimeasmins SMALLINT, @l_SampleReceiptDateTime DATETIME,   
+@l_Processinghoursasmins INT,  
+@l_ProcessStartDateTime DATETIME ,   
+@l_TATDateTime DATETIME,  
+@l_LabendTime TIME,  
+@l_EarlyReportTime TIME,  
+@l_ReportDateTime DATETIME  
+DECLARE @p11 dbo.UDT_Context  
+INSERT INTO @p11 values(67,N'Metropolis Vidyavihar',N'',107,1856,N'LabReception',0,3366,NULL,N'',107,0,N'',NULL,NULL,1,75,11,N'en-GB',0,NULL,NULL,NULL)  
+--SELECT * FROM @p11  
+EXECUTE pGetTATReportDateTime @p_OrgId = 67 ,@p_TestId = 2462,@p_TestType = 'GRP',@p_ClientId = 1089,@p_TATCalculationDateTime = '20160630 07:00:00',  
+                              @p_TATProcessDateTime = @l_TATProcessDateTime OUTPUT, @p_LogisticTimeasmins = @l_LogisticTimeasmins OUTPUT,   
+         @p_SampleReceiptDateTime = @l_SampleReceiptDateTime OUTPUT,  
+         @p_Processinghoursasmins = @l_Processinghoursasmins OUTPUT,  
+                              @p_ProcessStartDateTime = @l_ProcessStartDateTime OUTPUT,@p_TATDateTime = @l_TATDateTime OUTPUT,  
+         @p_LabendTime = @l_LabendTime OUTPUT,@p_EarlyReportTime = @l_EarlyReportTime OUTPUT,@p_ReportDateTime = @l_ReportDateTime OUTPUT,  
+         @p_Isdebug = 0,  
+         @p_@ContextInfo = @p11  
+  
+SELECT @l_TATProcessDateTime AS TATProcessDateTime,@l_LogisticTimeasmins AS LogisticTimeasmins, @l_SampleReceiptDateTime AS SampleReceiptDateTime,   
+@l_Processinghoursasmins AS Processinghoursasmins,  
+@l_ProcessStartDateTime AS ProcessStartDateTime, @l_TATDateTime AS TATDateTime,@l_LabendTime AS LabEndTime,@l_EarlyReportTime AS EarlyReportTime,   
+@l_ReportDateTime AS ReportDateTime  
+  
+*/  
+  
+BEGIN  
+   
+   SET NOCOUNT ON;  
+   
+   -- BEGIN : Local Variables Declarations ======  
+  
+      DECLARE @l_Scheduleid                    INT  
+   DECLARE @l_labstarttime                  TIME    
+   DECLARE @l_labendtime                    TIME  
+   DECLARE @l_Processinghours               SMALLINT  
+   DECLARE @l_processingmins                SMALLINT  
+   DECLARE @l_EarlyReporttime               TIME   
+   DECLARE @l_TATCalculationbasedon         VARCHAR(10)    /* Processed on labhours or 24hours  */  
+   DECLARE @l_TATProcesstype   TINYINT        /* Processed on Daily,Weekly or Monthly */  
+   DECLARE @l_TATmode                       TINYINT        /* TATmode as Random,Batch or Random Batch */  
+   DECLARE @l_Scheduleday                   VARCHAR(25)    /* Used to mention weekdays Ex : Mon,Tue,Fri,1st Mon,3rd Mon */  
+   DECLARE @l_UDTBatchtimings               [dbo].[UDT_Batchtimings]   
+   DECLARE @l_Samplereceiptdatetime         DATETIME  = @p_TATCalculationDateTime  
+   DECLARE @l_NextBatchStartdatetime        DATETIME  
+   DECLARE @l_NextWorkingdate               DATE  
+   DECLARE @l_CalculationDateandTime        DATETIME  
+   DECLARE @l_Calculationdate               DATE  
+   DECLARE @l_labcalculationStartTime       TIME  
+   DECLARE @l_labcalculationendTime         TIME  
+   DECLARE @l_labcalculationStartTimeasmins SMALLINT  
+   DECLARE @l_labcalculationendTimeasmins   SMALLINT  
+   DECLARE @l_labworkinghoursasmins         SMALLINT  
+   DECLARE @l_Processinghoursasmins         INT  
+   DECLARE @l_ReportDateAndTime             DATETIME  
+   DECLARE @l_ReportDate                    DATE  
+   DECLARE @l_ReportTime                    TIME  
+   DECLARE @l_TATDateAndTime                DATETIME  
+   DECLARE @l_Registeredlocationid          BIGINT  
+   DECLARE @l_ProcessingOrgid               INT  
+   DECLARE @l_Processinglocationid          BIGINT  
+   DECLARE @l_IsOrgtoOrgtransferflag        BIT       = 0  
+   DECLARE @l_IsOutsourceflag               BIT       = 0  
+   DECLARE @l_OrgtoOrgClientid              BIGINT  
+   DECLARE @l_TatStartBaseType              TINYINT  
+  
+  
+   DECLARE @p_LogisticTimeasmins SMALLINT;  
+   DECLARE @p_TATProcessDateTime DATETIME;  
+   DECLARE @p_ProcessStartDateTime DATETIME;  
+   DECLARE @p_Processinghoursasmins SMALLINT;  
+   DECLARE @p_SampleReceiptDateTime DATETIME;  
+   DECLARE @l_TATDateTime DATETIME;  
+        
+   -- END   : Local Variables Declarations ======  
+  
+   IF(ISNULL(@p_ClientId,0)=0)  
+      SELECT  @p_ClientId= ClientID FROM ClientMaster CM (NOLOCK) where CM.OrgID=@p_OrgId and CM.ClientName='GENERAL' AND CM.Status='A'  
+  
+   -- BEGIN : Find processing location =========  
+        
+   SELECT @l_Registeredlocationid = CI.OrgAddressID FROM @p_@ContextInfo CI  
+  
+  
+   if @InvestigationStatusID=6  
+   SELECT @l_Registeredlocationid=432  
+  
+   SELECT @l_TatStartBaseType = CASE WHEN ISNULL(Tatprocessdatetype,0) = 0 THEN 2   
+                                     ELSE Tatprocessdatetype END   
+             FROM ClientMaster CM (NOLOCK) WHERE CM.ClientID = @p_ClientId  
+     
+   SELECT @l_ProcessingOrgid = ILM.ProcessingOrgID, @l_Processinglocationid = ILM.ProcessingAddressID,  
+          @l_IsOutsourceflag = CASE WHEN ILM.Type = 12 THEN 1 ELSE 0 END  
+          FROM InvestigationLocationMapping (NOLOCK) ILM   
+                WHERE ILM.OrgID = @p_OrgId AND ILM.LocationID = @l_Registeredlocationid AND ILM.FeeType = @p_TestType   
+          AND ILM.InvestigationID = @p_TestId   
+  
+       --set @l_Processinglocationid=433  
+       --set @l_ProcessingOrgid=233  
+        --SELECT 'srini',ILM.ProcessingOrgID, ILM.ProcessingAddressID,  
+        --   CASE WHEN ILM.Type = 12 THEN 1 ELSE 0 END ,@p_OrgId,@p_TestId,@p_TestType  
+        --  FROM InvestigationLocationMapping (NOLOCK) ILM   
+        --        WHERE ILM.OrgID = @p_OrgId AND ILM.LocationID = @l_Registeredlocationid AND ILM.FeeType = @p_TestType   
+        --  AND ILM.InvestigationID = @p_TestId   
+       
+  IF(ISNULL(@l_Processinglocationid,0)=0)  
+  BEGIN  
+  
+   SET @l_Processinglocationid=@p_ProcessingLocationId  
+   SELECT @l_ProcessingOrgid = OA.OrgID   
+             FROM OrganizationAddress (NOLOCK) OA   
+       WHERE OA.AddressID = @l_Processinglocationid  
+    
+  END     
+        
+   IF @l_Processinglocationid IS NULL OR @l_IsOutsourceflag = 1  /* Taken reg.location's default processing location when test processed at reg.location or outsourced */  
+      BEGIN  
+  
+         SELECT @l_Processinglocationid = OA.ProcessingAddressID   
+             FROM OrganizationAddress (NOLOCK) OA   
+       WHERE OA.AddressID = @l_Registeredlocationid  
+  
+      SELECT @l_ProcessingOrgid = OA.OrgID   
+             FROM OrganizationAddress (NOLOCK) OA   
+       WHERE OA.AddressID = @l_Processinglocationid  
+  
+   END  
+   /**TAT MARIYA TEMP**/  
+    --Print '@l_Registeredlocationid'  
+   -- print @l_Registeredlocationid  
+   IF @l_Processinglocationid IS NULL AND @l_IsOutsourceflag =0  /* Taken reg.location's default processing location when test processed at reg.location or outsourced */  
+      BEGIN  
+  
+    
+  
+         SELECT @l_Processinglocationid = OA.ProcessingAddressID   
+             FROM OrganizationAddress (NOLOCK) OA   
+     --  WHERE OA.AddressID = @l_Registeredlocationid  
+      SELECT @l_Processinglocationid = @l_Registeredlocationid  
+      SELECT @l_ProcessingOrgid = OA.OrgID   
+             FROM OrganizationAddress (NOLOCK) OA   
+       WHERE OA.AddressID = @l_Registeredlocationid --@l_Processinglocationid  
+  
+   END  
+     
+     
+   -----SRINI  
+   
+   /**TAT MARIYA TEMP**/  
+   IF @p_OrgId <> @l_ProcessingOrgid AND @l_IsOutsourceflag = 0  
+      BEGIN  
+  
+        SELECT @l_IsOrgtoOrgtransferflag  =  1  
+  
+   END  
+  
+         IF @p_Isdebug = 1  
+      BEGIN  
+       
+     SELECT @p_OrgId AS RegisteredOrg, @l_Registeredlocationid AS Registeredlocationid, @l_ProcessingOrgid AS ProcessingOrgid,   
+      @l_Processinglocationid AS Processinglocationid, @l_IsOrgtoOrgtransferflag AS IsOrgtoOrgtransferflag, @l_IsOutsourceflag AS IsOutsourceflag  
+  
+   END  
+  
+   -- END   : Find processing location =========  
+  
+    
+   -- BEGIN : Find out which schedule ===========  
+        
+   IF @l_IsOrgtoOrgtransferflag  =  0  
+      BEGIN   
+       
+     SELECT @l_Scheduleid = TS.Scheduleid FROM dbo.TATSchedulemapping      (NOLOCK) SM  
+                 INNER JOIN dbo.TATSchedule  (NOLOCK) TS ON TS.Scheduleid = SM.Scheduleid --AND TS.OrgID = @p_OrgId   
+               WHERE SM.OrgID = @l_ProcessingOrgid AND SM.Testid = @p_TestId AND SM.Testtype = @p_TestType AND SM.Clientid = @p_ClientId and SM.IsActive=1  
+  
+   END  
+   ELSE IF @l_IsOrgtoOrgtransferflag  =  1  
+      BEGIN  
+  
+                 SELECT @l_OrgtoOrgClientid = TC.ClientID   
+            FROM OrgTransferClientMapping (NOLOCK) TC  
+            WHERE TC.RegisteredOrgID = @p_OrgId AND TC.ProcessingOrgID = @l_ProcessingOrgid  
+  
+     SELECT @l_Scheduleid = TS.Scheduleid FROM dbo.TATSchedulemapping      (NOLOCK) SM  
+                 INNER JOIN dbo.TATSchedule  (NOLOCK) TS ON TS.Scheduleid = SM.Scheduleid --AND TS.OrgID = @p_OrgId   
+               WHERE SM.OrgID = @l_ProcessingOrgid AND SM.Testid = @p_TestId AND SM.Testtype = @p_TestType AND SM.Clientid = @l_OrgtoOrgClientid  
+  
+   END  
+  
+   IF @l_Scheduleid IS NULL AND @p_TestType = 'INV'  
+      BEGIN  
+  
+                 SELECT @l_Scheduleid = IOM.Scheduleid FROM dbo.InvestigationOrgMapping (NOLOCK) IOM   
+                                           WHERE IOM.OrgID = @l_ProcessingOrgid AND IOM.InvestigationID = @p_TestId  
+          
+   END  
+         ELSE IF @l_Scheduleid IS NULL AND @p_TestType IN ( 'GRP','PKG' )  
+      BEGIN  
+  
+                 SELECT @l_Scheduleid = IOG.Scheduleid FROM dbo.InvOrgGroup (NOLOCK) IOG   
+                                           WHERE IOG.AttGroupID = @p_TestId AND IOG.OrgID = @l_ProcessingOrgid  
+          
+   END    
+  
+   IF @p_Isdebug = 1  
+      BEGIN  
+             
+     SELECT @l_Scheduleid AS Scheduleid  
+  
+   END  
+   
+   -- END   : Find out which schedule ===========  
+  
+  
+   -- BEGIN : Get schedule details ==============  
+     
+      SELECT @l_Processinghours = TS.Processinghours, @l_processingmins = TS.Processingmins,    
+          @l_EarlyReporttime = TS.Earlyreporttime,   
+    @l_TATCalculationbasedon =  CASE WHEN TS.TATcalculationbase = 1 THEN 'LAB HOURS' WHEN TS.TATcalculationbase = 2 THEN '24 HOURS' END,  
+    @l_TATProcesstype = TS.TATProcesstype, @l_TATmode = TS.TATmode, @l_Scheduleday = TS.Scheduleday  
+    FROM dbo.TATSchedule (NOLOCK) TS  
+               WHERE TS.Scheduleid = @l_Scheduleid  
+  
+   INSERT INTO @l_UDTBatchtimings ( Batchstarttime, Cutofftime, Cutoffintervalvalue, Cutoffintervaltype )  
+   SELECT RS.BatchStarttime, RS.Cutofftime, RS.Cutoffintervalvalue, RS.Cutoffintervaltype   
+          FROM TATrandombatchschedule (NOLOCK) RS WHERE RS.Scheduleid = @l_Scheduleid  
+  
+   IF @p_Isdebug = 1  
+      BEGIN  
+  
+     SELECT @l_Processinghours AS Processinghours, @l_processingmins AS processingmins,  
+      @l_EarlyReporttime AS EarlyReporttime, @l_TATCalculationbasedon AS TATCalculationbasedon, @l_TATProcesstype AS TATProcesstype,  
+      @l_TATmode AS TATmode, @l_Scheduleday AS Scheduleday  
+      
+     SELECT 'Batchtimings', * FROM @l_UDTBatchtimings   
+  
+   END  
+  
+   -- END   : Get schedule details ==============  
+  
+    IF(@InvestigationStatusID=6)  
+  BEGIN  
+    
+ --  -- BEGIN : Calculate transit time =========  
+ -- select @p_OrgId as p_OrgId,@l_ProcessingOrgid as l_ProcessingOrgid,@l_TatStartBaseType as l_TatStartBaseType ,@l_Registeredlocationid as l_Registeredlocationid,  
+ --@l_Processinglocationid as l_Processinglocationid,@l_TatStartBaseType as l_TatStartBaseType,@l_TatStartBaseType as l_TatStartBaseType ,@p_TestId  
+ --set @l_Processinglocationid=432  
+ --SET @l_Registeredlocationid=432  
+   
+      IF ( @p_OrgId = @l_ProcessingOrgid AND @l_TatStartBaseType <> 2 )   
+      OR   
+   ( @p_OrgId = @l_ProcessingOrgid AND @l_Registeredlocationid <> @l_Processinglocationid AND @l_TatStartBaseType = 2 ) /* Transit time calculation from loc to loc under same Org */  
+      BEGIN  
+   print 's'  
+ print @p_TATCalculationDateTime  
+    --select @l_Samplereceiptdatetime  
+     
+   --select @p_OrgId,@l_Registeredlocationid,@l_ProcessingOrgid,@l_Processinglocationid,@p_ClientId,@p_TATCalculationDateTime   
+        EXECUTE dbo.[pgettransittimecalculation] @p_Registeredorgid = @p_OrgId, @p_Registeredlocationid = @l_Registeredlocationid, @p_Processingorgid = @l_ProcessingOrgid,  
+                                              @p_Processinglocationid = @l_Processinglocationid, @p_Clientid = @p_ClientId,  
+                                                          @p_TATCalculationDateTime = @p_TATCalculationDateTime,@p_Transittimeasmins = @p_LogisticTimeasmins OUTPUT, @p_Samplereciptdatetime = @l_Samplereceiptdatetime OUTPUT,  
+                @p_@ContextInfo = @p_@ContextInfo  
+      
+       
+   END  
+   ELSE IF @l_Registeredlocationid <> @l_Processinglocationid AND @p_OrgId <> @l_ProcessingOrgid  /* Transit time calculation for Org to Org transfer */  
+      BEGIN  
+     
+    --select @l_Samplereceiptdatetime  
+        EXECUTE dbo.[pgetorgtoorgtimecalculation] @p_Registeredorgid = @p_OrgId, @p_Registeredlocationid = @l_Registeredlocationid, @p_Processingorgid = @l_ProcessingOrgid,  
+                                               @p_Processinglocationid = @l_Processinglocationid, @p_TATCalculationDateTime = @p_TATCalculationDateTime,   
+                 @p_Transittimeasmins = @p_LogisticTimeasmins OUTPUT, @p_Samplereciptdatetime = @l_Samplereceiptdatetime OUTPUT,  
+                 @p_@ContextInfo = @p_@ContextInfo  
+  
+  
+   END  
+     
+   SELECT @p_TATProcessDateTime = @p_TATCalculationDateTime, @p_SampleReceiptDateTime = @l_Samplereceiptdatetime, @p_LogisticTimeasmins = ISNULL(@p_LogisticTimeasmins,0) /* SET TAT processtype, sample receipt datetime and Logistic time to output paramete 
+ 
+  
+  
+  
+  
+  
+  
+  
+  
+r  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+s  */  
+  
+   IF @p_Isdebug = 1  
+      BEGIN  
+  
+           SELECT @p_TATCalculationDateTime AS Tatprocessdatetime, @l_Samplereceiptdatetime AS Samplereceiptdatetime  
+  
+   END  
+     
+   -- END  : Calculate transit time =========  
+     
+  
+   -- BEGIN : Find out when next process / batch start datetime ==============  
+    
+     IF ( @l_TATProcesstype IN ( 1,2 ) ) /* TATProcesstype as Daily - 1 or Weekly - 2 */  
+     BEGIN     
+    
+     --select @l_ProcessingOrgid,@l_Processinglocationid,@l_Samplereceiptdatetime,@l_Scheduleid,@l_Scheduleday,@l_TATmode  
+    EXECUTE dbo.[PgetNextweeklybatchstartdatetime] @Orgid = @l_ProcessingOrgid, @Orgaddressid = @l_Processinglocationid, @Pindate = @l_Samplereceiptdatetime, @pScheduleid = @l_Scheduleid, @pScheduleday = @l_Scheduleday,  
+                  @pTATmode = @l_TATmode,@pUDTBatchtiming = @l_UDTBatchtimings, @outdate = @l_NextBatchStartdatetime OUTPUT          
+      
+     END  
+   ELSE IF ( @l_TATProcesstype = 3 )   /* TATProcesstype as Monthly - 3 */  
+     BEGIN  
+      
+    EXECUTE [dbo].[pgetNextMonthlybatchstartdatetime]  @pOrgid = @l_ProcessingOrgid, @pOrgaddressid = @l_Processinglocationid, @pIndate = @l_Samplereceiptdatetime, @pScheduleid = @l_Scheduleid, @pScheduleday = @l_Scheduleday,  
+                   @pTATmode = @l_TATmode,@pUDTBatchtiming = @l_UDTBatchtimings,  
+                   @pOutdate = @l_NextBatchStartdatetime OUTPUT   
+  
+     END  
+     print 's2'  
+   print @p_TATCalculationDateTime    
+         SELECT @p_ProcessStartDateTime = @l_NextBatchStartdatetime  /* SET next process / batch start datetime to Output parameter  */  
+  
+   IF @p_Isdebug = 1  
+      BEGIN  
+  
+           SELECT @l_NextBatchStartdatetime AS NextBatchStartdatetime  
+  
+   END  
+      print 's3'  
+   print @p_TATCalculationDateTime    
+      -- END : Find out when next process / batch start datetime ================  
+--   print '1'  
+   SELECT @l_TATDateTime=@p_SampleReceiptDateTime;  
+   
+   END  
+   ------ TAT Date time calculation ------  
+  
+      
+   DECLARE @l_TATcalculationTimeinmins SMALLINT;  
+   --DECLARE @va_Processinghoursasmins SMALLINT;  
+   DECLARE @l_TATTimeinmins SMALLINT;  
+  
+   DECLARE @TempStatusMapping AS TABLE  
+   (  
+     ProcessingHours SMALLINT,  
+     ProcessingMins INT  
+    )  
+  
+   INSERT INTO @TempStatusMapping(ProcessingHours,ProcessingMins)  
+    SELECT ISNULL(ProcessingHours,0),ISNULL(TMT.ProcessingMins,0) From TatMISTimeconfiguration TMT  
+       --INNER JOIN TatMISStatusMapping TMM ON TMT.InvestigationStatusID=TMM.InvestigationStatusID  
+    WHERE TMT.InvestigationStatusID=@InvestigationStatusID AND TMT.DeptID=@DeptID;  
+    
+   SELECT @l_TATcalculationTimeinmins =  SUM(ISNULL(ProcessingHours,0) * 60)+ SUM(ISNULL(ProcessingMins,0)) FROM @TempStatusMapping  
+    
+  ------ TAT Date time calculation ------  
+  
+   -- BEGIN : TAT Date Calculation ==============  
+   IF(@InvestigationStatusID=6)  
+  BEGIN  
+     
+   --      SELECT @l_CalculationDateandTime = @l_NextBatchStartdatetime , @l_Calculationdate = CAST(@l_NextBatchStartdatetime AS DATE)  
+   --SELECT @l_TATcalculationTimeinmins = @p_LogisticTimeasmins  
+   --   print 's4'  
+   --print @p_TATCalculationDateTime   
+    SELECT @l_CalculationDateandTime = @p_TATCalculationDateTime , @l_Calculationdate = CAST(@p_TATCalculationDateTime AS DATE)   
+     SELECT @l_TATcalculationTimeinmins = @p_LogisticTimeasmins  
+   END  
+   ELSE   
+   BEGIN  
+     
+     SELECT @l_CalculationDateandTime = @p_TATCalculationDateTime , @l_Calculationdate = CAST(@p_TATCalculationDateTime AS DATE)  
+   END   
+         --SELECT @l_CalculationDateandTime AS CalculationDateandTime , @l_Calculationdate AS Calculationdate  
+    
+         SELECT @l_labcalculationStartTime = CAST( @l_CalculationDateandTime AS TIME )   
+  
+   SELECT @l_labendtime = L.Labend FROM Locationworkinghours L (NOLOCK)   
+             WHERE L.Orgid = @l_ProcessingOrgid AND L.Orgaddressid = @l_Processinglocationid  
+     AND L.Weekdayno = DATEPART(DW,@l_CalculationDateandTime)  
+  
+   SELECT @l_labcalculationendTime   =  CASE WHEN @l_TATCalculationbasedon = 'LAB HOURS' THEN @l_labendtime   
+               WHEN @l_TATCalculationbasedon = '24 HOURS'  THEN '23:59' END  
+  
+   SELECT @l_labcalculationStartTimeasmins = DATEPART(HOUR ,@l_labcalculationStartTime) * 60 + DATEPART(MINUTE ,@l_labcalculationStartTime)  
+   SELECT @l_labcalculationendTimeasmins = DATEPART(HOUR ,@l_labcalculationendTime) * 60 + DATEPART(MINUTE ,@l_labcalculationendTime) + CASE WHEN @l_TATCalculationbasedon = 'LAB HOURS' THEN 0   
+                                     WHEN @l_TATCalculationbasedon = '24 HOURS' THEN 1 END  
+          
+   SELECT @l_labworkinghoursasmins = ( @l_labcalculationendTimeasmins - @l_labcalculationStartTimeasmins )   
+   SELECT @l_Processinghoursasmins = @l_TATcalculationTimeinmins  
+        
+   IF @p_Isdebug = 1  
+      BEGIN  
+     
+     SELECT @l_labcalculationStartTime as labcalculationStartTime,@l_labcalculationendTime as labcalculationendTime,  
+      @l_labcalculationStartTimeasmins as labcalculationStartTimeasmins,@l_labcalculationendTimeasmins as labcalculationendTimeasmins,  
+      @l_labworkinghoursasmins as labworkinghoursasmins,@l_Processinghoursasmins as Processinghoursasmins  
+  
+   END  
+  
+         SELECT @p_Processinghoursasmins = @l_Processinghoursasmins  /* Set processing time to output parameter */  
+    
+  --IF(@InvestigationStatusID<>6)  
+  --BEGIN  
+    
+   WHILE ( @l_Processinghoursasmins > 0 )  
+     BEGIN  
+       
+       IF ( @l_Processinghoursasmins <=  @l_labworkinghoursasmins )   
+       BEGIN  
+       print @l_Processinghoursasmins  
+       print @l_labworkinghoursasmins  
+       print @l_CalculationDateandTime  
+         SELECT @l_TATDateTime = DATEADD(MINUTE,@l_Processinghoursasmins,@l_CalculationDateandTime)  
+           
+         SELECT @l_Processinghoursasmins = 0  
+      print @l_TATDateTime  
+           
+       END  
+     ELSE   
+       BEGIN  
+         
+             
+         
+       if (@l_labworkinghoursasmins>=0)  
+         SELECT @l_Processinghoursasmins = @l_Processinghoursasmins - @l_labworkinghoursasmins  
+      else   
+      SELECT @l_Processinghoursasmins = @l_Processinghoursasmins  
+         SELECT @l_Calculationdate = DATEADD ( DD, 1 , @l_Calculationdate )  
+  
+         SELECT @l_labstarttime = L.Labstart, @l_labendtime = L.Labend FROM Locationworkinghours L (NOLOCK)   
+                               WHERE L.Orgid = @l_ProcessingOrgid AND L.Orgaddressid = @l_Processinglocationid AND L.Weekdayno = DATEPART(DW,@l_Calculationdate)  
+  
+         SELECT @l_labcalculationStartTime =  CASE WHEN @l_TATCalculationbasedon = 'LAB HOURS' THEN @l_labstarttime   
+                  WHEN @l_TATCalculationbasedon = '24 HOURS'  THEN '00:00' END   
+  
+         SELECT @l_labcalculationendTime   =  CASE WHEN @l_TATCalculationbasedon = 'LAB HOURS' THEN @l_labendtime   
+                                 WHEN @l_TATCalculationbasedon = '24 HOURS'  THEN '23:59' END  
+  
+         SELECT @l_labcalculationStartTimeasmins = DATEPART(HOUR ,@l_labcalculationStartTime) * 60 + DATEPART(MINUTE ,@l_labcalculationStartTime)  
+  
+         SELECT @l_labcalculationendTimeasmins   = DATEPART(HOUR ,@l_labcalculationendTime) * 60 + DATEPART(MINUTE ,@l_labcalculationendTime) + CASE WHEN @l_TATCalculationbasedon = 'LAB HOURS' THEN 0   
+                                                           WHEN @l_TATCalculationbasedon = '24 HOURS' THEN 1 END  
+  
+         SELECT @l_labworkinghoursasmins = ( @l_labcalculationendTimeasmins - @l_labcalculationStartTimeasmins )   
+  
+         --EXECUTE dbo.pGetNextWorkingDate @pOrgId = @p_OrgId, @Pdate = @l_Calculationdate,@pcount = 0,@outdate = @l_Calculationdate OUTPUT  
+         /** BY SYED **/  
+       IF(@l_TATCalculationbasedon = 'LAB HOURS' )  
+       BEGIN   
+          
+             IF NOT EXISTS(SELECT * FROM LabHolidays LH (NOLOCK)   
+               INNER JOIN dbo.TATScheduleholiday SH (NOLOCK)  ON SH.HolidayId = LH.HolidayId   
+                    AND SH.OrgID = @l_ProcessingOrgid AND SH.Scheduleid = @l_Scheduleid  
+                  WHERE LH.OrgID = @l_ProcessingOrgid AND LH.HolidayDate=@l_Calculationdate)  
+                  BEGIN   
+  
+                     EXECUTE dbo.pGetNextWorkingDate @pOrgId = @l_ProcessingOrgid, @Pdate = @l_Calculationdate,@pcount = 0,@outdate = @l_Calculationdate OUTPUT  
+           END  
+       END  
+  
+         SELECT @l_CalculationDateandTime = DATEADD ( MINUTE , @l_labcalculationStartTimeasmins , CAST( @l_Calculationdate AS DATETIME ) )  
+  
+         IF @p_Isdebug = 1  
+            BEGIN  
+             
+           SELECT @l_labcalculationStartTime as labcalculationStartTime,@l_labcalculationendTime as labcalculationendTime,  
+            @l_labcalculationStartTimeasmins as labcalculationStartTimeasmins,@l_labcalculationendTimeasmins as labcalculationendTimeasmins,  
+            @l_labworkinghoursasmins as labworkinghoursasmins,@l_Processinghoursasmins as Processinghoursasmins,@l_Calculationdate as Calculationdate,  
+            @l_CalculationDateandTime as CalculationDateandTime  
+           
+         END  
+  
+       END  
+  
+     END  
+     --END  
+    
+    
+      SELECT @p_TATDateTime = @l_TATDateTime  /* SET calculated TAT end time to output parameter */  
+    
+      -- END : TAT Date Calculation ==============   
+  
+      
+END  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  

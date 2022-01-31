@@ -1,0 +1,83 @@
+-- =============================================        
+-- Author:  Pushparaj        
+-- Create date: 25th July 2018        
+-- Description: Update wellness pdf report details for Patient and as well for the company        
+-- =============================================        
+CREATE PROCEDURE pUpdateWellnessReport        
+ -- Add the parameters for the stored procedure here        
+ @Category as VARCHAR(50),        
+ @WellnessActivityID AS VARCHAR(100),        
+ @PatientOrCompanyID AS VARCHAR(50),        
+ @FileName as VARCHAR(MAX),      
+ @CurrentOrgID as INT,      
+ @RawData as nVARCHAR(MAX) ,
+ @PatientVisitId as bigint            
+AS                
+BEGIN                
+ -- SET NOCOUNT ON added to prevent extra result sets from                
+ -- interfering with SELECT statements.                
+ SET NOCOUNT ON;                
+                            
+                
+    -- Two Categories : Patient and Company                
+                 
+ IF(@Category = 'Patient')                
+ BEGIN                
+  -- Update Patient Details                
+  -- select * from visittemplate                
+ -- SELECT @VisitID=PatientVisitID from visittemplate WHERE BatchId=@WellnessActivityID                
+                
+  UPDATE Notifications SET ActionType='Pdf',[Status]='Completed'                
+    WHERE IdentityID=@PatientVisitId AND ActionType='WellnessPdf'                
+          
+  UPDATE PushingOrderedDetails SET [Status]='Completed',JsonData=@RawData WHERE IdentityID=Convert(varchar,@PatientVisitId)       
+              
+ --- Update ReportSnapShot , Which will show the report in the application              
+ ------------------------------------------------------------------------              
+ DECLARE @OrgId as VARCHAR(50)              
+ DECLARE @OrgAddrId as VARCHAR(50)              
+ DECLARE @ReportPath as VARCHAR(MAX)              
+ DECLARE @AccessionNumber as VARCHAR(MAX)              
+ DECLARE @NotificationID as VARCHAR(10)              
+ DECLARE @SeqNumber as INT              
+               
+ -- Fetch basic details for inserting              
+ SELECT @NotificationID=NotificationId,@SeqNumber=Seq_Num ,@OrgId=OrgID , @OrgAddrId = OrgAddressID , @ReportPath = CONCAT(Template,AttachmentName)              
+    FROM Notifications WHERE IdentityID=@PatientVisitId and ActionType='Pdf' and Status='Completed'              
+               
+  -- Fetch Accession Number              
+  SELECT DISTINCT @AccessionNumber = STUFF((SELECT distinct ', ' + CAST(AccessionNumber AS VARCHAR(10)) [text()]              
+    FROM OrderedInvestigations               
+    WHERE VisitID=@PatientVisitId              
+    FOR XML PATH(''), TYPE)              
+   .value('.','VARCHAR(MAX)'),1,2,' ')              
+  FROM OrderedInvestigations WHERE VisitID=@PatientVisitId              
+              
+              
+  INSERT INTO ReportSnapshot(Content,TemplateID,Status,VisitID,OrgID,OrgAddressID,CreatedBy,CreatedAt,ReportPath,AccessionNumber,NotificationID,Seq_Num,Type)              
+  VALUES(CAST('0x530079007300740065006D002E0042007900740065005B005D0020002000' AS varbinary(MAX)),0,'Ready',@PatientVisitId,@OrgId,@OrgAddrId,'',GETDATE(),@ReportPath,@AccessionNumber,@NotificationID,@SeqNumber,'Pdf')              
+              
+ END                
+ ELSE IF(@Category = 'Error')            
+  BEGIN          
+          
+   --SELECT @VisitID=PatientVisitID from visittemplate WHERE BatchId=@WellnessActivityID                
+ UPDATE PushingOrderedDetails SET [Status]='Error',RetryCount=ISNULL(RetryCount,0)+1 ,JsonData=@RawData WHERE IdentityID=Convert(varchar,@PatientVisitId)          
+  END          
+          
+  ELSE          
+          
+ BEGIN                
+  -- Update Company Details                
+  -- SELECT * FROM clientBatchMaster                
+  DECLARE @FilePath as VARCHAR(MAX)              
+                
+  --SELECT @FilePath='D:\Liskernel\PDF_Folder\ANDERSONLAB_PDF_FILES\WELLNESSREPORT\'              
+  SELECT @FilePath=Value FROM CommunicationConfig WHERE OrgID=@CurrentOrgID and Name='WellnessPdfFolderPath'              
+  -- Fetch filepath from Communication Config              
+  UPDATE clientBatchMaster SET ReportStatus='View',[FileName]=@FileName,FilePath=@FilePath              
+    WHERE CompanyReportId=@WellnessActivityID                
+        
+ END                
+          
+END 

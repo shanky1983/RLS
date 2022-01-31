@@ -1,0 +1,194 @@
+ 
+/****** Object:  StoredProcedure [dbo].[Psavelocationworkinghoursdetail]    Script Date: 4/3/2019 7:41:26 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+
+CREATE PROCEDURE [dbo].[Psavelocationworkinghoursdetail] (@pOrgID         [BIGINT],
+                                                 @pOrgAddressId  [BIGINT],
+                                                 @pLabstart      DATETIME,
+                                                 @pLabend        DATETIME,
+                                                  @pFrequencyDays VARCHAR(250),
+                                                 @pID            BIGINT,
+                                                 @ContextInfo    [UDT_CONTEXT] READONLY)
+AS
+  BEGIN
+      DECLARE @Str VARCHAR(250)
+      DECLARE @StrID VARCHAR(250)
+
+      IF( Charindex('#', @pFrequencyDays) > 0 )
+        BEGIN
+            SELECT @Str = Substring(@pFrequencyDays, 0, Charindex('#', @pFrequencyDays))
+
+            SELECT @StrID = Substring(@pFrequencyDays, Charindex('#', @pFrequencyDays) + 1, Len(@pFrequencyDays))
+
+            SELECT @pFrequencyDays = @Str
+        END
+
+      DECLARE @tblIDs AS TABLE
+        (
+           ID BIGINT
+        )
+
+      INSERT @tblIDs
+             (ID)
+      SELECT CONVERT(BIGINT, item)
+      FROM   dbo.[Fnsplit](@StrID, ',')
+
+      DECLARE @Weekdayno AS TABLE
+        (
+           Weekdayno INT,
+           IsExist   INT
+        )
+      DECLARE @LID BIGINT
+
+      SELECT @LID = LoginID
+      FROM   @ContextInfo
+
+      INSERT @Weekdayno
+             (Weekdayno)
+      SELECT item
+      FROM   dbo.[Fnsplit](@pFrequencyDays, ',')
+
+	  
+UPDATE w
+SET    w.Weekdayno = 7
+FROM   @Weekdayno w
+WHERE  w.Weekdayno = 0 
+
+      IF( @pID = 0 )
+        BEGIN
+            UPDATE T
+            SET    T.IsExist = 1
+            FROM   @Weekdayno T
+                   INNER JOIN (SELECT LWH.Weekdayno
+                               FROM   LocationWorkingHours LWH
+                               WHERE  LWH.Orgid = @pOrgID
+                                      AND LWH.Orgaddressid = @pOrgAddressId
+                                      AND LWH.Weekdayno IN (SELECT Weekdayno
+                                                            FROM   @Weekdayno)) T1
+                           ON T.Weekdayno = T1.Weekdayno
+
+            INSERT LocationWorkingHours
+                   (Orgid,
+                    Orgaddressid,
+                    Labstart,
+                    Labend,
+                    Weekdayno,
+                    Createdby,
+                    Createdat,
+                    Modifiedby,
+                    Modifiedat)
+            SELECT @pOrgID,
+                   @pOrgAddressId,
+                   @pLabstart,
+                   @pLabend,
+                   Weekdayno,
+                   @LID,
+                   Getdate(),
+                   @LID,
+                   Getdate()
+            FROM   @Weekdayno
+            WHERE  Isnull(IsExist, 0) <> 1
+        END
+      ELSE
+        BEGIN
+            --UPDATE T
+            --SET    T.IsExist = 1
+            --FROM   @Weekdayno T
+                   --INNER JOIN (SELECT LWH.Weekdayno
+                   --            FROM   LocationWorkingHours LWH
+                   --            WHERE  LWH.Orgid = @pOrgID
+                   --                   AND LWH.Orgaddressid = @pOrgAddressId
+                   --                   AND LWH.Weekdayno IN (SELECT Weekdayno
+                   --                                         FROM   @Weekdayno)) T1
+                   --        ON T.Weekdayno = T1.Weekdayno 
+
+			IF NOT EXISTS (SELECT 1 FROM @tblIDs )
+			BEGIN
+
+				 
+				           DELETE LWH
+							   FROM   LocationWorkingHours LWH
+                              INNER JOIN @Weekdayno T
+                           ON LWH.Weekdayno = T.Weekdayno
+							WHERE   LWH.Orgaddressid = @pOrgAddressId
+								
+							INSERT LocationWorkingHours
+								   (Orgid,
+									Orgaddressid,
+									Labstart,
+									Labend,
+									Weekdayno,
+									Createdby,
+									Createdat,
+									Modifiedby,
+									Modifiedat)
+							SELECT @pOrgID,
+								   @pOrgAddressId,
+								   @pLabstart,
+								   @pLabend,
+								   Weekdayno,
+								   1,
+								   Getdate(),
+								   1,
+								   Getdate()
+				 FROM   @Weekdayno
+							WHERE  IsExist IS NULL
+			END
+
+			UPDATE T
+            SET    T.IsExist = 1
+            FROM   @Weekdayno T
+                   INNER JOIN LocationWorkingHours LWH
+                           ON LWH.Weekdayno = T.Weekdayno
+            WHERE  LWH.Orgid = @pOrgID
+                   AND LWH.Orgaddressid = @pOrgAddressId
+
+            UPDATE LWH
+            SET    LWH.Labstart = @pLabstart,
+                   LWH.Labend = @pLabend
+            FROM   LocationWorkingHours LWH
+                   INNER JOIN @Weekdayno T
+                           ON LWH.Weekdayno = T.Weekdayno
+                   INNER JOIN @tblIDs TID
+                           ON LWH.ID = TID.ID
+            WHERE  LWH.Orgid = @pOrgID
+                   AND LWH.Orgaddressid = @pOrgAddressId
+                   AND T.IsExist = 1
+
+            DELETE LWH
+            FROM   LocationWorkingHours LWH
+                   INNER JOIN @tblIDs TID
+                           ON LWH.ID = TID.ID
+            WHERE  LWH.Weekdayno NOT IN (SELECT Weekdayno
+                                         FROM   @Weekdayno)
+
+            INSERT LocationWorkingHours
+                   (Orgid,
+                    Orgaddressid,
+                    Labstart,
+                    Labend,
+                    Weekdayno,
+                    Createdby,
+                    Createdat,
+                    Modifiedby,
+                    Modifiedat)
+            SELECT @pOrgID,
+                   @pOrgAddressId,
+                   @pLabstart,
+                   @pLabend,
+                   Weekdayno,
+                   1,
+                   Getdate(),
+                   1,
+                   Getdate()
+ FROM   @Weekdayno
+            WHERE  IsExist IS NULL
+        END
+  END 
+
+
+
+

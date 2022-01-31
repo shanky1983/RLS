@@ -1,0 +1,51 @@
+
+CREATE PROC [dbo].[pGetBillingdetailsForEdit]  
+(@pFinalBillID BIGINT,  
+@pBillNo NVARCHAR(50),  
+@pOrgId INT,  
+@ContextInfo [dbo].[UDT_Context] READONLY)  
+AS   
+BEGIN  
+  
+  
+if(@pFinalBillID=-1)  
+BEGIN  
+ SELECT @pFinalBillID=FinalBillID FROM FinalBill f inner join PatientVisit v on f.VisitID=v.PatientVisitId  
+  where BillNumber=@pBillNo OR VisitNumber=@pBillNo  
+END  
+  
+SELECT top 1 f.FinalBillID,s.DisplayText + '' + p.Name     Name,    
+                          p.Age                           PatientAge,    
+                          CASE    
+                            WHEN p.SEX = 'F' THEN 'Female'    
+                            WHEN p.SEX = 'M' THEN 'Male'    
+                            WHEN p.SEX = 'V' THEN 'Veterinary'    
+                            WHEN p.SEX = 'N' THEN 'NA'    
+WHEN p.SEX = 'U' THEN 'UnKnown'    
+                            ELSE ''    
+                          END  AS Type  ,  
+             VisitNumber VersionNo,BillNumber,BillDate,GrossBillValue,NetValue,DiscountAmount,  
+         ( SELECT AmountReceived FROM amountreceiveddetails where FinalBillID=f.FinalBillID )AmountReceived  
+   
+           FROM  FinalBill F    
+                 INNER JOIN Patient p    
+                         ON f.PatientID = p.PatientID    
+                 INNER JOIN SalutationOrgMapping s    
+                         ON s.TitleID = p.TITLECode    
+                 INNER JOIN PatientVisit vcm WITH (nolock)    
+                         ON vcm.PatientVisitId = F.VisitID    
+                            AND f.OrgID = p.OrgID    
+          WHERE  f.FinalBillID = @pFinalBillID    
+                 AND p.OrgID = @pOrgid  
+       
+   SELECT B.FinalBillID,    
+                 b.BillingDetailsID DetailsID,    
+                 b.Amount  ,             
+                 FeeDescription Description,    
+                 b.DiscountAmount,    
+                 b.DiscountPercent    
+          FROM   BillingDetails b    
+          WHERE  b.OrgID = @pOrgid    
+                 AND b.FinalBillID = @pFinalBillID    
+  
+END

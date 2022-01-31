@@ -1,0 +1,1721 @@
+
+
+CREATE PROCEDURE [dbo].[pInsertNotificationsLis_OutSourcePDFMerge] @ACTIONDETAIL [DBO].[ACTIONDETAILS] READONLY,    
+                                                 @CONTEXTINFO  [DBO].[UDT_CONTEXT] READONLY    
+WITH EXECUTE AS CALLER    
+AS    
+    DECLARE @SERVERDATE DATETIME    
+    
+    SET @SERVERDATE = DBO.FN_GETSERVERDATE(@CONTEXTINFO)    
+    
+    Declare @Orgid INT    
+    
+    Select @ORgid = ORgid    
+    from   @CONTEXTINFO    
+    
+  BEGIN    
+      SET NOCOUNT ON    
+    
+      DECLARE @XML AS XML    
+      DECLARE @CLIENTID NVARCHAR(10) = '0'    
+      DECLARE @VISITID NVARCHAR(10) = '0'    
+      DECLARE @IDENTITYID NVARCHAR(20) = '0'    
+      DECLARE @BILLNUMBER NVARCHAR(50) = '0'    
+      DECLARE @FROMDATE NVARCHAR(20) = ''    
+      DECLARE @TODATE NVARCHAR(20) = ''    
+      DECLARE @ORGADDRESSID NVARCHAR(50) = ''    
+      DECLARE @LOGINID NVARCHAR(20) = ''    
+      DECLARE @NOTIFICATIONSTATUS NVARCHAR(30) = ''    
+      --Added By QBITZ Prakash.k    
+      DECLARE @ReportMode VARCHAR(20)=''    
+      DECLARE @ReportType NVARCHAR(50)=''    
+      DECLARE @IsCumulative BIT    
+      DECLARE @IsManualReport BIT    
+      DECLARE @PreviousVisitCount INT    
+      DECLARE @IsCreditBill NCHAR(2)    
+    
+      --DECLARE @ServerDate DATETIME     
+      --SELECT @ServerDate = (     
+      --    SELECT dbo.Fn_getserverdate(@ContextInfo)     
+      --    )     
+      --                      
+	        Declare @ActionType Nvarchar(30)
+      DECLARE @ISPrint NVARCHAR(5)  
+       
+       SET @ISPrint=( SELECT top 1 configvalue from configkeymaster cm  
+      inner join configorgmaster com on com.configkeyid=cm.configkeyid and com.orgid=@Orgid  
+      Where cm.configkey='DispatchLocationPrint')  
+      SELECT @NOTIFICATIONSTATUS = STATUS    
+      FROM   @ACTIONDETAIL    
+    
+      SELECT @ReportType = ISNULL(ReportType, '')    
+      FROM   @ACTIONDETAIL    
+
+      Set @ActionType = (select ActionType from @ACTIONDETAIL)
+      ---                                
+      SELECT @LOGINID = CI.LOGINID    
+      FROM   @CONTEXTINFO CI    
+    
+      DECLARE @PDFDATE NVARCHAR(50)    
+    
+      SELECT @PDFDATE = CONVERT(NVARCHAR(10), @SERVERDATE, 111)    
+    
+      DECLARE @VISITCNT AS INT    
+      DECLARE @APPROVEDCNT AS INT    
+      DECLARE @ISAPPROVESMS AS NVARCHAR(10)    
+      DECLARE @XMLCODE AS NVARCHAR(10)    
+      DECLARE @SEQ_NUM INT    
+      DECLARE @APPRDET AS TABLE    
+        (    
+           ACCESSIONNO BIGINT,    
+           STATUS      NVARCHAR(25)    
+        )    
+      --Added By Qbitz Prakash.K    
+      DECLARE @OrderInvestigationDetails AS TABLE    
+        (    
+           VISITID     NVARCHAR(10),    
+           TATDateTime DATETIME,    
+           ACCESSIONNO BIGINT,    
+           STATUS      NVARCHAR(25)    
+        )    
+      --Added By Qbitz Prakash.K Start    
+      DECLARE @ActionDetails AS TABLE    
+        (    
+           [ActionType]        [NVARCHAR](50) NULL DEFAULT (''),    
+           [Value]             [NVARCHAR](1000) NULL DEFAULT (''),    
+           [AdditionalContext] [NVARCHAR](2000) NULL DEFAULT (''),    
+           [Category]          [NVARCHAR](20) NULL DEFAULT (''),    
+           [version]           [NVARCHAR](10) NULL DEFAULT (''),    
+           [Status]            [NVARCHAR](20) NULL DEFAULT (''),    
+           [OrgID]             [NVARCHAR](10) NULL DEFAULT (''),    
+           [OrgAddressID]      [NVARCHAR](20) NULL DEFAULT (''),    
+           [CreatedAt]         [NVARCHAR](100) NULL DEFAULT (''),    
+           [CreatedBy]         [NVARCHAR](20) NULL DEFAULT (''),    
+           [Template]          [NVARCHAR](max) NULL DEFAULT (''),    
+           [ContextType]       [NVARCHAR](10) NULL DEFAULT (''),    
+           [IsAttachment]      [NVARCHAR](5) NULL DEFAULT (''),    
+           [Subject]           [NVARCHAR](500) NULL DEFAULT (''),    
+           [AttachmentName]    [NVARCHAR](500) NULL DEFAULT (''),    
+           [IsClientBlinding]  [NVARCHAR](10) NULL DEFAULT (''),    
+           [CCTo]              [NVARCHAR](max) NULL DEFAULT (''),    
+           [BccTo]             [NVARCHAR](max) NULL DEFAULT (''),    
+           [ReportType]        [NVARCHAR](50) NULL DEFAULT (''),
+		   [IsReprinting] bit NULL DEFAULT (0) ,
+		   ReportLanguage NVARCHAR(100)NULL DEFAULT (''),
+		   NoofCopies INT NULL DEFAULT (1)
+        )    
+      DECLARE @CumulativeActionDetails AS TABLE    
+        (    
+           [ActionType]        [NVARCHAR](50) NULL DEFAULT (''),    
+           [Value]             [NVARCHAR](1000) NULL DEFAULT (''),    
+           [AdditionalContext] [NVARCHAR](2000) NULL DEFAULT (''),    
+           [Category]          [NVARCHAR](20) NULL DEFAULT (''),    
+           [version]           [NVARCHAR](10) NULL DEFAULT (''),    
+           [Status]            [NVARCHAR](20) NULL DEFAULT (''),    
+           [OrgID]             [NVARCHAR](10) NULL DEFAULT (''),    
+           [OrgAddressID]      [NVARCHAR](20) NULL DEFAULT (''),    
+           [CreatedAt]         [NVARCHAR](100) NULL DEFAULT (''),    
+           [CreatedBy]         [NVARCHAR](20) NULL DEFAULT (''),    
+           [Template]          [NVARCHAR](max) NULL DEFAULT (''),    
+           [ContextType]       [NVARCHAR](10) NULL DEFAULT (''),    
+           [IsAttachment]      [NVARCHAR](5) NULL DEFAULT (''),    
+           [Subject]           [NVARCHAR](500) NULL DEFAULT (''),    
+           [AttachmentName]    [NVARCHAR](500) NULL DEFAULT (''),    
+           [IsClientBlinding]  [NVARCHAR](10) NULL DEFAULT (''),    
+           [CCTo]              [NVARCHAR](max) NULL DEFAULT (''),    
+           [BccTo]             [NVARCHAR](max) NULL DEFAULT (''),    
+           [ReportType]        [NVARCHAR](50) NULL DEFAULT ('') ,
+		   ReportLanguage NVARCHAR(100)NULL DEFAULT (''),
+		   NoofCopies INT NULL DEFAULT (1)
+        )    
+    
+      INSERT INTO @ActionDetails    
+                  ([ActionType],[Value],[AdditionalContext],[Category],[version],[Status],[OrgID],[OrgAddressID],
+				  [CreatedAt],[CreatedBy],[Template],[ContextType],[IsAttachment],[Subject],[AttachmentName],[IsClientBlinding],[CCTo],[BccTo],[ReportType],[IsReprinting],
+		   ReportLanguage ,   NoofCopies )    
+      SELECT [ActionType],    
+             [Value],    
+             [AdditionalContext],    
+             [Category],    
+             [version],    
+             [Status],    
+             [OrgID],    
+             [OrgAddressID],    
+             [CreatedAt],    
+             [CreatedBy],    
+             [Template],    
+             [ContextType],    
+             [IsAttachment],    
+             [Subject],    
+             [AttachmentName],    
+             [IsClientBlinding],    
+             [CCTo],    
+             [BccTo],    
+             [ReportType],
+			 [IsReprinting] 
+			 ,ReportLanguage
+			 ,NoofCopies    
+      FROM   @ACTIONDETAIL    
+    
+      --Added By Qbitz Prakash.K End    
+      SET @SEQ_NUM = (SELECT ISNULL(Max(SEQ_NUM), 0) + 1    
+                      FROM   NOTIFICATIONS(NOLOCK))    
+    
+      DECLARE @CONFIDFLAG AS NVARCHAR(3)    
+    
+      IF ( (SELECT Count(1)    
+            FROM   @ActionDetails NOLOCK    
+            WHERE  ACTIONTYPE IN ( 'ConfidPdf', 'ConfidRoundbPdf' )) > 0 )    
+        BEGIN    
+            SET @CONFIDFLAG = 'Y'    
+        END    
+    
+      ------------                                                                                                                     
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.CATEGORY = 'Report'    
+                        AND AD.ISATTACHMENT = 'Y')    
+        BEGIN    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                WHERE  AD.CATEGORY = 'report')    
+            SET @VISITID = (SELECT TBL.COL.value('VisitID[1]', 'nVARCHAR(10)') AS ClientID    
+                            FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @VISITID    
+    
+            SELECT @ORGADDRESSID = ORGADDRESSID    
+            FROM   PATIENTVISIT(NOLOCK)    
+            WHERE  PATIENTVISITID = @VISITID    
+    
+   if exists ( select 1 from visittemplate where OrgID=@Orgid AND PatientVisitID=@VISITID )    
+   begin    
+    
+   --->>>>>>>  FOR WELLNESSPDF UPDATE     
+   --->>>>>>> Rule 1 : If Visit Id is available in the VisitTemplate Table, It should be a WellNessReport    
+   delete  from @ActionDetails     
+   where  ActionType in ('ROUNDBPDF','ISSTATPDF') and ADDITIONALCONTEXT like '%'+@VISITID+'%'    
+    
+   UPDATE T SET T.ACTIONTYPE='WellnessPdf',T.Template=REPLACE(T.Template, '\REPORT\', '\WELLNESSREPORT\') from @ActionDetails T    
+   inner join visittemplate VT on VT.PatientVisitID=@VISITID    
+   where T.ActionType in ('pdf') and T.ADDITIONALCONTEXT like '%'+@VISITID+'%'    
+   End    
+   --->>>>>> WELLNESSPDF END    
+            --                         
+            INSERT INTO @APPRDET    
+            SELECT DISTINCT ACCESSIONNUMBER,    
+                            STATUS    
+            FROM   ORDEREDINVESTIGATIONS(NOLOCK)    
+            WHERE  ReferralID = -1    
+                   AND VISITID = @VISITID    
+    
+            --Added By Qbitz Prakash.K    
+            INSERT INTO @OrderInvestigationDetails    
+            SELECT DISTINCT VISITID,    
+                            TatDateTime,    
+                            ACCESSIONNUMBER,    
+                            STATUS    
+            FROM   ORDEREDINVESTIGATIONS(NOLOCK)    
+WHERE  VISITID = @VISITID    
+    
+            --Added By Qbitz Prakash.K Start    
+            SELECT @ReportMode = ISNULL(ReportMode, ''),    
+                   @IsCumulative = IsCumulative    
+            FROM   PatientVisit WITH(NOLOCK)    
+            WHERE  PatientVisitID = @VISITID    
+    
+            SELECT @PreviousVisitCount = COUNT(1)    
+            FROM   PatientVisit WITH(NOLOCK)    
+            WHERE  PatientId = (SELECT PatientID    
+                                FROM   PatientVisit WITH(NOLOCK)    
+                                WHERE  PatientVisitId = @visitid)    
+    
+            SELECT @IsManualReport = IsManualReport    
+            FROM   @ACTIONDETAIL    
+    
+            Select @IsCreditBill = IsCreditBill    
+            from   FinalBill WITH(NOLOCK)    
+            where  VisitID = @VISITID    
+    
+            if @IsManualReport = 1    
+              begin    
+                  set @ReportMode='P'    
+              end    
+    
+          --  IF @IsCreditBill = 'Y'    
+          --    BEGIN    
+               --   SET @NOTIFICATIONSTATUS='Hold'    
+           --   END    
+    
+            IF @IsCumulative = 1    
+               AND @IsManualReport = 0    
+               AND @PreviousVisitCount > 1    
+              BEGIN    
+                  INSERT INTO @CumulativeActionDetails    
+                              ([ActionType],[Value],[AdditionalContext],[Category],[version],[Status],[OrgID],[OrgAddressID],[CreatedAt],[CreatedBy],[Template],[ContextType],[IsAttachment],[Subject],[AttachmentName],
+							  [IsClientBlinding],[CCTo],[BccTo],[ReportType],ReportLanguage,NoofCopies)      
+                  SELECT [ActionType],    
+                         [Value],    
+                         [AdditionalContext],    
+                         [Category],    
+                         [version],    
+                         [Status],    
+                         [OrgID],    
+                         [OrgAddressID],    
+                         [CreatedAt],    
+                         [CreatedBy],    
+                         [Template],    
+                         [ContextType],    
+                         [IsAttachment],    
+                         REPLACE([Subject], '[AT]', 'AC')        AS [Subject],    
+                         REPLACE([AttachmentName], '[AT]', 'AC') AS AttachmentName,    
+                         [IsClientBlinding],    
+                         [CCTo],    
+                         [BccTo],    
+                         'Cumulative' ,ReportLanguage,NoofCopies   
+                  FROM   @ACTIONDETAIL    
+                  WHERE  CATEGORY = 'Report'    
+              END    
+    
+            IF EXISTS(SELECT 1    
+                      FROM   @CumulativeActionDetails)    
+              BEGIN    
+                  INSERT INTO @ActionDetails    
+                              ([ActionType],[Value],[AdditionalContext],[Category],[version],[Status],[OrgID],[OrgAddressID],[CreatedAt],[CreatedBy],[Template],[ContextType],[IsAttachment],[Subject],
+							  [AttachmentName],[IsClientBlinding],[CCTo],[BccTo],[ReportType],ReportLanguage,NoofCopies)      
+                  SELECT [ActionType],    
+                         [Value],    
+                         [AdditionalContext],    
+                         [Category],    
+                         [version],    
+                         [Status],    
+                         [OrgID],    
+                         [OrgAddressID],    
+                         [CreatedAt],    
+                         [CreatedBy],    
+                         [Template],    
+                         [ContextType],    
+                         [IsAttachment],    
+                         [Subject],    
+                         [AttachmentName],    
+                         [IsClientBlinding],    
+                         [CCTo],    
+                         [BccTo],    
+                         [ReportType] ,ReportLanguage,NoofCopies   
+                  FROM   @CumulativeActionDetails    
+              END    
+    
+            --Added By Qbitz Prakash.K End    
+            SET @VISITCNT = (SELECT Count(1)    
+                             FROM   @APPRDET)    
+            SET @APPROVEDCNT = (SELECT Count(1)    
+                                FROM   @APPRDET    
+                                WHERE  STATUS IN ( 'Approve', 'Cancel', 'Rejected', 'Retest', 'Not Given' ))    
+    
+            PRINT @APPROVEDCNT    
+    
+            IF ( CONVERT(NVARCHAR(MAX), @XML) LIKE '%<AccessionNumber>0</AccessionNumber>%' )    
+              BEGIN    
+                  SET @ISAPPROVESMS = 'Y'    
+              END    
+            ELSE    
+              BEGIN    
+                  IF ( @VISITCNT = @APPROVEDCNT )    
+                    BEGIN    
+                        SET @ISAPPROVESMS = 'Y'    
+      if exists ( select 1 from visittemplate where OrgID=@Orgid AND PatientVisitID=@VISITID )      
+      begin   
+       DEclare @batchid nvarchar(200)  
+       select @batchid =Batchid from visittemplate where OrgID=@Orgid AND PatientVisitID=@VISITID  
+       insert into PushingOrderedDetails(ActionType ,Category,Status,OrgID,CreatedAt, CreatedBy,IdentityID)    
+       select 'Integ','Wellness','YetToTransfer',@Orgid,GETDATE(),0,@VISITID         
+      End     
+                    END            
+                  ELSE    
+                    BEGIN    
+                        SET @ISAPPROVESMS = 'N'    
+                    END    
+              END    
+    
+            PRINT @ISAPPROVESMS    
+			 --------------------------- Seetha Part SMS Config Start -----------------------------
+
+	      
+	  IF Exists (SELECT 1 From Configkeymaster CK Inner Join ConfigOrgMaster CM on CM.Configkeyid=CK.Configkeyid
+				Where CM.Orgid=@OrgID and CK.ConfigKey='NeedOrgLevel_PatientSMS')
+BEGIN
+
+
+ SET @ISAPPROVESMS = 'Y'  
+If Exists ( select 1 from @ActionDetails Where Contexttype in ('CP','P') and Actiontype in ('SMS','APISMS') and Category='Report')
+BEGIN
+
+
+ IF exists(SELECT 1 From Configkeymaster CK Inner Join ConfigOrgMaster CM on CM.Configkeyid=CK.Configkeyid
+				Where CM.Orgid=@OrgID and CK.ConfigKey='NeedClientLevel_PatientSMS')
+Begin
+
+Declare @IsPatientSMS as Nvarchar(2)
+
+Set @IsPatientSMS = dbo.fn_getclientlevelSMS(@VISITID,@OrgID)
+
+ IF (ISNULL(@IsPatientSMS,'N')<>'Y')    
+ BEGIN    
+ Delete from @ActionDetails Where Contexttype in ('CP','P') and Actiontype in ('SMS','APISMS') and Category='Report'   
+ END 
+ END
+ END
+ 
+   
+
+If Exists ( select 1 from @ActionDetails Where Contexttype in ('CP','P') and Actiontype in ('SMS','APISMS') and Category='Report')
+BEGIN
+
+
+ IF exists(SELECT 1 From Configkeymaster CK Inner Join ConfigOrgMaster CM on CM.Configkeyid=CK.Configkeyid
+				Where CM.Orgid=@OrgID and CK.ConfigKey='NeedDeptLevel_PatientSMS')
+				BEGIN
+				
+				
+Declare @IsDeptPatientSMS as Nvarchar(2)
+
+Set @IsDeptPatientSMS = dbo.fn_getDeptlevelSMS(@VISITID,@OrgID)
+
+
+ IF (ISNULL(@IsDeptPatientSMS,'N')<>'Y')    
+ BEGIN    
+ Delete from @ActionDetails Where Contexttype in ('CP','P') and Actiontype in ('SMS','APISMS') and Category='Report'   
+ END
+
+ENd
+END
+
+END
+ -----------------------------------Seetha Part SMS Config END ----------------------------------------
+ ------------------- Seetha Part Email Config Start ---------------------------------------------------
+ 
+   IF Exists (SELECT 1 From Configkeymaster CK Inner Join ConfigOrgMaster CM on CM.Configkeyid=CK.Configkeyid
+				Where CM.Orgid=@OrgID and CK.ConfigKey='NeedDeptLevel_Email')
+BEGIN
+Declare @IsPatientEmail as Nvarchar(2)
+
+Set @IsPatientEmail = dbo.fn_getDeptlevelEMail(@VISITID,@OrgID)
+
+ IF (ISNULL(@IsPatientEmail,'N')<>'Y')    
+ BEGIN    
+ Delete from @ActionDetails Where Contexttype in ('CP','P') and Actiontype='Email' and Category='Report'   
+ END
+
+END
+
+ -----------------------------------Seetha Part Email Config END ----------------------------------------
+      
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'Report'    
+                              AND AD.ISATTACHMENT = 'Y'    
+                              AND AD.ACTIONTYPE = 'PDF'    
+                              AND AD.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%')    
+              BEGIN    
+                  --Added By QBITZ Prakash.k    
+                  IF NOT EXISTS(select 1    
+                                FROM   Notifications WITH(NOLOCK)    
+                                WHERE  IdentityID = @VISITID    
+                                       AND ( ReportType = 'Cumulative'    
+                                              OR ISNULL(ReportType, '') = '' ))    
+                    BEGIN    
+                        UPDATE T    
+                        SET    STATUS = 'DIFFERED'    
+                        FROM   NOTIFICATIONS T(NOLOCK)    
+                        WHERE  IDENTITYID = @VISITID    
+                               AND CATEGORY = 'REPORT'    
+                               AND ISATTACHMENT = 'Y'    
+                               AND ACTIONTYPE=@ActionType
+                        UPDATE REPORTSNAPSHOT    
+                        SET    STATUS = 'DIFFERED'    
+                        WHERE  VISITID = @VISITID    
+                               AND NotificationID IN (SELECT NotificationID    
+                                                      FROM   NOTIFICATIONS T(NOLOCK)    
+                                                      WHERE  IDENTITYID = @VISITID    
+                                                             AND CATEGORY = 'REPORT'    
+                                                             AND ISATTACHMENT = 'Y'    
+           AND ACTIONTYPE=@ActionType)
+                    END    
+                  ELSE IF EXISTS(select 1    
+                            FROM   Notifications WITH(NOLOCK)    
+                            WHERE  IdentityID = @VISITID    
+             AND ReportType = 'Cumulative'    
+                                   AND @ReportType <> 'Cumulative')    
+                    BEGIN    
+                        UPDATE T    
+                        SET    STATUS = 'DIFFERED'    
+                        FROM   NOTIFICATIONS T(NOLOCK)    
+                        WHERE  IDENTITYID = @VISITID    
+                               AND CATEGORY = 'REPORT'    
+                               AND ISATTACHMENT = 'Y'    
+                               AND ACTIONTYPE=@ActionType
+                               AND ReportType NOT IN ( 'Cumulative' )    
+    
+                        UPDATE REPORTSNAPSHOT    
+                        SET    STATUS = 'DIFFERED'    
+                        WHERE  VISITID = @VISITID    
+                               AND NotificationID IN (SELECT NotificationID    
+                FROM   NOTIFICATIONS T(NOLOCK)    
+                                                      WHERE  IDENTITYID = @VISITID    
+                                                             AND CATEGORY = 'REPORT'    
+                                                             AND ISATTACHMENT = 'Y'    
+                                                             AND ACTIONTYPE=@ActionType
+                                                             AND ReportType NOT IN ( 'Cumulative' ))    
+                    END    
+                  ELSE IF EXISTS(select 1    
+                            FROM   Notifications WITH(NOLOCK)    
+                            WHERE  IdentityID = @VISITID    
+                                   AND ReportType = 'Cumulative'    
+                                   AND @ReportType = 'Cumulative')    
+                    BEGIN    
+                        UPDATE T    
+                        SET    STATUS = 'DIFFERED'    
+                        FROM   NOTIFICATIONS T(NOLOCK)    
+                        WHERE  IDENTITYID = @VISITID    
+                               AND CATEGORY = 'REPORT'    
+                               AND ISATTACHMENT = 'Y'    
+                               AND ACTIONTYPE=@ActionType
+                               AND ReportType IN ( 'Cumulative' )    
+    
+                        UPDATE REPORTSNAPSHOT    
+                        SET    STATUS = 'DIFFERED'    
+         WHERE  VISITID = @VISITID    
+                               AND NotificationID IN (SELECT NotificationID    
+                                                      FROM   NOTIFICATIONS T(NOLOCK)    
+                                                      WHERE  IDENTITYID = @VISITID    
+                                                             AND CATEGORY = 'REPORT'    
+                                                             AND ISATTACHMENT = 'Y'    
+                                                             AND ACTIONTYPE =@ActionType
+                                                             AND ReportType NOT IN ( 'Cumulative' ))    
+                    END    
+                  ELSE    
+                    BEGIN    
+                        UPDATE T    
+                        SET    STATUS = 'DIFFERED'    
+       FROM   NOTIFICATIONS T(NOLOCK)    
+                        WHERE  IDENTITYID = @VISITID    
+                               AND CATEGORY = 'REPORT'    
+                               AND ISATTACHMENT = 'Y'    
+                               AND ACTIONTYPE =@ActionType
+                        UPDATE REPORTSNAPSHOT    
+                        SET    STATUS = 'DIFFERED'    
+                        WHERE  VISITID = @VISITID    
+                               AND NotificationID IN (SELECT NotificationID    
+                                       FROM   NOTIFICATIONS T(NOLOCK)    
+                                                      WHERE  IDENTITYID = @VISITID    
+                                                             AND CATEGORY = 'REPORT'    
+                         AND ISATTACHMENT = 'Y'    
+                                                             AND ACTIONTYPE = @ActionType)    
+                    END    
+    
+                  --AND Status NOT IN ( 'PICKED')      
+                  -----                                
+                  IF EXISTS (SELECT 1    
+                             FROM   VISITCLIENTMAPPING VCM WITH (NOLOCK)    
+                                    INNER JOIN CLIENTMASTER CM WITH(NOLOCK)    
+                                            ON VCM.CLIENTID = CM.CLIENTID    
+                                               AND VCM.ORGID = CM.ORGID    
+                             WHERE  CM.STATUS = 'S'  AND  ISNULL(VCM.ISACTIVE,'Y')='Y' 
+                                    AND VCM.VISITID = @VISITID)    
+                    BEGIN    
+                        PRINT 'THIS IS SUSPEND CLIENT'    
+    
+                        SET @NOTIFICATIONSTATUS = 'SUSPEND'    
+                    END    
+	
+	----------- VEL| Due Status not updated for this Code | Hide | Start |---------
+    
+	 --IF EXISTS (SELECT 1    
+  --                           FROM   VISITCLIENTMAPPING VCM WITH (NOLOCK)    
+  --                                  INNER JOIN CLIENTMASTER CM WITH(NOLOCK)    
+  --       ON VCM.CLIENTID = CM.CLIENTID    
+  --                                             AND VCM.ORGID = CM.ORGID    
+  --                           WHERE  CM.STATUS <> 'S'  AND ISNULL(VCM.ISACTIVE,'Y')<>'N' 
+  --                                  AND VCM.VISITID = @VISITID)    
+  --                  BEGIN
+  --                      SET @NOTIFICATIONSTATUS = ''    
+  --                  END  
+                  -----                             
+
+	----------- VEL| Due Status not updated for this Code | Hide | END |---------
+                  ---for avoid no sign                            
+                  IF EXISTS (SELECT 1    
+                             FROM   PATIENTINVESTIGATION WITH (NOLOCK)    
+                             WHERE  PATIENTVISITID = @VISITID    
+                                    AND ( APPROVEDBY = 0    
+                                           OR APPROVEDBY IS NULL )    
+                                    AND STATUS = 'Approve')    
+                    BEGIN    
+                        SET @NOTIFICATIONSTATUS = 'HOLD'    
+                    END    
+              ---                                     
+              END    
+    
+            ---                                    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'Report'    
+                              AND AD.ISATTACHMENT = 'Y'    
+                              AND AD.ACTIONTYPE = 'roundbprint'    
+                              AND AD.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%')    
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @VISITID    
+                         AND CATEGORY = 'REPORT'    
+                         AND ISATTACHMENT = 'Y'    
+                         AND ACTIONTYPE IN ( 'ROUNDBPRINT', '' )    
+              END    
+    
+            DECLARE @ORGADDID INT    
+    
+            SELECT @ORGADDID = CM.PRINTORGADDRESSID                FROM   VISITCLIENTMAPPING VCM WITH(NOLOCK)    
+                   INNER JOIN CLIENTMASTER CM WITH(NOLOCK)    
+                           ON CM.CLIENTID = VCM.CLIENTID    
+            WHERE  VCM.VISITID = @VISITID    
+    
+            IF( @ORGADDID = 0 )    
+              BEGIN    
+                  SET @ORGADDID= NULL    
+              END    
+    
+            IF @ReportMode IS NULL    
+                OR @ReportMode = '0'    
+                OR @ReportMode = ''    
+              BEGIN    
+                  IF ( @ISAPPROVESMS = 'Y' )    
+                    BEGIN    
+                        INSERT INTO NOTIFICATIONS    
+                                    (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,
+									VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,
+									TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,
+									ISCLIENTBLINDING,ReportType,IsReprinting,ReportLanguage,NoofCopies)      
+                        SELECT DISTINCT A.ACTIONTYPE,    
+            A.VALUE,    
+                                        A.ADDITIONALCONTEXT,    
+                                        A.CATEGORY,    
+                                        A.VERSION,    
+                                        -- a.Status,                                  
+                                        @NOTIFICATIONSTATUS,    
+                                        A.ORGID,    
+                                        --a.orgaddressid,     
+                                        CASE    
+                                          WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                          WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                          ELSE A.ORGADDRESSID    
+                                        END,    
+                                        @SERVERDATE,    
+                                        @LOGINID,    
+                                        Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                        A.CONTEXTTYPE,    
+                                        A.ISATTACHMENT,    
+                                        ( CASE    
+                                            WHEN @IsCumulative = 1    
+                                                 AND @IsManualReport = 1    
+                                                 AND A.ReportType = 'Cumulative'    
+                                                 AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(RTRIM(LTRIM(A.SUBJECT)), '[AT]', 'AC')    
+                                            ELSE REPLACE(RTRIM(LTRIM(A.SUBJECT)), '[AT]', 'AT')    
+                                          END ) AS [SUBJECT],    
+                                        @SEQ_NUM,    
+                                        ( CASE    
+                                            WHEN @IsCumulative = 1    
+                                                 AND @IsManualReport = 1    
+                                                 AND A.ReportType = 'Cumulative'    
+                                                 AND A.ACTIONTYPE not in ( 'Sms' ,'APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                            ELSE REPLACE(RTRIM(LTRIM(Replace(A.ATTACHMENTNAME, '/', ' '))), '[AT]', 'AT')    
+                                          END ) AS AttachmentName,    
+                                        @IDENTITYID,    
+                                        @CONFIDFLAG,    
+                                        A.ISCLIENTBLINDING,    
+                                        A.ReportType ,IsReprinting ,ReportLanguage,NoofCopies    
+                        FROM   @ActionDetails A    
+                        WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                               AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                      OR A.ISATTACHMENT = 'N' )    
+                               AND A.TEMPLATE != ''    
+                               AND A.CATEGORY = 'Report'    
+                    END    
+                  ELSE    
+                    BEGIN    
+                        PRINT 'No Sms'    
+    
+                        INSERT INTO NOTIFICATIONS      
+                    (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,
+									CREATEDAT,CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,
+									ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)      
+                        SELECT DISTINCT A.ACTIONTYPE,    
+                                        A.VALUE,    
+                                        A.ADDITIONALCONTEXT,    
+                                        A.CATEGORY,    
+                                        A.VERSION,    
+                                        -- a.Status,                                                      
+                                        @NOTIFICATIONSTATUS,    
+                                        A.ORGID,    
+                                        --a.orgaddressid,     
+                                        CASE    
+                                          WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                          WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                          ELSE A.ORGADDRESSID    
+                                        END,    
+                                        @SERVERDATE,    
+                                        @LOGINID,    
+                                        Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                        A.CONTEXTTYPE,    
+                                        A.ISATTACHMENT,    
+                                        ( CASE    
+                                            WHEN @IsCumulative = 1    
+                                                 AND @IsManualReport = 1    
+                                                 AND A.ReportType = 'Cumulative'    
+                                                 AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                            ELSE REPLACE(A.SUBJECT, '[AT]', 'AT')    
+                                          END ) AS [SUBJECT],    
+                                        @SEQ_NUM,    
+                                        ( CASE    
+                                            WHEN @IsCumulative = 1    
+                                                 AND @IsManualReport = 1    
+                                                 AND A.ReportType = 'Cumulative'    
+                                                 AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                            ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                          END ) AS AttachmentName,    
+                                        @IDENTITYID,    
+                                        @CONFIDFLAG,    
+                                        A.ISCLIENTBLINDING,    
+                                        A.ReportType ,A.IsReprinting  ,ReportLanguage,NoofCopies        
+                        FROM   @ActionDetails A    
+                        WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'SMS', 'APISMS', 'OutBound' )    
+                               AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                      OR A.ISATTACHMENT = 'N' )    
+                               AND A.TEMPLATE != ''    
+                               AND A.CATEGORY = 'Report'    
+                    END    
+              END    
+            ELSE    
+              BEGIN    
+                  IF @ReportMode IS NULL    
+                      OR @ReportMode = ''    
+                      OR @ReportMode = 'P' --Progressive    
+                    BEGIN    
+                        IF ( @ISAPPROVESMS = 'Y' )    
+                          BEGIN    
+                              INSERT INTO NOTIFICATIONS    
+                                          (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,
+										  ORGADDRESSID,CREATEDAT,CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,
+										  SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,ISCLIENTBLINDING,ReportType,IsReprinting
+										   ,ReportLanguage,NoofCopies)      
+                              SELECT DISTINCT A.ACTIONTYPE,    
+                                              A.VALUE,    
+                                              A.ADDITIONALCONTEXT,    
+                                              A.CATEGORY,    
+                                              A.VERSION,    
+                                              -- a.Status,                                  
+                                              @NOTIFICATIONSTATUS,    
+                                              A.ORGID,    
+                                              --a.orgaddressid,     
+                                              CASE    
+                                                WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                ELSE A.ORGADDRESSID    
+                                              END,    
+                                              @SERVERDATE,    
+                                              @LOGINID,    
+                                              Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                              A.CONTEXTTYPE,    
+                                              A.ISATTACHMENT,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                                                       AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                                  ELSE REPLACE(A.Subject, '[AT]', 'AT')    
+                                                END ) AS [SUBJECT],    
+                                              @SEQ_NUM,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                                                       AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                  ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                END ) AS AttachmentName,    
+                                              @IDENTITYID,    
+                                              @CONFIDFLAG,    
+                                              A.ISCLIENTBLINDING,    
+                                              A.ReportType ,
+											  A.IsReprinting ,ReportLanguage,NoofCopies
+                              FROM   @ActionDetails A    
+                              WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                                     AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                            OR A.ISATTACHMENT = 'N' )    
+                                     AND A.TEMPLATE != ''    
+                                     AND A.CATEGORY = 'Report'    
+                          END    
+                        ELSE    
+                          BEGIN    
+                              PRINT 'No Sms'    
+    
+                              INSERT INTO NOTIFICATIONS    
+                                          (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,
+										  ISCONFIDENTIALTEST,ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)    
+                              SELECT DISTINCT A.ACTIONTYPE,    
+                                              A.VALUE,    
+             A.ADDITIONALCONTEXT,    
+                                              A.CATEGORY,    
+                                              A.VERSION,    
+                                              -- a.Status,                                                      
+                                              @NOTIFICATIONSTATUS,    
+                                              A.ORGID,    
+                                              --a.orgaddressid,     
+               CASE    
+                                                WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                ELSE A.ORGADDRESSID    
+                                              END,    
+                                              @SERVERDATE,    
+                                              @LOGINID,    
+                                              Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                              A.CONTEXTTYPE,    
+                                              A.ISATTACHMENT,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                   AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.Subject, '[AT]', 'AC')    
+                                                  ELSE REPLACE(A.Subject, '[AT]', 'AT')    
+                                                END ) AS SUBJECT,    
+                                              @SEQ_NUM,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                                                       AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                  ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                END ) AS AttachmentName,    
+                                              @IDENTITYID,    
+                                              @CONFIDFLAG,    
+                                              A.ISCLIENTBLINDING,    
+                                              A.ReportType  ,
+											  A.IsReprinting  ,ReportLanguage,NoofCopies   
+                              FROM   @ActionDetails A    
+                              WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'SMS' ,'APISMS' )    
+                                     AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                            OR A.ISATTACHMENT = 'N' )    
+                                     AND A.TEMPLATE != ''    
+                                     AND A.CATEGORY = 'Report'    
+                          END    
+                    END    
+                  ELSE IF @ReportMode = 'N' --Altogether    
+                    BEGIN    
+                        IF ( @VISITCNT = @APPROVEDCNT )    
+                          BEGIN    
+                              INSERT INTO NOTIFICATIONS      
+                                          (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,
+										  CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,
+										  ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)      
+                              SELECT DISTINCT A.ACTIONTYPE,    
+                                              A.VALUE,    
+                                              A.ADDITIONALCONTEXT,    
+                                              A.CATEGORY,    
+                                              A.VERSION,    
+                               -- a.Status,                                  
+                                @NOTIFICATIONSTATUS,    
+                                              A.ORGID,    
+                                              --a.orgaddressid,     
+                                              CASE    
+                                                WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                ELSE A.ORGADDRESSID    
+                                              END,    
+                                              @SERVERDATE,    
+                                              @LOGINID,    
+                                              Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                              A.CONTEXTTYPE,    
+                                              A.ISATTACHMENT,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                                                       AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                           ELSE REPLACE(A.SUBJECT, '[AT]', 'AT')    
+                                                END ) AS SUBJECT,    
+                                              @SEQ_NUM,    
+                                              ( CASE    
+                                                  WHEN @IsCumulative = 1    
+                                                       AND @IsManualReport = 1    
+                                                       AND A.ReportType = 'Cumulative'    
+                                                       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                  ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                END ) AS AttachmentName,    
+                                              @IDENTITYID,    
+                                              @CONFIDFLAG,    
+                                              A.ISCLIENTBLINDING,    
+                                              A.ReportType   ,
+											  A.IsReprinting  ,ReportLanguage,NoofCopies  
+                              FROM   @ActionDetails A    
+                              WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                                     AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                            OR A.ISATTACHMENT = 'N' )    
+                                     AND A.TEMPLATE != ''    
+                                     AND A.CATEGORY = 'Report'    
+                          END    
+                    END    
+                  ELSE IF @ReportMode = '1' --Same Day    
+                    BEGIN    
+                        SET @VISITCNT = (SELECT COUNT(1)    
+                                         from   @OrderInvestigationDetails OI    
+                                                INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                        on OI.VisitID = PV.PatientVisitID    
+                                                           AND CONVERT(VARCHAR(10), OI.TatDateTime, 103) = CONVERT(VARCHAR(10), PV.VisitDate, 103)) --   PV.VisitDate <=OI.TatDateTime     
+                        SET @APPROVEDCNT = (SELECT COUNT(1)    
+                                            from   @OrderInvestigationDetails OI    
+                                                 INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                           on OI.VisitID = PV.PatientVisitID    
+  AND CONVERT(VARCHAR(10), OI.TatDateTime, 103) = CONVERT(VARCHAR(10), PV.VisitDate, 103) --   PV.VisitDate <=OI.TatDateTime     
+                                            WHERE  STATUS IN ( 'Approve', 'Cancel', 'Rejected', 'Retest', 'Not Given' ))    
+    
+                        IF @VISITCNT > 0    
+                          BEGIN    
+                              IF ( @VISITCNT = @APPROVEDCNT )    
+                                BEGIN    
+                                    INSERT INTO NOTIFICATIONS      
+                                                (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,
+												CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,
+												ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)      
+                                    SELECT DISTINCT A.ACTIONTYPE,    
+                                                    A.VALUE,    
+                                                    A.ADDITIONALCONTEXT,    
+                                                    A.CATEGORY,    
+                                                    A.VERSION,    
+                                                    -- a.Status,                                  
+                                                    @NOTIFICATIONSTATUS,    
+                                                    A.ORGID,    
+                                                    --a.orgaddressid,     
+                             CASE    
+               WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                      WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                      ELSE A.ORGADDRESSID    
+                                                    END,    
+                                                    @SERVERDATE,    
+                                                    @LOGINID,    
+                                                    Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                                    A.CONTEXTTYPE,    
+                                                    A.ISATTACHMENT,    
+                                                    ( CASE    
+                                                        WHEN @IsCumulative = 1    
+                                                             AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+                                                             AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                                        ELSE REPLACE(A.SUBJECT, '[AT]', 'AT')    
+                                                      END ) AS SUBJECT,    
+                                                    @SEQ_NUM,    
+                                                    ( CASE    
+                                                        WHEN @IsCumulative = 1    
+                                                             AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+                                                             AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                        ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                      END ) AS AttachmentName, 
+                                                    @IDENTITYID,    
+                                                    @CONFIDFLAG,    
+                                                    A.ISCLIENTBLINDING,    
+                                A.ReportType      ,
+								A.IsReprinting ,ReportLanguage,NoofCopies
+                                    FROM   @ActionDetails A    
+                                    WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                                           AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                                  OR A.ISATTACHMENT = 'N' )    
+                                           AND A.TEMPLATE != ''    
+                                           AND A.CATEGORY = 'Report'    
+                                END    
+                          END    
+                        ELSE    
+                          BEGIN    
+                              SET @VISITCNT = (SELECT COUNT(1)    
+                                               from   @OrderInvestigationDetails OI    
+                                                      INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                              on OI.VisitID = PV.PatientVisitID)    
+                              SET @APPROVEDCNT = (SELECT COUNT(1)    
+                                                  from   @OrderInvestigationDetails OI    
+                                                         INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                                 on OI.VisitID = PV.PatientVisitID    
+                                                  WHERE  STATUS IN ( 'Approve', 'Cancel', 'Rejected', 'Retest', 'Not Given' ))    
+    
+                              IF ( @VISITCNT = @APPROVEDCNT )    
+                                BEGIN    
+                                    INSERT INTO NOTIFICATIONS      
+                                                (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,
+												CREATEDAT,CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,
+												ISCONFIDENTIALTEST,ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)      
+                                    SELECT DISTINCT A.ACTIONTYPE,    
+                                                    A.VALUE,    
+                                                    A.ADDITIONALCONTEXT,    
+                                                    A.CATEGORY,    
+                                                    A.VERSION,    
+ -- a.Status,                                  
+                                                    @NOTIFICATIONSTATUS,    
+                                                    A.ORGID,    
+                                                    --a.orgaddressid,     
+                                                    CASE    
+                                                      WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                      WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                      ELSE A.ORGADDRESSID    
+                                                    END,    
+                                                    @SERVERDATE,    
+                                                    @LOGINID,    
+                                                    Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                                    A.CONTEXTTYPE,    
+                                                    A.ISATTACHMENT,    
+                                                    ( CASE    
+                                                        WHEN @IsCumulative = 1    
+                                                             AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+       AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                                        ELSE REPLACE(A.SUBJECT, '[AT]', 'AT')    
+                                                      END ) AS SUBJECT,    
+                                                    @SEQ_NUM,    
+                                                    ( CASE    
+                                                        WHEN @IsCumulative = 1    
+                                                             AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+                                                             AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                        ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                      END ) AS AttachmentName,    
+                                                    @IDENTITYID,    
+                                                    @CONFIDFLAG,    
+                                                    A.ISCLIENTBLINDING,    
+                                                    A.ReportType  ,
+													A.IsReprinting  ,ReportLanguage,NoofCopies   
+                                    FROM   @ActionDetails A    
+                                    WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                                           AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                                  OR A.ISATTACHMENT = 'N' )    
+                                           AND A.TEMPLATE != ''    
+                                           AND A.CATEGORY = 'Report'    
+                                END    
+                          END    
+                    END    
+                  ELSE IF @ReportMode = 'D' --Daily    
+                    BEGIN    
+                        SET @VISITCNT = (SELECT COUNT(1)    
+                                         from   @OrderInvestigationDetails OI    
+                                                INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                        on OI.VisitID = PV.PatientVisitID    
+                                                           AND    
+                                                           --CONVERT(VARCHAR(10),OI.TatDateTime , 103)  =  CONVERT(VARCHAR(10),Getdate() , 103) AND     
+                                                           CONVERT(DATETIME, Getdate()) <= CONVERT(DATETIME, OI.TatDateTime)) --   PV.VisitDate <=OI.TatDateTime     
+                        SET @APPROVEDCNT = (SELECT COUNT(1)    
+                                            from   @OrderInvestigationDetails OI    
+                                                   INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                           on OI.VisitID = PV.PatientVisitID --AND       
+                                                              --CONVERT(VARCHAR(10),OI.TatDateTime , 103)  =  CONVERT(VARCHAR(10),Getdate() , 103)     
+                                                              AND CONVERT(DATETIME, Getdate()) <= CONVERT(DATETIME, OI.TatDateTime) --   PV.VisitDate <=OI.TatDateTime     
+                                            WHERE  STATUS IN ( 'Approve', 'Cancel', 'Rejected', 'Retest', 'Not Given' ))    
+    
+                        IF @VISITCNT > 0    
+begin    
+                              IF ( @VISITCNT = @APPROVEDCNT )    
+                                BEGIN    
+                                    INSERT INTO NOTIFICATIONS      
+                                                (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,
+												CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,
+												ISCLIENTBLINDING,ReportType,IsReprinting ,ReportLanguage,NoofCopies)      
+                                    SELECT DISTINCT A.ACTIONTYPE,    
+                                                    A.VALUE,    
+                                                    A.ADDITIONALCONTEXT,    
+                                                    A.CATEGORY,    
+                                                    A.VERSION,    
+                                                    -- a.Status,                                  
+                                                    @NOTIFICATIONSTATUS,    
+                                      A.ORGID,    
+                                                    --a.orgaddressid,     
+                                                    CASE    
+                                                      WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                                      WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                                      ELSE A.ORGADDRESSID    
+                                                    END,    
+                                                    @SERVERDATE,    
+                                                    @LOGINID,    
+                                                    Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                                    A.CONTEXTTYPE,    
+                                                    A.ISATTACHMENT,    
+                                                    ( CASE    
+                                                        WHEN @IsCumulative = 1    
+                                                             AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+                                                             AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(A.SUBJECT, '[AT]', 'AC')    
+                                                        ELSE REPLACE(A.SUBJECT, '[AT]', 'AT')    
+                                                      END ) AS SUBJECT,    
+                                                    @SEQ_NUM,    
+                                              ( CASE    
+                                                        WHEN @IsCumulative = 1    
+AND @IsManualReport = 1    
+                                                             AND A.ReportType = 'Cumulative'    
+                                                             AND A.ACTIONTYPE not in ('Sms','APISMS') THEN REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AC')    
+                                                        ELSE REPLACE(Replace(A.ATTACHMENTNAME, '/', ' '), '[AT]', 'AT')    
+                                                      END ) AS AttachmentName,    
+                                                    @IDENTITYID,    
+                                                    @CONFIDFLAG,    
+                                                    A.ISCLIENTBLINDING,      
+                                                    A.ReportType   ,
+													A.IsReprinting   ,ReportLanguage,NoofCopies 
+                                    FROM   @ActionDetails A    
+                                    WHERE  A.ACTIONTYPE NOT IN ( 'ISSTATPDF', 'ISSTATPRINT', 'OutBound' )    
+                             AND ( A.ADDITIONALCONTEXT NOT LIKE '%<AccessionNumber>0</AccessionNumber>%'    
+                                                  OR A.ISATTACHMENT = 'N' )    
+                                           AND A.TEMPLATE != ''    
+                                           AND A.CATEGORY = 'Report'    
+                                END    
+                          end    
+                    END    
+              END    
+        END    
+    
+      --Report End--                       
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.CATEGORY = 'Invoice')    
+        BEGIN    
+            SET @XML = (SELECT TOP 1 RIGHT(Replace(AD.ADDITIONALCONTEXT, 'version=1.0 encoding=utf-16', 'version="1.0" encoding="utf-16"'), Len(Replace(AD.ADDITIONALCONTEXT, 'version=1.0 encoding=utf-16', 'version="1.0" encoding="utf-16"')) - 1)    
+                        FROM   @ActionDetails AD)    
+            SET @CLIENTID = (SELECT TBL.COL.value('InvoiceID[1]', 'nVARCHAR(30)') AS ClientID    
+                             FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @CLIENTID    
+            SET @FROMDATE = (SELECT TBL.COL.value('FromDate[1]', 'nVARCHAR(30)') AS ClientID    
+                             FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @TODATE = (SELECT TBL.COL.value('ToDate[1]', 'nVARCHAR(30)') AS ClientID    
+                           FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+    
+            DECLARE @INVOICENUMBER AS BIGINT    
+    
+            SELECT @INVOICENUMBER = INVOICENUMBER    
+            FROM   INVOICE WITH (NOLOCK)    
+            WHERE  INVOICEID = @IDENTITYID    
+    
+            IF ( @FROMDATE != '0' )    
+              BEGIN    
+                  SET @FROMDATE = Replace(CONVERT(NVARCHAR(15), CONVERT(DATETIME, @FROMDATE, 103), 106), ' ', '')    
+                  SET @TODATE = Replace(CONVERT(NVARCHAR(15), CONVERT(DATETIME, @TODATE, 103), 106), ' ', '')    
+              END    
+    
+            IF ( @FROMDATE = '0' )    
+              BEGIN    
+                  SELECT @FROMDATE = FROMDATE,    
+                         @TODATE = TODATE    
+                  FROM   INVOICE WITH (NOLOCK)    
+                  WHERE  INVOICEID = @IDENTITYID    
+    
+                  SET @FROMDATE = Replace(CONVERT(NVARCHAR(15), CONVERT(DATE, @FROMDATE, 106)), '-', ' ')    
+                  SET @TODATE = Replace(CONVERT(NVARCHAR(15), CONVERT(DATE, @TODATE, 106)), '-', ' ')    
+              END    
+    
+            IF NOT EXISTS (SELECT 1    
+                           FROM   @ActionDetails AD    
+                           WHERE  AD.CONTEXTTYPE = 'CV')    
+              BEGIN    
+   IF EXISTS (SELECT 1    
+                             FROM   @ActionDetails AD    
+                             WHERE  AD.CATEGORY = 'INVOICE'    
+                                    AND AD.ACTIONTYPE IN ( 'INVOICEPRINT', 'PDF', 'Email' ))    
+                    BEGIN    
+                        PRINT 'INVOICEPRINT'    
+    
+                        INSERT INTO NOTIFICATIONS      
+                                    (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,
+									CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,IsReprinting ,ReportLanguage,NoofCopies)      
+                        SELECT DISTINCT ACTIONTYPE,    
+                                        VALUE,    
+                                        -- AdditionalContext,                                           
+                                        Replace(ADDITIONALCONTEXT, 'version=1.0 encoding=utf-16', 'version="1.0" encoding="utf-16"') AS AdditionalContext,    
+                                        CATEGORY,    
+                                        VERSION,    
+                                  STATUS,    
+                                        ORGID,    
+                                        ORGADDRESSID,    
+                                        @SERVERDATE,    
+                                        @LOGINID,    
+                                        Replace(Replace(Replace(TEMPLATE, '{pdfDate}', @PDFDATE), '&gt;', '>'), '&lt;', '<'),    
+                                        CONTEXTTYPE,    
+                                        CASE    
+                                          WHEN ISATTACHMENT = '' THEN 'N'    
+                                          ELSE ISATTACHMENT    
+                                        END,    
+                                        Replace(Replace(Replace(SUBJECT, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE), '{InvoiceNumber}', @INVOICENUMBER),    
+                                        @SEQ_NUM,    
+                                        Replace(Replace(Replace(Replace(ATTACHMENTNAME, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE), '/', ' '), '{InvoiceNumber}', @INVOICENUMBER),    
+                                        CASE    
+                                          WHEN ACTIONTYPE = 'Email' THEN @IDENTITYID    
+                                          ELSE VALUE    
+                                        END,    
+                                        ''      ,
+										IsReprinting ,ReportLanguage,NoofCopies
+                        FROM   @ActionDetails    
+                        WHERE  CATEGORY = 'Invoice'    
+                    END    
+              END    
+        END    
+    
+      IF EXISTS (SELECT 1    
+              FROM   @ActionDetails AD    
+                 WHERE  AD.CATEGORY = 'Bill')    
+        BEGIN    
+            PRINT ' non invoice'    
+    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                        WHERE  AD.CATEGORY = 'BILL')    
+            SET @BILLNUMBER = (SELECT TBL.COL.value('FinallBillID[1]', 'nVARCHAR(20)') AS BillNumber    
+                               FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @BILLNUMBER    
+    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'BILL'    
+                              AND AD.ACTIONTYPE = 'PDF')    
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @BILLNUMBER    
+                         AND CATEGORY = 'Bill'    
+                         AND ISATTACHMENT = 'Y'    
+     AND ACTIONTYPE IN ( 'EMAIL', 'PDF' )    
+              --AND Status NOT IN ('PICKED')                                                 
+              END    
+    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'BILL'    
+                              AND AD.ACTIONTYPE = 'BILLPRINT')    
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'REPORTERROR'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @BILLNUMBER    
+                         AND CATEGORY = 'Bill'    
+                         AND ISATTACHMENT = 'Y'    
+                         AND ACTIONTYPE IN ( 'BILLPRINT' )    
+                         AND STATUS = 'ERROR'    
+              --AND Status NOT IN ('PICKED')                                      
+              END    
+    
+            IF ( @IDENTITYID != '-1' )    
+              BEGIN    
+                  INSERT INTO NOTIFICATIONS      
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,
+							  TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,IsReprinting ,ReportLanguage,NoofCopies)      
+                  SELECT DISTINCT ACTIONTYPE,    
+                                  VALUE,    
+                                  ADDITIONALCONTEXT,    
+                                  CATEGORY,    
+                                  VERSION,    
+                                  STATUS,    
+                                  ORGID,    
+                                  ORGADDRESSID,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(Replace(TEMPLATE, '{pdfDate}', @PDFDATE), '&gt;', '>'), '&lt;', '<'),    
+                                  CONTEXTTYPE,    
+                                  CASE    
+                                    WHEN ISATTACHMENT = '' THEN 'N'    
+                                    ELSE ISATTACHMENT    
+                                  END,    
+                                  Replace(Replace(SUBJECT, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE),    
+                                  @SEQ_NUM,    
+                                  Replace(Replace(Replace(ATTACHMENTNAME, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE), '/', ' '),    
+                                  @IDENTITYID,    
+                                  '',
+								 IsReprinting ,ReportLanguage,NoofCopies
+                  FROM   @ActionDetails    
+                  WHERE  CATEGORY = 'Bill'    
+                         AND ATTACHMENTNAME LIKE '%Receipt%'    
+              END    
+        END    
+    
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.ACTIONTYPE IN ( 'ISSTATPRINT', 'roundbprint', 'PRINT' ))    
+        BEGIN    
+            INSERT INTO [DBO].[PRINT_AUDIT_HISTORY]    
+                        (ACTIONTYPE,[IDENTITYID],[CATEGORY],[TYPE],STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,SEQ_NUM,NOTIFICATIONID)    
+            SELECT DISTINCT A.ACTIONTYPE,    
+                            @IDENTITYID,    
+                            A.CATEGORY,    
+                            A.ACTIONTYPE,    
+                            A.STATUS,    
+                            A.ORGID,    
+                            --a.orgaddressid,     
+                            CASE    
+                              WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                              WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                              ELSE A.ORGADDRESSID    
+                            END,    
+                            @SERVERDATE,    
+                            @LOGINID,    
+                            @SEQ_NUM,    
+                            0    
+            FROM   @ActionDetails A    
+            WHERE  A.ACTIONTYPE IN ( 'ISSTATPRINT', 'roundbprint', 'PRINT' )    
+        END    
+    
+      --------------                                                                                                
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.ACTIONTYPE IN ( 'BILLPRINT', 'INVOICEPRINT' ))    
+        BEGIN    
+            INSERT INTO [DBO].[PRINT_AUDIT_HISTORY]    
+                        (ACTIONTYPE,[IDENTITYID],[CATEGORY],[TYPE],STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,SEQ_NUM,NOTIFICATIONID)    
+            SELECT DISTINCT A.ACTIONTYPE,    
+                            @BILLNUMBER,    
+                            A.CATEGORY,    
+                            A.ACTIONTYPE,    
+                            A.STATUS,    
+                            A.ORGID,    
+                            @ORGADDRESSID,    
+                            @SERVERDATE,    
+                            @LOGINID,    
+                            @SEQ_NUM,    
+                            0    
+            FROM   @ActionDetails A    
+            WHERE  A.ACTIONTYPE IN ( 'BILLPRINT', 'INVOICEPRINT' )    
+        END    
+    
+      IF EXISTS (SELECT 1    
+  FROM   @ActionDetails AD    
+                 WHERE  AD.CATEGORY = 'Notify')    
+        BEGIN    
+            PRINT 'Notify'    
+    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                        WHERE  AD.CATEGORY = 'Notify')    
+            SET @VISITID = (SELECT TBL.COL.value('VisitID[1]', 'nVARCHAR(10)') AS ClientID    
+                            FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @VISITID    
+    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'Notify'    
+                              AND AD.ACTIONTYPE = 'Email')    
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @BILLNUMBER    
+                         AND CATEGORY = 'Notify'    
+                         AND ISATTACHMENT = 'Y'    
+                         AND ACTIONTYPE IN ( 'EMAIL' )    
+              END    
+    
+            IF ( @IDENTITYID != '-1' )    
+              BEGIN    
+                  INSERT INTO NOTIFICATIONS    
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,TEMPLATE,
+							  CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,EmailCC,EmailBccTo,IsReprinting ,ReportLanguage,NoofCopies)      
+                  SELECT DISTINCT ACTIONTYPE,    
+                                  VALUE,    
+                                  ADDITIONALCONTEXT,    
+                                  CATEGORY,    
+                                  VERSION,    
+                                  STATUS,    
+                                  ORGID,    
+                                  ORGADDRESSID,    
+                          @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                  CONTEXTTYPE,    
+                                  CASE    
+                                    WHEN ISATTACHMENT = '' THEN 'N'    
+                                    ELSE ISATTACHMENT    
+                                  END,    
+                                  Replace(Replace(SUBJECT, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE),    
+                                  @SEQ_NUM,    
+                                  Replace(Replace(Replace(ATTACHMENTNAME, '{FromDate}', @FROMDATE), '{ToDate}', @TODATE), '/', ' '),    
+                                  @IDENTITYID,    
+                                  '',    
+                                  BccTo,    
+                                  CCTo ,
+								  IsReprinting   ,ReportLanguage,NoofCopies   
+                  FROM   @ActionDetails    
+                  WHERE  CATEGORY = 'Notify'    
+                         AND CONTEXTTYPE IN ( 'RECOLLECT', 'REJECT', 'CP', 'P',    
+                                              'AR', 'AC', 'RF', 'CV',    
+                                              'CAN', 'RJN', 'RCN', 'RFN','CLA' )    
+                         AND ACTIONTYPE IN ( 'Email', 'Sms','APISMS' )    
+              END    
+        END    
+    
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.CATEGORY = 'integration'    
+                        AND AD.ISATTACHMENT = 'N')    
+        BEGIN    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                        WHERE  AD.CATEGORY = 'integration')    
+            SET @VISITID = (SELECT TBL.COL.value('VisitID[1]', 'nVARCHAR(10)') AS ClientID    
+                            FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @VISITID    
+    
+            SELECT @ORGADDRESSID = ORGADDRESSID    
+            FROM   PATIENTVISIT(NOLOCK)    
+            WHERE  PATIENTVISITID = @VISITID    
+    
+            --                          
+            PRINT CONVERT(NVARCHAR(MAX), @XML)    
+    
+            IF EXISTS (SELECT 1    
+        FROM   @ActionDetails AD    
+                       WHERE  AD.CATEGORY = 'integration'    
+                              AND AD.ISATTACHMENT = 'N'    
+                              AND AD.ACTIONTYPE in ( 'LISOrdered', 'WBill' ))    
+              --AND AD.ADDITIONALCONTEXT NOT LIKE     
+              --    '%<AccessionNumber>0</AccessionNumber>%')     
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @VISITID    
+                         AND CATEGORY = 'integration'    
+                         AND ISATTACHMENT = 'N'    
+                         AND ACTIONTYPE IN ( 'WBill', 'LISOrdered' )    
+              END    
+    
+            IF ( @IDENTITYID != '-1' )    
+              BEGIN    
+                  INSERT INTO NOTIFICATIONS      
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,
+							  TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,IsReprinting ,ReportLanguage,NoofCopies)      
+                  SELECT DISTINCT ACTIONTYPE,    
+                                  VALUE,    
+                                  ADDITIONALCONTEXT,    
+                                  CATEGORY,    
+                                  VERSION,    
+                                  STATUS,    
+                                  ORGID,    
+                                  @ORGADDRESSID,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  '',    
+                                  CONTEXTTYPE,    
+                                  CASE    
+ WHEN ISATTACHMENT = '' THEN 'N'    
+                                    ELSE ISATTACHMENT    
+                                  END,    
+                                  '',    
+                                  @SEQ_NUM,    
+                                  '',    
+                                  @IDENTITYID,    
+                                  ''      ,IsReprinting ,ReportLanguage,NoofCopies
+                  FROM   @ActionDetails    
+                  WHERE  CATEGORY = 'integration'    
+                         AND ACTIONTYPE IN ( 'WBill', 'LISOrdered' )    
+              -- AND ATTACHMENTNAME LIKE '%Receipt%'      
+              END    
+        END    
+    
+      IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.ActionType = 'OutBound')    
+        Begin    
+            Declare @ISoutBound NVARCHAR(10)    
+            Declare @Isintegration NVARCHAR(10)    
+            Declare @Attributeid INT    
+    
+            SELECT @Isintegration = IsIntegration    
+            from   PatientVisit WITH(NOLOCK)    
+            where  PatientVisitid = @VISITID    
+    
+            Select @CLIENTID = Clientid    
+            from   VisitClientMapping WITH(NOLOCK)    
+            where  VisitID = @VISITID    
+    
+            Select @Attributeid = AttributeID    
+            from   ClientAttributes WITH(NOLOCK)    
+            where  AttributeName = 'OutBound'    
+  and AttributeCode = 'OB'    
+    
+            SELECT @ISoutBound = value    
+            from   ClientAttributesDetails WITH(NOLOCK)    
+            where  Clientid = @CLIENTID    
+                   and AttributesID = @Attributeid    
+    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                        WHERE  AD.CATEGORY = 'Report'    
+                               AND AD.ACTIONTYPE in ( 'OutBound' ))    
+            SET @VISITID = (SELECT TBL.COL.value('VisitID[1]', 'nVARCHAR(10)') AS ClientID    
+                            FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @VISITID    
+    
+            SELECT @ORGADDRESSID = ORGADDRESSID    
+            FROM   PATIENTVISIT(NOLOCK)    
+            WHERE  PATIENTVISITID = @VISITID    
+    
+            --                          
+            PRINT CONVERT(NVARCHAR(MAX), @XML)    
+    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                      WHERE  AD.CATEGORY = 'Report'    
+                              AND AD.ISATTACHMENT = 'Y'    
+                              AND AD.ACTIONTYPE in ( 'OutBound' ))    
+              --AND AD.ADDITIONALCONTEXT NOT LIKE     
+              --    '%<AccessionNumber>0</AccessionNumber>%')     
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @VISITID    
+                         AND CATEGORY = 'Report'    
+                         AND ISATTACHMENT = 'Y'    
+                         AND ACTIONTYPE IN ( 'OutBound' )    
+              END    
+    
+            IF ( @IDENTITYID != '-1'    
+                 and @ISoutBound = 'Y'    
+                 and @Isintegration = 'Y' )    
+              BEGIN    
+                  --select * from @ActionDetails    
+                  INSERT INTO NOTIFICATIONS      
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,
+							  TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,ISCLIENTBLINDING,IsReprinting
+							   ,ReportLanguage,NoofCopies)      
+                  SELECT DISTINCT A.ACTIONTYPE,    
+                                  A.VALUE,    
+                                  A.ADDITIONALCONTEXT,    
+                                  A.CATEGORY,    
+                                  A.VERSION,    
+                                  -- a.Status,                      
+                                  @NOTIFICATIONSTATUS,    
+                                A.ORGID,    
+                             --a.orgaddressid,     
+                                  CASE    
+                                  WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                    WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                    ELSE A.ORGADDRESSID    
+                                  END,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                  A.CONTEXTTYPE,    
+                                  A.ISATTACHMENT,    
+                                  A.SUBJECT,    
+                                  @SEQ_NUM,    
+                                  Replace(A.ATTACHMENTNAME, '/', ' ') AS AttachmentName,    
+                                  @IDENTITYID,    
+                                  @CONFIDFLAG,    
+                                  A.ISCLIENTBLINDING,A.IsReprinting   ,ReportLanguage,NoofCopies    
+                  FROM   @ActionDetails A    
+                  WHERE  A.ActionType = 'OutBound'    
+              END    
+    
+            IF ( @IDENTITYID != '-1'    
+                 and @ISoutBound = 'Y' )    
+              BEGIN    
+                  --select * from @ActionDetails    
+                   SET @VISITCNT = (SELECT COUNT(1)            
+                                               from   @OrderInvestigationDetails OI            
+                                                      INNER JOIN PatientVisit PV WITH(NOLOCK)            
+                                                              on OI.VisitID = PV.PatientVisitID)            
+                              SET @APPROVEDCNT = (SELECT COUNT(1)            
+                                                  from   @OrderInvestigationDetails OI            
+                                                         INNER JOIN PatientVisit PV WITH(NOLOCK)            
+                                                                 on OI.VisitID = PV.PatientVisitID            
+                                                  WHERE  STATUS IN ( 'Approve', 'Cancel', 'Rejected', 'Retest', 'Not Given' ))            
+            
+                              IF ( @VISITCNT = @APPROVEDCNT )            
+                                BEGIN    
+                  INSERT INTO NOTIFICATIONS      
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,
+							  ORGADDRESSID,CREATEDAT,CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,
+							  ISCONFIDENTIALTEST,ISCLIENTBLINDING,IsReprinting ,ReportLanguage,NoofCopies)      
+                  SELECT DISTINCT A.ACTIONTYPE,    
+                                  A.VALUE,    
+                                  A.ADDITIONALCONTEXT,    
+                                  A.CATEGORY,    
+                                  A.VERSION,    
+                                  -- a.Status,                      
+                                  @NOTIFICATIONSTATUS,    
+                                  A.ORGID,    
+                                  --a.orgaddressid,     
+                                  CASE    
+                                  WHEN ( A.ACTIONTYPE = 'ROUNDBPRINT' and @ISPrint ='Y' ) THEN   ISNULL(A.ORGADDRESSID,@ORGADDID)         
+                                    WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                    ELSE A.ORGADDRESSID    
+                                  END,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+  A.CONTEXTTYPE,    
+   A.ISATTACHMENT,    
+                                  A.SUBJECT,    
+                                  @SEQ_NUM,    
+                                  Replace(A.ATTACHMENTNAME, '/', ' ') AS AttachmentName,    
+                                  @IDENTITYID,    
+                                  @CONFIDFLAG,    
+                                  A.ISCLIENTBLINDING  ,
+								  A.IsReprinting   ,ReportLanguage,NoofCopies  
+                  FROM   @ActionDetails A    
+                  WHERE  A.ActionType = 'OutBound'    
+              END    
+        End    
+		IF EXISTS (SELECT 1    
+                 FROM   @ActionDetails AD    
+                 WHERE  AD.ActionType = 'SmartReport')    
+        Begin    
+            Declare @ISSmartReport NVARCHAR(10)    
+            Declare @Isintegration1 NVARCHAR(10)    
+            Declare @Attributeid1 INT    
+    
+            --SELECT @Isintegration = IsIntegration    
+            --from   PatientVisit WITH(NOLOCK)    
+            --where  PatientVisitid = @VISITID    
+    
+            Select @CLIENTID = Clientid    
+            from   VisitClientMapping WITH(NOLOCK)    
+            where  VisitID = @VISITID    
+    
+            Select @Attributeid1 = AttributeID    
+            from   ClientAttributes WITH(NOLOCK)    
+            where  AttributeName = 'SmartReport'    
+                   and AttributeCode = 'OB' 
+    
+            SELECT @ISSmartReport = value    
+            from   ClientAttributesDetails WITH(NOLOCK)    
+            where  Clientid = @CLIENTID    
+                   and AttributesID = @Attributeid1    
+    
+            SET @XML = (SELECT TOP 1 RIGHT(AD.ADDITIONALCONTEXT, Len(AD.ADDITIONALCONTEXT) - 1)    
+                        FROM   @ActionDetails AD    
+                        WHERE  AD.CATEGORY = 'Report'    
+                               AND AD.ACTIONTYPE in ( 'SmartReport' ))    
+            SET @VISITID = (SELECT TBL.COL.value('VisitID[1]', 'nVARCHAR(10)') AS ClientID    
+                            FROM   @XML.nodes('//ContextInfo') TBL(COL))    
+            SET @IDENTITYID = @VISITID    
+    
+            SELECT @ORGADDRESSID = ORGADDRESSID    
+            FROM   PATIENTVISIT(NOLOCK)    
+            WHERE  PATIENTVISITID = @VISITID    
+    
+            --                          
+            PRINT CONVERT(NVARCHAR(MAX), @XML)    
+    
+            IF EXISTS (SELECT 1    
+                       FROM   @ActionDetails AD    
+                      WHERE  AD.CATEGORY = 'Report'    
+                              AND AD.ISATTACHMENT = 'Y'    
+                              AND AD.ACTIONTYPE in ( 'SmartReport' ))    
+              --AND AD.ADDITIONALCONTEXT NOT LIKE     
+              --    '%<AccessionNumber>0</AccessionNumber>%')     
+              BEGIN    
+                  UPDATE T    
+                  SET    STATUS = 'DIFFERED'    
+                  FROM   NOTIFICATIONS T(NOLOCK)    
+                  WHERE  IDENTITYID = @VISITID    
+                         AND CATEGORY = 'Report'    
+                         AND ISATTACHMENT = 'Y'    
+                         AND ACTIONTYPE IN ( 'SmartReport' )    
+              END    
+    
+            IF ( @IDENTITYID != '-1'    
+                 and @ISSmartReport = 'Y'    
+                  )    
+              BEGIN    
+                  --select * from @ActionDetails    
+                  INSERT INTO NOTIFICATIONS    
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,
+							  CREATEDBY,TEMPLATE,CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,
+							  ISCLIENTBLINDING ,ReportLanguage,NoofCopies)    
+                  SELECT DISTINCT A.ACTIONTYPE,    
+                                  A.VALUE,    
+                                  A.ADDITIONALCONTEXT,    
+                                  A.CATEGORY,    
+                            A.VERSION,    
+                                  -- a.Status,                      
+                                  @NOTIFICATIONSTATUS,    
+                                A.ORGID,    
+                                  --a.orgaddressid,     
+                                  CASE    
+                                    WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                    ELSE A.ORGADDRESSID    
+                                  END,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                  A.CONTEXTTYPE,    
+                                  A.ISATTACHMENT,    
+                                  A.SUBJECT,    
+                                  @SEQ_NUM,    
+                                  Replace(A.ATTACHMENTNAME, '/', ' ') AS AttachmentName,    
+                                  @IDENTITYID,    
+                                  @CONFIDFLAG,    
+                          A.ISCLIENTBLINDING   ,ReportLanguage,NoofCopies  
+                  FROM   @ActionDetails A    
+                  WHERE  A.ActionType = 'SmartReport'    
+              END    
+    
+            IF ( @IDENTITYID != '-1'    
+                 and @ISSmartReport = 'Y' )    
+              BEGIN    
+                  --select * from @ActionDetails    
+                  INSERT INTO NOTIFICATIONS    
+                              (ACTIONTYPE,VALUE,ADDITIONALCONTEXT,CATEGORY,VERSION,STATUS,ORGID,ORGADDRESSID,CREATEDAT,CREATEDBY,TEMPLATE,
+							  CONTEXTTYPE,ISATTACHMENT,SUBJECT,SEQ_NUM,ATTACHMENTNAME,IDENTITYID,ISCONFIDENTIALTEST,ISCLIENTBLINDING ,ReportLanguage,NoofCopies)    
+                  SELECT DISTINCT A.ACTIONTYPE,    
+  A.VALUE,    
+                                  A.ADDITIONALCONTEXT,    
+                                  A.CATEGORY,    
+                                  A.VERSION,    
+                                  -- a.Status,                      
+                                  @NOTIFICATIONSTATUS,    
+                                  A.ORGID,    
+                                  --a.orgaddressid,     
+                                  CASE    
+                                    WHEN A.ACTIONTYPE = 'ROUNDBPRINT' THEN ISNULL(@ORGADDID, @ORGADDRESSID)    
+                                    ELSE A.ORGADDRESSID    
+                                  END,    
+                                  @SERVERDATE,    
+                                  @LOGINID,    
+                                  Replace(Replace(A.TEMPLATE, '&gt;', '>'), '&lt;', '<'),    
+                                  A.CONTEXTTYPE,    
+   A.ISATTACHMENT,    
+                                  A.SUBJECT,    
+                                  @SEQ_NUM,    
+                                  Replace(A.ATTACHMENTNAME, '/', ' ') AS AttachmentName,    
+                                  @IDENTITYID,    
+                                  @CONFIDFLAG,    
+                                  A.ISCLIENTBLINDING  ,ReportLanguage,NoofCopies   
+                  FROM   @ActionDetails A    
+                  WHERE  A.ActionType = 'SmartReport'    
+              END    
+        End    
+    
+      IF Exists (Select 1    
+                 from   PatientDispatchDetails PDD (NOLOCK)    
+                        Inner Join PatientVisit PV (NOLOCK)    
+                                on PV.PatientVisitid = PDD.VisitID    
+                                   and PV.Orgid = PDD.Orgid    
+                 where  PDD.VisitID = @IDENTITYID    
+                        and PDD.ORGID = @Orgid    
+                        and PDD.DispatchType = 'T'    
+                        and PDD.DispatchValue = 'Home')    
+        BEGIN    
+            UPDATE T    
+            SET    STATUS = '',ReportType = @ReportType    
+            FROM   NOTIFICATIONS T(NOLOCK)    
+            WHERE  IDENTITYID = @VISITID    
+                   AND CATEGORY = 'REPORT'    
+                   AND ISATTACHMENT = 'Y'    
+                   AND ACTIONTYPE IN ( 'PDF', 'ROUNDBPDF','FTP' )    
+                   AND Status = 'Due'    
+        END    
+  --------------                                               
+  END    
+
+  END  
+
+
+

@@ -1,0 +1,52 @@
+
+CREATE PROCEDURE [dbo].[pGetAttachmentPatientLoginPDF_LIMSAPI] 
+(
+   @pOrgCode NVARCHAR(100),
+   @pLoginID BIGINT,
+   @pPwd NVARCHAR(50),
+   @pVisitNumber NVARCHAR(50)
+)
+AS  
+BEGIN
+   ----pGetAttachmentPatientLoginPDF_LIMSAPI  'LIMSAPI',937526,'5Ay4ss8ZEg0=','2000335'
+   --D:\Liskernel-demo\LISPDF\\REPORT\202\ROUNDB\2020/05/26\Report-2000264_Test_Show_GENERAL_26May2020_104331.pdf
+
+   DECLARE @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL,@pVisitId BIGINT
+   DECLARE @REPORTPDFFOLDERPATH NVARCHAR(200)
+
+   IF @pVisitNumber = '0' OR @pVisitNumber = '-1'
+       SET @pVisitNumber = ''
+
+ IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode)
+    BEGIN
+       SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+          @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+	SELECT @REPORTPDFFOLDERPATH=Value
+                  FROM   CommunicationConfig cc 
+                  WHERE  OrgID = @pOrgID
+                         AND Name = 'REPORTPDFFOLDERPATH'
+                         AND Isnull(IsActive, 'A') <> 'D'
+
+--IF not exists (@pVisitNumber IS NULL OR @pVisitNumber='')
+ -- SELECT @pVisitId=PatientVisitId FROM BOOKINGS WITH(Nolock) WHERE BookingID=@pBookingID AND OrgID =@pOrgID
+--ELSE 
+select top 1 @pVisitId=  PV.PatientVisitId FROM PatientVisit PV WITH(Nolock)
+   inner join  login L WITH(Nolock) on L.loginID=@pLoginID and l.OrgID=@pOrgID and L.IsLocked='N'
+  inner join  Patient P WITH(Nolock) on P.LoginID=L.LoginId and P.LoginID is not null and P.PatientNumber=L.LoginName
+   inner join LoginRole LR WITH(Nolock) on LR.LoginID=L.LoginID
+   inner join Role R WITH(Nolock) on R.Rolename='Patient' and LR.RoleId=R.RoleID
+   
+   WHERE PV.VisitNumber=@pVisitNumber --AND PV.OrgId=@pOrgID and P.PatientID=PV.PatientID
+--   select @pVisitId
+  SELECT IdentityID  AS VisitId,@REPORTPDFFOLDERPATH + Template + AttachmentName AS FilePathName FROM Notifications (Nolock)
+      WHERE IdentityID = @pVisitId AND OrgID=@pOrgID 
+	  AND Status='Completed' AND ActionType='ROUNDBPDF' AND Completiontime IS NOT NULL
+   AND ContextType='P'
+END 
+

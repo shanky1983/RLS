@@ -1,0 +1,138 @@
+CREATE PROCEDURE [dbo].[pGetRoleLocation_LIMSAPI] 
+  @pOrgID [int]  
+ ,@pLID [bigint]  
+ ,@pRID [bigint]  
+ 
+   
+AS  
+BEGIN
+ IF @pRID > 0  
+ BEGIN  
+  IF NOT EXISTS (  
+    SELECT 1  
+    FROM LoginLocationMapping LLM WITH (NOLOCK)  
+    INNER JOIN LoginRole LR WITH (NOLOCK)  
+     ON LR.LoginRoleID = LLM.LoginRoleID  
+    WHERE LR.RoleID = @pRID  
+     AND LR.LoginID = @pLID  
+    )  
+  BEGIN  
+
+   SELECT OA.AddressID as LocationID 
+    ,OA.Add1  
+    ,OA.Add2  
+    ,OA.City  
+    ,OA.PostalCode  
+    ,OA.LandLineNumber  
+    ,OA.MobileNumber  
+    ,OA.Location  
+    ,OA.CountryID  
+    ,OA.StateID  
+    ,OA.CenterTypeCode  
+    ,OA.IsDefault  
+    ,OA.TimeDifference  
+    ,OA.TimeZone  
+    ,OA.DateFormat  
+    ,OA.TimeFormat  
+   ,ISNULL(OA.AddLevel1,0) AddLevel1  
+  
+   ,ISNULL(OA.AddLevel2,0) AddLevel2  
+  
+   ,ISNULL(OA.CityCode,'0') CityCode  
+   ,ISNULL(OA.HasHealthcoupon, 'N') AS IsRemote 
+   ,isnull(Ambulancenumber,'') as AmbulanceNumber
+   ,Org.Name as OrgName  
+   ,@pOrgID as OrgID
+   FROM OrganizationAddress OA WITH (NOLOCK)  
+   INNER JOIN Organization Org with(Nolock) ON OA.OrgID = Org.OrgID
+   WHERE OA.OrgID = @pOrgID  
+    AND OA.STATUS = 'A'  
+   ORDER BY Location  
+  END  
+  ELSE  
+  BEGIN  
+ 
+   SELECT OA.AddressID as LocationID 
+    ,OA.Add1  
+    ,OA.Add2  
+    ,OA.City  
+    ,OA.PostalCode  
+    ,OA.LandLineNumber  
+    ,OA.MobileNumber  
+    ,OA.Location  
+    ,OA.CountryID  
+    ,OA.StateID  
+    ,OA.CenterTypeCode  
+    ,CASE   
+     WHEN (L.LoginRoleID IS NULL)  
+      THEN 'N'  
+     ELSE 'Y'  
+     END IsDefault  
+    ,OA.TimeDifference  
+    ,OA.TimeZone  
+    ,OA.DateFormat  
+    ,OA.TimeFormat  
+    ,ISNULL(OA.AddLevel1,0) AddLevel1  
+  
+   ,ISNULL(OA.AddLevel2,0) AddLevel2  
+  
+   ,ISNULL(OA.CityCode,'0') CityCode  
+    ,ISNULL(OA.HasHealthcoupon, 'N') AS IsRemote 
+    ,isnull(Ambulancenumber,'')  as AmbulanceNumber
+	,Org.Name as OrgName 
+	,@pOrgID as OrgID 
+   FROM OrganizationAddress OA WITH (NOLOCK)  
+                         --LEFT OUTER JOIN (    
+                         INNER JOIN (SELECT llm.AddressID,  
+                                            LLM.LoginRoleID,  
+                                            LLM.OrgID  
+    FROM LoginRole LR  
+    JOIN LoginLocationMapping LLM  
+     ON llm.LoginRoleID = LR.LoginRoleID  
+    WHERE LR.LoginID = @pLID  
+     AND LR.RoleID = @pRID  
+    ) L  
+    ON L.AddressID = Oa.AddressID  
+     AND L.OrgID = OA.OrgID  
+  INNER JOIN Organization Org with(Nolock) ON OA.OrgID = Org.OrgID
+   WHERE OA.OrgID = @pOrgID  
+    AND OA.STATUS = 'A'  
+   ORDER BY Location  
+  END  
+ END  
+ ELSE  
+ BEGIN  
+  SELECT OA.AddressID as LocationID
+   ,OA.Add1  
+   ,OA.Add2  
+   ,OA.City  
+   ,OA.PostalCode  
+   ,OA.LandLineNumber  
+   ,OA.MobileNumber  
+   ,OA.Location  
+   ,OA.CountryID  
+   ,OA.StateID  
+   ,OA.CenterTypeCode  
+   ,OA.IsDefault  
+   ,OA.TimeDifference  
+   ,OA.TimeZone  
+   ,o.OrgDisplayName AS Comments  
+   ,OA.DateFormat  
+   ,OA.TimeFormat  
+   ,ISNULL(OA.AddLevel1,0) AddLevel1  
+  
+   ,ISNULL(OA.AddLevel2,0) AddLevel2  
+  
+   ,ISNULL(OA.CityCode,'0') CityCode  
+   ,ISNULL(OA.HasHealthcoupon, 'N') AS IsRemote 
+   ,isnull(Ambulancenumber,'')  as AmbulanceNumber
+   ,O.Name as OrgName 
+   ,@pOrgID as OrgID 
+  FROM OrganizationAddress OA WITH (NOLOCK)  
+  INNER JOIN organization o  
+   ON o.OrgID = oa.OrgID  
+  WHERE OA.OrgID = @pOrgID  
+   AND OA.STATUS = 'A'  
+  ORDER BY Location  
+ END  
+END  

@@ -1,0 +1,28 @@
+
+CREATE PROCEDURE [dbo].[pInsertinvSampleResultsSingleScreen]  
+ @pSampleResults [dbo].[UDTinvSampleResults] READONLY,  
+ @pVisitID [bigint],  
+ @pOrgID [int],  
+ @pReturnStatus [int] OUTPUT,  
+ @ContextInfo [UDT_Context] READONLY  
+WITH EXECUTE AS OWNER  
+AS  
+BEGIN  
+ SET @pReturnStatus=-1  
+Declare @ServerDate datetime
+Select @ServerDate =(Select dbo.fn_GetServerDate(@ContextInfo)) 
+   
+ --DELETE FROM PatientInvSampleResults WHERE VisitID = @pVisitID AND OrgID = @pOrgID  
+   
+ INSERT INTO PatientInvSampleResults (VisitID, SampleCode, AttributesID, SampleValues, SampleDesc, CreatedBy, CreatedAt, OrgID)  
+  SELECT sr.VisitID, sr.SampleCode, sr.AttributesID, sr.SampleValues, sr.SampleDesc, sr.CreatedBy, @ServerDate, sr.OrgID FROM @pSampleResults sr    
+    
+ SET @pReturnStatus=0  
+END
+
+
+
+
+
+
+

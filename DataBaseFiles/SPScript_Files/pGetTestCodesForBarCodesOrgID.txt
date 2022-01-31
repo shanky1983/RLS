@@ -1,0 +1,279 @@
+--drop procedure pGetTestCodesForBarCodes_S
+Create PROCEDURE [dbo].[pGetTestCodesForBarCodesOrgID] @DeviceID    [nvarchar](10),
+                                                  @BarCode     [dbo].[UDTDeviceImportData] READONLY,
+                                                  @ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+  SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON; 
+BEGIN TRY
+  DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+      DECLARE @pVisitID bigint
+      DECLARE @pOrgID int
+      DECLARE @pUID nvarchar(255)
+      --DECLARE @BarCode nvarchar(255) = '1605253'                                                                    
+      --DECLARE @DeviceID nvarchar(10) = 'CS400'                                                                       
+      DECLARE @Type nvarchar(10)
+      DECLARE @OrgID int
+      DECLARE @VisitID bigint
+      DECLARE @UID nvarchar(255)
+      DECLARE @INVID bigint
+      DECLARE @Barcodee nvarchar(255)
+      DECLARE @BarcodeLoop nvarchar(255)
+      DECLARE @SampleID int
+      DECLARE @tempBarCodeCollection TABLE
+        (
+           Barcode nvarchar(50)
+        )
+      DECLARE @tempIDCollection TABLE
+        (
+           ID      Bigint,
+           VisitID bigint
+        )
+		Select @OrgID= isnull(OrgID,0) from @BarCode
+
+      insert into @tempBarCodeCollection
+      select BarCode
+      from   @BarCode
+
+      While Exists(select Top 1 Barcode
+                   from   @tempBarCodeCollection)
+        BEGIN
+            SELECT TOP 1 @BarcodeLoop = Barcode
+            FROM   @tempBarCodeCollection
+
+            DECLARE @tempSampleCollected TABLE
+              (
+                 VisitID    bigint,
+                 OrgID      int,
+                 InvID      bigint,
+                 SampleType nvarchar(10),
+                 UID        nvarchar(255),
+                 Barcode    nvarchar(255)
+              )
+
+            /*below set count and order by createdat added by mohan*/
+            set rowcount 1
+
+            select @pVisitID = PIS.PatientVisitID,
+                   @pOrgID = PIS.OrgID,
+                   @pUID = PIS.UID,
+                   @SampleID = PIS.SampleCode
+            from   PatientInvSample PIS 
+            where  PIS.BarcodeNumber = @BarcodeLoop and PIS.OrgID=@OrgID
+            order  by CreatedAt desc
+
+            set rowcount 0
+
+            --select @pVisitID = PV.PatientVisitId,@pOrgID=PV.OrgID,@pUID=OI.UID from PatientVisit PV                                                          
+            --inner join OrderedInvestigations OI on OI.VisitID = PV.PatientVisitId where PV.ExternalVisitID = @BarcodeLoop                       
+            INSERT INTO @tempSampleCollected
+            SELECT VisitID,
+                   OrgID,
+                   ID,
+                   Type,
+                   UID,
+                   Barcode
+            from   PatientInvSampleMapping 
+            where  Barcode = @BarcodeLoop  and OrgID=@OrgID
+
+            --select * from @tempSampleCollected                             
+            While Exists(select Top 1 *
+                         from   @tempSampleCollected)
+              BEGIN
+                  --select * from #tempSampleCollected                                                                                     
+                  SELECT TOP 1 @Type = SampleType,
+                               @OrgID = OrgID,
+                               @VisitID = VisitID,
+                               @UID = UID,
+                               @Barcodee = Barcode,
+                               @INVID = InvID
+                  FROM   @tempSampleCollected
+
+                  if( @Type = 'INV' )
+                    BEGIN
+                        PRINT 'INV'
+
+                        INSERT into @tempIDCollection
+                        select     tmpSC.InvID,
+                                   @pVisitID
+                        from       @tempSampleCollected tmpSC
+                        inner join DeviceIntegrationOrgMapping DIM  on tmpSC.InvID = DIM.InvestigationID
+                                                                                   and DIM.OrgID = @OrgID
+                                                                                   and DIM.DeviceID = @DeviceID
+                                                                                   AND DIM.IsActive = 'Y'
+                        where      tmpSC.Barcode = @Barcodee
+                                   and tmpSC.OrgID = @OrgID
+                                   and InvID not in (Select ID
+                                                     from   @tempIDCollection)
+                    --and InvID  in (Select ID from OrderedInvestigations where VisitID=@pVisitID and ID=InvID and Status not IN('Cancel','Completed','Approve','Paid') )                                                         
+                    END
+                  ELSE
+                    BEGIN
+                        PRINT 'GRP'
+
+                        --SELECT @GrpID=ID from PatientInvSampleMapping where Barcode=@BarCode and OrgID=@pOrgID                                                                                         
+                        --Print 'Grpid'+convert(nvarchar,@GRpID)                                      
+                        --select @pOrgID,   @pVisitID  ,@DeviceID                                                                                   
+                        INSERT into @tempIDCollection
+                        SELECT     IGMM.InvestigationID,
+                                   @pVisitID
+                        From       InvGroupMapMaster IGMM 
+                        INNER join InvOrgGroup IOG  on IGMM.GroupID = IOG.OrgGroupID
+                                                                   and IOg.OrgID = @pOrgID
+                                                                   and IOG.AttGroupID = @INVID
+                        INNER join DeviceIntegrationOrgMapping DIM  on DIM.InvestigationID = IGMM.InvestigationID
+                                                                                   and DIM.OrgID = @pOrgID
+                                                                                   and DIM.DeviceID = @DeviceID
+                                                                                   AND DIM.IsActive = 'Y'
+                        where      IGMM.InvestigationID not in (Select ID
+                                                                from   @tempIDCollection)
+
+                        INSERT into @tempIDCollection
+                        SELECT     DISTINCT IGMM1.InvestigationID,
+                                            @pVisitID
+                        From       InvGroupMapMaster IGMM 
+                        INNER join InvOrgGroup IOG  on IGMM.GroupID = IOG.OrgGroupID
+                                                                   and IOg.OrgID = @pOrgID
+                                                                   and IOG.AttGroupID = @INVID
+                        INNER JOIN InvGroupMapMaster IGMM1 ON IGMM.InvestigationID = IGMM1.GroupID
+                                                              AND IGMM.Parent = 'Y'
+                        INNER join DeviceIntegrationOrgMapping DIM  on DIM.InvestigationID = IGMM1.InvestigationID
+                                                                                   and DIM.OrgID = @pOrgID
+                                                                                   and DIM.DeviceID = @DeviceID
+                                                                                   AND DIM.IsActive = 'Y'
+                        where      IGMM.InvestigationID not in (Select ID
+                                                                from   @tempIDCollection)
+                    END
+
+                  IF( @Type = 'PKG' )
+           BEGIN
+                        INSERT into @tempIDCollection
+                        SELECT     DISTINCT PINV.InvestigationID,
+                                            @pVisitID
+                        From       PatientInvestigation PINV 
+                        INNER join DeviceIntegrationOrgMapping DIM  on DIM.InvestigationID = PINV.InvestigationID
+                                                                                   and DIM.OrgID = @pOrgID
+                                                                                   and DIM.DeviceID = @DeviceID
+                                                                                   AND DIM.IsActive = 'Y'
+                        where      PINV.InvestigationID not in (Select ID
+                                                                from   @tempIDCollection)
+                    END
+
+                  --Print 'Deleting'+Convert(nvarchar,@INVID)                                                                              
+                  DELETE FROM @tempSampleCollected
+                  where  VisitID = @VisitID
+                         and OrgID = @OrgID
+                         and UID = @UID
+                         and Barcode = @Barcodee
+                         and InvID = @INVID
+              END
+
+            DECLARE @tempSampleCollected1 TABLE
+              (
+                 VisitID    bigint,
+                 OrgID      int,
+                 InvID      bigint,
+                 SampleType nvarchar(10),
+                 UID        nvarchar(255),
+                 Barcode    nvarchar(255)
+              )
+
+            INSERT INTO @tempSampleCollected1
+            SELECT VisitID,
+                   OrgID,
+                   ID,
+                   Type,
+                   UID,
+                   Barcode
+            from   PatientInvSampleMapping 
+            where  Barcode = @BarcodeLoop
+
+            While Exists(select Top 1 *
+                         from   @tempSampleCollected1)
+              BEGIN
+                  SELECT TOP 1 @Type = SampleType,
+                               @OrgID = OrgID,
+                               @VisitID = VisitID,
+                               @UID = UID,
+                               @Barcodee = Barcode,
+                               @INVID = InvID
+                  FROM   @tempSampleCollected1
+
+                  if( @Type = 'INV' )
+                    BEGIN
+                        INSERT into @tempIDCollection
+                        select @INVID,
+                               @pVisitID
+                        where  @INVID NOT IN (Select ID
+                                              from   @tempIDCollection)
+                    END
+
+                  DELETE FROM @tempSampleCollected1
+                  where  VisitID = @VisitID
+                         and OrgID = @OrgID
+                         and UID = @UID
+                         and Barcode = @Barcodee
+                         and InvID = @INVID
+              END
+
+            --Select  ID from #tempIDCollection order by ID asc                                                                    
+            --DROP TABLE #tempIDCollection                                                                                       
+            --DROP TABLE @tempSampleCollected                                                                      
+            --DROP TABLE @tempSampleCollected1                                                                      
+            DELETE FROM @tempBarCodeCollection
+            where  Barcode = @BarcodeLoop
+        END
+
+      Select     Distinct DIOM.TestCode      AS TestCode,
+                          Pv.ExternalVisitID AS ExternalVisitID,
+                          P.Name             as PatientName,
+                          P.PatientNumber    as PatientNumber,
+                          P.Age              as PatientAge,
+                    P.SEX              as PatientSex,
+                          P.DOB,
+                          PV.PatientVisitId  as VisitID,
+                          PV.OrgID  as OrgID,
+                          PV.OrgAddressID    as OrgAddressID,
+                          DIOM.DeviceID      as DeviceID,
+                          @BarcodeLoop       as BarCode,
+                          PV.VisitNumber ,
+						    PV.ReferingPhysicianName,
+						  PV.WardNo 
+      from       PatientVisit PV 
+      inner join Patient P  on P.PatientID = PV.PatientID
+      inner join @tempIDCollection TIC on TIC.VisitID = PV.PatientVisitId
+      inner join DeviceIntegrationOrgMapping DIOM  on DIOM.InvestigationID = TIC.ID
+                                                                  and DIOM.DeviceID = @DeviceID
+                                                                  AND DIOM.IsActive = 'Y'
+                                                                  AND ISNULL(DIOM.IsUpload, 'Y') = 'Y'
+      inner join InvestigationOrgMapping IOM  ON IOM.OrgID = DIOM.OrgID
+                                                             AND DIOM.InvestigationID = IOM.InvestigationID
+                                                             AND IOM.SampleCode = @SampleID
+      inner join PatientInvestigation PI  on PI.PatientVisitID = PV.PatientVisitId
+                                                         and PI.InvestigationID = DIOM.InvestigationID
+      INNER JOIN PatientInvSampleMapping PISM  ON PI.UID = PISM.UID
+                                                              AND PI.PatientVisitID = PISM.VisitID
+                                                              AND PI.OrgID = PISM.OrgID
+      where      PI.Status
+                 --not in ('Approve','Cancel','Completed','SampleLoaded','Recheck','Validate','Retest','Reject','Not given',                          
+                 --'Rejected','Co-authorize','With Held','SampleCollected')                     
+                 --in ('SampleLoaded','SampleReceived','Pending')                
+                 in ( 'SampleLoaded', 'SampleReceived', 'Pending' )
+                 and PISM.Barcode IN(select BarCode
+                                     from   @BarCode)
+  --AND                      
+  --DROP TABLE @tempBarCodeCollection                                           
+  --DROP TABLE @tempIDCollection    
+END TRY
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetTestCodesForBarCodes @DeviceID  = '+@DeviceID
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH   
+  END
+
+
+

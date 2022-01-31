@@ -1,0 +1,96 @@
+create PROCEDURE [dbo].[PgetSmartReport_API]
+(
+@NotificationID BIGINT
+
+)
+AS
+BEGIN
+--set QUOTED_IDENTIFIER on;
+DECLARE @Accessnumber Table(
+Sno BIGINT Identity(1,1),
+AccessionNumber BIGINT
+)
+
+DECLARE @VisitID BIGINT=''
+DECLARE @LocationCode NVARCHAR(100),  @OrgName NVARCHAR(1000)
+
+DECLARE @OrgID BIGINT=0
+DECLARE @Count BIGINT
+DECLARE @sno BIGINT=1
+DECLARE @Acccessno BIGINT
+DECLARE @AccessString nvarchar(max)=''
+DECLARE @AttachmentName varchar(max) =''
+DECLARE @Path varchar(max) ='',@ReportFolderpath NVARCHAR(MAX)='',@PdfReport NVARCHAR(MAX)
+
+--DECLARE @commonPath VARCHAR(100)
+ 
+--SET @commonPath = (SELECT VALUE FROM CommunicationConfig  WITH(NOLOCK) WHERE UPPER(Type) ='EMAIL' AND NAME = 'REPORTPDFFOLDERPATH'  AND OrgID =  @OrgID )
+select @VisitID=IdentityID,@OrgID=OrgID from Notifications WITH(NOLOCK) where NotificationID=@NotificationID
+
+SELECT @OrgName = OrgDisplayName FROM Organization (NOLOCK) WHERE OrgID=@OrgID
+SELECT @LocationCode = LocationCode FROM OrganizationAddress (NOLOCK) WHERE OrgID=@OrgID
+
+INSERT INTO @Accessnumber(AccessionNumber)
+select AccessionNumber from OrderedInvestigations WITH(NOLOCK) Where VisitID=@VisitID AND OrgID=@OrgID
+
+
+  SELECT @AccessString = (SELECT 
+                               Stuff((SELECT N', ' + Ltrim(Rtrim(accessionnumber )) 
+                                      FROM   @Accessnumber  
+                                      FOR xml path(''), type).value('text()[1]','nvarchar(max)'), 1, 2  , N'') 
+                               AS AccessionNumber) 
+ 
+select @Count=Count(1) from OrderedInvestigations
+WHILE(@sno<=@Count)
+BEGIN
+
+Select @Acccessno=AccessionNumber from @Accessnumber WHERE Sno=@sno
+SET @AccessString=CAST(@AccessString AS VARCHAR) +','+ CAST(@Acccessno AS VARCHAR)+','
+SET @sno=@sno+1
+
+END
+
+SET @AccessString = 
+     CASE @AccessString WHEN null THEN null 
+     ELSE (
+         CASE LEN(@AccessString) WHEN 0 THEN @AccessString 
+            ELSE LEFT(@AccessString, LEN(@AccessString) - 1) 
+         END 
+     ) END
+
+ --select @AccessString
+exec GetPatientBiographyForReport_Smart @pVisitID=@VisitID,@OrgID=@OrgID
+
+--trends
+EXEC Pgetresulttrends @pVisitID=@VisitID,@OrgID=@OrgID
+
+--summaryNormal
+--EXEC pGetOrderedInvestigationsandClosed @pVisitID=@VisitID,@OrgID=@OrgID,@IsServiceRequest='Y' 
+
+----summaryNormal
+--EXEC pGetInvestigationValuesReportCommonSummary_Normal @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=139,@InvestigationID=N'0', @GroupOrgIDs =N'',@IsServiceRequest= 'N'
+
+--summaryAbNormal
+--EXEC pGetInvestigationValuesReportCommonSummary @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=139,@InvestigationID=N'0'
+--, @GroupOrgIDs =N'',@IsServiceRequest='Y' 
+
+
+--labResults
+exec PgetinvestigationvaluesreportMergedcommon_API @pVisitID=@VisitID,@OrgID=@OrgID,@TemplateID=143,@InvestigationID=@AccessString
+
+select @ReportFolderpath=value from CommunicationConfig where orgid=@OrgID and Name='PdfFolderPath'
+select @Path=Template,@AttachmentName=AttachmentName  from Notifications N WITH(NOLOCK) WHERE N.NotificationID=@NotificationID
+
+--SELECT  @PdfReport=Template+AttachmentName FROM Notifications WHERE IdentityID =@VisitID AND ActionType='pdf' and category='report' and ReportLanguage='en-GB'
+
+SELECT @ReportFolderpath+REPLACE(Template,'/','\')+AttachmentName  PdfReportpath,AttachmentName,0 fileSize,'' externalURL ,'' fileMimeType
+FROM Notifications WHERE IdentityID =@VisitID AND ActionType='pdf' and category='report' and ReportLanguage='en-GB'
+
+select REPLACE(@Path,'/','\')  AS  Path ,@AttachmentName AttachmentName,CONVERT(NVARCHAR,@NotificationID) NotificationID,@OrgID OrgID,@VisitID PatientVisitID
+,@OrgName entityName
+,CONVERT(NVARCHAR,@OrgID) externalEntityId
+,@LocationCode entityLocationCode
+
+-- REPLACE(@Path,'/','\')
+--@commonPath + @Path
+END

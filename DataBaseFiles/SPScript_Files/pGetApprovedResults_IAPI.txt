@@ -1,0 +1,254 @@
+CREATE procedure [dbo].[pGetApprovedResults_IAPI]                  
+                  
+as                  
+begin                  
+declare  @Results as TABLE                   
+  (                  
+     MessageID            VARCHAR(20) ,                  
+     OrgCode              NVARCHAR(5),                  
+     OrderID              varchar(40),                  
+     ExternalPatientID    NVARCHAR(25),                  
+     ExternalVisitID      NVARCHAR(25),                  
+     LISPatientID         BIGINT,                  
+     LISVisitID           BIGINT,                  
+     OrderedTestCode      NVARCHAR(250),                  
+     OrderedTestName      NVARCHAR(250),                  
+     GroupTestCode        NVARCHAR(250),                  
+     GroupTestName        NVARCHAR(250),                  
+     AnalyteTestCode      NVARCHAR(250),                  
+     AnalyteTestName      NVARCHAR(250),                  
+     ResultValue          NVARCHAR(Max),                  
+     UOM                  NVARCHAR(50),                  
+     ReferenceRange       NVARCHAR(250),                  
+     IsAbnormal           NCHAR(1),                  
+     IsSensitive          NCHAR(1),                  
+     Remarks              NVARCHAR(250),                  
+     GroupResultStatus    NVARCHAR(100),                  
+     AnalyteResultStatus  VARCHAR(100),                  
+     ApprovedBy           NVARCHAR(200),                  
+     ApprovedDateTime     DATETIME,                  
+     CoAuthorizedBy       NVARCHAR(200),                  
+     CoAuthorizedDateTime DATETIME,                  
+     ReportHold           CHAR(1),                  
+     CreatedBy            NVARCHAR(50),                  
+     CreatedAtDateTime    DATETIME,                  
+  NotificationID       bigint,                  
+  FileName             nvarchar(1000),                  
+  FilePath             nvarchar(1000),                  
+  Template             nvarchar(500),          
+  VisitType int        ,    
+  Department  varchar(250),    
+  Type varchar(10),    
+  OrderedDateAndTime datetime          
+                  
+  )                  
+    Declare @pdfRootFolder nvarchar(200)                  
+    select  @pdfRootFolder=value from communicationconfig where orgid=98 and name='PdfFolderPath'                  
+ declare @visitID bigint =0                  
+ declare @orgID bigint =0                 
+ -- select top 1  @visitID=nc.Identityid,@orgID=nc.OrgID    from  Notifications  nc  where identityid=145275    
+   select top 1  @visitID=nc.Identityid,@orgID=nc.OrgID                  
+ from  IntegrationConfig ic                   
+  inner join Notifications nc on nc.OrgID=ic.OrgID                   
+  inner join orderedinvestigations oi on oi.VisitID=nc.IdentityID and nc.OrgID=oi.OrgID                
+  where ic.IsActive='Y' and nc.ActionType='OutBound'  and nc.Status='' and oi.status='Approve'  order by nc.createdat asc                
+                
+                  
+                  
+DECLARE @ORDEREDITEMS AS TABLE (VisitID bigint,ID BIGINT,Type nvarchar(40),Name nvarchar(500),AccessionNumber bigint ,Status nvarchar(100),                  
+OrderedStatusDateTime DATETIME ,ContentStatusDateTime DateTime,pkgid bigint,pkgname varchar(500),                
+NotificationID bigint,OrgID bigint,FileName nvarchar(1000),FilePath nvarchar(1000),Template nvarchar(500) )                  
+insert into @ORDEREDITEMS                  
+                  
+  select   oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status ,oi.CreatedAt AS DD,oi.CreatedAt,oi.pkgid,oi.pkgname ,nc.NotificationID,                  
+ nc.OrgID,nc.AttachmentName,isnull(@pdfRootFolder,'')+isnull(nc.Template,'')+isnull(nc.AttachmentName,'') ,Template                  
+ from   Notifications nc                   
+  inner join orderedinvestigations oi on oi.VisitID=nc.IdentityID and nc.OrgID=oi.OrgID                  
+  where nc.IdentityID=@visitID and nc.OrgID=@orgID  and nc.ActionType='OutBound' and oi.Status='Approve' and nc.Status=''  order by nc.createdat asc                  
+                  
+insert into @Results                  
+select oi.AccessionNumber,oi.OrgID                   
+,pv.ExternalVisitID                  
+,p.PatientNumber                  
+,pv.PreviousLabNumber                 
+,p.patientid                  
+,pv.PatientVisitID                  
+,iom.TestCode                  
+,oi.Name                   
+,''                  
+,''                  
+,iom.TestCode                  
+,oi.Name                  
+,iv.Value             
+,iv.UOMCode                  
+,pi.ReferenceRange                  
+,pi.IsAbnormal                  
+,pi.IsSensitive                  
+,pi.MedicalRemarks                  
+,oi.status sts                  
+,oi.status                  
+,pi.ApprovedBy                  
+,pi.ApprovedAt                  
+,''                  
+,getdate()                  
+,'N'                  
+,''                  
+,getdate()                  
+,oi.NotificationID                  
+,oi.FileName, oi.FilePath                   
+,Template           
+,pv.VisitType      
+,dm.DeptName       
+,'INV'    
+,pv.VisitDate            
+from @ORDEREDITEMS oi                  
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=oi.AccessionNumber                  
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID     
+inner join Investigationorgmapping iom (nolock) on iom.investigationid=IV.Investigationid and iom.OrgID=pv.OrgID     
+inner join InvDeptMaster dm on dm.DeptID=iom.DeptID  and dm.OrgID=iom.OrgID                               
+inner join patient p (nolock) on p.PatientID=pv.PatientID                   
+where  oi.type='INV' and isnull(oi.pkgid,0)=0                  
+union                   
+select                   
+oi.AccessionNumber,oi.OrgID                  
+,pv.ExternalVisitID                  
+,p.PatientNumber                  
+,pv.PreviousLabNumber                
+,p.patientid                  
+,pv.PatientVisitID                  
+,iog.TestCode                  
+,oi.Name                   
+,iog.TestCode                  
+,oi.Name                   
+,iom.investigationcode                  
+,pi.InvestigationName                  
+,iv.Value                  
+,iv.UOMCode                  
+,pi.ReferenceRange                  
+,pi.IsAbnormal                  
+,pi.IsSensitive                  
+,pi.MedicalRemarks                  
+,oi.status sts                  
+,oi.status                  
+,pi.ApprovedBy                  
+,pi.ApprovedAt                  
+,''                  
+,getdate()                  
+,'N'                  
+,''                  
+,getdate()                  
+,oi.NotificationID                  
+,oi.FileName, oi.FilePath                   
+,Template             
+,pv.VisitType     
+,dm.DeptName       
+,'GRP'    
+,pv.VisitDate                 
+from @ORDEREDITEMS oi                  
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=oi.AccessionNumber                  
+inner join InvOrgGroup iog (nolock) on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID                  
+               
+--inner join PatientInvestigation pi on pi.Accessionnumber=oi.AccessionNumber                  
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID      
+inner join Investigationorgmapping iom (nolock) on iom.investigationid=pi.InvestigationID and iom.OrgID=pv.OrgID       
+inner join InvDeptMaster dm on dm.DeptID=iom.DeptID  and dm.OrgID=iom.OrgID                   
+inner join patient p (nolock) on p.PatientID=pv.PatientID                   
+where  oi.type='GRP' and isnull(oi.pkgid,0)=0                  
+union                  
+                  
+select oi.AccessionNumber                  
+,oi.OrgID,pv.ExternalVisitID                  
+,p.PatientNumber                  
+,pv.PreviousLabNumber ,            
+p.patientid,pv.PatientVisitID,                  
+(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) as Pkgcode,                  
+ oi.pkgname,iog.TestCode,                  
+oi.Name,iom.investigationcode                  
+,pi.InvestigationName                  
+,iv.Value                  
+,iv.UOMCode                  
+,pi.ReferenceRange                  
+,pi.IsAbnormal                  
+,pi.IsSensitive              
+,pi.MedicalRemarks                  
+,oi.Status as sts                  
+,oi.Status                  
+,pi.ApprovedBy                  
+,pi.ApprovedAt                  
+,''                  
+,getdate()                  
+,'N'                  
+,''                  
+,getdate()                  
+,oi.NotificationID                  
+,oi.FileName, oi.FilePath                   
+,Template           
+,pv.VisitType     
+,dm.DeptName       
+,'PKG'    
+,pv.VisitDate                    
+ from @ORDEREDITEMS oi                  
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                  
+inner join InvOrgGroup iog (nolock) on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID                  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=oi.AccessionNumber                  
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID                    
+inner join Investigationorgmapping iom (nolock) on pi.investigationid=iom.investigationID and iom.OrgID=iv.OrgID      
+inner join InvDeptMaster dm on dm.DeptID=iom.DeptID  and dm.OrgID=iom.OrgID                  
+inner join patient p (nolock) on p.PatientID=pv.PatientID                
+where isnull(oi.pkgid,0)>0 and Oi.Type='GRP'                  
+                  
+union                   
+select oi.AccessionNumber,oi.OrgID,pv.ExternalVisitID                  
+,p.PatientNumber                  
+,pv.PreviousLabNumber  ,p.patientid,pv.PatientVisitID ,                  
+(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) as Pkgcode                  
+,oi.pkgname                  
+, iom.TestCode                  
+,oi.Name                  
+,iom.investigationcode                  
+,pi.InvestigationName                  
+,iv.Value                  
+,iv.UOMCode                  
+,pi.ReferenceRange                  
+,pi.IsAbnormal                  
+,pi.IsSensitive                  
+,pi.MedicalRemarks                  
+,oi.Status as sts                  
+,oi.Status                  
+,pi.ApprovedBy                  
+,pi.ApprovedAt                  
+,''                  
+,getdate()                  
+,'N'                  
+,''                  
+,getdate()                  
+,oi.NotificationID                  
+,oi.FileName, oi.FilePath                   
+,Template            
+,pv.VisitType      
+,dm.DeptName       
+,'PKG'    
+,pv.VisitDate                  
+ from @ORDEREDITEMS oi                  
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID                  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=oi.AccessionNumber                  
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID                   
+inner join Investigationorgmapping iom (nolock) on pi.investigationid=iom.investigationID and iom.OrgID=iv.OrgID          
+inner join InvDeptMaster dm on dm.DeptID=iom.DeptID  and dm.OrgID=iom.OrgID              
+inner join patient p (nolock) on p.PatientID=pv.PatientID                   
+where isnull(oi.pkgid,0)>0 and OI.Type='INV'                  
+                  
+                  
+UPDATE n SET  n.Status ='Picked' from Notifications (nolock) n                  
+inner join @ORDEREDITEMS os on os.NotificationID=n.NotificationID and n.OrgID=os.OrgID                   
+                  
+select  MessageID,OrgCode,OrderID,ExternalPatientID,ExternalVisitID,LISPatientID  ,LISVisitID    ,                  
+     OrderedTestCode,OrderedTestName,GroupTestCode  ,GroupTestName  ,AnalyteTestCode,AnalyteTestName,                  
+     ResultValue,UOM,ReferenceRange,IsAbnormal,IsSensitive,Remarks,GroupResultStatus,AnalyteResultStatus,ApprovedBy,                  
+  ApprovedDateTime,CoAuthorizedBy,CoAuthorizedDateTime,ReportHold,CreatedBy,CreatedAtDateTime, NotificationID,                  
+  FileName,FilePath,Template,  case when VisitType=0 then 'OP' when Visittype=1 then 'IP'          
+  else '' end as VisitType , Department, Type , OrderedDateAndTime from @Results                    
+                  
+end   

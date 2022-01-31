@@ -1,0 +1,390 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO    
+CREATE PROCEDURE [dbo].[pGetVisitBulkApprovalDetails] @pVisitIDs [nvarchar] (max),     
+                                                      @OrgID            [INT],     
+                                                      @BarcodeNumber [nvarchar] (50),     
+                                                      @RoleID           [BIGINT],     
+                                                      @pDeptID [BIGINT],     
+                                                      @pTestID          [BIGINT],     
+                                                      @pTestType [nvarchar] (25),     
+                                                      @LoginDetail [dbo].[LOGINDETAIL] READONLY,     
+                                                      @IsTrustedDetails [nvarchar] (3),     
+                                                      @WorkListID       [BIGINT],     
+                                                      @DeviceID         BIGINT,     
+                                                      @pIsAbnormal      nchar(1),     
+                                                      @pHeaderID        BIGINT,     
+                                                      @pProtocalID      BIGINT,     
+                                                      @pActionName      NVARCHAR(50),     
+                                                      @pIsMaster        NCHAR(1),     
+                                                      @pRecordCount     INT,     
+                                                      @pvisittype       varchar(50),     
+                                                      @pLocation        varchar(100),     
+                                                      @pQcCheck         varchar(50),     
+                                                      @pPatientId       varchar(100),     
+                                                      @ColleLocationID  Nvarchar(100),     
+                                                      @pFDate           datetime,     
+                                                      @pTDate datetime,     
+                                                      @ContextInfo [UDT_CONTEXT] READONLY     
+--With recompile                                                                                                                                                    
+AS     
+  BEGIN     
+      SET NOCOUNT ON     
+    
+      DECLARE @SearchStartDate DATETIME     
+      DECLARE @SearchEndDate DATETIME     
+    
+      SELECT @SearchStartDate = dbo.Fn_getserverdate(@ContextInfo) - 30     
+    
+      SELECT @SearchEndDate = dbo.Fn_getserverdate(@ContextInfo)     
+    
+      DECLARE @OrgAddressID BIGINT     
+      DECLARE @LangCode NVARCHAR(6)='en-GB'     
+   DECLARE @FromDate NVarchar(50)    
+   DECLARE @ToDate NVarchar(50)    
+   DECLARE @invID BIGINT                                                              
+   DECLARE @groupID INT                                                              
+   DECLARE @packageID INT      
+      SELECT @LangCode = ISNULL(LanguageCode, 'en-GB')     
+      from   @ContextInfo     
+    
+      SET @LangCode=ISNULL(@LangCode, 'en-GB')     
+    
+   IF @DeviceID = 0                                  
+   BEGIN                                                              
+   SET @DeviceID = NULL                                                              
+   END                                                              
+   IF @WorkListID = 0                                                              
+   BEGIN         
+   SET @WorkListID = NULL                                                      
+   END                     
+   IF @pTestType = 'INV'                                                              
+   BEGIN                                                              
+   SET @invID = @pTestID                                                              
+   SET @groupID = NULL                                                              
+   SET @packageID = NULL                                     
+   END                                                              
+   ELSE IF @pTestType = 'GRP'                      
+   BEGIN                            
+   SET @invID = NULL                                                              
+   SET @groupID = CONVERT(INT, @pTestID)                                                              
+   SET @packageID = NULL                                                              
+   END                                                              
+   ELSE IF @pTestType = 'PKG'                                                              
+   BEGIN                                          
+   SET @invID = NULL                                                              
+   SET @groupID = NULL                                                              
+   SET @packageID = CONVERT(INT, @pTestID)                                               
+   END                                                              
+   ELSE                                                              
+   BEGIN                                                              
+   SET @pTestType = NULL                                                              
+   SET @invID = NULL                                                              
+   SET @groupID = NULL                                                              
+   SET @packageID = NULL                                                              
+   END                           
+   IF @pDeptID = 0                                                              
+   BEGIN                                                              
+   SET @pDeptID = NULL                                                              
+   END      
+   IF (@ColleLocationID='-1' OR @ColleLocationID='0')    
+   BEGIN    
+    SET @ColleLocationID=NULL    
+   END    
+   IF (@pPatientId='')    
+       SET @pPatientId=NULL    
+    
+      IF (@BarcodeNumber ='')    
+       SET @BarcodeNumber=NULL    
+      DECLARE @sDelimiter NVARCHAR(2)=','     
+      DECLARE @SearchConfig NVARCHAR(50)='N'     
+      DECLARE @VisitNumber1 NVARCHAR(20)     
+      DECLARE @VisitNumber2 NVARCHAR(20)     
+   DECLARE @tblVisitID TABLE (VisitID BIGINT)       
+      SET @VisitNumber1 = (SELECT TOP 1 *     
+                           FROM   dbo.Fnsplit(@pVisitIDs, @sDelimiter))     
+      SET @VisitNumber2 = (SELECT *     
+                           FROM   dbo.Fnsplit(@pVisitIDs, @sDelimiter)     
+                           WHERE  item NOT IN ( @VisitNumber1 ))     
+    
+      IF( Isnull(@VisitNumber1, '') <> '' )     
+        BEGIN     
+            IF( @SearchConfig = 'Y' )     
+              BEGIN     
+                  SELECT @VisitNumber1 = VisitNumber     
+                  FROM   PatientVisit WITH (NOLOCK)     
+                  WHERE  ExternalVisitID = @VisitNumber1     
+              END     
+        END     
+    
+      IF( Isnull(@VisitNumber2, '') <> '' )     
+        BEGIN     
+            IF( @SearchConfig = 'Y' )     
+              BEGIN     
+                  SELECT @VisitNumber2 = VisitNumber     
+                  FROM   PatientVisit WITH (NOLOCK)     
+                  WHERE  ExternalVisitID = @VisitNumber2     
+              END     
+        END     
+  --IF(@pPatientId is not null)    
+  --BEGIN    
+  --        INSERT INTO @tblVisitID                                                              
+  --              SELECT DISTINCT PatientVisitID                                                              
+  --              FROM   PatientVisit PV WITH(NOLOCK)                                                           
+  --              INNER JOIN OrderedInvestigations OI WITH(NOLOCK)    
+  --  ON OI.VisitID=PV.PatientVisitId and OI.OrgID=PV.OrgID        
+  --  INNER JOIN Patient P WITH(NOLOCK)     
+  --  ON P.PatientID=PV.PatientID                                                              
+  --              WHERE  pv.VisitNumber=isnull(@VisitNumber1,PV.VisitNumber)         
+  --  and OI.Status='PartiallyApproved' and ISNULL(P.PatientNumber,'')=@pPatientID    
+  --  and OI.CreatedAt between  @pFDate and @pTDate      
+  --END    
+   if(@VisitNumber1 is not null AND @VisitNumber2 is not null)                                                              
+              BEGIN        
+           IF ((SELECT COUNT(1) FROM @tblVisitID)=0)    
+              BEGIN        
+                    INSERT INTO @tblVisitID                                                              
+                    SELECT DISTINCT PatientVisitID                  
+                    FROM PatientVisit PV WITH (NOLOCK)                                                              
+                    INNER JOIN OrderedInvestigations OI WITH(NOLOCK)    
+     ON OI.VisitID=PV.PatientVisitId and OI.OrgID=PV.OrgID      
+     INNER JOIN Patient P WITH(NOLOCK)     
+        ON P.PatientID=PV.PatientID                                                                   
+                    WHERE pv.VisitNumber BETWEEN @VisitNumber1 AND @VisitNumber2   and OI.CreatedAt between @pFDate and @pTDate    
+     and ISNULL(P.PatientNumber,'')=ISNULL(@pPatientID,P.PatientNumber)                                                                
+     END                 
+               END                 
+       ELSE                                                              
+              BEGIN        
+           IF ((SELECT COUNT(1) FROM @tblVisitID)=0)    
+              BEGIN                             
+                    INSERT INTO @tblVisitID                                                              
+                    SELECT DISTINCT PatientVisitID                                                              
+                    FROM   PatientVisit PV WITH(NOLOCK)                                                           
+                    INNER JOIN OrderedInvestigations OI WITH(NOLOCK)    
+     ON OI.VisitID=PV.PatientVisitId and OI.OrgID=PV.OrgID    
+     INNER JOIN Patient P WITH(NOLOCK)     
+        ON P.PatientID=PV.PatientID                                                                   
+                    WHERE  pv.VisitNumber=isnull(@VisitNumber1,PV.VisitNumber)         
+     and OI.Status='PartiallyApproved'    
+     and OI.CreatedAt between  @pFDate and @pTDate    
+     and ISNULL(P.PatientNumber,'')=ISNULL(@pPatientID,P.PatientNumber)        
+     END    
+             END     
+      CREATE TABLE #tempGender     
+        (     
+           RowID      int identity(1, 1),     
+           GenderCode nvarchar(50),     
+           Gender     nvarchar(50)     
+        )     
+    
+      CREATE TABLE #OrderedPatientInv     
+        (     
+           [PatientVisitID]     [BIGINT],     
+           [OrdID]              [BIGINT],     
+           [OrdType]            [NVARCHAR](50),     
+           [OrdName]            [NVARCHAR](250),     
+           [InvestigationName]  [nvarchar](250),     
+           [SampleID]           [INT],     
+           [BarcodeNumber]      [NVARCHAR] (250),     
+           [GroupID]            BIGINT,     
+           [GroupName]          [nvarchar](250),     
+           [OrgID]              [INT],     
+           [PackageID]          [INT],     
+           [PackageName]        [nvarchar](255),     
+           [UID]                [nvarchar](255),     
+           [AccessionNumber]    [BIGINT],     
+           [RefAccessionNumber] [BIGINT]     
+        )     
+  CREATE TABLE #FinalPatientInv     
+        (     
+           [PatientVisitID]     [BIGINT],     
+           [OrdID]              [BIGINT],     
+           [OrdType]            [NVARCHAR](50),     
+           [OrdName]            [NVARCHAR](250),     
+           [InvestigationName]  [nvarchar](250),     
+           [SampleID]           [INT],     
+           [BarcodeNumber]      [NVARCHAR] (250),     
+           [GroupID]            BIGINT,     
+           [GroupName]          [nvarchar](250),     
+           [OrgID]              [INT],     
+           [PackageID]          [INT],     
+           [PackageName]        [nvarchar](255),     
+           [UID]    [nvarchar](255),     
+           [AccessionNumber]    [BIGINT],     
+           [RefAccessionNumber] [BIGINT]     
+        )     
+    
+      insert into #tempGender     
+                  (GenderCode,     
+                   Gender)     
+      select distinct M.Code,     
+                      MOM.DisplayText     
+      from   MetaDataOrgMapping MOM     
+             inner join MetaData M     
+                     on M.MetaDataID = MOM.MetadataID     
+    where  MOM.OrgID = @OrgID     
+             and MOM.LangCode = @LangCode     
+             and ISNULL(MOM.IsActive, 'Y') = 'Y'     
+             and M.Domain = 'Gender'     
+         
+   IF @pTestType IN ( 'GRP', 'PKG' )                                                                
+      BEGIN     
+      INSERT INTO #OrderedPatientInv     
+                  (PatientVisitID,     
+                   OrdID,     
+                   OrdType,     
+                   OrdName,     
+                   OrgID,     
+                   UID,     
+                   AccessionNumber,     
+                   RefAccessionNumber,     
+                   PackageID)     
+      SELECT VisitID,     
+             ID,     
+             Type,     
+             Name,     
+             OI.OrgID,     
+             OI.UID,     
+             OI.AccessionNumber,     
+             ISNULL(ReferredAccessionNo, 0),     
+             PkgID     
+      FROM   OrderedInvestigations OI WITH (NOLOCK)     
+      INNER JOIN PatientInvestigation P1 WITH (NOLOCK)   ON OI.AccessionNumber = P1.AccessionNumber                              
+      AND OI.OrgID = P1.OrgID    
+                                                                                           
+      WHERE  OI.OrgID = @OrgID     
+             AND OI.Status IN ( 'PartiallyApproved' )    
+    AND OI.VisitID IN (SELECT VisitID from @tblVisitID)    
+          
+    INSERT INTO #FinalPatientInv     
+                  (PatientVisitID,     
+                   OrdID,     
+       OrdType,     
+                   OrdName,     
+                   OrgID,     
+                   UID,     
+                   AccessionNumber,     
+                   RefAccessionNumber,     
+                   PackageID)    
+  SELECT OI.PatientVisitID,     
+             OI.OrdID,     
+             OI.OrdType,     
+             OI.OrdName,     
+             OI.OrgID,     
+             OI.UID,     
+             OI.AccessionNumber,     
+             ISNULL(OI.RefAccessionNumber, 0),     
+             OI.PackageID     
+      FROM   #OrderedPatientInv OI WITH (NOLOCK)     
+      INNER JOIN PatientInvestigation P1 WITH (NOLOCK)   ON OI.AccessionNumber = P1.AccessionNumber                                                              
+      AND OI.OrgID = P1.OrgID    
+   INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID = P1.InvestigationID                                                              
+      AND IOM.OrgID = @OrgID    
+   INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID = OI.OrdID                                                              
+      AND IOG.OrgID = @OrgID                                                                                             
+      WHERE  OI.OrgID = @OrgID     
+    AND IOG.AttGroupID = COALESCE(@groupID, IOG.AttGroupID)                                                            
+             AND COALESCE(OI.PackageID, 0) = COALESCE(@packageID, OI.PackageID, 0)                                                                                            
+             AND COALESCE(IOM.DeptID, '') = COALESCE(@pDeptID, IOM.DeptID, '')    
+    AND IOM.OrgID = @OrgID                                                              
+             AND IOG.OrgID = @OrgID      
+        
+             
+   END    
+   ELSE    
+   BEGIN    
+   INSERT INTO #OrderedPatientInv     
+                  (PatientVisitID,     
+                   OrdID,     
+                   OrdType,     
+                   OrdName,     
+                   OrgID,     
+                   UID,     
+                   AccessionNumber,     
+             RefAccessionNumber,     
+                   PackageID)     
+      SELECT VisitID,     
+             ID,     
+             Type,     
+             Name,     
+             OI.OrgID,     
+             OI.UID,     
+             OI.AccessionNumber,     
+             ISNULL(ReferredAccessionNo, 0),     
+             PkgID     
+      FROM   OrderedInvestigations OI WITH (NOLOCK)     
+      INNER JOIN PatientInvestigation P1 WITH (NOLOCK)   ON OI.AccessionNumber = P1.AccessionNumber                                                              
+      AND OI.OrgID = P1.OrgID    
+   WHERE  OI.OrgID = @OrgID     
+             AND OI.Status IN ( 'PartiallyApproved' )    
+    AND OI.VisitID IN (SELECT VisitID from @tblVisitID)    
+        
+    
+      INSERT INTO #FinalPatientInv     
+                     (PatientVisitID,     
+                      OrdID,     
+                      OrdType,     
+                      OrdName,     
+                      OrgID,     
+                      UID,     
+                      AccessionNumber,     
+                      RefAccessionNumber,     
+                      PackageID,    
+        BarcodeNumber)    
+     SELECT OI.PatientVisitID,     
+                OI.OrdID,     
+                OI.OrdType,     
+                OI.OrdName,     
+                OI.OrgID,     
+                OI.UID,     
+                OI.AccessionNumber,     
+                ISNULL(OI.RefAccessionNumber, 0),     
+                OI.PackageID,    
+     PIS.BarcodeNumber     
+         FROM   #OrderedPatientInv OI WITH (NOLOCK)     
+         INNER JOIN PatientInvestigation P1 WITH (NOLOCK)   ON OI.AccessionNumber = P1.AccessionNumber                                                              
+         AND OI.OrgID = P1.OrgID    
+      INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID = P1.InvestigationID                                                              
+         AND IOM.OrgID = @OrgID    
+    INNER JOIN PatientInvSample  PIS WITH(NOLOCK) ON PIS.PatientVisitID=P1.PatientVisitID AND PIS.OrgID=P1.OrgID and PIS.PatientVisitID=OI.PatientVisitID     
+    INNER JOIN PatientInvSampleMapping PSM WITH(NOLOCK) ON PSM.SID=PIS.SampleID and PSM.ID=OI.OrdID and PSM.Type=OI.OrdType and PSM.UID=OI.UID      
+       WHERE  OI.OrgID = @OrgID     
+                AND COALESCE(P1.InvestigationID, 0) = COALESCE(@invID,  P1.InvestigationID)                                                                                            
+                AND COALESCE(IOM.DeptID, '') = COALESCE(@pDeptID, IOM.DeptID, '')    
+       AND IOM.OrgID = @OrgID      
+     AND PIS.CollectedLocID=ISNULL(@ColleLocationID,PIS.CollectedLocID)       
+     AND PIS.BarcodeNumber=ISNULL(@BarcodeNumber,PIS.BarcodeNumber)                                                         
+      END    
+    
+  declare @visittype int = cast(@pvisittype as int)    
+    
+      select distinct P.PatientNumber,     
+             P.Name                                  PatientName,     
+             dbo.fn_getAgeDecimalAge(P.DOB, @OrgID)     
+             + ', ' + Gender                         as Gender,     
+             ISNULL(PV.VisitNumber, ExternalVisitID) VisitNumber,     
+             ISNULL(OI.BarcodeNumber, '')            BarcodeNumber,     
+             OI.OrdName                              InvestigationName,     
+             ISNULL(OI.PackageID, 0)                 PackageID,     
+             OI.PatientVisitID,     
+             OI.AccessionNumber,     
+             OI.OrdType                              FeeType,     
+             P.PatientID,     
+             OI.OrdID                                FeeID,     
+             OI.UID     
+      from   #FinalPatientInv OI     
+        inner join PatientVisit PV(nolock)     
+                     on PV.PatientVisitID = OI.PatientVisitID     
+             inner join Patient P(nolock)     
+                     on P.PatientID = PV.PatientID     
+             inner join #tempGender TG     
+                     on TG.GenderCode = P.SEX     
+      Where  PV.VisitType=case when @visittype=-1 then PV.VisitType else @visittype End   
+      Order  by OI.PatientVisitID     
+  END     
+    
+    
+    
+    

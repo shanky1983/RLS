@@ -1,0 +1,1456 @@
+CREATE PROCEDURE [dbo].[pInsertAmtRefundDetails_Franchisee] @pamtRefundDetails [dbo].[UDTAMTREFUNDDETAILS] READONLY,
+@PRefFlag          NCHAR(1),
+@RefundStatus      [INT],
+@POrgId            [BIGINT],
+@ContextInfo       [UDT_CONTEXT] READONLY,
+@CollectionID      BIGINT
+WITH EXECUTE AS OWNER
+AS
+SET NOCOUNT ON
+--  return                                                                                                         
+	DECLARE @RefundNo NVARCHAR(30)
+	DECLARE @pRefundId NVARCHAR(30)
+	DECLARE @status NVARCHAR(20)
+	DECLARE @BillStatus NVARCHAR(25)
+	DECLARE @ret BIGINT
+	DECLARE @visitId BIGINT
+	DECLARE @refundAmount BIGINT
+	BEGIN
+			DECLARE @ServerDate DATETIME
+			SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+			/* Code added by T.Suresh for MIS Purpose start here */
+			declare @tmp_ordinv as table (accessionnumber bigint,status nvarchar(50))
+			declare @tmp_patinv as table (patientinvid bigint,status nvarchar(50))
+			declare @tmp_invv as table (investigationvalueid bigint,status nvarchar(50))
+			declare @Loginid bigint
+			Select @Loginid  = Loginid from @contextinfo
+			/* Code added by T.Suresh for MIS Purpose end here */
+			DECLARE @CancelledAccessionNumbers TABLE
+			(
+			AccessionNumber BIGINT,
+			VisitID         BIGINT,
+			InvestigationId BIGINT,
+			ParentInvId     BIGINT
+			)
+			DECLARE @FullyCancelledAccessionNumbers TABLE
+			(
+			AccessionNumber BIGINT,
+			VisitID         BIGINT,
+			ParentInvId     BIGINT
+			)
+			DECLARE @CreatedBy BIGINT
+			DECLARE @Curdate DATETIME
+			DECLARE @pRFNAmount DECIMAL (18, 2)
+			DECLARE @pPatientID BIGINT
+			DECLARE @pVisitID BIGINT
+			DECLARE @pClientCode NVARCHAR(50)
+			DECLARE @pClientID BIGINT
+			DECLARE @pRFNFinalBillId BIGINT
+			DECLARE @BillNo BIGINT
+			DECLARE @pRefundtype NVARCHAR(50)
+			DECLARE @RefundType NVARCHAR(25)
+			DECLARE @ClientID BIGINT
+			SELECT TOP 1 @RefundType = rd.RefundType
+			FROM   @pamtRefundDetails rd
+			SELECT @pRefundtype = RefundType
+			FROM   @pamtRefundDetails
+			SELECT @pRFNFinalBillId = FinalBillID
+			FROM   @pamtRefundDetails
+			SELECT @Curdate = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+			SELECT TOP 1 @RefundType = rd.RefundType
+			FROM   @pamtRefundDetails rd
+			SELECT @CreatedBy = CreatedBy
+			FROM   @pamtRefundDetails
+			EXEC dbo.Pgetnextid
+			@pOrgId,
+			'RFN',
+			@pRefundId OUTPUT,
+			@POrgId
+			----------- REFLEX CANCEL ---------------    
+			SELECT @visitId = FB.VisitID
+			FROM   FinalBill FB WITH(NOLOCK)
+			WHERE  FB.OrgID = @POrgId
+			AND FB.FinalBillID IN (SELECT DISTINCT FinalBillID
+			FROM   @pamtRefundDetails)
+			AND FB.Type = 'Reflex'
+	IF( Isnull(@visitId, 0) > 0 )
+	BEGIN
+			UPDATE IQ
+			SET    IQ.BillableStatus = 'CANCEL'
+			FROM   @pamtRefundDetails T
+			INNER JOIN FinalBill FB WITH(NOLOCK)
+			ON FB.FInalBillID = T.FinalBillID
+			AND FB.TYpe = 'Reflex'
+			INNER JOIN Billingdetails BD WITH(NOLOCK)
+			ON BD.FInalBillID = T.FinalBillID
+			AND BD.billingdetailsID = T.billingdetailsID
+			INNER JOIN InvestigationQueue IQ WITH(NOLOCK)
+			ON IQ.VisitID = FB.VisitID
+			AND IQ.InvestigationID = BD.FeeID
+			AND IQ.Type = BD.FeeType
+
+			INSERT INTO @CancelledAccessionNumbers
+			SELECT DISTINCT AccessionNumber,
+			VisitID,
+			InvestigationId,
+			ParentInvId
+			FROM   InvestigationQueue WITH(NOLOCK)
+			WHERE  VisitID = @visitId
+			AND Status IN ( 'Reflexwithnewsample', 'Reflexwithsamesample' )
+			AND BillableStatus = 'CANCEL'
+			INSERT INTO @FullyCancelledAccessionNumbers
+			SELECT DISTINCT AccessionNumber,
+			VisitID,
+			ParentInvId
+			FROM   InvestigationQueue WITH(NOLOCK)
+			WHERE  VisitID = @visitId
+			AND Status IN ( 'Reflexwithnewsample', 'Reflexwithsamesample' )
+			AND AccessionNumber IN (SELECT AccessionNumber
+			FROM   @CancelledAccessionNumbers)
+			GROUP  BY AccessionNumber,
+			VisitID,
+			ParentInvId
+			HAVING Count(DISTINCT Isnull(BillableStatus, 'N')) = 1
+			UPDATE OI
+			SET    OI.status = 'Pending'
+			output inserted.accessionnumber,inserted.status into @tmp_ordinv
+			FROM   OrderedInvestigations OI WITH(NOLOCK)
+			INNER JOIN @FullyCancelledAccessionNumbers FCA
+			ON FCA.AccessionNumber = OI.AccessionNumber
+			AND OI.visitid = FCA.visitid
+			UPDATE PI
+			SET    PI.status = 'Pending'
+			output inserted.patientinvid,inserted.status into @tmp_patinv
+			FROM   patientinvestigation PI WITH(NOLOCK)
+			INNER JOIN @FullyCancelledAccessionNumbers FCA
+			ON FCA.AccessionNumber = PI.AccessionNumber
+			AND PI.patientvisitid = FCA.visitid
+			UPDATE PI
+			SET    PI.status = 'Pending'
+			output inserted.investigationvalueid,inserted.status into @tmp_invv
+			FROM   InvestigationValues PI WITH(NOLOCK)
+			INNER JOIN @FullyCancelledAccessionNumbers FCA
+			ON PI.PatientVisitID = FCA.visitid
+			INNER JOIN InvestigationQueue IQ WITH(NOLOCK)
+			ON IQ.AccessionNumber = FCA.AccessionNumber
+			AND IQ.visitid = FCA.visitid
+			AND IQ.ParentInvId = PI.InvestigationID
+	END
+	INSERT INTO RefundAmtDetailsCapture
+	(RefundNo,
+	FinalBillID,
+	BillingDetailsID,
+	RefundAmt,
+	ApprovedAmt,
+	RefundStatus,
+	OrgID,
+	CreatedBy,
+	CreatedAt,
+	ReasonforRefund,
+	ReceiptNo,
+	AuthorisedBy,
+	Comments,
+	RefundType)
+	SELECT @pRefundId,
+	rd.FinalBillID,
+	rd.BillingDetailsID,
+	rd.AmtRefund,
+	rd.AmtRefund,
+	rd.RefundStatus,
+	rd.OrgID,
+	rd.CreatedBy,
+	@Curdate,
+	rd.ReasonforRefund,
+	'0',
+	rd.AuthorisedBy,
+	rd.Comments,
+	rd.RefundType
+	FROM   @pamtRefundDetails rd
+	-- Modification Done By Murali Manohar on 02/09/2015      
+	-- To Update Refund Status in  ClientBill for Ledger         
+	SELECT @pPatientID = PatientID,
+	@pVisitID = VisitID
+	FROM   FinalBill
+	WHERE  FinalBillID = @pRFNFinalBillId
+	AND OrgID = @POrgId
+	SELECT @pClientCode = CM.ClientCode,
+	@pClientID = CM.ClientID
+	FROM   ClientMaster CM (NOLOCK)
+	INNER JOIN VisitClientMapping VCM (NOLOCK)
+	ON VCM.ClientID = CM.ClientID
+	WHERE  VCM.FinalBillID = @pRFNFinalBillId
+	AND VCM.OrgID = @POrgId
+	AND CM.OrgID = @POrgId
+	--SELECT @pClientCode -- test     
+	SELECT @pRFNAmount = RefundAmt
+	FROM   RefundAmtDetailsCapture
+	WHERE  OrgId = @POrgId
+	AND RefundNo = @pRefundId
+	AND RefundType = 'CANCELLED'
+	--SELECT @pRFNAmount-- test      
+	----------------------------Ledger Refund Update---------------------------------------      
+	SET @RefundNo=@pRefundId
+IF( @RefundStatus = 0 )
+BEGIN
+	INSERT INTO AmountRefundDetails
+	(RefundNo,
+	FinalBillID,
+	BillingDetailsID,
+	AmtRefund,
+	RefundBy,
+	RefundStatus,
+	OrgID,
+	CreatedBy,
+	CreatedAt,
+	ModifiedBy,
+	ModifiedAt,
+	ReasonforRefund,
+	BillStatus,
+	Quantity,
+	RefundType,
+	ApprovedBy,
+	TranCurrencyID,
+	BaseCurrencyID,
+	TranCurrencyAmount,
+	PaymentTypeID,
+	PaymentDetail,
+	ChequeNo,
+	BankName,
+	Remarks,
+	AuthorisedBy,
+	ServiceType,
+	Comments,
+	CancelAmount)
+	SELECT DISTINCT @pRefundId,
+	rd.FinalBillID,
+	rd.BillingDetailsID,
+	rd.AmtRefund,
+	rd.RefundBy,
+	'Open',
+	rd.OrgID,
+	rd.CreatedBy,
+	@Curdate,
+	rd.CreatedBy,
+	@Curdate,
+	rd.ReasonforRefund,
+	rd.RefundType,
+	rd.Quantity,
+	rd.RefundType,
+	rd.ApprovedBy,
+	rd.TranCurrencyID,
+	rd.BaseCurrencyID,
+	rd.TranCurrencyAmount,
+	rd.PaymentTypeID,
+	rd.PaymentDetail,
+	rd.ChequeNo,
+	rd.BankName,
+	rd.Remarks,
+	rd.AuthorisedBy,
+	rd.ServiceType,
+	rd.Comments,
+	rd.CancelAmount
+	FROM   @pamtRefundDetails rd
+	INNER JOIN billingdetails BD (nolock)
+	ON BD.BillingDetailsID = rd.BillingDetailsID
+	AND BD.OrgID = rd.OrgID
+	LEFT JOIN amountreceiveddetails ARD (nolock)
+	ON ARD.FinalBillID = rd.FinalBillID
+	GROUP  BY rd.FinalBillID,
+	rd.BillingDetailsID,
+	ARD.AmtReceived,
+	rd.RefundBy,
+	rd.OrgID,
+	rd.CreatedBy,
+	rd.ReasonforRefund,
+	rd.RefundType,
+	RD.Quantity,
+	rd.RefundType,
+	rd.ApprovedBy,
+	rd.TranCurrencyID,
+	rd.BaseCurrencyID,
+	rd.TranCurrencyAmount,
+	rd.PaymentTypeID,
+	rd.PaymentDetail,
+	rd.ChequeNo,
+	rd.BankName,
+	rd.Remarks,
+	rd.AuthorisedBy,
+	rd.ServiceType,
+	rd.Comments,
+	rd.CancelAmount,
+	rd.AmtRefund
+--SELECT @BillNo=FB.BillNumber from  FinalBill FB where FinalBillID=@pRFNFinalBillId           
+-- Modification Done By Murali Manohar on 02/09/2015      
+-- To Update Refund Status in  ClientBill for Ledger      
+--IF(@POrgId = 70 AND(@pClientID =67 OR @pClientID =70 OR @pClientID =360 OR @pClientID =782))            
+--  BEGIN        
+--'BillNumber:'+ CONVERT(nvarchar(15), @BillNo)  
+	IF( @pRefundtype = 'CANCELLED' )
+	BEGIN
+			INSERT INTO ClientCredit
+			(CreditDate,
+			OrgID,
+			Category,
+			SourceCode,
+			Narration,
+			Amount,
+			Remarks,
+			Status,
+			CreatedBy,
+			CreatedAt)
+			SELECT CONVERT(DATE, @Curdate),
+			@POrgId,
+			'TSP',
+			@pClientCode,
+			'billcancelled',
+			@pRFNAmount,
+			@pRFNFinalBillId,
+			'Pending',
+			@CreatedBy,
+			@Curdate
+	END
+--END      
+----------------------------Ledger Refund Update---------------------------------------         
+	DECLARE @TempRefundAmt DECIMAL(18, 2)
+	DECLARE @FinalBillID BIGINT
+	DECLARE @FinalAmtRefund DECIMAL(18, 2)
+	--DECLARE @pPatientID BIGINT          
+	--DECLARE @pVisitID BIGINT          
+	DECLARE @DisCount DECIMAL(18, 2)
+	DECLARE @DiscountAdj DECIMAL(18, 2)
+	DECLARE @TotalSumCancelAmount DECIMAL(18, 2)
+	DECLARE @CancelledReturnedValue DECIMAL(18, 2)
+	DECLARE @RedemPoints DECIMAL(18, 2)
+	DECLARE @oldCancelledReturnedValue DECIMAL(18, 2)
+	DECLARE @newCancelledReturnedValue DECIMAL(18, 2)
+	DECLARE @MembershipCardDetailsID DECIMAL(18, 2)
+	--SELECT @TempRefundAmt =  SUM(ISNULL(ApprovedAmt,0)) FROM RefundAmtDetailsCapture WITH(NOLOCK)  WHERE RefundNo = @pRefundId and OrgID = @POrgId                                                          
+	SELECT @FinalBillID = FinalBillID
+	FROM   AmountRefundDetails WITH(NOLOCK)
+	WHERE  RefundNo = @pRefundId
+	AND OrgID = @POrgId
+	SELECT @TempRefundAmt = Sum(Isnull(ApprovedAmt, 0))
+	FROM   RefundAmtDetailsCapture WITH(NOLOCK)
+	WHERE  RefundNo = @pRefundId
+	AND FinalBillID = @FinalBillID
+	AND OrgID = @POrgId
+	SELECT @pPatientID = PatientID,
+	@pVisitID = VisitID
+	FROM   FinalBill WITH(NOLOCK)
+	WHERE  FinalBillID = @FinalBillID
+	AND OrgID = @POrgId
+	SELECT @FinalAmtRefund = Sum(AmtRefund)
+	FROM   AmountRefundDetails WITH(NOLOCK)
+	WHERE  FinalBillID = @FinalBillID
+	AND OrgID = @POrgId
+--------------------------------
+	DECLARE @tempBillingDetails TABLE
+	(
+	RowID            BIGINT IDENTITY(1, 1),
+	BillingDetailsID BIGINT,
+	MRP              DECIMAL(18, 2),
+	Discount         DECIMAL(18, 2),
+	NetAmount        DECIMAL(18, 2),
+	RefundAmount     DECIMAL(18, 2)
+	)
+	DECLARE @tempRedeemBillingDetails TABLE
+	(
+	RowID            BIGINT IDENTITY(1, 1),
+	BillingDetailsID BIGINT,
+	MRP              DECIMAL(18, 2),
+	redeempoints     DECIMAL(18, 2),
+	NetAmount        DECIMAL(18, 2),
+	RefundAmount     DECIMAL(18, 2)
+	)
+	DECLARE @patientredemdetails TABLE
+	(
+	RowID                   BIGINT IDENTITY(1, 1),
+	finalbillid             BIGINT,
+	MembershipCardDetailsID BIGINT,
+	CancelledReturnedValue  DECIMAL(18, 2),
+	OrgId                   BIGINT,
+	visitid                 BIGINT,
+	RedemPoints             DECIMAL(18, 2),
+	RedemValue              DECIMAL(18, 2)
+	)
+	INSERT INTO @patientredemdetails
+	SELECT finalbillid,
+	MembershipCardDetailsID,
+	CancelledReturnedValue,
+	OrgId,
+	visitid,
+	RedemPoints,
+	RedemValue
+	FROM   patientredemdetails
+	WHERE  finalbillid = @FinalBillID
+	--NEW CHANGES    
+
+	INSERT INTO @tempBillingDetails
+	SELECT DISTINCT Bd.BillingDetailsID,
+	Bd.Amount,
+	BD.DiscountAmount,
+	( BD.Amount - BD.DiscountAmount ) AS NetAmount,
+	( a.CancelAmount )                AS RefundAmount
+	FROM   AmountRefundDetails a (nolock)
+	INNER JOIN BillingDetails_Franchisee Bd (nolock)
+	ON bd.BillingDetailsID = a.BillingDetailsID
+	WHERE  a.RefundNo = @RefundNo
+	AND a.OrgID = @POrgId
+	AND a.Finalbillid = @FinalBillID
+
+	INSERT INTO @tempRedeemBillingDetails
+	SELECT DISTINCT Bd.BillingDetailsID,
+	BDF.Amount,
+	BD.RedeemPoints,
+	( BDF.Amount - BD.RedeemPoints ) AS NetAmount,
+	( a.CancelAmount )              AS RefundAmount
+	FROM   AmountRefundDetails a (nolock)
+	INNER JOIN BillingDetails Bd (nolock)
+	ON bd.BillingDetailsID = a.BillingDetailsID
+	INNER JOIN BillingDetails_Franchisee BDF (nolock)
+	ON BDF.BillingDetailsID = a.BillingDetailsID AND BDF.BillingDetailsID = Bd.BillingDetailsID
+	WHERE  a.RefundNo = @RefundNo
+	AND a.OrgID = @POrgId
+	AND a.Finalbillid = @FinalBillID
+	--------------------------------                                    
+	DECLARE @ExistDueAmt DECIMAL(18, 2)
+	DECLARE @RefundAmt DECIMAL(18, 2)
+	DECLARE @RedeemPoint DECIMAL(18, 2)
+	DECLARE @PointsPercent DECIMAL(18, 2)
+	DECLARE @patientRedeemCount BIGINT
+	DECLARE @RowCount INT=1
+	SELECT @DisCount = Isnull(f.DiscountAmount, 0)
+	FROM   FinalBill f WITH(NOLOCK)
+	WHERE  f.FinalBillID = @FinalBillID
+	AND f.OrgID = @POrgId
+	SELECT @RedeemPoint = Isnull(f.RedeemPoints, 0)
+	FROM   FinalBill f WITH(NOLOCK)
+	WHERE  f.FinalBillID = @FinalBillID
+	AND f.OrgID = @POrgId
+	SELECT @TotalSumCancelAmount = Sum (Isnull(f.CancelAmount, 0))
+	FROM   AmountRefundDetails f WITH(NOLOCK)
+	WHERE  f.FinalBillID = @FinalBillID
+	AND f.OrgID = @POrgId
+	SELECT @patientRedeemCount = Count(1)
+	FROM   patientredemdetails f
+	WHERE  finalbillid = @FinalBillID
+	AND f.OrgID = @POrgId
+	SELECT @PointsPercent = PointsPercent
+	FROM   [PatientCreditSlabMapping] f
+	WHERE  f.OrgID = @POrgId
+--SELECT @DiscountAdj = Sum(Isnull(DiscountAdjustedAmt, 0))    
+--FROM   (SELECT DISTINCT RefundNo,    
+--                        DiscountAdjustedAmt    
+--        FROM   AmountRefundDetails WITH(NOLOCK)    
+--        WHERE  FinalBillID = @FinalBillID    
+--               AND OrgID = @POrgId) T    
+--SET @DisCount=@DisCount - Isnull(@DiscountAdj, 0)    
+--WHERE   a.FinalBillID = @FinalBillID    and f.OrgID=@POrgId                                                        
+		SELECT @ExistDueAmt = ( a.DueAmount - ( Isnull(a.DuePaidAmt, 0)
+		+ Isnull(a.RefundedAmount, 0)+ISNULL(a.DiscountAmt,0)+
+		+ Isnull(a.WriteOffAmt, 0) ) )
+		FROM   PatientDueDetails a WITH(NOLOCK)
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		SET @ExistDueAmt=Isnull(@ExistDueAmt, 0)
+		IF( @Prefflag = 'Y' )
+		BEGIN
+		IF @ExistDueAmt > 0 AND @ExistDueAmt >= @TempRefundAmt
+		BEGIN
+		DECLARE @FullDue DECIMAL(18, 2)
+		--UPDATE FinalBill
+		--SET    CurrentDue = Isnull(CurrentDue, 0) - @TempRefundAmt
+		--FROM   FinalBill (nolock)
+		--WHERE  FinalBillID = @FinalBillID
+		--AND OrgID = @POrgId
+		UPDATE F SET
+		F.CurrentDue = isnull(F.CurrentDue, 0) - @TempRefundAmt
+		-- (Case When Isnull(F.CurrentDue, 0)>Isnull(F.AmountRefund, 0) and Isnull(F.AmountRefund, 0)<>0 Then Isnull(F.CurrentDue, 0)- (Isnull(F.AmountRefund, 0) + (Isnull(BD.NetAmount,0)))
+		-- When Isnull(F.CurrentDue, 0)>Isnull(BD.NetAmount, 0) and Isnull(BD.NetAmount, 0)<>0 Then Isnull(F.CurrentDue, 0) - (Isnull(BD.NetAmount,0))
+		--When (Isnull(F.CurrentDue, 0)<=Isnull(F.AmountRefund, 0)) OR (Isnull(F.CurrentDue, 0)<=Isnull(BD.NetAmount, 0))  Then 0
+		-- Else Isnull(CurrentDue, 0) END)
+		FROM   Finalbill_Franchisee F (nolock)
+		INNER JOIN AmountRefundDetails ARD ON ARD.FinalBillID=F.FinalBillID and ARD.OrgID=F.OrgID
+		INNER JOIN @tempBillingDetails Bd ON bd.BillingDetailsID = ARD.BillingDetailsID
+		WHERE ARD.OrgID = @POrgId
+		AND ARD.Finalbillid = @FinalBillID
+
+		UPDATE PatientDueDetails
+		SET    RefundedAmount = @TempRefundAmt + Isnull(RefundedAmount, 0)
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		SELECT @FullDue = ( Isnull(RefundedAmount, 0)
+		+ Isnull(DuePaidAmt, 0)
+		+ Isnull(DiscountAmt, 0) )
+		FROM   PatientDueDetails
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		UPDATE PatientDueDetails
+		SET    status = 'Closed'
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		AND DueAmount = @FullDue
+		--Commented By jayaramanan L
+		--UPDATE ARD
+		--SET     AmtRefund = 0.00,
+		-- TranCurrencyAmount = 0.00,
+		--RefundadjustedAmt = A.AmtRefund
+		--FROM   AmountRefundDetails ARD (nolock)
+		--INNER JOIN @pamtRefundDetails A
+		--ON A.BillingDetailsID = ARD.BillingDetailsID
+		--AND RefundNo = @RefundNo
+		--WHERE  ARD.OrgID = @POrgId
+		--AND ard.FinalBillID = @FinalBillID
+		UPDATE a
+		SET    a.AmtRefund = A.AmtRefund--Isnull(Bd.NetAmount,0)
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID 
+		WHERE  --a.RefundNo = @RefundNo AND --Commented By Jayaramanan L
+		 a.OrgID = @POrgId
+		AND a.Finalbillid = @FinalBillID 
+		END
+		ELSE
+		BEGIN
+		SELECT @RefundAmt = @TempRefundAmt - ( @ExistDueAmt )
+		--UPDATE FinalBill    
+		--SET    --AmountRefund = Isnull(AmountRefund, 0) + @RefundAmt,    
+		--CurrentDue = Isnull(CurrentDue, 0) - ( @TempRefundAmt - @RefundAmt )    
+		--WHERE  FinalBillID = @FinalBillID    
+		--       AND OrgID = @POrgId    
+		UPDATE PatientDueDetails
+		SET    RefundedAmount = Isnull(RefundedAmount, 0) + ( @TempRefundAmt - @RefundAmt )
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		DECLARE @FullDue1 DECIMAL(18, 2)
+		SELECT @FullDue1 = ( Isnull(RefundedAmount, 0)
+		+ Isnull(DuePaidAmt, 0)
+		+ Isnull(DiscountAmt, 0) )
+		FROM   PatientDueDetails
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		UPDATE PatientDueDetails
+		SET    status = 'Closed'
+		WHERE  Finalbillid = @FinalBillID
+		AND OrgID = @POrgId
+		AND DueAmount = @FullDue1
+		--------------------------------------     
+		/**    
+		IF(Isnull(@DisCount, 0) >0 )    
+		BEGIN    
+		SET @RefundAmt =@RefundAmt - @DisCount    
+		DECLARE @loop INT =1    
+		DECLARE @loopcont INT =0    
+		DECLARE @tbTable TABLE    
+		(    
+		RowID          INT IDENTITY(1, 1),    
+		AmtRefundID    BIGINT,    
+		AmtRefund      DECIMAL(18, 2),    
+		netAmt         DECIMAL(18, 2),    
+		discountamount DECIMAL(18, 2)    
+		DECLARE @AmtRefundID      BIGINT,    
+		@AmtRefund        DECIMAL(18, 2),    
+		@netAmt           DECIMAL(18, 2),    
+		@TempAmtRefund    DECIMAL(18, 2),    
+		@UpdatedAmtRefund DECIMAL(18, 2),    
+		@discountamount   DECIMAL(18, 2)    
+		**/
+		DECLARE @NewDueRefund DECIMAL(18, 2)
+		DECLARE @Count INT=1,
+		@RowID INT=1
+		SELECT @Count = Count(1)
+		FROM   @tempBillingDetails
+		WHILE( @Count >= @RowID )
+		BEGIN
+		DECLARE @SumOfDiscountAdjustedAmt DECIMAL(18, 2)
+		DECLARE @ItemDiscount DECIMAL(18, 2)
+		DECLARE @ItemCancelAmount DECIMAL(18, 2)
+		DECLARE @SumCancelAmount DECIMAL(18, 2)
+		DECLARE @NewDiscountAdjustedAmt DECIMAL(18, 2)
+		DECLARE @NewAmtRefund DECIMAL(18, 2)
+		DECLARE @NewdueAmtRefund DECIMAL(18, 2)
+		DECLARE @SumOfRedeemAdjustedAmt DECIMAL(18, 2)
+		DECLARE @ItemRedeem DECIMAL(18, 2)
+		DECLARE @NewRedeemAdjustedAmt DECIMAL(18, 2)
+		SELECT @SumOfDiscountAdjustedAmt = Sum(Isnull(a.DiscountAdjustedAmt, 0)),
+		@SumCancelAmount = Sum(Isnull(a.CancelAmount, 0))
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  a.OrgID = @POrgId
+		AND a.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		SELECT @SumOfRedeemAdjustedAmt = Sum(Isnull(a.RedeemAdjustedAmt, 0)),
+		@SumCancelAmount = Sum(Isnull(a.CancelAmount, 0))
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempRedeemBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  a.OrgID = @POrgId
+		AND a.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		IF ( @ExistDueAmt <> 0 )
+		BEGIN
+			SELECT @ItemDiscount = Isnull(BD.Discount, 0),
+			@ItemCancelAmount = Isnull(BD.RefundAmount, 0) - ( @ExistDueAmt - Isnull(@NewDueRefund, 0) )
+			FROM   @tempBillingDetails Bd
+			WHERE  BD.RowID = @RowID
+			SET @NewDueRefund = ( @ExistDueAmt - Isnull(@NewDueRefund, 0) )
+			SET @SumCancelAmount = @ItemCancelAmount
+			IF( @ItemCancelAmount < 0 )
+			BEGIN
+				IF( @RedeemPoint = 0 )
+				BEGIN
+					SELECT @ItemDiscount = Isnull(BD.Discount, 0),
+					@NewdueAmtRefund = Isnull(BD.RefundAmount, 0),
+					@ItemCancelAmount = Isnull(BD.RefundAmount, 0) - ( @ExistDueAmt - @NewdueAmtRefund ),
+					@NewdueAmtRefund = Isnull(BD.RefundAmount, 0)
+					FROM   @tempBillingDetails Bd
+					WHERE  BD.RowID = @RowID
+					SET @NewDueRefund = @ExistDueAmt - @NewdueAmtRefund
+					SET @SumCancelAmount = @ItemCancelAmount
+				END
+				ELSE
+				BEGIN
+					SELECT @ItemRedeem = Isnull(BD.redeempoints, 0),
+					@NewdueAmtRefund = Isnull(BD.RefundAmount, 0),
+					@ItemCancelAmount = Isnull(BD.RefundAmount, 0) - ( @ExistDueAmt - @NewdueAmtRefund ),
+					@NewdueAmtRefund = Isnull(BD.RefundAmount, 0)
+					FROM   @tempRedeemBillingDetails Bd
+					WHERE  BD.RowID = @RowID
+					SET @NewDueRefund = @ExistDueAmt - @NewdueAmtRefund
+					SET @SumCancelAmount = @ItemCancelAmount
+				END
+			END
+		END
+		ELSE
+		BEGIN
+			IF( @RedeemPoint = 0 )
+			BEGIN
+				SELECT @ItemDiscount = Isnull(BD.Discount, 0),
+				@ItemCancelAmount = Isnull(BD.RefundAmount, 0) - ( @ExistDueAmt - Isnull(@NewDueRefund, 0) )
+				FROM   @tempBillingDetails Bd
+				WHERE  BD.RowID = @RowID
+				END
+				ELSE
+				BEGIN
+				SELECT @ItemRedeem = Isnull(BD.redeempoints, 0),
+				@ItemCancelAmount = Isnull(BD.RefundAmount, 0) - ( @ExistDueAmt - Isnull(@NewDueRefund, 0) )
+				FROM   @tempRedeemBillingDetails Bd
+				WHERE  BD.RowID = @RowID
+			END
+		END
+		--SELECT @ItemDiscount = Isnull(BD.Discount, 0),    
+		--       @ItemCancelAmount = Isnull(BD.RefundAmount, 0)     
+		--FROM   @tempBillingDetails Bd    
+		--WHERE  BD.RowID = @RowID    
+		IF( @RedeemPoint = 0 )
+		BEGIN
+			IF( ( @ItemDiscount - @SumOfDiscountAdjustedAmt ) > 0 )
+			BEGIN
+				IF( @ItemCancelAmount <= ( @ItemDiscount - @SumOfDiscountAdjustedAmt ) )
+				BEGIN
+					SELECT @NewDiscountAdjustedAmt = @ItemCancelAmount
+					--SELECT @NewAmtRefund = 0 -- Commented  by jayaramanan L
+				END
+				ELSE
+				BEGIN
+					SELECT @NewDiscountAdjustedAmt = ( @ItemDiscount - @SumOfDiscountAdjustedAmt )
+					IF( @ItemDiscount - ( @SumOfDiscountAdjustedAmt
+					+ @NewDiscountAdjustedAmt ) = 0 )
+				BEGIN
+				IF( @RefundType = 'CANCELLED' )
+				BEGIN
+					SELECT @NewAmtRefund = @SumCancelAmount - @ItemDiscount
+				END
+				ELSE
+				BEGIN
+					SELECT @NewAmtRefund = @SumCancelAmount
+				END
+				END
+				ELSE
+				BEGIN
+					SELECT @NewAmtRefund = @SumCancelAmount - ( @ItemDiscount - ( @SumOfDiscountAdjustedAmt
+					+ @NewDiscountAdjustedAmt ) )
+				END
+			END
+		END
+		ELSE
+		BEGIN
+		SELECT @NewDiscountAdjustedAmt = 0
+		SELECT @NewAmtRefund = @ItemCancelAmount
+		END
+		UPDATE a
+		--SET    a.AmtRefund = @NewDueRefund --Commented By Jayaramanan L
+		--SET    a.AmtRefund = Isnull(Bd.NetAmount,0),  -- commanded by arun - total investigation amount updated instead of refund amount
+		SET    a.AmtRefund = Isnull(Bd.RefundAmount,0),
+		a.DiscountAdjustedAmt = @NewDiscountAdjustedAmt
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  a.RefundNo = @RefundNo AND --Commented By Jayaramanan L
+		 a.OrgID = @POrgId
+		AND a.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		UPDATE a
+		SET    a.RefundadjustedAmt = @NewDueRefund
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  a.RefundNo = @RefundNo
+		AND OrgID = @POrgId
+		AND Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		--- Added BY jayaramanan  L
+		UPDATE F
+		SET  F.AmountRefund = Isnull(F.AmountRefund, 0) + (Isnull(BD.NetAmount,0))
+		FROM   Finalbill_Franchisee F (nolock)
+		INNER JOIN AmountRefundDetails ARD ON ARD.FinalBillID=F.FinalBillID and ARD.OrgID=F.OrgID
+		INNER JOIN @tempBillingDetails Bd ON bd.BillingDetailsID = ARD.BillingDetailsID
+		WHERE ARD.OrgID = @POrgId
+		AND ARD.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+
+		UPDATE F SET
+		F.CurrentDue = (Case When Isnull(F.CurrentDue, 0)>Isnull(F.AmountRefund, 0) Then Isnull(F.CurrentDue, 0)- (Isnull(F.AmountRefund, 0) + (Isnull(BD.NetAmount,0)))
+		When Isnull(F.CurrentDue, 0)<=Isnull(F.AmountRefund, 0) Then 0
+		 Else Isnull(CurrentDue, 0) END)
+		FROM   Finalbill_Franchisee F (nolock)
+		INNER JOIN AmountRefundDetails ARD ON ARD.FinalBillID=F.FinalBillID and ARD.OrgID=F.OrgID
+		INNER JOIN @tempBillingDetails Bd ON bd.BillingDetailsID = ARD.BillingDetailsID
+		WHERE ARD.OrgID = @POrgId
+		AND ARD.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		----- End 
+		--UPDATE FinalBill
+		--SET    AmountRefund = Isnull(AmountRefund, 0) + @NewAmtRefund,
+		--CurrentDue = Isnull(CurrentDue, 0) - (Isnull(AmountRefund, 0) + @NewAmtRefund )
+		--WHERE  FinalBillID = @FinalBillID
+		--AND OrgID = @POrgId
+		-----
+		--IF( @PointsPercent > 0 )    
+		--  BEGIN    
+		--      UPDATE patientcreditdetails    
+		--      SET    CancelledValue = ( ( @TotalSumCancelAmount * @PointsPercent ) / 100 )    
+		--      WHERE  FinalBillID = @FinalBillID    
+		--             AND OrgID = @POrgId    
+		--  END    
+		END
+		ELSE
+		BEGIN
+			IF( ( @ItemRedeem - @SumOfRedeemAdjustedAmt ) > 0 )
+			BEGIN
+				IF( @ItemCancelAmount <= ( @ItemRedeem - @SumOfRedeemAdjustedAmt ) )
+				BEGIN
+					SELECT @NewRedeemAdjustedAmt = @ItemCancelAmount
+					SELECT @NewAmtRefund = 0
+				END
+				ELSE
+				BEGIN
+					SELECT @NewRedeemAdjustedAmt = ( @ItemRedeem - @SumOfRedeemAdjustedAmt )
+					IF( @ItemRedeem - ( @SumOfRedeemAdjustedAmt
+					+ @NewRedeemAdjustedAmt ) = 0 )
+					BEGIN
+						SELECT @NewAmtRefund = @SumCancelAmount - @ItemRedeem
+					END
+					ELSE
+					BEGIN
+						SELECT @NewAmtRefund = @SumCancelAmount - ( @ItemRedeem - ( @SumOfRedeemAdjustedAmt
+						+ @NewRedeemAdjustedAmt ) )
+					END
+			END
+		END
+		ELSE
+		BEGIN
+		SELECT @NewRedeemAdjustedAmt = 0
+		SELECT @NewAmtRefund = @ItemCancelAmount
+		END
+		UPDATE a
+		--SET    a.AmtRefund = @NewDueRefund --Commented By Jayaramanan L
+		--SET    a.AmtRefund = Isnull(Bd.NetAmount,0),  -- commanded by arun - total investigation amount updated instead of refund amount
+		SET    a.AmtRefund = Isnull(Bd.RefundAmount,0),
+		a.DiscountAdjustedAmt = @NewDiscountAdjustedAmt
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  --a.RefundNo = @RefundNo AND --Commented By Jayaramanan L
+		 a.OrgID = @POrgId
+		AND a.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		UPDATE a
+		SET    a.RefundadjustedAmt = @NewDueRefund
+		FROM   AmountRefundDetails a (nolock)
+		INNER JOIN @tempRedeemBillingDetails Bd
+		ON bd.BillingDetailsID = a.BillingDetailsID
+		WHERE  a.RefundNo = @RefundNo
+		AND OrgID = @POrgId
+		AND Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		--- Added BY jayaramanan  L
+		UPDATE F
+		SET  F.AmountRefund = Isnull(F.AmountRefund, 0) + (Isnull(BD.NetAmount,0))
+		FROM   Finalbill_Franchisee F (nolock)
+		INNER JOIN AmountRefundDetails ARD ON ARD.FinalBillID=F.FinalBillID and ARD.OrgID=F.OrgID
+		INNER JOIN @tempBillingDetails Bd ON bd.BillingDetailsID = ARD.BillingDetailsID
+		WHERE ARD.OrgID = @POrgId
+		AND ARD.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+
+		UPDATE F SET
+		F.CurrentDue = (Case When Isnull(F.CurrentDue, 0)>Isnull(F.AmountRefund, 0) Then Isnull(F.CurrentDue, 0)- (Isnull(F.AmountRefund, 0) + (Isnull(BD.NetAmount,0)))
+		When Isnull(F.CurrentDue, 0)<Isnull(F.AmountRefund, 0) Then 0
+		 Else Isnull(CurrentDue, 0) END)
+		FROM   Finalbill_Franchisee F (nolock)
+		INNER JOIN AmountRefundDetails ARD ON ARD.FinalBillID=F.FinalBillID and ARD.OrgID=F.OrgID
+		INNER JOIN @tempBillingDetails Bd ON bd.BillingDetailsID = ARD.BillingDetailsID
+		WHERE ARD.OrgID = @POrgId
+		AND ARD.Finalbillid = @FinalBillID
+		AND BD.RowID = @RowID
+		--UPDATE a
+		--SET    a.AmtRefund = @NewAmtRefund,
+		--a.RedeemAdjustedAmt = @NewRedeemAdjustedAmt
+		--FROM   AmountRefundDetails a (nolock)
+		--INNER JOIN @tempRedeemBillingDetails Bd
+		--ON bd.BillingDetailsID = a.BillingDetailsID
+		--WHERE  a.RefundNo = @RefundNo
+		--AND a.OrgID = @POrgId
+		--AND a.Finalbillid = @FinalBillID
+		--AND BD.RowID = @RowID
+		--UPDATE a
+		--SET    a.RefundadjustedAmt = @NewDueRefund
+		--FROM   AmountRefundDetails a (nolock)
+		--INNER JOIN @tempRedeemBillingDetails Bd
+		--ON bd.BillingDetailsID = a.BillingDetailsID
+		--WHERE  a.RefundNo = @RefundNo
+		--AND OrgID = @POrgId
+		--AND Finalbillid = @FinalBillID
+		--AND BD.RowID = @RowID
+		--UPDATE FinalBill
+		--SET    AmountRefund = Isnull(AmountRefund, 0) + @NewAmtRefund,
+		--CurrentDue = Isnull(CurrentDue, 0) - ( Isnull(AmountRefund, 0) + @NewAmtRefund )
+		--WHERE  FinalBillID = @FinalBillID
+		--AND OrgID = @POrgId
+		IF( @NewRedeemAdjustedAmt > 0 )
+		BEGIN
+		WHILE( @patientRedeemCount >= @Rowcount )
+		BEGIN
+		IF( @NewRedeemAdjustedAmt > 0 )
+		BEGIN
+		-- select @CancelledReturnedValue   = Isnull(CancelledReturnedValue, 0) + @NewRedeemAdjustedAmt    
+		--from @patientredemdetails prd     
+		--                      WHERE  FinalBillID = @FinalBillID     
+		--                             AND OrgID = @POrgId    
+		SELECT @CancelledReturnedValue = Isnull(CancelledReturnedValue, 0)
+		+ @NewRedeemAdjustedAmt,
+		@MembershipCardDetailsID = MembershipCardDetailsID,
+		@RedemPoints = RedemPoints
+		FROM   @patientredemdetails
+		WHERE  RowID = @Rowcount
+		AND OrgID = @POrgId
+		IF( @CancelledReturnedValue <= @RedemPoints )
+		BEGIN
+		UPDATE prd -- final    
+		SET    prd.CancelledReturnedValue = Isnull(prd.CancelledReturnedValue, 0)
+		+ @NewRedeemAdjustedAmt
+		FROM   patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		UPDATE prd -- final    
+		SET    prd.CancelledReturnedValue = Isnull(prd.CancelledReturnedValue, 0)
+		+ @NewRedeemAdjustedAmt
+		FROM   @patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		SET @NewRedeemAdjustedAmt = @NewRedeemAdjustedAmt - @CancelledReturnedValue
+		END
+		ELSE
+		BEGIN
+		SELECT @oldCancelledReturnedValue = ( ( @NewRedeemAdjustedAmt + @RedemPoints ) - ( @NewRedeemAdjustedAmt
+		+ Isnull(prd.CancelledReturnedValue, 0) ) )
+		FROM   patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		IF( @oldCancelledReturnedValue > 0 )
+		BEGIN
+		UPDATE prd -- final    
+		SET    prd.CancelledReturnedValue = Isnull(prd.CancelledReturnedValue, 0) + ( ( @NewRedeemAdjustedAmt + @RedemPoints ) - ( @NewRedeemAdjustedAmt
+		+ Isnull(prd.CancelledReturnedValue, 0) ) )
+		FROM   patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		UPDATE prd -- final    
+		SET    prd.CancelledReturnedValue = Isnull(prd.CancelledReturnedValue, 0) + ( ( @NewRedeemAdjustedAmt + @RedemPoints ) - ( @NewRedeemAdjustedAmt
+		+ Isnull(prd.CancelledReturnedValue, 0) ) )
+		FROM   @patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		SELECT @newCancelledReturnedValue = Isnull(CancelledReturnedValue, 0)
+		FROM   @patientredemdetails prd
+		WHERE  prd.MembershipCardDetailsID = @MembershipCardDetailsID
+		AND prd.OrgID = @POrgId
+		SET @NewRedeemAdjustedAmt = ( @NewRedeemAdjustedAmt - @newCancelledReturnedValue )
+		END
+		END
+		END
+		SET @Rowcount = @Rowcount + 1
+		END
+		END
+		--IF( @PointsPercent > 0 )    
+		--                  BEGIN    
+		--                      UPDATE patientcreditdetails    
+		--                      SET    CancelledValue = ( ( @TotalSumCancelAmount * @PointsPercent ) / 100 )    
+		--                      WHERE  FinalBillID = @FinalBillID    
+		--                             AND OrgID = @POrgId    
+		--                  END    
+		END
+		SET @RowID=@RowID + 1
+		SET @Rowcount = 1
+		END
+		/**     
+		INSERT @tbTable    
+		SELECT DISTINCT AmtRefundID,    
+		d.ApprovedAmt,    
+		0,    
+		bd.DiscountAmount    
+		FROM   AmountRefundDetails a (nolock)    
+		INNER JOIN RefundAmtDetailsCapture d (nolock)    
+		ON d.BillingDetailsID = a.BillingDetailsID    
+		AND d.RefundNo = @RefundNo    
+		INNER JOIN BillingDetails Bd (nolock)    
+		ON bd.BillingDetailsID = d.BillingDetailsID    
+		WHERE  a.RefundNo = @RefundNo    
+		AND a.OrgID = @POrgId    
+		AND a.Finalbillid = @FinalBillID    
+		SELECT @loopcont = Count(1)    
+		FROM   @tbTable    
+		WHILE @loop <= @loopcont    
+		BEGIN    
+		SELECT @AmtRefundID = AmtRefundID,    
+		@AmtRefund = AmtRefund - discountamount,    
+		@netAmt = netAmt,    
+		@discountamount = discountamount    
+		FROM   @tbTable    
+		WHERE  RowID = @loop    
+		IF( @RefundAmt > 0    
+		AND @RefundAmt >= @AmtRefund )    
+		BEGIN    
+		UPDATE AmountRefundDetails    
+		SET    AmtRefund = @AmtRefund,    
+		DiscountAdjustedAmt = @discountamount    
+		WHERE  RefundNo = @RefundNo    
+		AND OrgID = @POrgId    
+		AND AmtRefundID = @AmtRefundID    
+		SET @RefundAmt=@RefundAmt - @AmtRefund    
+		END    
+		ELSE    
+		BEGIN    
+		UPDATE AmountRefundDetails    
+		SET    AmtRefund = @RefundAmt,    
+		DiscountAdjustedAmt = @DisCount    
+		WHERE  RefundNo = @RefundNo    
+		AND OrgID = @POrgId    
+		AND AmtRefundID = @AmtRefundID    
+		SET @RefundAmt=0    
+		END    
+		SET @loop=@loop + 1    
+		END    
+		UPDATE AmountRefundDetails    
+		SET    TranCurrencyAmount = AmtRefund    
+		WHERE  FinalBillID = @FinalBillID    
+		AND RefundNo = @RefundNo    
+		AND OrgID = @POrgId    
+		**/
+		/**    
+		END    
+		ELSE    
+		BEGIN    
+		UPDATE AmountRefundDetails    
+		SET    DiscountAdjustedAmt = @DisCount - @RefundAmt,    
+		TranCurrencyAmount = 0,    
+		AmtRefund = 0    
+		WHERE  FinalBillID = @FinalBillID    
+		AND RefundNo = @RefundNo    
+		AND OrgID = @POrgId    
+		n                    
+		END    
+		**/
+		END
+		--------------------------------                         
+		END
+		IF( @Prefflag = 'N' )
+		BEGIN
+			UPDATE ARD
+			SET    ARD.TranCurrencyAmount = 0,
+			AmtRefund = 0,
+			RedeemAdjustedAmt = Isnull(( BD.RedeemPoints - Isnull(RedeemAdjustedAmt, 0) ), 0)
+			FROM   AmountRefundDetails ARD (nolock)
+			INNER JOIN @pamtRefundDetails PRD
+			ON ARD.FinalBillID = PRD.FinalBillID
+			AND ARD.BillingDetailsID = PRD.BillingDetailsID
+			INNER JOIN billingdetails BD (nolock)
+			ON BD.BillingDetailsID = PRD.BillingDetailsID
+			AND BD.FinalBillID = PRD.FinalBillID
+			WHERE  ARD.FinalBillID = @FinalBillID
+			AND RefundNo = @RefundNo
+			AND ARD.OrgID = @POrgId
+
+			DECLARE @RedeemPoints DECIMAL(18, 2)
+
+			SELECT @RedeemPoints = Floor(Isnull(( Sum(BD.RedeemPoints) ), 0))
+			FROM   billingdetails bd (nolock)
+			INNER JOIN AmountRefundDetails ARD (nolock)
+			ON bd.FinalBillID = ARD.FinalBillID
+			AND bd.billingdetailsid = ARD.billingdetailsid
+			INNER JOIN patientredemdetails prdd (nolock)
+			ON prdd.FinalBillID = ARD.FinalBillID
+			WHERE  ARD.finalbillid = @FinalBillID
+			AND RefundNo = @RefundNo
+			AND ARD.OrgID = @POrgId
+
+			UPDATE prdd
+			SET    prdd.CancelledReturnedValue = @RedeemPoints
+			FROM   patientredemdetails prdd (nolock)
+			WHERE  prdd.FinalBillID = @FinalBillID
+			AND prdd.OrgID = @POrgId
+		END
+		END
+		DECLARE @CheckCreditvalue DECIMAL(18, 2)
+		DECLARE @NewtotalRedeemAdjustedAmt DECIMAL(18, 2)
+		
+		SELECT @CheckCreditvalue = Isnull(f.CreditValue, 0)
+		FROM   Finalbill f WITH(NOLOCK)
+		WHERE  f.FinalBillID = @FinalBillID
+		IF( @CheckCreditvalue > 0 )
+		BEGIN
+			IF( @PointsPercent > 0 )
+			BEGIN
+				SELECT @NewtotalRedeemAdjustedAmt = Sum (Isnull(f.RedeemAdjustedAmt, 0))
+				FROM   AmountRefundDetails f WITH(NOLOCK)
+				WHERE  f.FinalBillID = @FinalBillID
+				AND f.OrgID = @POrgId
+
+				SELECT @TotalSumCancelAmount = Sum (Isnull(f.CancelAmount, 0))
+				FROM   AmountRefundDetails f WITH(NOLOCK)
+				WHERE  f.FinalBillID = @FinalBillID
+				AND f.OrgID = @POrgId
+
+				UPDATE patientcreditdetails
+				SET    CancelledValue = Floor(( ( ( @TotalSumCancelAmount - Isnull(@NewtotalRedeemAdjustedAmt, 0) ) * @PointsPercent ) / 100 ))
+				WHERE  FinalBillID = @FinalBillID
+				AND OrgID = @POrgId
+			END
+		END
+		IF @RefundType = 'CANCELLED'
+		BEGIN
+		DECLARE @pPatientVisitID BIGINT
+
+		SELECT @pPatientVisitID = VisitID
+		FROM   finalbill WITH(NOLOCK)
+		WHERE  FinalBillID = @FinalBillID
+		AND OrgID = @POrgId 
+
+		SELECT DISTINCT @ClientID = ClientID
+		FROM   billingdetails WITH(NOLOCK)
+		WHERE  FinalBillID = @FinalBillID
+		AND OrgID = @POrgId
+
+		DECLARE @Temptable AS TABLE (
+					Investigationname NVARCHAR(500)
+					,Type NVARCHAR(50)
+					,InvestigationID BIGINT
+					,visitid BIGINT
+					,orgid INT
+					,STATUS NVARCHAR(200)
+					,deptid BIGINT
+					,display NVARCHAR(15)
+					,packageid BIGINT
+					,Accessionnumber BIGINT
+					,groupid BIGINT
+					,uid NVARCHAR(max)
+					)
+
+		
+			IF  exists(Select 1 from  ConfigKeyMaster CFM INNER JOIN ConfigOrgMaster COM 
+		ON CFM.ConfigKeyID=COM.ConfigKeyID AND ConfigKey='IsRadiologyInteg' AND COM.OrgID=@pOrgID and com.ConfigvALUE='Y'
+		)
+		Begin
+
+		INSERT INTO @Temptable
+				EXEC pGetDeptToTrackSamplesForQucikBill1 @pPatientVisitID
+					,@pOrgID
+					,0
+					,''
+			
+		Declare @LstAccessionnumbers as table(visitid bigint,orgid bigint,accessionnumber bigint)
+					insert into @LstAccessionnumbers
+		SELECT pv.visitid, OI.OrgID,OI.accessionnumber
+			--  ActionNumber 
+			--= STUFF(
+			--             (SELECT ',' + CONVERT(NVARCHAR(200), t1.AccessionNumber )FROM OrderedInvestigations t1    WHERE t1.VisitID = OI.VisitID and T1.AccessionNumber=OI.AccessionNumber FOR XML PATH ('')), 1, 1, ''
+			--           ) 
+			--,'NW'
+			from OrderedInvestigations OI         
+			 INNER JOIN FinalBill FB on fb.VisitID=OI.VisitID            
+			INNER JOIN BillingDetails BD on FB.FinalBillID=BD.FinalBillID  and BD.FeeId=OI.ID and BD.FeeType=OI.Type             
+			INNER JOIN @pamtRefundDetails ta on ta.FinalBillID=fb.FinalBillID and  BD.BillingDetailsID=ta.BillingDetailsID and BD.OrgID=@pOrgID  
+			--inner join PatientInvestigation t2 on t2.AccessionNumber=oi.AccessionNumber and oi.VisitID=t2.PatientVisitID 
+			inner join @Temptable pv on pv.InvestigationID = ID               
+			WHERE OI.VisitID = @pPatientVisitID  
+
+			AND  pv.PackageID = 0      
+
+			AND  pv.GroupID = 0      
+
+			AND  OI.OrgID=@pOrgID and pv.display='N'  GROUP BY pv.visitid,OI.OrgID,OI.VisitID, OI.accessionnumber
+
+
+			INSERT INTO RadiologyDataintegration(PatientVisitID,OrgID,AccessionNumber,orderStatus)
+			SELECT distinct  visitid,  OrgID,
+			ActionNumber = STUFF(
+						 (SELECT ',' + CONVERT(NVARCHAR(200), t1.AccessionNumber )FROM @LstAccessionnumbers t1    FOR XML PATH ('')), 1, 1, ''
+			 ) 
+			,'CA'
+			from @LstAccessionnumbers
+
+
+
+		End
+		UPDATE OI
+		SET    OI.Status = 'Cancel',
+		OI.ModifiedBy = @CreatedBy,
+		OI.Modifiedat = @Curdate
+		output inserted.accessionnumber,inserted.status into @tmp_ordinv
+		FROM   OrderedInvestigations OI WITH(NOLOCK)
+		INNER JOIN FinalBill FB WITH(NOLOCK)
+		ON fb.VisitID = OI.VisitID
+		INNER JOIN BillingDetails BD WITH(NOLOCK)
+		ON BD.FeeId = OI.ID
+		AND FB.FinalBillID = BD.FinalBillID
+		AND BD.feetype != 'PKG'
+		AND OI.PkgID IS NULL
+		INNER JOIN @pamtRefundDetails ta
+		ON BD.BillingDetailsID = ta.BillingDetailsID
+		AND BD.OrgID = @pOrgId
+		WHERE  OI.VisitID = @pPatientVisitID
+
+		UPDATE OI
+		SET    OI.Status = 'Cancel',
+		OI.ModifiedBy = @CreatedBy,
+		OI.Modifiedat = @Curdate
+		output inserted.accessionnumber,inserted.status into @tmp_ordinv
+		FROM   OrderedInvestigations OI WITH(NOLOCK)
+		INNER JOIN FinalBill FB WITH(NOLOCK)
+		ON fb.VisitID = OI.VisitID
+		INNER JOIN BillingDetails BD WITH(NOLOCK)
+		ON BD.FeeId = OI.PkgID
+		AND FB.FinalBillID = BD.FinalBillID
+		AND BD.feetype = 'PKG'
+		INNER JOIN @pamtRefundDetails ta
+		ON BD.BillingDetailsID = ta.BillingDetailsID
+		AND BD.OrgID = @pOrgId
+		WHERE  OI.VisitID = @pPatientVisitID
+
+		----Child Bill Cancel
+
+		DECLARE @TempChildAccession as table
+		(
+		AccessionNumber BIGINT,
+		Status NVARCHAR(20)
+		)
+
+
+		UPDATE OI
+		SET    OI.Status = t.status,
+		OI.ModifiedBy = @CreatedBy,
+		OI.Modifiedat = @Curdate
+		--output inserted.AccessionNumber,inserted.status into @TempChildAccession
+		FROM   OrderedInvestigations OI WITH(NOLOCK)
+		JOIN @tmp_ordinv T ON OI.ReferredAccessionNo=T.accessionnumber
+		--AND BD.OrgID = @pOrgId
+		--WHERE  OI.VisitID = @pPatientVisitID
+
+
+		insert into @TempChildAccession
+		select OI.accessionnumber,OI.Status
+		FROM   OrderedInvestigations OI WITH(NOLOCK)
+		JOIN @tmp_ordinv T ON OI.ReferredAccessionNo=T.accessionnumber
+
+		DECLARE @TaskStatusID BIGINT
+		DECLARE @TaskActionID AS TABLE
+		(
+		TaskStatusID INT
+		)
+		INSERT INTO @TaskActionID
+		(TaskStatusID)
+		SELECT TaskActionID
+		FROM   TaskActions WITH(NOLOCK)
+		WHERE  ActionName IN( 'CollectSample', 'Validate', 'Approvel', 'Coauthorize' )
+		SELECT @TaskStatusID = TaskStatusID
+		FROM   TaskStatus WITH(NOLOCK)
+		WHERE  StatusName = 'DELETED' 
+
+		UPDATE PI
+		SET    PI.Status = 'Cancel',
+		PI.ModifiedBy = @CreatedBy,
+		PI.Modifiedat = @Curdate
+		output inserted.patientinvid,inserted.status into @tmp_patinv
+		FROM   OrderedInvestigations OI WITH(NOLOCK)
+		INNER JOIN PatientInvestigation PI WITH(NOLOCK)
+		ON OI.VisitID = PI.PatientVisitID
+		AND OI.AccessionNumber = PI.AccessionNumber
+		AND OI.OrgID = PI.OrgID
+		WHERE  PatientVisitID = @pPatientVisitID
+		AND OI.Status = 'Cancel'
+
+		UPDATE PI
+		SET    PI.Status = T.Status,
+		PI.ModifiedBy = @CreatedBy,
+		PI.Modifiedat = @Curdate
+		--output inserted.patientinvid,inserted.status into @tmp_patinv
+		FROM  PatientInvestigation PI WITH(NOLOCK)
+		INNER JOIN @TempChildAccession T ON T.AccessionNumber=PI.AccessionNumber
+		--   SELECT @CreatedBy,    
+		--    
+		--         @Curdate    
+		END
+		DECLARE @refamt DECIMAL(18, 0)
+		--SELECT @refamt = Sum(AmtRefund)    
+		--FROM   AmountRefundDetails WITH(NOLOCK)    
+		--WHERE  FinalBillID = @FinalBillID    
+		IF EXISTS(SELECT FinalBillID
+		FROM   InvoiceDetails WITH(NOLOCK)
+		WHERE  FinalBillID = @FinalBillID)
+		BEGIN
+		DECLARE @CreditReceiptNo NVARCHAR(25)
+		DECLARE @DebitReceiptNo NVARCHAR(25)
+		DECLARE @CreditReferenceID BIGINT
+		DECLARE @DebitReferenceID BIGINT
+		DECLARE @pCreatedAt AS DATETIME = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+		/** Credit Notes**/
+		EXEC dbo.Pgetnextid
+		@pOrgID,
+		'REC',
+		@CreditReceiptNo OUTPUT
+		INSERT INTO CreditDebitSummary
+		(ReceiptNo,
+		CrDrDate,
+		ClientType,
+		ClientId,
+		ItemType,
+		Authorizedby,
+		OrgID)
+		SELECT @CreditReceiptNo,
+		@pCreatedAt,
+		'Client',
+		@ClientID,
+		'Credit',
+		@CreatedBy,
+		@pOrgID
+		SET @CreditReferenceID=Scope_identity()
+
+		INSERT INTO CreditDebitDetails
+		(SummaryID,
+		ReferenceType,
+		ReferenceID,
+		Amount,
+		Reason,
+		OrgID,
+		CreatedAt)
+		SELECT @CreditReferenceID,
+		'Billing',
+		@FinalBillID,
+		Sum(ARD.CancelAmount),
+		137,
+		@pOrgID,
+		@pCreatedAt
+		FROM   @pamtRefundDetails T
+		INNER JOIN AmountRefundDetails ARD WITH(NOLOCK)
+		ON T.BillingDetailsID = ARD.BillingDetailsID
+		END
+		SET @ret = 0
+		--SET @RefundNo=@pRefundId                                            
+		SET @ret = 0
+		DECLARE @GROSSVALUE DECIMAL(18, 2) = 0.00
+		DECLARE @GROSSBILLVALUE DECIMAL(18, 2) = 0.00
+		DECLARE @TOTALDUEREFUND DECIMAL(18, 2) = 0.00
+		DECLARE @AMTRECEIVED DECIMAL(18, 2) = 0.00
+		DECLARE @DUE DECIMAL(18, 2) = 0.00
+		DECLARE @HashealthCoupon NVARCHAR(10) = 'N'
+		DECLARE @MembershipCardTypeID BIGINT
+		DECLARE @MembershipCardNo NVARCHAR(255)=''
+		DECLARE @MembershipCardMappingID BIGINT
+		SELECT @GROSSVALUE = GrossBillValue,
+		@TOTALDUEREFUND = AmountRefund,
+		@DUE = Due,
+		@AMTRECEIVED = AmountReceived,
+		@HashealthCoupon = HasHealthcoupon
+		FROM   FinalBill WITH(NOLOCK)
+		WHERE  FinalBillID = @FinalBillID
+		AND HasHealthcoupon = 'Y'
+		--SET @RefundNo=@pRefundId             
+		--   SELECT @GROSSBILLVALUE - @TOTALDUEREFUND          
+		--SELECT @AMTRECEIVED          
+		--   SELECT @DUE          
+		--   SELECT @TOTALDUEREFUND          
+		--select   @GROSSVALUE          
+		--select @refundAmount          
+		--select @AMTRECEIVED    
+		SELECT @refundAmount = Sum(rd.AmtRefund)
+		FROM   @pamtRefundDetails rd
+		/*********** Update the RefundAmount For DepositClient   ********/
+		IF @pRefundtype = 'CANCELLED' 
+	    BEGIN
+		    DECLARE @ClientRate DECIMAL(18,2)
+			SELECT @ClientRate=SUM(BD.Amount) FROM BillingDetails BD (NOLOCK) INNER JOIN @pamtRefundDetails RD  
+			ON BD.FinalBIllID=RD.FinalBillID AND BD.BillingdetailsID=RD.BillingDetailsID
+			 
+
+			UPDATE CMA
+			SET    CMA.BillRefund = Isnull(CMA.BillRefund, 0) + ISNULL(@ClientRate,0),
+			CMA.TotalDepositUsed = Isnull(CMA.TotalDepositUsed, 0) - ISNULL(@ClientRate,0)
+			FROM   CollectionsMaster CMA WITH (NOLOCK)
+			WHERE  CMA.CollectionID = @collectionID
+			AND orgid = @pOrgID
+		END
+		
+		IF ( ( ( @GROSSVALUE - @refundAmount ) = @AMTRECEIVED )
+		AND @HashealthCoupon = 'Y' )
+		BEGIN
+		SET @MembershipCardNo = CONVERT(NUMERIC(12, 0), Rand() * 899999999999)
+		DECLARE @SlapPercentage DECIMAL(18, 2) = 0.00
+		SELECT TOP 1 @SlapPercentage = PointsPercent
+		FROM   PATIENTCREDITSLABMAPPING
+		WHERE  OrgId = (SELECT OrgId
+		FROM   @ContextInfo)
+		SET @GROSSBILLVALUE=( @AMTRECEIVED * @SlapPercentage / 100 )
+		SELECT @MembershipCardTypeID = membershipcardtypeid
+		FROM   patientmembershipcardtype
+		WHERE  membershipcardtype = 'MYCARD'
+		DECLARE @ConfigValue NVARCHAR(10) = 'N'
+		SELECT @ConfigValue = COM.ConfigValue
+		FROM   ConfigKeyMaster CKM WITH (NOLOCK)
+		INNER JOIN ConfigOrgMaster COM WITH (NOLOCK)
+		ON CKM.ConfigKeyID = COM.ConfigKeyID
+		WHERE  CKM.ConfigKey = 'HealthCardOTP'
+		AND COM.OrgID = (SELECT OrgId
+		FROM   @ContextInfo)
+		INSERT INTO patientmembershipcardmapping
+		(membershipcardtypeid,
+		patientid,
+		membershipcardno,
+		orgid,
+		otp,
+		STATUS,
+		createdby,
+		createdat,
+		mobileno)
+		VALUES      ( @MembershipCardTypeID,
+		@pPatientID,
+		@MembershipCardNo,
+		@pOrgID,
+		0,
+		CASE Isnull(@ConfigValue, 'N')
+		WHEN 'Y' THEN 'Pending'
+		ELSE 'Active'
+		END,
+		@CreatedBy,
+		@ServerDate,
+		'' )
+		SET @MembershipCardMappingID = Scope_identity()
+		INSERT INTO patientcreditdetails
+		(membershipcardmappingid,
+		patientid,
+		visitid,
+		orgid,
+		creditpoints,
+		creditvalue,
+		validfrom,
+		validto,
+		createdby,
+		createdat,
+		FinalBillID)
+		SELECT @MembershipCardMappingID,
+		@pPatientID,
+		@pVisitID,
+		@POrgId,
+		Floor(@GROSSBILLVALUE),
+		Floor(@GROSSBILLVALUE),
+		@ServerDate,
+		@ServerDate + 365,
+		@CreatedBy,
+		@ServerDate,
+		@FinalBillID
+		END
+		/*Code added by T.Suresh for MIS Purpose Start here */
+		;with cteo as
+		(
+		select row_number() over (partition by accessionnumber order by accessionnumber) as sno,accessionnumber from @tmp_Ordinv
+		)
+		delete from cteO where sno>1;
+		;with cteP as
+		(
+		select row_number() over (partition by patientinvid order by patientinvid) as sno,patientinvid from @tmp_patinv
+		)
+		delete from cteP where sno>1;
+		;with cteV as
+		(
+		select row_number() over (partition by investigationvalueid order by investigationvalueid) as sno,investigationvalueid from @tmp_invv
+		)
+		delete from cteV where sno>1;
+		UPdate MIS Set status = OI.status , modifiedby = @Loginid , Modifiedat = @serverdate
+		From @tmp_ordinv tmp
+		Inner join orderedinvestigations OI (nolock) on tmp.accessionNumber = OI.accessionnumber
+		Inner join MISOrderedinvestigations MIS (nolock) on OI.accessionnumber = MIS.accessionnumber
+		Where OI.Visitid = @pPatientVisitID
+		Insert into MISOrderedinvestigationhistory
+		(
+		AccessionNumber,Visitid,id,type,Name,statusid,status,
+		CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName
+		)
+		Select mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,mord.status,
+		@Loginid as CreatedBy,@ServerDate as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName
+		From @tmp_ordinv tp
+		Inner join MISOrderedinvestigations MORD (nolock) on tp.Accessionnumber = MORD.Accessionnumber
+		Inner join ordtasks tsk (nolock) on MORD.status = tsk.status
+		Left join MISOrderedinvestigationhistory OH (nolock) on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and OH.Createdby = @Loginid
+		Where Oh.Accessionnumber is null
+		update MISP set status = PI.status,modifiedat = @serverdate,Modifiedby = @Loginid
+		From @tmp_patinv t
+		Inner join MISpatientinvestigation MISP (nolock) on MISP.Patientinvid = t.Patientinvid
+		Inner join patientinvestigation PI (nolock) on MISP.patientinvid = PI.Patientinvid
+		Where MISP.PatientVisitid = @pPatientVisitID
+		update MISV Set status = t.status, modifiedat = @serverdate,Modifiedby = @Loginid
+		From @tmp_invv t
+		Inner join MISinvestigationvalues MISV (nolock) on t.investigationvalueid = MISV.investigationvalueid
+		--Where IV.Patientvisitid = @Visitid
+		/*Code added by T.Suresh for MIS Purpose end here */
+		SELECT @pPatientID              PatientID,
+		@pVisitID                VisitID,
+		@FinalBillID             FinalBillID,
+		@RefundNo                LabNo,
+		''                       VersionNo,
+		''                       BillNumber,
+		----Added by Thamilselvan to Get the @MembershipCardNo for Client Billing Form          
+		@MembershipCardNo        BatchNo,
+		@MembershipCardMappingID AS FeeId
+		select @refundAmount=Sum(rd.AmtRefund),@ClientID = isnull(vc.clientid,0)
+		FROM   @pamtRefundDetails rd inner join visitclientmapping vc with(nolock) on vc.finalbillid=rd.finalbillid
+		group by vc.clientid
+		if exists(select 1 from AmountRefundDetails where Finalbillid=@pRFNFinalBillId)
+		begin
+		if(@ClientID>0)
+		begin
+		Update CCD set CCD.PendingCreditLimit=CCD.PendingCreditLimit+@refundAmount , CCD.NotInvoiced=CCD.NotInvoiced-@refundAmount
+		From ClientCreditDetails CCD With(nolock) Inner Join ClientMaster CM With(nolock) on CM.ClientId=CCD.ClientID 
+		Where CM.CreditLimit>0 and CCD.ClientID=@ClientID
+		end
+		end
+
+ 
+END
+SET QUOTED_IDENTIFIER OFF 
+
+
+
+
+
+

@@ -1,0 +1,502 @@
+ 
+/****** Object:  StoredProcedure [dbo].[pUpdateAmendedTAT_Notification]    Script Date: 2/12/2019 2:35:11 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE  [dbo].[pUpdateAmendedTAT_Notification]
+@pPatientVisitID BIGINT,
+@ppatientInvSample [dbo].[PATIENTINVSAMPLECOLLECTED] READONLY,
+@ContextInfo       [UDT_CONTEXT] READONLY
+AS
+BEGIN 
+   
+	  DECLARE @pClientID BIGINT
+	  DECLARE @RecOrgID INT
+	  DECLARE @pOrgID INT
+	  DECLARE @PatientVisitDateTime DATETIME
+
+	  SET @pOrgID = (SELECT OrgID
+                     FROM   @ContextInfo)
+
+	  SELECT @RecOrgID = OrgID,
+			   @PatientVisitDateTime = PV.VisitDate
+      FROM   PatientVisit PV WITH (NOLOCK)
+      WHERE  PatientVisitID = @pPatientVisitID
+
+	  SELECT @pClientID = Max(ClientID)
+      FROM   VisitClientMapping VCM WITH(NOLOCK)
+      WHERE  VCM.OrgID = @RecOrgID
+             AND VisitID = @pPatientVisitID
+             AND Isnull(IsActive, 'Y') = 'Y'	
+
+		 ----Config Based TAT report created by ARUN-------------
+      DECLARE @TATDATE VARCHAR(20)
+      DECLARE @ReportDeliveryDATE VARCHAR(25)
+	  DECLARE @pTatDateTime DATETIME
+      DECLARE @p_TATCalculationDateTime DATETIME
+      DECLARE @p_TATProcessDateTime DATETIME
+      DECLARE @p_SampleReceiptDateTime DATETIME
+      DECLARE @p_ProcessStartDateTime DATETIME
+      DECLARE @p_ReportDateTime DATETIME
+      DECLARE @p_TATDateTime DATETIME
+      DECLARE @IsProcessing BIT = 0
+      DECLARE @Tatprocessdatetype SMALLINT
+      ----  DECLARE @pClientID BIGINT
+      DECLARE @pFinalbillID BIGINT
+	  DECLARE @p_LogisticTimeasmins     SMALLINT
+	  DECLARE @p_Processinghoursasmins  INT --SMALLINT --Corrected by SYED
+	  DECLARE @p_LabendTime             TIME  
+	  DECLARE @p_EarlyReportTime        TIME  
+	  DECLARE @p_Isdebug BIT=0
+	  DECLARE @p_TATReferenceDateBase int=0
+	  
+      DECLARE @TatDetail AS TABLE
+       (
+           RowId           INT IDENTITY(1, 1),
+           ID                       BIGINT,
+           Type               VARCHAR(10),
+           TatDateTime              DATETIME,
+           ReportDateTime           DATETIME,
+           TATProcessDateTime       DATETIME,
+           TATSampleReceiptDateTime DATETIME,
+           TATProcessStartDateTime  DATETIME,
+           VisitID                  BIGINT,
+           BillingdetailsId         BIGINT,
+		   Logistictimeinmins       smallint,
+		   Processingtimeinmins     int,
+		   Labendtime               Time,
+           Earlyreporttime          Time,
+           ExcludeVIDlockID         int,
+           CustomerCommittedTAT     DATETIME,
+           Excludetime              INT,
+           OrgID                    INT,
+		      UID varchar(255)
+        )
+
+      SELECT ---@pClientID = ClientID,
+      @pFinalbillID = FinalBillID
+      FROM   VisitClientMapping vcm WITH(NOLOCK)
+      WHERE  visitid = @pPatientVisitID
+             AND Isnull(vcm.IsActive, 'Y') != 'N'
+
+	 SELECT @Tatprocessdatetype = CASE
+                                     WHEN ISNULL(Tatprocessdatetype, 0) = 0 THEN 2
+                                     ELSE Tatprocessdatetype
+                                   END
+      FROM   clientmaster WITH(nolock)
+      WHERE  clientid = @pClientID
+
+      DECLARE @totaltestcount INT
+      DECLARE @incrementcount INT
+      DECLARE @configKeyID INT
+      DECLARE @ConfigValue VARCHAR(50)
+      DECLARE @p_OrgId INT = @RecOrgID
+      DECLARE @p_TestId BIGINT
+      DECLARE @p_TestType VARCHAR(5)
+      DECLARE @p_ClientId BIGINT = @pClientID
+      DECLARE @BillingdetailsId BIGINT
+	  DECLARE @UID varchar(255)
+
+      SELECT @configKeyID = ConfigKeyID
+      FROM   ConfigKeyMaster WITH(NOLOCK)
+      WHERE  ConfigKey = 'TAT'
+
+      SELECT @ConfigValue = ConfigValue
+      FROM   ConfigOrgMaster WITH(NOLOCK)
+      WHERE  ConfigKeyID = @configKeyID
+             AND OrgID = @RecOrgID
+
+      DECLARE @INVESTIGATIONRESULTS AS TABLE
+        (
+           RowId             INT IDENTITY(1, 1),
+           FeeId             BIGINT,
+           FeeType           VARCHAR(10),
+           CollectedDateTime DATETIME,
+           --   AccessionNumber   BIGINT,
+           BillingdetailsId  BIGINT,
+		   UID varchar(255)
+     )
+
+      SELECT @ReportDeliveryDATE = NULL
+	  SELECT @pTatDateTime=NULL
+
+   IF ( Isnull(@ConfigValue, 'N') = 'Y' )
+    BEGIN
+		 
+		     IF EXISTS (SELECT 1
+                       FROM   dbo.ConfigKeyMaster ckm WITH (NOLOCK)
+                              INNER JOIN dbo.ConfigOrgMaster com WITH (NOLOCK)
+                                      ON com.ConfigKeyID = ckm.ConfigKeyID
+                                         AND com.OrgID = @pOrgID
+                       WHERE  ckm.ConfigKey = 'NewTATLogic'
+                              AND com.ConfigValue = 'Y')
+              BEGIN						 
+       
+                  SET @incrementcount = 1
+				 
+                     INSERT INTO @INVESTIGATIONRESULTS
+				     SELECT DISTINCT
+                               OI.ID,
+                               OI.Type,
+                               CollectedDateTime,
+                             '',
+                               OI.UID
+                      FROM @ppatientInvSample tmp
+                             INNER JOIN patientInvSampleMapping PIS ON PIs.Barcode = tmp.BarcodeNumber
+                                                               AND PIS.OrgID = tmp.OrgID
+                                                               AND PIS.SampleID = tmp.SampleCode
+                                                              AND PIS.UID = tmp.UID
+                             INNER JOIN OrderedInvestigations oi WITH (NOLOCK) ON PIS.ID = oi.ID
+                                                                                  AND PIS.TYPE = OI.TYPE
+                                                                                  AND OI.OrgID = PIS.OrgID
+                                                                                  AND OI.UID = PIS.UID
+                             --INNER JOIN BillingDetails Bd WITH (NOLOCK) ON BD.BillingDetailsID = OI.BillingDetailsID
+                       WHERE OI.VisitID = @pPatientVisitID
+                       UNION
+                       SELECT DISTINCT
+                               OI.ID,
+                               OI.Type,
+                               tmp.CollectedDateTime,
+                               '',
+                               OI.UID
+                       FROM @ppatientInvSample tmp
+                             INNER JOIN patientInvSampleMapping PIS ON PIs.Barcode = tmp.BarcodeNumber
+                                                               AND PIS.OrgID = tmp.OrgID
+                                                               AND PIS.SampleID = tmp.SampleCode
+                                                               and PIS.UID = tmp.UID
+                             Inner join OrderedInvestigations OI WITH (nolock) ON PIS.ID = OI.ID
+                                                                                  AND PIS.Type = OI.Type
+                                                                                  AND OI.OrgID = PIS.OrgID
+                                                                                  and oi.UID = pis.UID
+                       WHERE OI.ReferredType = 'ReflexTest'
+						   AND OI.VisitID = @pPatientVisitID
+				   
+					--print 33					
+                  SELECT @totaltestcount = Count(*)
+                  FROM   @INVESTIGATIONRESULTS
+		 
+				 
+                 WHILE @incrementcount <= @totaltestcount
+                    BEGIN
+                        SELECT @p_TestId = FeeId,
+                               @p_TestType = FeeType,
+                               @p_TATCalculationDateTime = CollectedDateTime,
+                               @BillingdetailsId = BillingDetailsID,
+							   @UID=UID
+                        FROM   @INVESTIGATIONRESULTS
+                        WHERE  RowId = @incrementcount
+						 
+  EXEC dbo.Pgettatreportdatetime
+              @p_OrgId,
+                          @p_TestId,
+                          @p_TestType,
+                          @p_ClientId,
+                          @p_TATCalculationDateTime,
+                          @p_TATProcessDateTime OUTPUT,
+						  @p_LogisticTimeasmins  OUTPUT,
+                          @p_SampleReceiptDateTime OUTPUT,
+						  @p_Processinghoursasmins OUTPUT,
+                          @p_ProcessStartDateTime OUTPUT,
+                          @p_TATDateTime OUTPUT,
+						  @p_LabendTime OUTPUT,
+						  @p_EarlyReportTime OUTPUT,
+                          @p_ReportDateTime OUTPUT,
+						  @p_Isdebug,   
+                          @ContextInfo
+
+                        INSERT INTO @TatDetail
+                        SELECT @p_TestId,
+                               @p_TestType,
+                               @p_TATDateTime,
+                               @p_ReportDateTime,
+                               @p_TATProcessDateTime,
+                               @p_SampleReceiptDateTime,
+                               @p_ProcessStartDateTime,
+                               @pPatientVisitID,
+                               @BillingdetailsId,
+							   @p_LogisticTimeasmins,
+							   @p_Processinghoursasmins,
+							   @p_LabendTime,
+                               @p_EarlyReportTime,
+                               NULL    AS ExcludeVIDlockID,
+                               NULL    AS CustomerCommittedTAT,
+                               Abs(Round(Datediff(hh, @p_ReportDateTime, CAST(@PatientVisitDateTime AS DATE)), 0)) as Excludetime,
+                               @p_OrgId,
+							   @UID
+
+                        SET @incrementcount = @incrementcount + 1
+                    END
+					
+                        UPDATE T
+                        SET    ExcludeVIDlockID = TVLE.ID
+                        FROM   @TatDetail T
+                               INNER JOIN TATVIDLockExclude TVLE (NOLOCK)
+                                       ON TVLE.OrgID = T.OrgID
+                                          AND TVLE.Isactive = 1
+                        WHERE  Excludetime BETWEEN TVLE.StartValue AND TVLE.EndValue
+
+                        UPDATE T
+                        SET    ExcludeVIDlockID = 9999
+                        FROM   @TatDetail T
+                        WHERE  ExcludeVIDlockID IS NULL
+                               AND ReportDateTime < CAST(@PatientVisitDateTime AS DATE);
+						
+
+                        WITH TempCustomerCommittedTAT
+                             AS (SELECT ExcludeVIDlockID,
+                                        MAX(ReportDateTime) As CustomerCommittedTAT
+                                 FROM   @TatDetail TT
+                                 GROUP  BY ExcludeVIDlockID)
+                        --SELECT * FROM TempCustomerCommittedTAT
+                        UPDATE TT
+                        SET    TT.CustomerCommittedTAT = TP.CustomerCommittedTAT
+                        FROM   @TatDetail TT
+                               INNER JOIN TempCustomerCommittedTAT TP
+								ON TP.ExcludeVIDlockID = TT.ExcludeVIDlockID
+
+						UPDATE TT
+						SET    TT.CustomerCommittedTAT = TT.ReportDateTime
+						FROM   @TatDetail TT WHERE ExcludeVIDlockID IS NULL
+					
+				
+				END
+				ELSE
+				 BEGIN
+						SELECT @TATDATE = NULL,
+								@ReportDeliveryDATE = NULL,
+							   @p_TATProcessDateTime = NULL,
+							   @p_SampleReceiptDateTime = NULL,
+							   @p_ProcessStartDateTime = NULL,
+							   @p_LogisticTimeasmins = NULL,
+							   @p_Processinghoursasmins = NULL,
+							   @p_LabendTime = NULL,
+							   @p_EarlyReportTime = NULL
+				END
+				 END
+
+					/***********Final Update********************/
+			 
+                  UPDATE OI
+                  SET    TatDateTime = td.TatDateTime,
+                         ReportDateTime = td.ReportDateTime,
+                         Tatreferencedatetime = td.TATProcessDateTime,
+             Tatsamplereceiptdatetime = td.TATSampleReceiptDateTime,
+                         Tatprocessstartdatetime = td.TATProcessStartDateTime,
+						 Logistictimeinmins=td.Logistictimeinmins,
+						 Processingtimeinmins=td.Processingtimeinmins,
+						 Labendtime=td.Labendtime,
+						 Earlyreporttime= ISNULL(td.Earlyreporttime,'00:00'),
+						 Tatreferencedatebase=@Tatprocessdatetype
+
+                  FROM   orderedinvestigations OI WITH(nolock)
+                             INNER JOIN @TatDetail TD  ON OI.ID = TD.ID AND OI.UID = TD.UID 	 AND OI.UID=TD.UID
+                  WHERE  oi.VisitID = @pPatientVisitID 
+				 
+				 
+				  UPDATE OI
+                  SET    TatDateTime = td.TatDateTime,
+                         ReportDateTime = td.ReportDateTime,
+                         Tatreferencedatetime = td.TATProcessDateTime,
+                         Tatsamplereceiptdatetime = td.TATSampleReceiptDateTime,
+                         Tatprocessstartdatetime = td.TATProcessStartDateTime,
+						 Logistictimeinmins=td.Logistictimeinmins,
+						 Processingtimeinmins=td.Processingtimeinmins,
+						 Labendtime=td.Labendtime,
+						 Earlyreporttime=ISNULL(td.Earlyreporttime,'00:00'),
+						 Tatreferencedatebase=@Tatprocessdatetype
+
+                  FROM   orderedinvestigations OI WITH(nolock)
+                               INNER JOIN @TatDetail TD  ON OI.ID = TD.ID AND OI.UID = TD.UID 	 AND OI.UID=TD.UID
+						 AND OI.UID=TD.UID AND OI.ReferredType='ReflexTest'
+
+                  WHERE  oi.VisitID = @pPatientVisitID 
+			
+				   
+                  UPDATE bd
+                  SET    TatDateTime = td.TatDateTime,
+                         ReportDateTime = td.ReportDateTime,
+                         Tatreferencedatetime = td.TATProcessDateTime,
+                         Tatsamplereceiptdatetime = td.TATSampleReceiptDateTime,
+                         Tatprocessstartdatetime = td.TATProcessStartDateTime,
+						 Logistictimeinmins=td.Logistictimeinmins,
+						 Processingtimeinmins=td.Processingtimeinmins,
+						 Labendtime= td.Labendtime,
+						 Earlyreporttime= td.Earlyreporttime,
+                         Tatreferencedatebase = @Tatprocessdatetype,
+                         CustomerCommittedTAT = TD.CustomerCommittedTAT
+                  FROM   BillingDetails BD WITH(nolock)
+				  INNER JOIN @TatDetail TD ON  BD.FeeId = TD.ID AND BD.FeeType = TD.Type  -- BD.BillingDetailsID = td.BillingDetailsID AND BD.FeeId= TD.ID
+				  WHERE  FinalBillID = @pFinalbillID
+				
+				   
+				  SELECT @pTatDateTime =  Max(ISNull(TatDateTime,''))
+                  FROM   orderedinvestigations oi
+				  WHERE  OI.VisitID = @pPatientVisitID  
+				     AND OI.OrgID = @RecOrgID
+					 group by TatDateTime
+				  SELECT @ReportDeliveryDATE = Max(ISNull(ReportDateTime,''))
+                  FROM   orderedinvestigations oi
+				  WHERE  OI.VisitID = @pPatientVisitID  
+				     AND OI.OrgID = @RecOrgID
+				group by ReportDateTime
+                  UPDATE fb
+                  SET    fb.TATDate = @pTatDateTime,
+                         fb.ReportDateTime = @ReportDeliveryDATE
+                  FROM   finalbill fb (nolock)
+				 WHERE  fb.VisitID = @pPatientVisitID
+                    AND fb.OrgID = @RecOrgID
+		  DECLARE @ConfigValues [nvarchar](max) 
+SELECT @ConfigValues = ConfigValue 
+FROM   ConfigKeyMaster ckm  
+INNER JOIN ConfigOrgMaster com  
+ON ckm.ConfigKeyID = com.ConfigKeyID 
+WHERE  ckm.ConfigKey = 'NotifyPathworks' 
+AND com.OrgID = @pOrgID 
+
+IF( @ConfigValues = 'Y' ) 
+BEGIN 
+				 /*EMail and SMS*/
+				 DECLARE @tblActionList TABLE
+                    (
+					  ContextType       VARCHAR(50) DEFAULT(''),
+                       Description       VARCHAR(max) DEFAULT(''),
+                       ActionType        VARCHAR(124) DEFAULT(''),
+                       Attributes        VARCHAR(500) DEFAULT(''),
+                       MailFrom          VARCHAR(124) DEFAULT(''),
+                       MailTo            VARCHAR(1000) DEFAULT(''),
+                       CCTo              VARCHAR(124) DEFAULT(''),
+                       BccTo             VARCHAR(124) DEFAULT(''),
+					  Subject    VARCHAR(500) DEFAULT(''),
+                       NAME              VARCHAR(124) DEFAULT(''),
+                       PhoneNo           VARCHAR(124) DEFAULT(''),
+                       RedirectURL       VARCHAR(255) DEFAULT(''),
+                       PatientNumber     VARCHAR(124) DEFAULT(''),
+                       MsgedDate         VARCHAR(124) DEFAULT(''),
+						OrgName           VARCHAR(124) DEFAULT(''),
+                       LocationName      VARCHAR(124) DEFAULT(''),
+                       ClientStatus      VARCHAR(50) DEFAULT(''),
+						 BlockFrom         VARCHAR(50) DEFAULT(''),
+                       BlockTo           VARCHAR(50) DEFAULT(''),
+                       RefDoctorName     VARCHAR(50) DEFAULT(''),
+                       PublishedDate     VARCHAR(50) DEFAULT(''),
+                       InvsNValues       VARCHAR(max) DEFAULT(''),
+                       AccessionNumber   VARCHAR(max) DEFAULT(''),
+                       ClientName        VARCHAR(124) DEFAULT(''),
+                       PatientDueStatus  VARCHAR(50) DEFAULT(''),
+                       IsAttachment      VARCHAR(50) DEFAULT(''),
+                       Password          VARCHAR(255) DEFAULT(''),
+                       AdditionalContext VARCHAR(255) DEFAULT(''),
+                       Priority          INT DEFAULT(1),
+                       ApplicationUrl    VARCHAR(max) DEFAULT(''),
+                       VisitNumber       VARCHAR(50) DEFAULT(''),
+                       AttachmentName    VARCHAR(500) DEFAULT(''),
+                       ClientCode        VARCHAR(20) DEFAULT(''),
+                       SampleName        VARCHAR(100) DEFAULT(''),
+                       TestName          VARCHAR(2000) DEFAULT(''),
+                       RejectedDate      DATETIME DEFAULT(''),
+                       ReCollectedDate   DATETIME,
+                       BarcodeNumber     VARCHAR(255),
+                       Reason            VARCHAR(500),
+                       IsClientBlinding  VARCHAR(10), 
+		           --    IsCreditLimitExist  VARCHAR(50) ,
+				   BillType VARCHAR(50) ,
+					   ReportLanguage VARCHAR(50) ,
+					   NoofCopies VARCHAR(50),
+					  ClientID BIGINT 
+
+                    --Status   VARCHAR(20) DEFAULT('')  
+                    )
+
+				  DECLARE @NewOrgID BIGINT
+                  DECLARE @ContextType VARCHAR(10)
+                  DECLARE @NewRoleID BIGINT
+                  DECLARE @AccessionNumber VARCHAR(200)
+                  DECLARE @PatientID BIGINT
+                  DECLARE @OrgAddID BIGINT
+
+				  
+                  SELECT @PatientID = PatientID,
+                         @OrgAddID = OrgAddressID,
+                         @NewOrgID = OrgID
+                  FROM   PatientVisit WITH (nolock)
+                  WHERE  PatientVisitId = @pPatientVisitID
+
+				  
+                  SELECT @NewRoleID = RoleID
+                  FROM   Role
+                  WHERE  OrgID = @NewOrgID
+                         AND RoleName = 'Doctor'
+				
+				  SELECT @AccessionNumber = (SELECT Stuff((SELECT N', ' + Ltrim(Rtrim(AccessionNumber))
+                                                           FROM   OrderedInvestigations OI WITH ( NOLOCK)
+														--   JOIN  @TatDetail TD   ON  OI.ID = TD.ID AND OI.UID = TD.UID
+														   WHERE  OI.VisitID = @pPatientVisitID
+                                                           FOR XML PATH(''), TYPE).value('text()[1]', 'nvarchar(max)'), 1, 2, N'') AS AccessionNumber)
+					 
+					INSERT INTO @tblActionList
+                --    EXEC Pperformingnextaction @PageID=474,@ButtonName=N'btnSaveforTAT',@RoleID=@NewRoleID,@PatientID=@PatientID,@OrgID=@NewOrgID,@PatientVisitID=@pPatientVisitID,@pSampleID=0,@pIds=@AccessionNumber,@ContextInfo=@ContextInfo					
+				    EXEC Pperformingnextaction @PageID=474,@ButtonName=N'btnSaveToDispatch',@RoleID=@NewRoleID,@PatientID=@PatientID,@OrgID=@NewOrgID,@PatientVisitID=@pPatientVisitID,@pSampleID=0,@pIds=@AccessionNumber,@ContextInfo=@ContextInfo						 
+                 	
+			--	 select * from @tblActionList
+				
+				   
+				   DECLARE @ActionDetail [ACTIONDETAILS]
+                        DELETE FROM @ActionDetail
+						/*
+					    DECLARE @pBillNumber VARCHAR(500)
+						SELECT @pBillNumber = BillNumber 
+						FROM   FinalBill(nolock)
+						WHERE  FinalBillID = @pFinalBillID
+						*/
+      INSERT INTO @ActionDetail
+                                  (ActionType,Value,AdditionalContext,Category,version,Status,OrgID,OrgAddressID,CreatedAt,CreatedBy,Template,ContextType,IsAttachment,Subject,AttachmentName,ReportType,ReportLanguage,NoofCopies
+
+)
+                        SELECT ActionType,
+								 CASE
+                                 WHEN ActionType = 'EMAIL' THEN MailTo
+								 WHEN ActionType='Sms' then PhoneNo
+                                 ELSE NULL
+                               END,
+							    CASE
+                                  WHEN ActionType = 'EMAIL'  OR ActionType = 'PDF'  THEN 
+									'<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>'
+                                   + CONVERT(VARCHAR, @pPatientVisitID)
+                                   + '</VisitID><FinallBillID>'
+                                   + CONVERT(VARCHAR, @pFinalBillID)
+                                   + '</FinallBillID><BillNumber>' + CONVERT(VARCHAR, @pFinalBillID) +'</BillNumber></ContextInfo>'
+								 ELSE
+										'<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>'
+										   + CONVERT(VARCHAR, @pPatientVisitID)
+										   + '</VisitID><AccessionNumber>'
+										   + @AccessionNumber
+										   + '</AccessionNumber></ContextInfo>'                                 
+                               END,
+                              AdditionalContext,
+                               '',
+                               CASE WHEN PatientDueStatus ='OPEN' THEN 'DUE'
+									 ELSE '' END,
+                               @NewOrgID,
+                               @OrgAddID,
+                               Getdate(),
+                               '',
+								Description,
+                               ContextType,
+                               IsAttachment,
+                               Subject,
+                               Replace(Replace(Replace(AttachmentName, '{VisitNumber}', VisitNumber), '{Name}', Name), '{ClientCode}', ClientCode) AS AttachmentName, CASE
+                                WHEN ActionType='Sms' then NULL
+                                 ELSE 'Final'
+                               END,'en-GB',1
+                        FROM   @tblActionList		
+                       WHERE  ActionType in ( 'Email', 'Sms','pdf','ROUNDBPDF' ) 	-- ContextType =  'TAT' and
+					
+			--	select * from @ActionDetail
+					   
+                        EXEC PinsertnotificationsLis @ActionDetail,@ContextInfo
+              
+	end
+         
+END
+

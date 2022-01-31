@@ -1,0 +1,751 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pUpdatePatientVisitInvestigationStatus]   
+@pPatientInvTable [dbo].[PatientInvestigation] READONLY,   
+@UID              nvarchar(255),   
+@pReturnStatus    [int] OUTPUT,   
+@ContextInfo      [UDT_Context] READONLY   
+WITH EXECUTE AS OWNER   
+AS   
+  BEGIN   
+      set @pReturnStatus=-1   
+  
+      DECLARE @CreatedAt DateTime   
+      DECLARE @CreatedBy bigint   
+  
+      SELECT @CreatedAt = dbo.Fn_getserverdate(@ContextInfo)   
+  
+      SELECT @CreatedBy = LoginID   
+      FROM   @ContextInfo   
+  
+      insert into OrderedInvestigations_Hist   
+                  (VisitID,   
+                   ID,   
+                   Name,   
+                   Type,   
+                   Status,   
+                   AccessionNumber,   
+                   StudyInstanceUId,   
+                   PerformingPhysicain,   
+                   ComplaintId,   
+                   OrgID,   
+                   CreatedBy,   
+                   CreatedAt,   
+                   ModifiedBy,   
+                   ModifiedAt,   
+                   InvestigationsType,   
+                   ReferralID,   
+                   PaymentStatus,   
+                   UID,   
+                   ResCaptureLoc,   
+                   MPPSStatus,   
+                   ReferredAccessionNo,   
+                   TaskID,   
+                   LabNo,   
+                   RefPhysicianID,   
+                   RefPhyName,   
+                   ReferenceType,   
+                   ReferredType,   
+                   InvestigationComment,   
+                   PrintCount,   
+                   VisitSampleStatus,   
+                   SamplePickupDate,   
+                   Migrated_Patient_Number,   
+                   Migrated_Request_Number,   
+                   Migrated_Visit_Number,   
+                   Migrated_TestCode,   
+                   Patient_HISTID,   
+                   PkgID,   
+                   PkgName,   
+                   IsStat,   
+                   ReportDateTime,   
+                   TatDateTime,   
+                   SortedTask,   
+                   Print_Task,   
+                   Print_taskid,   
+                   IsCoPublish,   
+                   IsBlindingClient,   
+                   IsSensitive,   
+                   Isarchive,   
+                   OrderedID,   
+                   BillingID,   
+                   ReportCommitTime,   
+                   RecollectNotify,   
+                   PhysicianID,   
+                   OrderType,   
+                   BarcodeNumber,   
+                   updatestauts,   
+                   OrderID,   
+                   Deviceid,   
+                   TestCode,   
+                   OrderTaskID,   
+                   OrderedQty,   
+                   PatientVisitAttribID,   
+                   PerphyID,   
+                   Perphyname,   
+                   Performertype,   
+                   SampleID,   
+                   IsIntegrationTest,   
+                   BillingDetailsID,   
+                   Tatreferencedatetime,   
+                   Tatreferencedatebase,   
+                   Logistictimeinmins,   
+                   Tatsamplereceiptdatetime,   
+                   Processingtimeinmins,   
+                   Tatprocessstartdatetime,   
+                   Labendtime,   
+                   Earlyreporttime,   
+                   CustomerCommittedTAT,   
+                   IsNonPath,   
+                   CurrentLocationID,   
+                   MessageControlID,   
+                   TCODE,   
+                   HLMessageOBRDetailsID,   
+                   PreviousStatus)   
+      select OI.VisitID,   
+             OI.ID,   
+             OI.Name,   
+             OI.Type,   
+             OI.Status,   
+             OI.AccessionNumber,   
+             OI.StudyInstanceUId,   
+             OI.PerformingPhysicain,   
+             OI.ComplaintId,   
+             OI.OrgID,   
+             OI.CreatedBy,   
+             OI.CreatedAt,   
+             OI.ModifiedBy,   
+             OI.ModifiedAt,   
+             OI.InvestigationsType,   
+             OI.ReferralID,   
+             OI.PaymentStatus,   
+             OI.UID,   
+             OI.ResCaptureLoc,   
+             OI.MPPSStatus,   
+             OI.ReferredAccessionNo,   
+             OI.TaskID,   
+             OI.LabNo,   
+             OI.RefPhysicianID,   
+             OI.RefPhyName,   
+             OI.ReferenceType,   
+             OI.ReferredType,   
+             OI.InvestigationComment,   
+             OI.PrintCount,   
+             OI.VisitSampleStatus,   
+             OI.SamplePickupDate,   
+             OI.Migrated_Patient_Number,   
+             OI.Migrated_Request_Number,   
+             OI.Migrated_Visit_Number,   
+             OI.Migrated_TestCode,   
+             OI.Patient_HISTID,   
+             OI.PkgID,   
+             OI.PkgName,   
+             OI.IsStat,   
+             OI.ReportDateTime,   
+             OI.TatDateTime,   
+             OI.SortedTask,   
+             OI.Print_Task,   
+             OI.Print_taskid,   
+             OI.IsCoPublish,   
+             OI.IsBlindingClient,   
+             OI.IsSensitive,   
+             OI.Isarchive,   
+             OI.OrderedID,   
+             OI.BillingID,   
+             OI.ReportCommitTime,   
+             OI.RecollectNotify,   
+             OI.PhysicianID,   
+             OI.OrderType,   
+             OI.BarcodeNumber,   
+             OI.updatestauts,   
+             OI.OrderID,   
+             OI.Deviceid,   
+             OI.TestCode,   
+             OI.OrderTaskID,   
+             OI.OrderedQty,   
+             OI.PatientVisitAttribID,   
+             OI.PerphyID,   
+             OI.Perphyname,   
+             OI.Performertype,   
+             OI.SampleID,   
+             OI.IsIntegrationTest,   
+             OI.BillingDetailsID,   
+             OI.Tatreferencedatetime,   
+             OI.Tatreferencedatebase,   
+             OI.Logistictimeinmins,   
+             OI.Tatsamplereceiptdatetime,   
+             OI.Processingtimeinmins,   
+             OI.Tatprocessstartdatetime,   
+             OI.Labendtime,   
+             OI.Earlyreporttime,   
+             OI.CustomerCommittedTAT,   
+             OI.IsNonPath,   
+             OI.CurrentLocationID,   
+             OI.MessageControlID,   
+             OI.TCODE,   
+             OI.HLMessageOBRDetailsID,   
+             OI.PreviousStatus   
+      from   @pPatientInvTable P   
+             inner join OrderedInvestigations OI (nolock)   
+                     on OI.VisitID = P.PatientVisitID   
+                        and OI.AccessionNumber = P.AccessionNumber   
+                        and OI.ID = P.InvestigationID   
+                        and OI.Type = P.Type   
+      where  OI.Status = 'PartiallyApproved'   
+  
+  insert into invvaluesforintegration(Patientvisitid,Investigationid,Value,Status,IsTransfer,Createdat,Createdby,IsStatusFlag,GroupId,RootGroupId)  
+  select  IV.Patientvisitid,IV.Investigationid,IV.Value,'Approve',0,@CreatedAt,@CreatedBy,0,OI.Groupid,null from   @pPatientInvTable P   
+             inner join PatientInvestigation OI (nolock)   
+                     on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.AccessionNumber = P.AccessionNumber and isnull(OI.statustype,'') not in ('RR','RC')  
+      INNER JOIN ORDEREDINVESTIGATIONS OI1 (NOLOCK) ON OI1.AccessionNumber=OI.AccessionNumber AND OI1.ORGID=OI.ORGID  
+      inner join investigationvalues IV (nolock) on IV.patientvisitid=OI.patientvisitid and IV.investigationid=OI.investigationid and isnull(iv.statustype,'') not in ('RR','RC')  
+      where  OI.Status = 'PartiallyApproved'   
+  
+      UPDATE OI   
+      set    OI.Status = 'Approve',   
+             OI.ModifiedAt = @CreatedAt,   
+             OI.ModifiedBy = @CreatedBy   
+      from   @pPatientInvTable P   
+             inner join OrderedInvestigations OI (nolock)   
+                     on OI.VisitID = P.PatientVisitID   
+                        and OI.AccessionNumber = P.AccessionNumber   
+                        and OI.ID = P.InvestigationID   
+                        and OI.Type = P.Type   
+      where  OI.Status = 'PartiallyApproved'   
+  
+   UPDATE OI   
+      set    OI.Status = 'Approve',  
+          OI.ModifiedAt = @CreatedAt,   
+             OI.ModifiedBy = @CreatedBy,  
+    OI.ApprovedBy= ISNULL(P.ApprovedBy, @CreatedBy),  
+    OI.ApprovedAt=@CreatedAt  
+      from   @pPatientInvTable P   
+             inner join PatientInvestigation OI (nolock)   
+                     on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.AccessionNumber = P.AccessionNumber   
+      where  OI.Status = 'PartiallyApproved'   
+  
+    insert into PatientInvestigation_Hist(PatientVisitID,InvestigationID, InvestigationName, CreatedBy, CreatedAt, ModifiedBy, ModifiedAt, InvestigationMethodID, InvestigationSampleContainerID, SampleID,   
+   InvestigationSiteID, IsCompleted, CollectedDateTime, Status, ComplaintId, GroupID, GroupName, Reason, ReportStatus, ReferenceRange, MethodName,   
+   IPInvSampleCollectionMasterID, OrgID, WorklistDeletedStatus, PerformingPhysicainName, KitID, KitName, InstrumentID, InstrumentName, Interpretation,   
+   PrincipleID, PrincipleName, QCData, PackageID, PackageName, ApprovedBy, PatientInvID, OrderedAt, UID, GroupComment, ApprovedAt, AccessionNumber,   
+   IsAbnormal, InvStatusReasonID, ValidatedBy, ValidatedAt, GetCurrentDate, WorklistType, WorklistTypeID, PrintableRange)  
+      select OI.PatientVisitID,   
+             OI.InvestigationID,   
+             OI.InvestigationName,   
+             OI.CreatedBy,   
+             OI.CreatedAt,   
+             OI.ModifiedBy,   
+             OI.ModifiedAt,   
+             OI.InvestigationMethodID,   
+             OI.InvestigationSampleContainerID,   
+             OI.SampleID,   
+             OI.InvestigationSiteID,   
+             OI.IsCompleted,   
+             OI.CollectedDateTime,   
+             OI.Status,   
+             OI.ComplaintId,   
+             OI.GroupID,   
+             OI.GroupName,   
+             OI.Reason,   
+             OI.ReportStatus,   
+             OI.ReferenceRange,   
+             OI.MethodName,   
+             OI.IPInvSampleCollectionMasterID,   
+             OI.OrgID,   
+             OI.WorklistDeletedStatus,   
+             OI.PerformingPhysicainName,   
+             OI.KitID,   
+             OI.KitName,   
+             OI.InstrumentID,   
+             OI.InstrumentName,   
+             OI.Interpretation,   
+             OI.PrincipleID,   
+             OI.PrincipleName,   
+             OI.QCData,   
+             OI.PackageID,   
+             OI.PackageName,   
+             OI.ApprovedBy,   
+             OI.PatientInvID,   
+             OI.OrderedAt,   
+             OI.UID,   
+             OI.GroupComment,   
+             OI.ApprovedAt,   
+             OI.AccessionNumber,   
+             OI.IsAbnormal,   
+             OI.InvStatusReasonID,   
+             OI.ValidatedBy,   
+             OI.ValidatedAt,   
+             @CreatedAt,   
+             OI.WorklistType,   
+             OI.WorklistTypeID,   
+             OI.PrintableRange   
+      from   @pPatientInvTable P   
+             inner join PatientInvestigation OI (nolock)   
+                     on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.AccessionNumber = P.AccessionNumber   
+   --   where  OI.Status = 'PartiallyApproved'  
+        
+  
+   UPDATE OI   
+      set  OI.PreviousStatus=OI.Status,  OI.Status = 'Approve',  
+    OI.ModifiedAt = @CreatedAt,   
+             OI.ModifiedBy =ISNULL(P.ApprovedBy, @CreatedBy)  
+   from @pPatientInvTable P  
+              inner join InvestigationValues OI (nolock)   
+                     on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.UID = P.GUID  and (OI.InvestigationID=P.InvestigationID)  
+      and P.Type='INV'  
+      where  OI.Status = 'PartiallyApproved'   
+    UPDATE OI   
+      set  OI.PreviousStatus=OI.Status,  OI.Status = 'Approve',  
+          OI.ModifiedAt = @CreatedAt,   
+             OI.ModifiedBy = ISNULL(P.ApprovedBy, @CreatedBy)  
+   from @pPatientInvTable P  
+   inner join InvestigationValues OI  on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.UID = P.GUID    
+      and P.Type='GRP'  
+      inner join PatientInvestigation PV      
+      ON PV.InvestigationID=OI.InvestigationID and PV.PatientVisitID=OI.PatientVisitID  
+      where  ISNULL(OI.statustype,'')not in ('RR','RC')  
+   -- UPDATE OI   
+   --   set  OI.PreviousStatus=OI.Status,  OI.Status = 'Approve',  
+   --       OI.ModifiedAt = @CreatedAt,   
+   --          OI.ModifiedBy = ISNULL(P.ApprovedBy, @CreatedBy)  
+   --from @pPatientInvTable P  
+   --inner join InvOrgGroup IOG(nolock) ON IOG.AttGroupID=P.InvestigationID and IOG.OrgID=P.OrgID  
+   --           inner join InvestigationValues OI (nolock)   
+   --                  on OI.PatientVisitID = P.PatientVisitID   
+   --                     and OI.UID = P.GUID  and (OI.GroupID=IOG.OrgGroupID)  
+   --   and P.Type='GRP'  
+   --   where  OI.Status = 'PartiallyApproved'   
+  
+   insert into InvestigationValueHistory(  
+   InvestigationValueID,Name,Value,InvestigationID,GroupID,PatientVisitID,UOMID,Status,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,UOMCode,  
+   GroupName,Orgid,PackageID,PackageName,UID,Dilution,DeviceID,DeviceValue,Precision,  
+   DeviceActualValue,ConvValue,DeviceErrorCode,IsAbnormal,PreviousStatus)  
+      select OI.InvestigationValueID,OI.Name,OI.Value,OI.InvestigationID,OI.GroupID,OI.PatientVisitID,OI.UOMID,OI.Status,OI.CreatedBy,OI.CreatedAt,  
+   OI.ModifiedBy,OI.ModifiedAt,OI.UOMCode,OI.GroupName,OI.Orgid,OI.PackageID,OI.PackageName,OI.UID,OI.Dilution,OI.DeviceID,OI.DeviceValue,OI.Precision,  
+      OI.DeviceActualValue,OI.ConvValue,OI.DeviceErrorCode,OI.IsAbnormal,OI.PreviousStatus from @pPatientInvTable P  
+              inner join InvestigationValues OI (nolock)   
+                     on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.UID = P.GUID  and (OI.InvestigationID=P.InvestigationID)  
+      and P.Type='INV'  
+      --where  OI.Status = 'PartiallyApproved'   
+   UNION  
+   select OI.InvestigationValueID,OI.Name,OI.Value,OI.InvestigationID,OI.GroupID,OI.PatientVisitID,OI.UOMID,OI.Status,OI.CreatedBy,OI.CreatedAt,  
+   OI.ModifiedBy,OI.ModifiedAt,OI.UOMCode,OI.GroupName,OI.Orgid,OI.PackageID,OI.PackageName,OI.UID,OI.Dilution,OI.DeviceID,OI.DeviceValue,OI.Precision,  
+      OI.DeviceActualValue,OI.ConvValue,OI.DeviceErrorCode,OI.IsAbnormal,OI.PreviousStatus   
+   from @pPatientInvTable P  
+   inner join InvestigationValues OI  on OI.PatientVisitID = P.PatientVisitID   
+                        and OI.UID = P.GUID    
+      and P.Type='GRP'  
+      inner join PatientInvestigation PV      
+      ON PV.InvestigationID=OI.InvestigationID and PV.PatientVisitID=OI.PatientVisitID  
+      where  ISNULL(OI.statustype,'')not in ('RR','RC')  
+   --select OI.InvestigationValueID,OI.Name,OI.Value,OI.InvestigationID,OI.GroupID,OI.PatientVisitID,OI.UOMID,OI.Status,OI.CreatedBy,OI.CreatedAt,  
+   --OI.ModifiedBy,OI.ModifiedAt,OI.UOMCode,OI.GroupName,OI.Orgid,OI.PackageID,OI.PackageName,OI.UID,OI.Dilution,OI.DeviceID,OI.DeviceValue,OI.Precision,  
+   --   OI.DeviceActualValue,OI.ConvValue,OI.DeviceErrorCode,OI.IsAbnormal,OI.PreviousStatus   
+   --from @pPatientInvTable P  
+   --inner join InvOrgGroup IOG(nolock) ON IOG.AttGroupID=P.InvestigationID and IOG.OrgID=P.OrgID  
+   --           inner join InvestigationValues OI (nolock)   
+   --                  on OI.PatientVisitID = P.PatientVisitID   
+   --                     and OI.UID = P.GUID    
+   --   and (OI.GroupID=IOG.OrgGroupID)  
+   --   and P.Type='GRP'  
+      --where  OI.Status = 'PartiallyApproved'  
+  
+   /******Sample Transfer***********************/  
+  
+    --Sample Transfer          
+   DECLARE @ApprovedBy bigint                                                                                            
+      DECLARE @tblVisitList AS TABLE  
+        (  
+           VisitID BIGINT,  
+     ApprovedBy BIGINT  
+        )  
+      DECLARE @tmpVisitList AS TABLE  
+        (  
+           Sno     INT,  
+           VisitID BIGINT,  
+     ApprovedBy BIGINT  
+        )  
+      DECLARE @VisitCount BIGINT  
+      DECLARE @pVisitID BIGINT  
+  
+      INSERT INTO @tblVisitList  
+                  (VisitID,ApprovedBy)  
+      SELECT DISTINCT PatientVisitID,ISNULL(ApprovedBy,@CreatedBy)  
+      FROM   @pPatientInvTable  
+  
+      INSERT INTO @tmpVisitList  
+                  (Sno,  
+                   VisitID,  
+       ApprovedBy)  
+      SELECT DISTINCT Row_number()  
+             OVER (  
+                          ORDER BY VisitID),  
+                      VisitID,  
+       ApprovedBy  
+      FROM   @tblVisitList  
+  
+      SELECT @VisitCount = Count(VisitID)  
+      FROM   @tblVisitList  
+  
+      --select * from @tmpVisitList                              
+      DECLARE @intFlag INT  
+  
+      SET @intFlag = 1  
+   DECLARE @CurrentPageID bigint=0  
+  
+   SELECT TOP 1 @CurrentPageID=PageID FROM Pages(NOLOCK) WHERE PageName='VisitBulkApproval' and PageURL='/Investigation/VisitBulkApproval.aspx'  
+      WHILE ( @intFlag <= @VisitCount )  
+        BEGIN  
+            PRINT @intFlag  
+  
+SELECT @pVisitID = VisitID,@ApprovedBy=ApprovedBy  
+            FROM   @tmpVisitList  
+            WHERE  Sno = @intFlag  
+  
+            DECLARE @RefVisitID AS BIGINT  
+  
+            SELECT @RefVisitID = ReferVisitID  
+            FROM   PatientVisit  
+            WHERE  PatientVisitId = @pVisitID  
+  
+            IF( Isnull(@RefVisitID, 0) <> 0 )  
+              BEGIN  
+                  DECLARE @tblAccessionNo AS TABLE  
+                    (  
+                       AccessionNo BIGINT,  
+                       Status      nvarchar(255),  
+                       ID          BIGINT,  
+                       Type        nvarchar(15),  
+                       VisitID     BIGINT,  
+                       RefVisitID  BIGINT,  
+                       UID         nvarchar(255)  
+                    )  
+  
+                  INSERT @tblAccessionNo  
+                         (Status,  
+                          AccessionNo,  
+                          ID,  
+                          Type,  
+                          VisitID,  
+                          RefVisitID)  
+                  SELECT STATUS,  
+                         ReferredAccessionNo,  
+                         ID,  
+                         Type,  
+                         VisitID,  
+                         @RefVisitID  
+                  FROM   OrderedInvestigations WITH (nolock)  
+                  WHERE  referredAccessionNo IN(SELECT AccessionNumber  
+                                                FROM   OrderedInvestigations WITH (nolock)  
+                                                WHERE  VisitID = @RefVisitID)  
+  
+                  --Select * from @tblAccessionNo                            
+                  UPDATE @tblAccessionNo  
+                  SET    UID = OI.UID  
+                  FROM   @tblAccessionNo tbl  
+                         INNER JOIN OrderedInvestigations OI WITH (NOLOCK)  
+                                 ON OI.AccessionNumber = tbl.AccessionNo  
+  
+                  UPDATE OrderedInvestigations  
+                  SET    Status = tbl.Status  
+                  FROM   OrderedInvestigations ORD WITH (NOLOCK)  
+                         INNER JOIN @tblAccessionNo tbl  
+                                 ON tbl.AccessionNo = ORD.AccessionNumber  
+                  WHERE  ORD.Status NOT IN( 'Retest' )  
+  
+                  UPDATE PatientInvestigation  
+                  SET    Status = tbl.Status  
+                  FROM   PatientInvestigation PIV WITH (NOLOCK)  
+                         INNER JOIN @tblAccessionNo tbl  
+                                 ON tbl.RefVisitID = PIV.PatientVisitID  
+                                    AND tbl.ID = PIV.InvestigationID  
+                  WHERE  Type = 'INV'  
+                         AND PIV.UID = tbl.UID  
+                         AND PIV.Status NOT IN( 'Retest' )  
+  
+                  UPDATE PatientInvestigation  
+                  SET    Status = tbl.Status  
+                  FROM   PatientInvestigation PIV WITH (NOLOCK)  
+                         INNER JOIN @tblAccessionNo tbl  
+                                 ON tbl.RefVisitID = PIV.PatientVisitID  
+                         INNER JOIN PatientVisit PV WITH (NOLOCK)  
+                               ON PV.PatientVisitId = tbl.RefVisitID  
+                         INNER JOIN InvOrgGroup IOG WITH (NOLOCK)  
+                                 ON tbl.ID = IOG.AttGroupID  
+                                    AND IOG.OrgID = PV.OrgID  
+                                    AND PIV.GroupID = IOG.OrgGroupID  
+                                    AND PIV.UID = tbl.UID  
+                  WHERE  Type = 'GRP'  
+                         AND PIV.Status NOT IN( 'Retest' )  
+  
+                  UPDATE PatientInvestigation  
+                  SET    Status = TBL1.Status  
+                  FROM   PatientInvestigation PIV WITH (NOLOCK)  
+                         INNER JOIN (SELECT DISTINCT IGM.InvestigationID,  
+                                                     tbl.Status,  
+                                                     tbl.ID,  
+                                     tbl.UID,  
+                                         tbl.RefVisitID  
+                                     FROM   PatientInvestigation PIV WITH ( NOLOCK)  
+                                            INNER JOIN @tblAccessionNo tbl  
+                                                    ON tbl.RefVisitID = PIV.PatientVisitID  
+                                            INNER JOIN PatientVisit PV WITH ( NOLOCK)  
+                                                    ON PV.PatientVisitId = tbl.RefVisitID  
+                                            INNER JOIN InvOrgGroup IOG WITH ( NOLOCK)  
+                                                    ON tbl.ID = IOG.AttGroupID  
+                                                       AND IOG.OrgID = PV.OrgID  
+                                            INNER JOIN InvGroupMapMaster IGM WITH ( NOLOCK)  
+ ON IGM.GroupID = IOG.OrgGroupID  
+                                                       --and PIV.GroupID = IOG.OrgGroupID     
+                                                       AND IGM.Parent = 'Y'  
+                                                       AND IGM.Active <> 'N'  
+                                                       AND PIV.UID = tbl.UID  
+                                     WHERE  Type = 'GRP') AS TBL1  
+                                 ON TBL1.InvestigationID = PIV.GroupID  
+                                    AND PIV.UID = TBL1.UID  
+                                    AND PIV.PatientVisitID = TBL1.RefVisitID  
+                  WHERE  PIV.Status NOT IN( 'Retest' )  
+  
+                  UPDATE PIV  
+                  SET    PIV.ApprovedBy = ISNULL(@ApprovedBy,@CreatedBy),  
+                         PIV.ApprovedAt = @CreatedAt  
+                  FROM   PatientInvestigation PIV WITH(NOLOCK)  
+                         INNER JOIN @tblAccessionNo tbl  
+                                 ON tbl.RefVisitID = PIV.PatientVisitID  
+                                    AND Tbl.AccessionNo = PIV.AccessionNumber  
+                  WHERE  PIV.Status IN( 'Approve', 'PartiallyApproved' )  
+  
+                  /*****     Notification Insert For Parent Org        ****/  
+                  DECLARE @NewOrgID BIGINT  
+                  DECLARE @ContextType nvarchar(10)  
+                  DECLARE @NewRoleID BIGINT  
+                  DECLARE @AccessionNumber nvarchar(200)  
+                  DECLARE @PatientID BIGINT  
+                  DECLARE @OrgAddID BIGINT  
+                  DECLARE @pClientID BIGINT  
+                  DECLARE @Status nvarchar(50)  
+                  DECLARE @DueStatus nvarchar (50)  
+                  DECLARE @tblActionList TABLE  
+                    (  
+                       ContextType       nvarchar(50) DEFAULT(''),  
+                       Description       nvarchar(max) DEFAULT(''),  
+                       ActionType        nvarchar(124) DEFAULT(''),  
+                       Attributes        nvarchar(500) DEFAULT(''),  
+                       MailFrom          nvarchar(124) DEFAULT(''),  
+                       MailTo            nvarchar(1000) DEFAULT(''),  
+                       CCTo              nvarchar(124) DEFAULT(''),  
+                    BccTo             nvarchar(124) DEFAULT(''),  
+                       Subject           nvarchar(500) DEFAULT(''),  
+                       NAME              nvarchar(124) DEFAULT(''),  
+                       PhoneNo           nvarchar(124) DEFAULT(''),  
+                       RedirectURL       nvarchar(255) DEFAULT(''),  
+                    PatientNumber     nvarchar(124) DEFAULT(''),  
+                       MsgedDate         nvarchar(124) DEFAULT(''),  
+                       OrgName           nvarchar(124) DEFAULT(''),  
+                       LocationName      nvarchar(124) DEFAULT(''),  
+                       ClientStatus      nvarchar(50) DEFAULT(''),  
+                       BlockFrom         nvarchar(50) DEFAULT(''),  
+                       BlockTo   nvarchar(50) DEFAULT(''),  
+                       RefDoctorName  nvarchar(50) DEFAULT(''),  
+                       PublishedDate     nvarchar(50) DEFAULT(''),  
+                       InvsNValues       nvarchar(max) DEFAULT(''),  
+                       AccessionNumber   nvarchar(max) DEFAULT(''),  
+                       ClientName        nvarchar(124) DEFAULT(''),  
+                       PatientDueStatus  nvarchar(50) DEFAULT(''),  
+                       IsAttachment      nvarchar(50) DEFAULT(''),  
+                       Password          nvarchar(255) DEFAULT(''),  
+                       AdditionalContext nvarchar(255) DEFAULT(''),  
+                       Priority          INT DEFAULT(1),  
+                       ApplicationUrl    nvarchar(max) DEFAULT(''),  
+                       VisitNumber       nvarchar(50) DEFAULT(''),  
+                       AttachmentName    nvarchar(500) DEFAULT(''),  
+                       ClientCode        nvarchar(20) DEFAULT(''),  
+                       SampleName        nvarchar(100) DEFAULT(''),  
+                       TestName          nvarchar(2000) DEFAULT(''),  
+                       RejectedDate      DATETIME DEFAULT(''),  
+                       ReCollectedDate   DATETIME,  
+                       BarcodeNumber     nvarchar(255),  
+                       Reason            nvarchar(500),  
+                       IsClientBlinding  nvarchar(10)  ,
+				       visitType VARCHAR(50) ,
+					   ReportLanguage VARCHAR(50) ,
+					   NoofCopies VARCHAR(50),
+					  ClientID BIGINT 
+                    --Status   nvarchar(20) DEFAULT('')   
+                    )  
+                  DECLARE @PerformingNextAction AS TABLE  
+                    (  
+                       PageID         BIGINT,  
+                       ButtonName     [nvarchar](20),  
+                       RoleID         [BIGINT],  
+                       PatientID      [BIGINT],  
+                       OrgID          [INT],  
+                       PatientVisitID [BIGINT]  
+                    )  
+  
+                  SELECT @PatientID = PatientID,  
+                         @OrgAddID = OrgAddressID,  
+                         @NewOrgID = OrgID  
+                  FROM   PatientVisit WITH (nolock)  
+                  WHERE  PatientVisitId = @RefVisitID  
+  
+                  SELECT @NewRoleID = RoleID  
+                  FROM   Role  
+                  WHERE  OrgID = @NewOrgID  
+                         AND RoleName = 'Doctor'  
+  
+                  SELECT @pClientID = ClientID  
+                  FROM   Visitclientmapping (NOLOCK)  
+                  WHERE  OrgID = @NewOrgID  
+                         AND VisitID = @RefVisitID  
+  
+                  IF( @pClientID = (SELECT ClientId  
+                                    FROM   Clientmaster (NOLOCK)  
+                                    WHERE  ClientCode = 'GENERAL'  
+                                           AND OrgID = @NewOrgID) )  
+                    BEGIN  
+                        SET @ContextType = 'P'  
+                    END  
+                  ELSE  
+                    BEGIN  
+                        SET @ContextType = 'CP'  
+                    END  
+  
+                  INSERT INTO @PerformingNextAction  
+                  SELECT DISTINCT @CurrentPageID               AS PageID,  
+                                  'btnVisitApproval'            AS ButtonName,  
+                 @NewRoleID        AS RoleID,  
+                                  PV.PatientID,  
+                                  PV.OrgID AS OrgID,  
+                                  OI.VisitID  
+                  FROM   @tblAccessionNo tbl  
+                         INNER JOIN OrderedInvestigations OI WITH (NOLOCK)  
+                                 ON tbl.AccessionNo = OI.AccessionNumber  
+                         INNER JOIN PatientVisit PV WITH (NOLOCK)  
+                                 ON tbl.RefVisitID = PV.PatientVisitId  
+                         INNER JOIN PatientInvestigation PINV WITH (NOLOCK)  
+                                 ON tbl.AccessionNo = pinv.AccessionNumber  
+                         LEFT JOIN Notifications NT WITH (NOLOCK)  
+                                ON tbl.RefVisitID = NT.IdentityID  
+      AND NT.Category = 'report'  
+                                   AND NT.ActionType = 'pdf'  
+                                   AND Nt.Createdat >= pinv.approvedat  
+                  WHERE  OI.VisitID = tbl.RefVisitID  
+                         AND OI.Status IN ( 'Approve', 'PartiallyApproved' )  
+                         AND NT.IdentityID IS NULL  
+                  GROUP  BY PV.PatientID,  
+                            PV.VisitNumber,  
+                            OI.VisitID,  
+                            OI.Status,  
+                            PV.CreatedAt,  
+                            PV.OrgID  
+  
+                  SELECT @AccessionNumber=(SELECT Stuff((SELECT N', ' + Ltrim(Rtrim(AccessionNumber)) FROM OrderedInvestigations  WITH (NOLOCK)  
+                  WHERE  Status IN('Approve','With Held','Rejected','PartiallyApproved')   AND VisitID=@RefVisitID  
+                  FOR XML PATH(''),TYPE).value('text()[1]','nvarchar(max)'),1,2,N'')  AS AccessionNumber)  
+  
+                  IF EXISTS(SELECT 1  
+                            FROM   @PerformingNextAction  
+                            WHERE  PatientVisitID = @RefVisitID)  
+                    BEGIN  
+                        DELETE FROM @tblActionList  
+  
+                        INSERT INTO @tblActionList  
+                        EXEC Pperformingnextaction  
+                          @PageID=@CurrentPageID,  
+                          @ButtonName=N'btnVisitApproval',  
+                          @RoleID=@NewRoleID,  
+                          @PatientID=@PatientID,  
+                          @OrgID=@NewOrgID,  
+                          @PatientVisitID=@RefVisitID,  
+                          @pSampleID=0,  
+                          @pIds='',  
+                          @ContextInfo=@ContextInfo  
+  
+                        SELECT @DueStatus = PatientDueStatus  
+                        FROM   @tblActionList  
+  
+                        IF ( @DueStatus = 'Open' )  
+                          BEGIN  
+                              SET @Status = 'DUE'  
+                          END  
+                        ELSE  
+                          BEGIN  
+                              SET @Status = ''  
+                          END  
+  
+                        DECLARE @ActionDetail [ACTIONDETAILS]  
+  
+                        DELETE FROM @ActionDetail  
+  
+                        INSERT INTO @ActionDetail  
+                                    (ActionType,  
+                                     Value,  
+                                     AdditionalContext,  
+                                     Category,  
+                                     version,  
+                                     Status,  
+                                     OrgID,  
+                                     OrgAddressID,  
+                                     CreatedAt,  
+                                     CreatedBy,  
+                                     Template,  
+                                     ContextType,  
+                                     IsAttachment,  
+                                     Subject,  
+                                     AttachmentName)  
+                        SELECT ActionType,  
+                               CASE  
+WHEN ActionType = 'EMAIL' THEN MailTo  
+                                 ELSE ''  
+                               END,  
+                               '<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>'  
+                               + CONVERT(nvarchar, @RefVisitID)  
+                               + '</VisitID><AccessionNumber>'  
+                               + @AccessionNumber  
+                               + '</AccessionNumber></ContextInfo>',  
+                               'Report',  
+                               '',  
+                               @Status,  
+                               @NewOrgID,  
+                               @OrgAddID,  
+                               dbo.Fn_getserverdate(@ContextInfo),  
+                               '',  
+           Description,  
+     ContextType,  
+                               IsAttachment,  
+                               Subject,  
+                               Replace(Replace(Replace(AttachmentName, '{VisitNumber}', VisitNumber), '{Name}', Name), '{ClientCode}', ClientCode) AS AttachmentName  
+                        FROM   @tblActionList  
+                        WHERE  ContextType = @ContextType  
+  
+                        --SELECT * FROM @ActionDetail  
+                        EXEC pInsertNotificationsLis  
+                          @ActionDetail,  
+                          @ContextInfo  
+                    END  
+              END  
+  
+            SET @intFlag = @intFlag + 1   
+        END   
+  
+  
+   /******End Sample Transfer*******************/  
+  
+  
+  
+  
+  
+      set @pReturnStatus=1   
+  END   
+  
+  
+  

@@ -1,0 +1,3148 @@
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ActionMaster' AND SC.NAME = 'LanguageCode') 
+BEGIN
+ALTER TABLE ActionMaster ADD LanguageCode nvarchar(10)
+END
+GO
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInUsers' AND SC.NAME = 'CreatedBy') 
+BEGIN
+ALTER TABLE LoggedInUsers ADD CreatedBy bigint
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInUsers' AND SC.NAME = 'ModifiedAt') 
+BEGIN
+ALTER TABLE LoggedInUsers ADD ModifiedAt datetime
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInUsers' AND SC.NAME = 'ModifiedBy') 
+BEGIN
+ALTER TABLE LoggedInUsers ADD ModifiedBy bigint
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInUsers' AND SC.NAME = 'InventoryLocationID') 
+BEGIN
+ALTER TABLE LoggedInUsers ADD InventoryLocationID int
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'MenuMasterHeader'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE MenuMasterHeader ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'MenuMasterHeader'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE MenuMasterHeader ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'MenuMasterHeader'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE MenuMasterHeader ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'MenuMasterHeader'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE MenuMasterHeader ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'MenuMasterHeader'
+			AND SC.NAME = 'CssClass'
+		)
+BEGIN
+	ALTER TABLE MenuMasterHeader ADD CssClass NVARCHAR(510)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'CategoryText'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD CategoryText NVARCHAR(100)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'LanguageCode'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD LanguageCode NVARCHAR(40)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskActions'
+			AND SC.NAME = 'DisplayText'
+		)
+BEGIN
+	ALTER TABLE TaskActions ADD DisplayText NVARCHAR(max)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'LanguageCode'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD LanguageCode NVARCHAR(200)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'CurrencyDisplayText'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD CurrencyDisplayText NVARCHAR(200)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'CurrencyOrgMapping'
+			AND SC.NAME = 'MinorCurrencyDisplayText'
+		)
+BEGIN
+	ALTER TABLE CurrencyOrgMapping ADD MinorCurrencyDisplayText NVARCHAR(200)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'SystemFeedBackType'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE SystemFeedBackType ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'SystemFeedBackType'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE SystemFeedBackType ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'SystemFeedBackType'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE SystemFeedBackType ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'SystemFeedBackType'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE SystemFeedBackType ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'SystemFeedBackType'
+			AND SC.NAME = 'LangCode'
+		)
+BEGIN
+	ALTER TABLE SystemFeedBackType ADD LangCode NVARCHAR(15)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE OrganizationAddress ADD AddLevel1 INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE OrganizationAddress ADD AddLevel2 INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'TimeDifference'
+		)
+BEGIN
+	ALTER TABLE OrganizationAddress ADD TimeDifference TIME(7)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'TimeZone'
+		)
+BEGIN
+	ALTER TABLE OrganizationAddress ADD TimeZone NVARCHAR(255)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Login'
+			AND SC.NAME = 'TaskNotification'
+		)
+BEGIN
+	ALTER TABLE LOGIN ADD TaskNotification NCHAR(1)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Login'
+			AND SC.NAME = 'IsInstanceCreated'
+		)
+BEGIN
+	ALTER TABLE LOGIN ADD IsInstanceCreated BIT
+END
+GO
+
+
+
+
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'ParentLocationTypeID'
+		)
+BEGIN
+	ALTER TABLE Locations ADD ParentLocationTypeID INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'TINNO'
+		)
+BEGIN
+	ALTER TABLE Locations ADD TINNO NVARCHAR(50)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'DLNO'
+		)
+BEGIN
+	ALTER TABLE Locations ADD DLNO NVARCHAR(50)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'LocationCode'
+		)
+BEGIN
+	ALTER TABLE Locations ADD LocationCode NVARCHAR(50)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'RootLocationID'
+		)
+BEGIN
+	ALTER TABLE Locations ADD RootLocationID INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Locations'
+			AND SC.NAME = 'IsDefaults'
+		)
+BEGIN
+	ALTER TABLE Locations ADD IsDefaults BIT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'theme'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE theme ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'theme'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE theme ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'theme'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE theme ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'theme'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE theme ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'theme'
+			AND SC.NAME = 'LangCode'
+		)
+BEGIN
+	ALTER TABLE theme ADD LangCode NVARCHAR(100)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvGroupMaster'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvGroupMaster ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvGroupMaster'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvGroupMaster ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvGroupMaster'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE InvGroupMaster ADD ModifiedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvGroupMaster'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE InvGroupMaster ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup ADD Createdat DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup_History'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup_History ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup_History'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup_History ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup_History'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup_History ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvOrgGroup_History'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE InvOrgGroup_History ADD ModifiedAt DATETIME
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationMaster'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvestigationMaster ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationMaster'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationMaster ADD CreatedBy BIGINT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationMaster'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationMaster ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationMaster'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE InvestigationMaster ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMappingHistory'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMappingHistory ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMappingHistory'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMappingHistory ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMappingHistory'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMappingHistory ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMappingHistory'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMappingHistory ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMappingHistory'
+			AND SC.NAME = 'IsNonReportable'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMappingHistory ADD IsNonReportable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'RoleDeptMap'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE RoleDeptMap ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'RoleDeptMap'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE RoleDeptMap ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'RoleDeptMap'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE RoleDeptMap ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'RoleDeptMap'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE RoleDeptMap ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskProfile'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE TaskProfile ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskProfile'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE TaskProfile ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskProfile'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE TaskProfile ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TaskProfile'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE TaskProfile ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TrustedOrgActions'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE TrustedOrgActions ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TrustedOrgActions'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE TrustedOrgActions ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TrustedOrgActions'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE TrustedOrgActions ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'TrustedOrgActions'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE TrustedOrgActions ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PageMapping'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE PageMapping ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LocationUserMap'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE LocationUserMap ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LocationUserMap'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE LocationUserMap ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LocationUserMap'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE LocationUserMap ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LocationUserMap'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE LocationUserMap ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'VisitClientMapping'
+			AND SC.NAME = 'EligibleRateTypeID'
+		)
+BEGIN
+	ALTER TABLE VisitClientMapping ADD EligibleRateTypeID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'VisitClientMapping'
+			AND SC.NAME = 'EligibleClientID'
+		)
+BEGIN
+	ALTER TABLE VisitClientMapping ADD EligibleClientID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'VisitClientMapping'
+			AND SC.NAME = 'IsBilled'
+		)
+BEGIN
+	ALTER TABLE VisitClientMapping ADD IsBilled NCHAR(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'VisitClientMapping'
+			AND SC.NAME = 'IsRateCardChanged'
+		)
+BEGIN
+	ALTER TABLE VisitClientMapping ADD IsRateCardChanged NCHAR(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'BillingDetails'
+			AND SC.NAME = 'EligibleAmount'
+		)
+BEGIN
+	ALTER TABLE BillingDetails ADD EligibleAmount DECIMAL(18, 2)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'BillingDetails'
+			AND SC.NAME = 'CoSharing'
+		)
+BEGIN
+	ALTER TABLE BillingDetails ADD CoSharing DECIMAL(18, 2)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'BillingDetails'
+			AND SC.NAME = 'RateRefID'
+		)
+BEGIN
+	ALTER TABLE BillingDetails ADD RateRefID INT
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'BillingDetails'
+			AND SC.NAME = 'Comments'
+		)
+BEGIN
+	ALTER TABLE BillingDetails ADD Comments nvarchar(255)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueDetails'
+			AND SC.NAME = 'DeptID'
+		)
+BEGIN
+	ALTER TABLE PatientDueDetails ADD DeptID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'IsIntegration'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD IsIntegration NCHAR(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'BookingID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD BookingID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'ReasonID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD ReasonID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'ServiceDiscountMappingID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD ServiceDiscountMappingID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'KnowledgeOfServiceID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD KnowledgeOfServiceID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'VisitStateMasterID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD VisitStateMasterID TINYINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'Old_PatVstID'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD Old_PatVstID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientVisit'
+			AND SC.NAME = 'IsWalkIn'
+		)
+BEGIN
+	ALTER TABLE PatientVisit ADD IsWalkIn NCHAR(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'ReferenceType'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD ReferenceType NVARCHAR(50)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'ParentID'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD ParentID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'BookingStatusId'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD BookingStatusId INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'BookingPriority'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD BookingPriority INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'PaymentTypeID'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD PaymentTypeID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'VisitPurposeID'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD VisitPurposeID INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'GroupID'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD GroupID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'Remarks'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD Remarks NVARCHAR(4000)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'Altmobilenoone'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD Altmobilenoone NVARCHAR(20)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'Altmobilenotwo'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD Altmobilenotwo NVARCHAR(20)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD CountryID BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD CityCode INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'DistrictCode'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD DistrictCode INT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Bookings'
+			AND SC.NAME = 'PostalCode'
+		)
+BEGIN
+	ALTER TABLE Bookings ADD PostalCode NVARCHAR(40)
+END
+GO
+
+
+
+
+
+
+IF NOT EXISTS(SELECT * FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.Login') and name='DF__Login__TaskNotif__01430CDD')
+BEGIN
+  ALTER TABLE [dbo].[Login] ADD  CONSTRAINT [DF__Login__TaskNotif__01430CDD]  DEFAULT ('Y') FOR [TaskNotification]
+END
+GO
+
+IF NOT EXISTS ( SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Login'
+			AND SC.NAME = 'IsInstanceCreated' )
+BEGIN
+  ALTER TABLE [dbo].[Login] ADD  DEFAULT ((0)) FOR [IsInstanceCreated]
+END
+
+
+
+GO
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMapping'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMapping ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMapping'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMapping ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMapping'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMapping ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'InvestigationOrgMapping'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE InvestigationOrgMapping ADD ModifiedAt DATETIME
+END
+GO
+--
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'FeeSubType'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD FeeSubType nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'ChartAccCode'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD ChartAccCode nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'IsAmountEditable'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD IsAmountEditable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'IsRefundable'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD IsRefundable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'IsActive'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD IsActive nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'ServiceCode'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD ServiceCode nvarchar(255)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'GeneralBillingMaster'
+			AND SC.NAME = 'FeeTypeGroupOrgID'
+		)
+BEGIN
+	ALTER TABLE GeneralBillingMaster ADD FeeTypeGroupOrgID bigint
+END
+GO
+
+--
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'Name'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD Name nvarchar(255)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'ChartAccCode'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD ChartAccCode nvarchar(10)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsAmountEditable'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsAmountEditable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsRefundable'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsRefundable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsTaxable'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsTaxable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsDiscountable'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsDiscountable nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsActive'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsActive nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'ServiceCode'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD ServiceCode nvarchar(255)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'FeeTypeGroupOrgID'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD FeeTypeGroupOrgID bigint
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'IsFollowUpLogic'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD IsFollowUpLogic nchar(1)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpeciality'
+			AND SC.NAME = 'DischargeSummary'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpeciality ADD DischargeSummary nvarchar(max)
+END
+GO
+
+---------Speciality------------
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Speciality'
+			AND SC.NAME = 'AttuneID'
+		)
+BEGIN
+	ALTER TABLE Speciality ADD AttuneID bigint
+END
+GO
+
+----------OrganizationSpecialityMapping------------
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'ServiceCode'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD ServiceCode nvarchar(255)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'VersionID'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD VersionID int
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD ModifiedAt datetime
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'DayCare'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD DayCare decimal(18,2)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'HomeService'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD HomeService decimal(18,2)
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping'
+			AND SC.NAME = 'TeleService'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping ADD TeleService decimal(18,2)
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationSpecialityMapping_HIST'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE OrganizationSpecialityMapping_HIST ADD ModifiedAt datetime
+END
+GO
+--
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Tasks'
+			AND SC.NAME = 'DeptID'
+		)
+BEGIN
+	ALTER TABLE Tasks ADD DeptID int
+END
+GO
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='Role' AND SC.NAME = 'LangCode') 
+BEGIN
+ALTER TABLE Role ADD LangCode nvarchar(10)
+END
+GO
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='Role' AND SC.NAME = 'DisplayText') 
+BEGIN
+ALTER TABLE Role ADD DisplayText nvarchar(255)
+END
+GO
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='PageContextActionMapping' AND SC.NAME = 'Category') 
+BEGIN
+Alter TABLE PageContextActionMapping add [Category] [nvarchar](100) NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PageContextActionMapping'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE PageContextActionMapping ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PageContextActionMapping'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE PageContextActionMapping ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PageContextActionMapping'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE PageContextActionMapping ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PageContextActionMapping'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE PageContextActionMapping ADD ModifiedAt DATETIME
+END
+GO
+------------------------------
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'CountryCode'
+		)
+BEGIN
+	ALTER TABLE LabRefOrgAddress ADD CountryCode INT
+END
+GO
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'StateCode'
+		)
+BEGIN
+	ALTER TABLE LabRefOrgAddress ADD StateCode INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE LabRefOrgAddress ADD [CityCode] [int] NULL 
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE LabRefOrgAddress ADD AddLevel1 INT
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE LabRefOrgAddress ADD AddLevel2 INT
+END
+GO
+------
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'PhysicianID'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD PhysicianID bigint
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'OrderType'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD OrderType nvarchar(10) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'BarcodeNumber'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD BarcodeNumber nvarchar(100) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'updatestauts'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD updatestauts nvarchar(30) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'OrderID'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD OrderID bigint null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'Deviceid'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD Deviceid nvarchar(100) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'TestCode'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD TestCode nvarchar(100) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'OrderTaskID'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD OrderTaskID bigint null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'LabNo'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD LabNo nvarchar(30) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'ReferredAccessionNo'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD ReferredAccessionNo bigint null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'OrderedQty'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD OrderedQty decimal(18,2) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'PatientVisitAttribID'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD PatientVisitAttribID bigint null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'PerphyID'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD PerphyID bigint null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'Perphyname'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD Perphyname nvarchar(255) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrderedInvestigations'
+			AND SC.NAME = 'Performertype'
+		)
+BEGIN
+	ALTER TABLE OrderedInvestigations ADD Performertype nvarchar(255) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Physician'
+			AND SC.NAME = 'Last_View'
+		)
+BEGIN
+	ALTER TABLE Physician ADD Last_View nvarchar(20) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Users'
+			AND SC.NAME = 'ActionType'
+		)
+BEGIN
+	ALTER TABLE Users ADD ActionType nvarchar(100) null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Organization'
+			AND SC.NAME = 'OrgCategoryID'
+		)
+BEGIN
+	ALTER TABLE Organization ADD OrgCategoryID int null
+END
+go
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Patient'
+			AND SC.NAME = 'UseAdvertisement'
+		)
+BEGIN
+	ALTER TABLE Patient ADD UseAdvertisement bit default(0)
+END
+go
+
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'BrowserName') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD BrowserName nvarchar(55) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'Browserversion') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD Browserversion nvarchar(30) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'OS') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD OS nvarchar(50) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'CreatedBy') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD CreatedBy bigint null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'ModifiedAt') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD ModifiedAt datetime
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='LoggedInProfile' AND SC.NAME = 'ModifiedBy') 
+BEGIN
+ALTER TABLE LoggedInProfile ADD ModifiedBy bigint null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ParentID') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ParentID bigint null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ICDCode') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ICDCode nvarchar(25) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ComplaintName') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ComplaintName nvarchar(2000) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsAmountEditable') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsAmountEditable nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ChartAccCode') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ChartAccCode nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsRefundable') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsRefundable nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsTaxable') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsTaxable nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsDiscountable') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsDiscountable nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsActive') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsActive nchar(1) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ServiceCode') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ServiceCode nvarchar(255) null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'ReOrderPeriod') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD ReOrderPeriod int null
+END
+GO
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='ProcedureMaster' AND SC.NAME = 'IsAdminChargeApplicable') 
+BEGIN
+ALTER TABLE ProcedureMaster ADD IsAdminChargeApplicable nchar(1) null
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RefPhysicianID'
+		) --WARNING! ERRORS ENCOUNTERED DURING SQL PARSING!
+BEGIN
+	ALTER TABLE PatientDueChart ADD [RefPhysicianID] [bigint] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RefPhyName'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [RefPhyName] [nvarchar] (255) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'IsTaxable'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [IsTaxable] [nchar] (1) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ServiceCode'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ServiceCode] [nvarchar] (255) NULL
+		
+END
+	GO
+
+
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ReferenceType'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD  [ReferenceType] [nchar] (1) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'InterimBillNo'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [InterimBillNo] [nvarchar] (30) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'PerphyName'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [PerphyName] [nvarchar] (255) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'PerPhysicianID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [PerPhysicianID] [bigint] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscountAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [DiscountAmount] [decimal] (18,2) NULL
+		
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ReturnQuantity'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ReturnQuantity] [numeric] (18,2) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscountPercent'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [DiscountPercent] [decimal] (18,2) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscOrEnhanceType'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [DiscOrEnhanceType] [nvarchar] (10) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscOrEnhanceRemarks'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [DiscOrEnhanceRemarks] [nvarchar] (255) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RoomTypeID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [RoomTypeID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'kitid'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD  [kitid] [bigint] NULL
+
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'LabNo'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [LabNo] [nvarchar] (30) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'TaxPercent'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [TaxPercent] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ProductKey'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ProductKey] [nvarchar] (255) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'VersionNo'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [VersionNo] [nvarchar] (15) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ReimbursableAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ReimbursableAmount] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'NonReimbursableAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [NonReimbursableAmount] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RoleID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [RoleID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DeptID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [DeptID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'OrgID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [OrgID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'LocationID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [LocationID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ActualAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ActualAmount] [decimal] (18,6) NULL
+		
+	
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RateID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [RateID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'IsDiscountable'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [IsDiscountable] [nchar] (1) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'IsSTAT'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [IsSTAT] [nchar] (1) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'IsOutSource'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [IsOutSource] [nchar] (1) NULL
+
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'IsNABL'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [IsNABL] [nchar] (1) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ClientID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [ClientID] [bigint] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'EligibleAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [EligibleAmount] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'CoSharing'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [CoSharing] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'Performertype'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart   ADD [Performertype] [nvarchar] (55) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'RateRefID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [RateRefID] [int] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'SellingUnit'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart ADD [SellingUnit] [nvarchar] (50) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'PrepareCharges'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD[PrepareCharges] [decimal] (18,2) NULL
+	
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscountReason'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [DiscountReason] [nvarchar] (255) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'ClientFeeTypeRateCustID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [ClientFeeTypeRateCustID] [bigint] NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'Remarks'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [Remarks] [nvarchar] (50) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'DiscOrEnhancePercent'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [DiscOrEnhancePercent] [decimal] (18,2) NULL
+		
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'AgreedAmount'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [AgreedAmount] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'CoPayValue'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [CoPayValue] [decimal] (18,2) NULL
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'CoPayType'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [CoPayType] [nvarchar] (10) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'PharmacyBillNo'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [PharmacyBillNo] [nvarchar] (50) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'Des'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [Des] [nvarchar] (max) NULL
+		
+END
+	GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientDueChart'
+			AND SC.NAME = 'PerPhySpecialityID'
+		)
+BEGIN
+	ALTER TABLE PatientDueChart  ADD [PerPhySpecialityID] [bigint] NULL
+END
+	GO
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PhysicianAddreSS_HIST'
+			AND SC.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE PhysicianAddreSS_HIST  ADD [CityCode] int NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PhysicianAddreSS_HIST'
+			AND SC.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE PhysicianAddreSS_HIST  ADD [AddLevel1] int NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PhysicianAddreSS_HIST'
+			AND SC.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE PhysicianAddreSS_HIST  ADD [AddLevel2] int NULL
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'UserAddreSS_HIST'
+			AND SC.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE UserAddreSS_HIST  ADD [CityCode] int NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'UserAddreSS_HIST'
+			AND SC.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE UserAddreSS_HIST  ADD [AddLevel1] int NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'UserAddreSS_HIST'
+			AND SC.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE UserAddreSS_HIST  ADD [AddLevel2] int NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'localities'
+			AND SC.NAME = 'IsDefault'
+		)
+BEGIN
+	ALTER TABLE localities  ADD [IsDefault] nchar(1) null
+END
+
+
+IF NOT EXISTS(SELECT 1 FROM SYS.COLUMNS SC WHERE OBJECT_NAME(SC.OBJECT_ID)='DiscountMaster' AND SC.NAME = 'DataSetname') 
+BEGIN
+ ALTER TABLE DiscountMaster add  [DataSetname] [nvarchar](max) NULL
+END
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'Createdat'
+		)
+BEGIN
+	ALTER TABLE DiscountMaster ADD Createdat DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE DiscountMaster ADD CreatedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE DiscountMaster ADD ModifiedBy BIGINT
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE DiscountMaster ADD ModifiedAt DATETIME
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'IsRequiresReason'
+		)
+BEGIN
+	 ALTER TABLE DiscountMaster add  [IsRequiresReason] [nchar](1) NULL
+END
+GO
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'DiscountMaster'
+			AND SC.NAME = 'IsApprovalRequired'
+		)
+BEGIN
+	 ALTER TABLE DiscountMaster add  [IsApprovalRequired] [nchar](1) NULL
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientProgressive'
+			AND SC.NAME = 'OrderTaskID'
+		)
+BEGIN
+	ALTER TABLE PatientProgressive ADD OrderTaskID bigint null
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientTypeMaster'
+			AND SC.NAME = 'ColourCode'
+		)
+BEGIN
+	ALTER TABLE PatientTypeMaster ADD ColourCode  nvarchar(50) null
+END
+----Address----
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'Patient'
+			AND SC.NAME = 'Nationality'
+		)
+BEGIN
+	ALTER TABLE  patient  ALTER COLUMN Nationality bigint
+END
+
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+
+
+IF  EXISTS(SELECT * FROM sys.indexes WHERE name = 'NC_PatientAddress_PatientID_AddressType' AND object_id = OBJECT_ID('PatientAddress'))
+    BEGIN
+	/****** Object:  Index [NC_PatientAddress_PatientID_AddressType]    Script Date: 3/29/2016 9:24:43 PM ******/
+       DROP INDEX [NC_PatientAddress_PatientID_AddressType] ON [dbo].[PatientAddress]
+	   	ALTER TABLE  PatientAddress  ALTER COLUMN CountryID bigint
+		ALTER TABLE  PatientAddress  ALTER COLUMN StateID bigint
+    END
+
+
+
+IF NOT EXISTS(SELECT * FROM sys.indexes WHERE name = 'NC_PatientAddress_PatientID_AddressType' AND object_id = OBJECT_ID('PatientAddress'))
+    BEGIN
+	/****** Object:  Index [NC_PatientAddress_PatientID_AddressType]    Script Date: 3/29/2016 9:24:43 PM ******/
+       CREATE NONCLUSTERED INDEX [NC_PatientAddress_PatientID_AddressType] ON [dbo].[PatientAddress]
+(
+	[PatientID] ASC,
+	[AddressType] ASC
+)
+INCLUDE ( 	[Add1],
+	[Add2],
+	[Add3],
+	[CountryID],
+	[City],
+	[StateID],
+	[MobileNumber],
+	[LandLineNumber]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, 
+	ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+
+    END
+
+	
+END
+
+--IF  EXISTS (
+--		SELECT 1
+--		FROM SYS.COLUMNS SC
+--		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientAddress'
+--			AND SC.NAME = 'StateID'
+--		)
+--BEGIN
+--	ALTER TABLE  PatientAddress  ALTER COLUMN StateID bigint
+--END
+
+--
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  LabRefOrgAddress  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'LabRefOrgAddress'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  LabRefOrgAddress  ALTER COLUMN StateID bigint
+END
+
+--
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  PatientEmployer  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  PatientEmployer  ALTER COLUMN StateID bigint
+END
+
+---
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'NurseAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  NurseAddress  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'NurseAddress'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  NurseAddress  ALTER COLUMN StateID bigint
+END
+
+--
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PhysicianAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  PhysicianAddress  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PhysicianAddress'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  PhysicianAddress  ALTER COLUMN StateID bigint
+END
+
+--
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'UserAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  UserAddress  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'UserAddress'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  UserAddress  ALTER COLUMN StateID bigint
+END
+
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'CountryID'
+		)
+BEGIN
+	ALTER TABLE  OrganizationAddress  ALTER COLUMN CountryID bigint
+END
+
+IF  EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'OrganizationAddress'
+			AND SC.NAME = 'StateID'
+		)
+BEGIN
+	ALTER TABLE  OrganizationAddress  ALTER COLUMN StateID bigint
+END
+
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'CountryCode'
+		)
+BEGIN
+	ALTER TABLE PatientEmployer ADD CountryCode  int null
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'StateCode'
+		)
+BEGIN
+	ALTER TABLE PatientEmployer ADD StateCode  int null
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE PatientEmployer ADD CityCode  int null
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE PatientEmployer ADD AddLevel1  int null
+END
+
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM SYS.COLUMNS SC
+		WHERE OBJECT_NAME(SC.OBJECT_ID) = 'PatientEmployer'
+			AND SC.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE PatientEmployer ADD AddLevel2  int null
+END
+
+
+
+---
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'createdat'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [createdat] [datetime] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'CreatedBy'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [CreatedBy] [bigint] NULL
+END
+Go
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'ModifiedAt'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [ModifiedAt] [datetime] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'ModifiedBy'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [ModifiedBy] [bigint] NULL
+	
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'CountryCode'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [CountryCode] [int] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'StateCode'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [StateCode] [int] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'CityCode'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [CityCode] [int] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'AddLevel1'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [AddLevel1] [int] NULL
+END
+GO
+
+IF NOT EXISTS (
+		SELECT 1
+		FROM sys.columns sc
+		INNER JOIN sys.sysobjects SO(NOLOCK) ON sc.object_id = so.id
+		WHERE so.NAME = 'NewInstanceWaitingCustomers'
+			AND sc.NAME = 'AddLevel2'
+		)
+BEGIN
+	ALTER TABLE NewInstanceWaitingCustomers ADD [AddLevel2] [int] NULL
+END
+GO
+
+
+
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'PhysicianID' AND id = OBJECT_ID('PatientAdvice'))                
+BEGIN
+	   Alter table PatientAdvice Add  [PhysicianID] [bigint] NULL
+END 
+GO
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'Type' AND id = OBJECT_ID('PatientAdvice'))                
+BEGIN
+	   Alter table PatientAdvice   ADD [Type] [nvarchar](10) NULL
+END 
+GO
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'OrderTaskID' AND id = OBJECT_ID('PatientAdvice'))                
+BEGIN
+	   Alter table PatientAdvice   ADD [OrderTaskID] [bigint] NULL
+END 
+GO
+	
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'Status' AND id = OBJECT_ID('PatientAdvice'))                
+BEGIN
+	   Alter table PatientAdvice   ADD [Status] [bit] NULL
+END 
+GO
+	
+	
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'PhysicianType' AND id = OBJECT_ID('PatientComplaint'))                
+BEGIN
+	   Alter table PatientComplaint  ADD [PhysicianType] [nchar](1) NULL
+END 
+GO
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'OrderTaskID' AND id = OBJECT_ID('PatientComplaint'))                
+BEGIN
+	   Alter table PatientComplaint ADD   [OrderTaskID] [bigint] NULL
+END 
+GO
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'PatientVisitAttribID' AND id = OBJECT_ID('PatientComplaint'))                
+BEGIN
+	   Alter table PatientComplaint ADD   [PatientVisitAttribID] [bigint] NULL
+END 
+GO
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'Status' AND id = OBJECT_ID('PatientComplaint'))                
+BEGIN
+	   Alter table PatientComplaint ADD   [Status] [bit] NULL
+END 
+GO
+			
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'isAccessChanged' AND id = OBJECT_ID('loggedInUsers'))                
+BEGIN
+	   Alter table loggedInUsers Add  isAccessChanged char(1)
+END 
+
+IF  EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'orgID' AND id = OBJECT_ID('TaskProfile'))                
+BEGIN
+	 ALTER TABLE TaskProfile alter COLUMN orgID INT
+END 
+
+
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'ParentPatientID' AND id = OBJECT_ID('PatientDepositUsage'))                
+BEGIN
+	   Alter table PatientDepositUsage Add  ParentPatientID bigint null
+END 
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'DepositTypeID' AND id = OBJECT_ID('PatientDepositUsage'))                
+BEGIN
+	   Alter table PatientDepositUsage Add  DepositTypeID nvarchar(10) null
+END 
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'ModifiedAt' AND id = OBJECT_ID('PatientDepositUsage'))                
+BEGIN
+	   Alter table PatientDepositUsage Add  ModifiedAt datetime null
+END 
+
+IF NOT EXISTS (SELECT 1 FROM syscolumns WHERE [name] = 'ModifiedBy' AND id = OBJECT_ID('PatientDepositUsage'))                
+BEGIN
+	   Alter table PatientDepositUsage Add  ModifiedBy bigint null
+END 
+
+
+If Not exists(select 1 from sys.columns sc inner join sys.sysobjects SO (nolock) on sc.object_id = so.id where so.name = 'DiscountMaster' And sc.name = 'LangCode') 
+Alter Table [DiscountMaster] Add [LangCode]  varchar(10) 
+IF NOT EXISTS(SELECT * FROM sys.columns WHERE name='LoggedInUsersID' AND object_id= OBJECT_ID('loggedinprofile'))
+BEGIN
+    ALTER TABLE LoggedInProfile ADD LoggedInUsersID bigint
+END
+GO
+IF NOT EXISTS(SELECT * FROM sys.columns WHERE name='LogOutTime' AND object_id= OBJECT_ID('LoggedInUsers_Hist'))
+BEGIN
+    ALTER TABLE LoggedInUsers_Hist ADD LogOutTime DATETIME
+END
+GO	
+
+----24-03-2016--
+IF NOT EXISTS(SELECT * FROM sys.columns WHERE name='PatientTypeID' AND object_id= OBJECT_ID('Patient'))
+BEGIN
+ALTER table  Patient add  [PatientTypeID] [nvarchar](50) NULL
+END
+
+
+If Not exists(select 1 from sys.columns sc inner join sys.sysobjects SO (nolock) on sc.object_id = so.id where so.name = 'TaskProfile' And sc.name = 'PatientTypeID') 
+BEGIN
+Alter Table [TaskProfile] Add [PatientTypeID]  int 
+END
+Go
+If Not exists(select 1 from sys.columns sc inner join sys.sysobjects SO (nolock) on sc.object_id = so.id where so.name = 'TaskProfile' And sc.name = 'PatientTypeName') 
+BEGIN
+Alter Table [TaskProfile] Add [PatientTypeName]  Nvarchar(100) 
+END
+Go

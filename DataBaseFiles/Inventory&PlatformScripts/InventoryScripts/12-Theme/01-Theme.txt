@@ -1,0 +1,4 @@
+
+Insert into Theme(ThemeName,ThemeURL,Createdat)
+select 'Dark Blue','/Themes/DB/style.css',getdate()
+WHERE NOT EXISTS(SELECT * FROM THEME WHERE ThemeName='Dark Blue')

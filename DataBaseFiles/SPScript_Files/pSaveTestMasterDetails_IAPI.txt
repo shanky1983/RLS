@@ -1,0 +1,236 @@
+CREATE procedure [dbo].[pSaveTestMasterDetails_IAPI]
+
+     @MessageID         BIGINT,
+     @OrgCode           NVARCHAR(5),
+     @TestCode          NVARCHAR(10),
+     @TestName          NVARCHAR(500),
+     @IsOrderable       BIT,
+     @Gender            NCHAR(1),
+     @Department        NVARCHAR(250),
+     @TestType          NVARCHAR(5),
+     @Active            BIT,
+     @Content           NVARCHAR(800),
+     @ProcessStatus     NCHAR(1)
+	 
+as
+begin
+declare @OrgID bigint,@InvestigationID bigint,@CodeTypeID int
+--select @OrgID=OrgID from organization where centrecode=@OrgCode
+set @OrgID=224
+
+Declare @CoeMasterID  bigint
+select @CodeTypeID=com.CodeTypeID from CodingSchemeOrgMapping com 
+inner join codingschememaster csm on csm.CodeTypeID=com.CodeTypeID 
+where com.orgid=@OrgID  and csm.CodingSchemaName='TCODE' and IsPrimary='Y'
+
+
+  declare   @tblInvs    [dbo].[InvestigationDetail]  
+  if @TestType='PKG'
+  begin
+  insert into @tblInvs(ID,Type)
+  select Convert(varchar,IOG.AttGroupID),CP.identifyingtype as InvType from Invorggroup IOG
+Inner join Codemapper CP on CP.identifyingid=IOG.orggroupid
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+ where IOG.orgid=@OrgID and cm.codename=@TestCode and CSM.OrgID=@OrgID and CP.identifyingtype='PKG' 
+ end
+  if @TestType='GRP' or @TestType='PKG'
+  begin
+  insert into @tblInvs(ID,Type)
+  select Convert(varchar,IOG.OrgGroupID) ,CP.identifyingtype as InvType from Invorggroup IOG
+Inner join Codemapper CP on CP.identifyingid=IOG.orggroupid
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+ where IOG.orgid=@OrgID and cm.codename=@TestCode and CSM.OrgID=@OrgID and CP.identifyingtype=@TestType
+   declare @GroupID bigint,@AttGroupID bigint,@OrgGroupID bigint
+
+   --Select top 10 * from invGroupMapmaster 'G))1', 'too1,too2,too2' , 'GRP'
+   dECLARE @ContentCount int
+   dECLARE @TCODES as table (SequenceNo bigint identity(1,1),TestCode varchar(500))
+   dECLARE @tblGrp as table (ID bigint,TestCode varchar(500),InvType varchar(20),Name nvarchar(800),SequenceNo int)
+   insert into @TCODES
+   select Discount from dbo.Splitfunc(@Content,',')
+   SELECT @ContentCount= COUNT(1) FROM @TCODES
+
+--declare   @tblGrp [dbo].[InvestigationDetail]  
+--select  * from @tblGrp
+insert into @tblGrp (ID,TestCode,InvType,SequenceNo)
+select IOG.OrgGroupID,tc.testcode ,CP.identifyingtype as InvType,tc.SequenceNo from Invorggroup IOG
+Inner join Codemapper CP on CP.identifyingid=IOG.orggroupid
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join @TCODES tc on tc.testcode=cm.CodeName 
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+where IOG.orgid=@OrgID and CSM.OrgID=@OrgID and CP.identifyingtype='GRP'
+--and cm.codename=@TestCode 
+union
+select IOM.investigationid,tc.testcode,'INV' as InvType ,tc.SequenceNo from investigationorgmapping IOM
+Inner join Codemapper CP on CP.identifyingid=IOM.investigationid 
+and identifyingtype='investigations'
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join @TCODES tc on tc.testcode=cm.CodeName 
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+where IOM.orgid=@OrgID and CSM.OrgID=@OrgID 
+--and cm.codename=@TestCode
+
+if not exists(select 1 from @tblInvs)
+begin
+
+  if @ContentCount =(select count(1) from @tblGrp )
+  begin
+
+   if not exists (select 1 from  InvGroupMaster where TestCode=@TestCode and GroupName=@TestName and Type=@TestType)
+   begin
+   select @GroupID=max(GroupID)+1 from InvGroupMaster
+   insert into InvGroupMaster(GroupID,GroupName,Type,TestCode)
+   select @GroupID,@TestName, @TestType, @TestCode
+   end
+   else
+   select @GroupID=GroupID from InvGroupMaster where TestCode=@TestCode and GroupName=@TestName and Type=@TestType
+
+   if not exists( select 1 from invorggroup where AttGroupID=@GroupID and TestCode=@TestCode and DisplayText=@TestName and OrgID=@OrgID )
+   begin
+   select  @OrgGroupID=max(OrgGroupID)+1 from invorggroup
+   insert into invorggroup(AttGroupID,OrgGroupID,OrgID,DisplayText,SequenceNo,IsNonOrderable,TestCode,BillingName)
+   select @GroupID,@OrgGroupID,@OrgID,@TestName,@OrgGroupID,case when @IsOrderable=0 then 'N' else 'Y' end,@TestCode,@TestName
+   end
+   else
+   select @OrgGroupID=OrgGroupID from invorggroup where AttGroupID=@GroupID and TestCode=@TestCode and DisplayText=@TestName and OrgID=@OrgID 
+
+   if(@TestType = 'GRP')
+   Begin
+      if not exists(select 1 from InvGroupMapMaster where GroupID = @OrgGroupID)
+	   Begin
+		  insert into InvGroupMapMaster(GroupID,InvestigationID,Parent,SequenceNo,Active)
+		  select @OrgGroupID,ID,case when InvType ='GRP' then 'Y' else 'N' end,SequenceNo,  'Y'  from @tblGrp
+		End
+		else
+		Begin
+		    delete from InvGroupMapMaster where GroupID=@OrgGroupID
+			insert into InvGroupMapMaster(GroupID,InvestigationID,Parent,SequenceNo,Active)
+		    select @OrgGroupID,ID,case when InvType ='GRP' then 'Y' else 'N' end,SequenceNo,  'Y'  from @tblGrp
+		End
+   End
+   if(@TestType = 'PKG')
+   Begin
+     if not exists(select 1 from InvPackageMapping where PackageID=@OrgGroupID)
+		 Begin
+		  insert into InvPackageMapping(PackageID,ID,Type,Active)
+		  select @OrgGroupID,ID,InvType,'Y'  from @tblGrp
+		 End
+	    Else
+		Begin
+		Delete from InvPackageMapping where PackageID=@OrgGroupID
+		 insert into InvPackageMapping(PackageID,ID,Type,Active)
+		  select @OrgGroupID,ID,InvType,'Y'  from @tblGrp
+		End
+   End
+  insert into codemaster(CodeName,CodeType,CodeSchemeID,CodeDesc)
+  select @TestCode,@TestType,@CodeTypeID,@TestName
+  set @CoeMasterID= Scope_identity()
+
+  insert into CodeMapper(IdentifyingType,IdentifyingID,CodeMasterID)
+  select @TestType,@OrgGroupID,@CoeMasterID
+
+  end
+  
+  else
+  begin
+
+  select t.TestCode from @TCODES t
+  left join @tblGrp g on g.TestCode=t.TestCode
+  where ISNULL(g.TestCode,'0')='0'
+  
+  end
+  end
+  else
+  begin
+
+  if @ContentCount =(select count(1) from @TCODES t inner join @tblGrp g on g.TestCode=t.TestCode)
+  begin
+  dECLARE @tblExContents as table (ID bigint,TestCode varchar(500),InvType varchar(20),Name nvarchar(800),SequenceNo int)
+  
+  select @GroupID=GroupID from InvGroupMaster where TestCode=@TestCode and GroupName=@TestName and Type=@TestType
+  select @OrgGroupID=OrgGroupID from invorggroup where AttGroupID=@GroupID and TestCode=@TestCode and DisplayText=@TestName and OrgID=@OrgID 
+  insert into @tblExContents(ID,InvType)
+  select igm.InvestigationID,case when igm.Parent='Y' then 'GRP' else 'INV' end from invorggroup  ig 
+  inner join InvGroupMapMaster igm on ig.OrgGroupID=igm.GroupID
+  where ig.OrgGroupID=@OrgGroupID and ig.OrgID=@OrgID 
+ 
+  update  gm set  gm.Active='N' from @tblExContents EG
+  inner join InvGroupMapMaster gm on gm.InvestigationID=EG.ID 
+  left join @tblGrp lg  on lg.ID =EG.ID 
+  --and lg.InvType=eg.InvType 
+   where gm.GroupID=@OrgGroupID and isnull(lg.ID,0)=0
+
+    if(@TestType = 'GRP')
+   Begin
+	 insert into InvGroupMapMaster(GroupID,InvestigationID,Parent,SequenceNo,Active)
+   select @OrgGroupID,lg.ID,case when lg.InvType='GRP' then 'Y' else 'N' end,lg.SequenceNo,'Y'   from  @tblExContents EG
+   right join @tblGrp lg  on lg.ID =EG.ID 
+   --and lg.InvType=eg.InvType 
+   where isnull(EG.ID,0)=0
+
+  update  gm set  gm.Active='Y' , gm.SequenceNo=lg.SequenceNo from @tblExContents EG
+  inner join InvGroupMapMaster gm on gm.InvestigationID=EG.ID 
+  inner join @tblGrp lg  on lg.ID =EG.ID 
+  --and lg.InvType=eg.InvType 
+   where gm.GroupID=@OrgGroupID 
+   End
+   if(@TestType = 'PKG')
+   Begin
+	  insert into InvPackageMapping(PackageID,ID,Type,Active)
+	  select @OrgGroupID,lg.ID,lg.InvType,'Y'   from  @tblExContents EG
+   right join @tblGrp lg  on lg.ID =EG.ID 
+   --and lg.InvType=eg.InvType 
+   where isnull(EG.ID,0)=0
+   End
+   
+  end
+  end
+  End
+ 
+ if @TestType='INV' 
+ begin
+ 
+ select  @InvestigationID= IOM.investigationid  from investigationorgmapping IOM
+Inner join Codemapper CP on CP.identifyingid=IOM.investigationid 
+and identifyingtype='investigations'
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+ where IOM.orgid=@OrgID and CSM.OrgID=@OrgID and cm.codename=@TestCode
+ 
+  if isnull(@InvestigationID,0)=0
+ begin
+ select @InvestigationID=max(InvestigationID)+1 from investigationmaster
+ if not exists(select 1 from investigationmaster where testcode = @TestCode )
+ insert into investigationmaster(InvestigationID,InvestigationName,Display,TestCode,IsParameter,Createdat,CreatedBy)
+ select @InvestigationID,@TestName,case when @IsOrderable=0 then 'N' else 'Y' end,@TestCode,'Y',getdate(),435
+ 
+
+if not exists(select 1 from investigationorgmapping where orgid=@OrgID and TestCode=@TestCode)
+insert into investigationorgmapping (InvestigationID,OrgID,DeptID,Display,DisplayText,TestCode,IsActive,Gender)
+select @InvestigationID,@OrgID,@Department,case when @IsOrderable=0 then 'N' else 'Y' end,  @TestName,@TestCode,
+case when @Active=0 then 'N' else 'Y' end,@Gender
+else
+
+insert into codemaster(CodeName,CodeType,CodeSchemeID,CodeDesc)
+select @TestCode,'Investigations',@CodeTypeID,@TestName
+set @CoeMasterID= Scope_identity()
+
+insert into CodeMapper(IdentifyingType,IdentifyingID,CodeMasterID)
+select 'Investigations',@InvestigationID,@CoeMasterID
+
+end
+
+else
+begin
+update investigationorgmapping set DisplayText=@TestName,Display=case when @IsOrderable=0 then 'N' else 'Y' end ,DeptID=@Department,
+IsActive=case when @Active=0 then 'N' else 'Y' End,Gender=@Gender
+where InvestigationID=@InvestigationID and OrgID=@OrgID and InvestigationCode=@TestCode
+end
+ 
+END
+
+end
+
+

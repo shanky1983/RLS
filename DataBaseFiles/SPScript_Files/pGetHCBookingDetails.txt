@@ -1,0 +1,864 @@
+CREATE PROCEDURE [dbo].[pGetHCBookingDetails]
+  -- @PatientID       [BIGINT],
+  @CollectionTime [DATETIME],
+  @toTime         [DATETIME],
+  -- @RoleID          [BIGINT],
+   @UserID          [BIGINT],
+  @CollecOrgID    [INT],
+  @Location nvarchar(200),
+  @Pincode nvarchar(20),
+  -- @CollecOrgAddrID [BIGINT],
+  @LoginOrgID     [INT],
+  @BookedFrom     [DATETIME],
+  @BookedTo       [DATETIME],
+  @Status         [nvarchar](20),
+  @Task           [nvarchar](10),
+  @ContextInfo    [UDT_CONTEXT] READONLY,
+  @MobileNumber   nvarchar(20),
+  @TelePhone      nvarchar(20),
+  @pName          nvarchar(200),
+  @pageSize       INT,
+  @startRowIndex  INT,
+  @BookingNumber  BIGINT
+--,@totalRows       INT OUTPUT
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      IF( @TelePhone = ''
+          AND @BookingNumber = 0
+          AND @toTime = '1753-01-01 00:00:00'
+          AND @BookedTo = '1753-01-01 00:00:00'
+          AND @MobileNumber = ''
+          AND @pName = '' )
+        BEGIN
+            SET @BookedFrom= Dateadd(YEAR, -10, dbo.Fn_getserverdate(@ContextInfo));
+            SET @BookedTo= Dateadd(month, +4, dbo.Fn_getserverdate(@ContextInfo));
+        END
+
+		IF Year(@BookedFrom)=1753
+		 BEGIN
+            SET @BookedFrom= Dateadd(YEAR, -10, dbo.Fn_getserverdate(@ContextInfo));
+            SET @BookedTo= Dateadd(month, +4, dbo.Fn_getserverdate(@ContextInfo));
+        END
+		IF Year(@CollectionTime)=1753
+		 BEGIN
+            SET @CollectionTime= Dateadd(YEAR, -10, dbo.Fn_getserverdate(@ContextInfo));
+            SET @toTime= Dateadd(month, +4, dbo.Fn_getserverdate(@ContextInfo));
+        END
+		DECLARE @OrgID INT
+		Select @OrgID=OrgID from @ContextInfo
+		
+		declare @pLanguageCode nvarchar(20)
+		select @pLanguageCode=LanguageCode from  @ContextInfo
+		declare @pClientCode nvarchar(20), @Delimiter CHAR(1) ='|',@Book nvarchar(20)
+		
+		DECLARE @String VARCHAR(100) = @pName
+        DECLARE @tbl TABLE (ID INT IDENTITY PRIMARY KEY, col VARCHAR(MAX));
+		 INSERT INTO @tbl VALUES (@pName)
+     DECLARE @target TABLE (ID INT PRIMARY KEY, col VARCHAR(MAX), col1 VARCHAR(100), col2 VARCHAR(100))
+	    ;WITH rs AS
+     (
+        SELECT * 
+        , TRY_CAST('<root><r>' + 
+      REPLACE(col, @Delimiter, '</r><r>') + 
+         '</r></root>' AS XML) AS xmldata
+        FROM @tbl
+     ) 
+
+	
+	  INSERT INTO @target (ID, col, col1, col2)
+     SELECT ID, col
+      , CAST(xmldata.query('let $n := /root/r[lower-case(.)=("test","tests")]
+      let $pos := count(/root/r[. << $n[1]])
+      let $num := if (number((/root/r[$pos]/text())[1]) instance of xs:double) then 1 else 0
+      return for $x in /root/r[position() le ($pos - $num)] return data($x)') AS VARCHAR(100)) AS col1
+      , CAST(xmldata.query('let $n := /root/r[lower-case(.)=("test","tests")]
+      let $pos := count(/root/r[. << $n[1]])
+      let $num := if (number((/root/r[$pos]/text())[1]) instance of xs:double) then 1 else 0
+      return for $x in /root/r[position() gt ($pos - $num)] return data($x)') AS VARCHAR(100)) AS col2
+     FROM rs
+    
+ -- test
+ 
+	set @pName = (SELECT col1  FROM @target)
+	set @pClientCode = (SELECT col2  FROM @target)
+
+	Declare @ClientId int = 0 
+	IF( @BookingNumber = 0 )
+		SET @BookingNumber=NULL
+	IF( @pClientCode = '' or @pClientCode = 0 )
+		SET @pClientCode = NULL 
+      IF( @CollecOrgID = 0 )
+         OR ( @CollecOrgID = -1 )
+        SET @CollecOrgID=NULL
+      IF( @LoginOrgID = -1   )
+        SET @LoginOrgID=NULL 
+      IF( @UserID = 0 )
+        SET @UserID=NULL
+      IF( @BookingNumber = 0 )
+        SET @BookingNumber=NULL
+      IF( @MobileNumber = '' )
+        SET @MobileNumber = NULL
+		IF(@Pincode='')
+		SET @Pincode=NULL
+		IF(@Status='')
+		SET @Status='0'
+
+
+		IF(@Location='')
+		SET @Location=NULL
+      IF( @TelePhone = '' )
+        SET @TelePhone=NULL
+      IF( @toTime = '1753-01-01 00:00:00' )
+        SET @toTime = '2025-01-01 00:00:00'
+      IF( @BookedTo = '1753-01-01 00:00:00' )
+        SET @BookedTo = '2025-01-01 00:00:00'
+
+		if (@CollectionTime = '1753-01-01 00:00:00')
+		SET @CollectionTime = ''
+      CREATE TABLE #Temp 
+        (
+           [Rowid]              INT IDENTITY(1, 1),
+           BookingID            [BIGINT],
+           [PatientID]          [BIGINT],
+           [PatientName]        [nvarchar](100),
+           [PatientNumber]      [nvarchar](200),
+           [CollectionAddress]  [nvarchar](250),
+           [CollectionAddress2] [nvarchar](250),
+           [CollectionTime]     [DATETIME],
+           [BookingStatus]      [nvarchar](40),
+           [BookingNumber]      [nvarchar](300),
+           [Age]                [nvarchar](20),
+		      [Sex]                [nvarchar](20),
+			     [Ages]                [nvarchar](20),
+           [DOB]                DATETIME,
+           [UserName]           [nvarchar](250),
+		   [UserNameLN]         [nvarchar](250),
+           [RoleName]           [nvarchar](25),
+           PhoneNumber          [nvarchar](20),
+           LandLineNumber       [nvarchar](20),
+           SourceType           [nvarchar](50),
+           RoleID               [BIGINT],
+           UserID               [BIGINT],
+           BookingOrgID         [INT],
+		   RescheduleToken      [INT],
+           OrgAddressID         [BIGINT],
+           DisplayText          [nvarchar](max),
+           --Priority             [INT],
+           Priority             [nvarchar](20),
+           city                 [nvarchar](50),
+           State                [nvarchar](50),
+           Pincode              [nvarchar](10),
+           stateid              BIGINT,
+           cityid               BIGINT,
+		   CancelRemarks [nvarchar](300),
+           BillDescription      nvarchar(max),
+		   TitleCode     nvarchar(100),ExternalRefNo   nvarchar(100),
+		   ClientName nvarchar(100),ClientID   [nvarchar](20), 
+		   ClientCode   nvarchar(100), 
+		   [VisitNumber]      [nvarchar](200),
+		   VisitID BIGINT
+        )
+      CREATE TABLE #TempResult 
+        (
+           BookingID            [BIGINT],
+           [PatientID]          [BIGINT],
+           [PatientName]  [nvarchar](100),
+    [PatientNumber]     [nvarchar](200),
+           [CollectionAddress]  [nvarchar](250),
+           [CollectionAddress2] [nvarchar](250),
+           [CollectionTime]     [DATETIME],
+           [BookingStatus] [nvarchar](40),
+          [BookingNumber]      [nvarchar](300),
+           [Age]                [nvarchar](20),
+		       [Sex]                [nvarchar](20),
+			   [Ages][nvarchar](20),
+           [DOB]                DATETIME,
+           [UserName]           [nvarchar](250),
+		   UserNameLN			[nvarchar](250),
+           [RoleName]           [nvarchar](25),
+           PhoneNumber          [nvarchar](20),
+           LandLineNumber       [nvarchar](20),
+           SourceType           [nvarchar](50),
+           RoleID               [BIGINT],
+           UserID               [BIGINT],
+           BookingOrgID         [INT],
+		    RescheduleToken      [INT],
+           OrgAddressID         [BIGINT],
+           DisplayText          [nvarchar](max), 
+           Priority             [nvarchar](20),
+           city                 [nvarchar](50),
+           State                [nvarchar](50),
+           Pincode              [nvarchar](10),
+           stateid              BIGINT,
+           cityid               BIGINT,
+		   CancelRemarks [nvarchar](300),
+           BillDescription      nvarchar(max),
+		   PaymentStatus   [nvarchar](150),   TitleCode     nvarchar(100),ExternalRefNo nvarchar(100),
+		    ClientName nvarchar(100),ClientID  [nvarchar](20),ClientCode   nvarchar(100), [VisitNumber]      [nvarchar](200),
+		   VisitID BIGINT
+        )
+
+		
+      IF( @Task = 'Search' )
+        BEGIN
+
+            IF( @pName = '' )
+              SET @pName=NULL
+            --SET @pName=''
+            ELSE
+              SET @pName=@pName + '%'
+            IF( @Status != '0' AND @Status !='RS')
+              BEGIN
+			  print 'a'
+                  INSERT INTO #Temp
+                              (BookingID,
+                               [PatientID],
+                               [PatientName],
+                               [PatientNumber],
+                               [CollectionAddress],
+                               [CollectionAddress2],
+                               [CollectionTime],
+                               [BookingStatus],
+                               [BookingNumber],
+                               [Age],
+							   [Sex],
+							   [Ages],
+                               [DOB],
+                               [UserName],
+							    UserNameLN,
+                               [RoleName],
+                               PhoneNumber,
+                               LandLineNumber,
+                               SourceType,
+                               RoleID,
+                               UserID,
+                               BookingOrgID,
+							   RescheduleToken,
+                               OrgAddressID,
+                               DisplayText,
+                               Priority,
+                               city,
+                               State,
+                               Pincode,
+                               stateid,
+                               cityid,
+							   CancelRemarks,
+                               BillDescription,   TitleCode ,ExternalRefNo 
+							   , ClientName ,ClientCode   ,ClientID, VisitNumber,VisitID)
+                  SELECT HCD.BookingID,
+                         HCD.PatientID,
+                         HCD.PatientName,
+                         HCD.PatientNumber, 
+                         HCD.CollectionAddress  AS CollectionAddress,
+                         HCD.CollectionAddress2 AS CollectionAddress2,
+                         HCD.CollectionTime,
+                         HCD.BookingStatus,
+                         HCD.BookingID,
+                         HCD.Age + '/' + HCD.Sex,
+						 HCD.Sex,
+						 HCD.Age,
+                         HCD.DOB,
+                         '',
+						 '' ,
+                         ''            RoleName,
+                         HCD.PhoneNumber,
+                         HCD.LandLineNumber,
+   HCD.SourceType,
+                         Isnull(HCD.RoleID, 0),
+                         Isnull(HCD.UserID, 0),
+                         Isnull(HCD.BookingOrgID, 0),
+						 HCD.RescheduleToken,
+                         Isnull(HCD.OrgAddressID, 0), 
+                         HCD.Comments,
+                         HCD.Priority,
+                         HCD.city,
+                         HCD.State,
+       HCD.Pincode,
+                Isnull( HCD.stateid,0),
+                          Isnull(HCD.cityid,0)             [CityID],
+						 HCD.CancelRemarks,
+					     HCD.BillDescription,   SOM.TitleID,HCD.ExternalRefNo 
+					     ,CM.ClientName,CM.ClientID,CM.ClientCode,'',HCD.PatientVisitID
+                  FROM   Bookings HCD (Nolock) 
+				  inner join ClientMaster CM (NOLOCK) ON CM.CLIENTID=HCD.ClientID  and cM.OrgID=@OrgID
+                         --LEFT JOIN MetaData M (Nolock)
+                         --       ON M.Code = HCD.Priority
+                         --          AND M.Domain = 'PriorityStatusforHomeCollection'
+				inner join SalutationOrgMapping som (Nolock) on SOM.OrgID=@OrgID and HCD.TITLECode = SOM.TitleID
+				and Isnull(LanguageCode, 'en-GB') = @pLanguageCode --ORDER BY TitleID asc  
+                  WHERE  HCD.BookingID = COALESCE(@BookingNumber, HCD.BookingID)
+                         -- AND HCD.PatientID=Coalesce(@PatientID,HCD.PatientID) AND HCD.OrgID=Coalesce(@CollecOrgID,HCD.OrgID)                                                                                     
+                         AND HCD.OrgAddressID=Coalesce(@LoginOrgID,HCD.OrgAddressID) 
+						 AND HCD.BookingOrgID=Coalesce(@CollecOrgID,HCD.BookingOrgID)
+                         --and HCD.RoleID=COALESCE(@RoleID,HCD.RoleID) 
+						 and HCD.UserID=coalesce(@UserID,HCD.UserID) 
+						  and HCD.ClientID=coalesce(@pClientCode,HCD.ClientID) 
+                         AND HCD.BookingStatus = @Status
+						 --AND HCD.BookingStatus !='Collected'
+						   AND HCD.RescheduleToken <>1 
+						 AND HCD.OrgID=@OrgID
+						 AND HCD.PinCode=coalesce(@Pincode,HCD.PinCode)   
+                         AND CONVERT(DATE, HCD.CreatedAt)BETWEEN CONVERT(DATE, @BookedFrom) AND CONVERT(DATE, @BookedTo)
+                        --AND (CONVERT(DATE, HCD.CollectionTime) BETWEEN CONVERT(DATE, @CollectionTime) and CONVERT(DATE, @toTime) OR (ISNULL(CONVERT(DATETIME, @CollectionTime, 101), '')='' OR ISNULL(CONVERT(DATETIME, @toTime, 101), '')='')) 
+						AND CONVERT(DATE, HCD.CollectionTime) BETWEEN CONVERT(DATE, @CollectionTime) and CONVERT(DATE, @toTime)
+                         
+                        
+						--AND HCD.BookingID= Coalesce(@BookingNumber,HCD.BookingID)                                                                                    
+                       AND ISNULL(HCD.CollectionAddress2,'')=coalesce(@Location,ISNULL(HCD.CollectionAddress2,'')) 
+                         AND HCD.PhoneNumber LIKE COALESCE(@MobileNumber, HCD.PhoneNumber)
+                  -- AND HCD.LandLineNumber like Coalesce('%'+@TelePhone+'%',HCD.LandLineNumber)                                                                                     
+                  ORDER  BY HCD.CreatedAt DESC
+              END
+			  ELSE IF (@Status ='RS')
+			  BEGIN
+			   print 'b'
+                  INSERT INTO #Temp
+                              (BookingID,
+                               [PatientID],
+                               [PatientName],
+                               [PatientNumber],
+                               [CollectionAddress],
+                               [CollectionAddress2],
+                               [CollectionTime],
+                               [BookingStatus],
+                               [BookingNumber],
+                               [Age],
+							   [Sex],
+							   [Ages],
+                               [DOB],
+                               [UserName],
+							     UserNameLN,
+                               [RoleName],
+                               PhoneNumber,
+                               LandLineNumber,
+                               SourceType,
+                               RoleID,
+                               UserID,
+                               BookingOrgID,
+							   RescheduleToken,
+                               OrgAddressID,
+                               DisplayText,
+                               Priority,
+                               city,
+      State,
+                               Pincode,
+                         stateid,
+                               cityid,
+							   CancelRemarks,
+                                BillDescription,TitleCode,ExternalRefNo 
+							    ,ClientName,ClientID,ClientCode,VisitNumber,VisitID)
+                  SELECT HCD.BookingID,
+                         HCD.PatientID,
+                         HCD.PatientName,
+                         HCD.PatientNumber, 
+						 HCD.CollectionAddress  AS CollectionAddress,
+                         HCD.CollectionAddress2 AS CollectionAddress2,
+                         HCD.CollectionTime,
+                         HCD.BookingStatus,
+						 HCD.BookingID,
+						 HCD.Age + '/' + HCD.Sex,
+						 HCD.Sex,
+						 HCD.Age,
+                         HCD.DOB,
+                         '' as [UserName],
+						 '' ,
+                         ''            RoleName,
+                         HCD.PhoneNumber,
+                         HCD.LandLineNumber,
+                         HCD.SourceType,
+                         Isnull(HCD.RoleID, 0),
+                         Isnull(HCD.UserID, 0),
+                         Isnull(HCD.BookingOrgID, 0),
+						 HCD.RescheduleToken,
+                         Isnull(HCD.OrgAddressID, 0),
+                         --M.DisplayText,
+                         HCD.Comments,
+                         HCD.Priority,
+                         HCD.city,
+  HCD.State,
+                         HCD.Pincode,
+                         HCD.stateid,
+                         HCD.cityid             [CityID],
+						 HCD.CancelRemarks,
+                         HCD.BillDescription, SOM.TitleID ,HCD.ExternalRefNo 
+						  ,CM.ClientName,CM.ClientID,CM.ClientCode,'',HCD.PatientVisitID
+                  FROM   Bookings HCD(NOLOCK) 
+                --LEFT JOIN MetaData M(Nolock) 
+                --                ON M.Code = HCD.Priority
+                --                   AND M.Domain = 'PriorityStatusforHomeCollection'
+								   INNER JOIN CLIENTMASTER CM (NOLOCK) ON CM.CLIENTID=HCD.CLIENTID and cM.OrgID=@OrgID
+								    inner join SalutationOrgMapping SOM (NOLOCK) on SOM.OrgID=@OrgID and HCD.TITLECode = SOM.TitleID
+								 and Isnull(LanguageCode, 'en-GB') = @pLanguageCode --ORDER BY TitleID asc  
+                  WHERE  HCD.BookingID = COALESCE(@BookingNumber, HCD.BookingID)
+                         -- AND HCD.PatientID=Coalesce(@PatientID,HCD.PatientID) AND HCD.OrgID=Coalesce(@CollecOrgID,HCD.OrgID)                                                                                     
+                         AND HCD.OrgAddressID=Coalesce(@LoginOrgID,HCD.OrgAddressID) 
+						 AND HCD.BookingOrgID=Coalesce(@CollecOrgID,HCD.BookingOrgID)
+                         --and HCD.RoleID=COALESCE(@RoleID,HCD.RoleID) 
+						 and HCD.UserID=coalesce(@UserID,HCD.UserID) 
+						   and HCD.ClientID=coalesce(@pClientCode,HCD.ClientID) 
+                         AND HCD.BookingStatus = 'B'
+						 AND HCD.RescheduleToken=1
+						  AND HCD.OrgID=@OrgID
+						 AND HCD.PinCode=coalesce(@Pincode,HCD.PinCode)   
+                         AND CONVERT(DATE, HCD.CreatedAt)BETWEEN CONVERT(DATE, @BookedFrom) AND CONVERT(DATE, @BookedTo)
+                     --AND (CONVERT(DATE, HCD.CollectionTime) BETWEEN CONVERT(DATE, @CollectionTime) and CONVERT(DATE, @toTime) OR (ISNULL(CONVERT(DATETIME, @CollectionTime, 101), '')='' OR ISNULL(CONVERT(DATETIME, @toTime, 101), '')='')) 
+				 AND CONVERT(DATE, HCD.CollectionTime) BETWEEN CONVERT(DATE, @CollectionTime) and CONVERT(DATE, @toTime)
+                       --  AND CONVERT(DATETIME, HCD.CollectionTime)BETWEEN CONVERT(DATETIME, @CollectionTime, 101) AND CONVERT(DATETIME, @toTime, 101)
+                         --AND HCD.BookingID= Coalesce(@BookingNumber,HCD.BookingID)                                                                                    
+                       AND ISNULL(HCD.CollectionAddress2,'')=coalesce(@Location,ISNULL(HCD.CollectionAddress2,'')) 
+                         AND HCD.PhoneNumber LIKE COALESCE(@MobileNumber, HCD.PhoneNumber)
+                  -- AND HCD.LandLineNumber like Coalesce('%'+@TelePhone+'%',HCD.LandLineNumber)               
+                ORDER  BY HCD.CreatedAt DESC
+              END
+            ELSE
+              BEGIN
+			  	--	select 'hi'
+				 print 'c'
+                  INSERT INTO #Temp
+  (BookingID,
+                               [PatientID],
+                               [PatientName],
+                               [PatientNumber],
+                               [CollectionAddress],
+                               [CollectionAddress2],
+                               [CollectionTime],
+                               BookingStatus,
+                               [BookingNumber],
+                               [Age],
+							   [Sex],
+							   [Ages],
+                               [DOB],
+                               [UserName],
+							   [UserNameLN],
+                               [RoleName],
+                               PhoneNumber,
+               LandLineNumber,
+                       SourceType,
+               RoleID,
+                              UserID,
+                               BookingOrgID,
+							   RescheduleToken,
+                               OrgAddressID,
+                               DisplayText,
+                               Priority,
+                               city,
+                               state,
+                               pincode,
+                               stateid,
+                               cityid,
+							   CancelRemarks,
+                               BillDescription,TitleCode,ExternalRefNo
+							    ,ClientName,ClientID,ClientCode,VisitNumber,VisitId)
+                  SELECT HCD.BookingID,
+                         HCD.PatientID,
+                         HCD.PatientName,
+                         HCD.PatientNumber, 
+                         HCD.CollectionAddress  AS CollectionAddress,
+                         HCD.CollectionAddress2 AS CollectionAddress2,
+                         HCD.CollectionTime,
+                         HCD.[BookingStatus],
+                         HCD.BookingID,
+                         HCD.Age + '/' + HCD.Sex,
+						 HCD.Sex,
+						   HCD.Age,
+                         HCD.DOB,
+                         ''   UserName,
+						 '' ,
+                         ''            RoleName,
+                         HCD.PhoneNumber,
+                         HCD.LandLineNumber,
+                         HCD.SourceType,
+                         Isnull(HCD.RoleID, 0),
+         Isnull(HCD.UserID, 0),
+            Isnull(HCD.BookingOrgID, 0),
+			HCD.RescheduleToken,
+                         Isnull(HCD.OrgAddressID, 0),
+                         --M.DisplayText,
+                         HCD.Comments,
+                         HCD.Priority,
+                         HCD.City,
+                         HCD.State,
+                         HCD.Pincode,
+                         HCD.stateid,
+                         HCD.cityid             [CityID],
+						 HCD.CancelRemarks,
+                         HCD.BillDescription, SOM.TitleID,HCD.ExternalRefNo 
+						  ,CM.ClientName,CM.ClientID,CM.ClientCode,'',HCD.PatientVisitID
+                  FROM   Bookings HCD(NOLOCK) 
+                         --LEFT JOIN MetaData M(NOLOCK)
+                         --       ON M.Code = HCD.Priority
+                         --          AND M.Domain = 'PriorityStatusforHomeCollection'
+						INNER JOIN CLIENTMASTER CM ON CM.CLIENTID=HCD.CLIENTID and cM.OrgID=@OrgID
+						inner join SalutationOrgMapping SOM on SOM.OrgID=@OrgID  and HCD.TITLECode = SOM.TitleID
+						and Isnull(LanguageCode, 'en-GB') = @pLanguageCode  
+                  WHERE  HCD.BookingID = COALESCE(@BookingNumber, HCD.BookingID) 
+						 and HCD.UserID=coalesce(@UserID,HCD.UserID)
+						   and HCD.ClientID=coalesce(@pClientCode,HCD.ClientID) 
+						 AND HCD.OrgAddressID=Coalesce(@LoginOrgID,HCD.OrgAddressID) 
+						 AND HCD.BookingOrgID=Coalesce(@CollecOrgID,HCD.BookingOrgID)
+						 AND HCD.OrgID=@OrgID
+					 	 AND ISNULL(HCD.CollectionAddress2,'')=coalesce(@Location,ISNULL(HCD.CollectionAddress2,'')) 
+						 AND HCD.PinCode=coalesce(@Pincode,HCD.PinCode)   
+                         -- AND HCD.BookingStatus != 'C'
+                         AND CONVERT(DATE, HCD.CreatedAt)BETWEEN CONVERT(DATE, @BookedFrom) AND CONVERT(DATE, @BookedTo)
+				       -- AND (CONVERT(DATE, HCD.CollectionTime)BETWEEN CONVERT(DATE, @CollectionTime) AND CONVERT(DATE, @toTime) OR (ISNULL(CONVERT(DATETIME, @CollectionTime, 101), '')='' OR ISNULL(CONVERT(DATETIME, @toTime, 101), '')='')) 
+                         AND CONVERT(DATE, HCD.CollectionTime) BETWEEN CONVERT(DATE, @CollectionTime) and CONVERT(DATE, @toTime)
+                         --AND HCD.BookingID= Coalesce(@BookingNumber,HCD.BookingID)                                                           
+                       --  AND HCD.PatientName LIKE COALESCE('%' + @pName + '%', HCD.PatientName)
+                       AND HCD.PhoneNumber LIKE COALESCE(@MobileNumber, HCD.PhoneNumber)
+                  --AND HCD.LandLineNumber like Coalesce('%'+@TelePhone+'%',HCD.LandLineNumber)                                      
+                  ORDER  BY HCD.CreatedAt DESC
+              END
+        -- SELECT * FROm @Temp                                                                                     
+        END
+      
+
+	    UPDATE  T
+		SET  T.VisitNumber=PV.VisitNumber
+		FROM #Temp T INNER JOIN PatientVisit PV (NOLOCK)
+		ON T.visitid=pv.PatientVisitId
+
+		UPDATE  T
+		SET  T.UserName =isnull(U.Name,''),
+			T.UserNameLN= isnull(U.Name,'') + ' (' + L.LoginName + ')'
+		FROM #Temp T INNER JOIN Users U (NOLOCK)
+		ON T.USerId=U.UserID
+		INNER JOIN Login L (NOLOCK) ON L.LoginID=U.LoginID
+
+		UPDATE  T
+		SET  T.RoleName=R.RoleName
+		FROM #Temp T
+		INNER JOIN Role R(NOLOCK)  ON R.RoleID = T.RoleID  
+
+      select * from PreOrderedInvestigations  POI (NOLOCK) WHERE  1=2
+	  
+	   select  * from OrderedInvestigations  OI (NOLOCK)    where    1=2
+
+      INSERT INTO #TempResult
+      SELECT BookingID,
+             [PatientID],
+             [PatientName],
+             [PatientNumber],
+             [CollectionAddress],
+             [CollectionAddress2],
+             [CollectionTime],
+             [BookingStatus],
+             [BookingNumber],
+             [Age],
+			 [Sex],
+			 [Ages],
+             [DOB],
+             ISNULL([UserName],'') as [UserName],
+			  ISNULL([UserNameLN],'') as [UserNameLN],
+      [RoleName],
+             PhoneNumber,
+             LandLineNumber,
+             SourceType,
+             RoleID,
+             UserID,
+             BookingOrgID,
+			 RescheduleToken,
+             OrgAddressID,
+             DisplayText,
+             Priority,
+             city,
+             State,
+             Pincode,
+             isnull(stateid,0),
+             isnull(cityid,0),
+			 CancelRemarks ,
+             BillDescription,
+	'',TitleCode,ExternalRefNo ,ClientName,ClientID,ClientCode,VisitNumber,VisitId
+      FROM   #Temp
+      WHERE  Rowid >= @startRowIndex
+      SET ROWCOUNT 0
+
+
+
+
+
+
+
+	 -- select IsCash, * from ClientMaster where OrgID = 202 AND ClientCode in('GENERAL','ABC001') -- N - Credit, Y- Cash
+	     CREATE TABLE #TempResultFinal  
+        (
+           BookingID            [BIGINT],
+           [PatientID]          [BIGINT],
+     [PatientName]  [nvarchar](100),
+    [PatientNumber]     [nvarchar](200),
+           [CollectionAddress]  [nvarchar](250),
+           [CollectionAddress2] [nvarchar](250),
+           [CollectionTime]     [DATETIME],
+           [BookingStatus] [nvarchar](20),
+          [BookingNumber]      [nvarchar](300),
+           [Age]                [nvarchar](20),
+		       [Sex]                [nvarchar](20),
+			   [Ages][nvarchar](20),
+           [DOB]                DATETIME,
+           [UserName]           [nvarchar](250),
+		     [UserNameLN]           [nvarchar](250),
+           [RoleName]           [nvarchar](25),
+           PhoneNumber          [nvarchar](20),
+           LandLineNumber       [nvarchar](20),
+           SourceType           [nvarchar](50),
+           RoleID               [BIGINT],
+           UserID               [BIGINT], 
+           Comments          [nvarchar](max), 
+           Priority             [nvarchar](20),
+           city                 [nvarchar](50),
+           State                [nvarchar](50),
+           Pincode              [nvarchar](10),
+           stateid              BIGINT,
+           cityid               BIGINT,
+		    Name  [nvarchar](max),
+		   CreatedAt DATETIME,
+		 
+		
+		   CancelRemarks [nvarchar](300),
+           BillDescription      nvarchar(max),
+		   PaymentStatus   [nvarchar](150),Remarks  nvarchar(max),    TitleCode     nvarchar(100),ExternalRefNo   nvarchar(100)
+           ,ClientName  nvarchar(100),ClientID   [nvarchar](20),ClientCode  nvarchar(100),   [CollectionTimeSlot]     NVARCHAR(50), 
+	       [VisitNumber]     [nvarchar](200),Color  [nvarchar](50),  VisitID BIGINT )
+
+	INSERT INTO #TempResultFinal
+     (
+		BookingID,[PatientID] ,[PatientName] ,[PatientNumber] ,[CollectionAddress] ,[CollectionAddress2] ,[CollectionTime] ,[BookingStatus],[BookingNumber] ,
+		[Age] ,[DOB] ,[UserName] ,[UserNameLN] ,[RoleName] ,PhoneNumber ,LandLineNumber ,SourceType ,RoleID ,UserID ,Name,CreatedAt,BillDescription ,Comments,
+		Priority ,city ,State ,Pincode ,stateid ,cityid ,CancelRemarks,PaymentStatus ,Remarks,[Sex] ,[Ages],TitleCode ,ExternalRefNo ,ClientName ,ClientID ,
+		ClientCode ,VisitNumber,VisitID  )
+      SELECT DISTINCT New.BookingID,
+                new.PatientID,
+                [PatientName] AS PatientName,
+                (
+                       SELECT PatientNumber
+                       FROM   Patient (NOLOCK)
+                       WHERE  Patientid=new.Patientid) AS [PatientNumber],
+                Isnull([CollectionAddress],'')         AS [CollectionAddress],
+                Isnull( [CollectionAddress2],'')       AS [CollectionAddress2],
+                [CollectionTime] ,
+                CASE
+                                WHEN [BookingStatus] = 'B'
+                                AND             RescheduleToken=1 THEN 'Rescheduled'
+                                WHEN [BookingStatus] = 'B' THEN 'Booked'
+                                WHEN [BookingStatus] = 'CD' THEN 'Completed'
+                                WHEN [BookingStatus] = 'C' THEN 'Canceled'
+                                WHEN [BookingStatus] = 'TS' THEN 'Trip Started'
+                                WHEN [BookingStatus] = 'TC' THEN 'Trip Can-celled'
+                                WHEN [BookingStatus] = 'RD' THEN 'Reached Destination'
+                                WHEN [BookingStatus] ='A' THEN 'Assigned'
+                                WHEN [BookingStatus] = 'IP' THEN 'In-progress'
+                                ELSE [BookingStatus]
+                END AS [BookingStatus],
+                [BookingNumber],
+                [Age],
+                [DOB],
+                Isnull([UserName],'') AS [UserName] ,
+                [UserNameLN] ,
+                [RoleName],
+                PhoneNumber,
+                New.LandLineNumber,
+                SourceType,
+                New.RoleID,
+                CASE WHEN UserID = 0 THEN ''
+                                ELSE UserID
+                END AS UserID, 
+                (
+                       SELECT Stuff(
+                              (
+                                     SELECT ','+ POI.Name
+                                     FROM   PreOrderedInvestigations POI (NOLOCK)
+                                     WHERE  POI.QuotationId=New.BookingID FOR XML Path('')),1, 1, N'')) AS Name,
+                (
+                       SELECT CreatedAt
+                       FROM   Bookings (NOLOCK)
+                       WHERE  Bookingid=new.Bookingid) AS CreatedAt,
+                (
+                       SELECT Isnull(Location,'')
+                       FROM   Organizationaddress (NOLOCK)
+                       WHERE  AddressID=new.OrgAddressID ) AS BillDescription ,
+                DisplayText                                AS Comments, 
+                CASE
+                                WHEN [Priority] = 0 THEN 'Normal'
+                                WHEN [Priority] = 1 THEN 'Urgent'
+                                WHEN [Priority] = 2 THEN 'Fasting'
+                END      AS Priority,
+                New.city AS City,
+                State,
+                Pincode,
+                New.stateid AS Stateid,
+                cityid      AS Cityid,
+                ClientName     cancelRemarks, 
+                CASE
+                                WHEN PB.BookingID >0 THEN 'PAID' 
+                                ELSE 'UNPAID'
+                END AS Altmobilenoone ,
+                (
+                       SELECT CONVERT(VARCHAR(30),Isnull(B.BookingID,''))+'~'+Isnull(B.PatientName,'') + '~'+Isnull(B.Sex,'') + '~'+Isnull(B.Age,'')+ '~'+ 
+					   CONVERT(VARCHAR(30),B.DOB,103) +'~'+Isnull(B.Pincode,0)+'~'+Isnull(B.CollectionAddress2,'')+'~'+Isnull(B.City,'') +':'
+					   +Isnull(CONVERT(VARCHAR(30),B.CityID),0) +'~'+Isnull(B.State,'') +':'+ Isnull(CONVERT(VARCHAR(30),B.Stateid),'') + '~'
+					   +CONVERT (VARCHAR(30),Isnull(B.BookingOrgID,'')) +'~' +CONVERT(VARCHAR(30),Isnull(B.OrgAddressID,'')) +'~'
+					   +Isnull(B.CollectionAddress,'') +'~'+ CONVERT(VARCHAR(30),Format(B.CollectionTime,'dd/MM/yyyy hh:mm tt'))+'~'
+					   + CONVERT(VARCHAR(30),Isnull(B.UserID,''))+'~'+Isnull(B.PhoneNumber,0)+'~'+Isnull(B.LandLineNumber,0)+'~'
+					   +Isnull(CONVERT(VARCHAR(30),BA.URNTypeID),0)+'~' +Isnull( URNO,'') +'~'+ Email+'~'+ Isnull(BA.DispatchValue,'') 
+					   +'~'+Isnull(BA.Comments,'') +'~'+ Isnull( BA.RefPhysicianName,'') +'~'+ Isnull( BA.BookingStatus,'')
+					   +'~'+ Isnull(CONVERT(VARCHAR(30),Isnull(B.CityID,'')),0)+ '~'+Isnull(CONVERT(VARCHAR(30),Isnull(B.Stateid,'')),0) 
+					   + '~'+ Isnull(B.City,'')+'~'+ Isnull( B.State,'') +'~'+ Isnull(CONVERT(VARCHAR(30),B.TITLECode) ,0)+'~'+Isnull(B.ExternalRefNo,'') 
+					   +'~'+Isnull(B.ClientName,'') +'~'+ Isnull(CONVERT(VARCHAR(30),Isnull(B.ClientID,'')),0)+'~'+ Isnull(B.ClientCode,'') +'~'
+					   + Isnull(B.VisitNumber,'') 
+	 
+	 from #Temp B
+    INNER JOIN Bookings BA (Nolock) ON B.BookingID=BA.BookingID 
+	 where B.Bookingid=new.BookingID) AS Remarks, Sex, Ages,TitleCode,isnull(New.ExternalRefNo,'')  AS Altmobilenotwo,ClientName,ClientID,ClientCode,VisitNumber,VisitId
+      FROM   #TempResult New 
+	  INNER JOIN Organization Org (Nolock) on new.BookingOrgID=Org.OrgID and Org.OrgID=@orgid
+	   LEFT JOIN PreBookingPaymentDetails AS PB (Nolock) ON New.BookingID = PB.BookingID and PB.OrgID=@orgid
+	  
+      ORDER  BY New.BookingID desc 
+	
+	 UPDATE T
+	 SET T.PaymentStatus= CASE WHEN A.FinalBillID > 0 THEN 'PAID' ELSE 'UNPAID' END
+	 FROM #TempResultFinal T
+	 INNER JOIN FinalBill AS F ON     T.VisitID=F.VisitID
+	 INNER JOIN AmountReceivedDetails A ON F.FinalBillID = A.FinalBillID
+
+
+    UPDATE T SET PaymentStatus ='CREDIT'
+  FROM #TempResultFinal AS T 
+  JOIN Bookings AS B (Nolock) ON T.BookingID = B.BookingID
+  JOIN ClientMaster AS C (Nolock) ON B.ClientCode = C.ClientCode AND B.OrgID = C.OrgID
+  WHERE C.IsCash = 'N' and B.BookingStatus in ('Completed','CD')
+
+
+  UPDATE T SET Color ='#FF69B4'
+  FROM #TempResultFinal AS T where T.PaymentStatus!='UNPAID' and VisitNumber is not NULL
+ 
+
+  --Aaru changes for Collection Time
+ 
+			CREATE TABLE #TempSlot
+		(
+		AutoID INT IDENTITY(1,1),
+		BookingID BIGINT,
+		UserID BIGINT,
+		ResourceTemplateID BIGINT,
+		WorkingDays VARCHAR(100),
+		SlotDuration TIME
+		
+		)
+
+		INSERT INTO #TempSlot ( UserID, ResourceTemplateID, WorkingDays, SlotDuration )
+		SELECT B.ResourceID, C.ResourceTemplateID, C.WorkingDays, C.SlotDuration 		
+		FROM #TempResultFinal AS A
+		JOIN SCPSchedulableResource B (NOLOCK) ON A.UserID  = B.ResourceID
+		JOIN SCPScheduleTemplate AS C(NOLOCK)  ON B.ResourceTemplateID = C.ResourceTemplateID
+		
+		--SELECT * FROM #TempSlot
+
+	CREATE TABLE #TempBooking
+		(
+		AutoID INT IDENTITY(1,1),
+		CollDate DATE,
+		CollTime TIME,
+		CollDays VARCHAR(20),
+		CollNo INT,
+		BookingID BIGINT,
+		UserID BIGINT,
+		Slot  TIME
+		)
+
+		INSERT INTO #TempBooking (BookingID, UserID,  CollDate, CollTime, CollDays)
+		SELECT BookingID, userid, CAST(CollectionTime AS DATE), cast(CollectionTime as time),  FORMAT(CollectionTime, 'ddd') 
+		--FROM Bookings AS B
+		FROM #TempResultFinal 
+		--WHERE userid =  @ResourceID AND CAST(CollectionTime AS DATE) >= CAST(GETDATE() AS DATE) 
+
+		UPDATE T SET CollNo = M.Code
+		FROM #TempBooking AS T
+		JOIN MetaData AS M (NOLOCK) ON T.CollDays = M.DisplayText AND M.Domain = 'WeekDay' 
+
+ 
+
+  DECLARE @Count INT
+		DECLARE @MaxCount INT
+		DECLARE @CollNo VARCHAR(10)
+
+		SET @Count = 1 
+	
+		SET @MaxCount = (SELECT COUNT(AutoID) from #TempBooking) 
+		
+
+		WHILE @Count <= @MaxCount 
+
+		BEGIN
+			SET @CollNo = (SELECT CollNo FROM #TempBooking WHERE AutoID = @Count )
+
+			UPDATE A SET Slot  = SlotDuration
+			FROM #TempBooking  AS A
+			JOIN #TempSlot AS B ON A.UserID = B.UserID
+			 WHERE WorkingDays LIKE '%' + @CollNo + '%'
+
+			SET @Count = @Count + 1 
+
+		END
+
+		 
+ UPDATE T SET  CollectionTimeSlot =  CONVERT(varchar(15),CollTime,100)  + ' - ' + CONVERT(varchar(15),dateadd(second,datediff(second,0,CollTime),Slot),100)
+  FROM #TempResultFinal AS T 
+  JOIN #TempBooking AS B ON T.BookingID = B.BookingID
+
+
+  --END Aaru
+
+ select BookingID,
+       [PatientID],
+       [PatientName],
+       [PatientNumber] + '|' + VisitNumber + '|' + Color as [PatientNumber],
+       [CollectionAddress],
+       [CollectionAddress2], 
+       [CollectionTime],
+       [BookingStatus],
+       [BookingNumber],
+       [Age],
+       [Sex],
+       [Ages],
+       [DOB],
+       [UserName],
+       [UserNameLN]                                      AS ReferenceType,
+       [RoleName],
+       PhoneNumber,
+       LandLineNumber,
+       SourceType,
+       RoleID,
+       UserID,
+       Name,
+       CreatedAt,
+       BillDescription,
+       Comments, 
+       Priority,
+       city,
+       State,
+       Pincode,
+       stateid,
+       cityid,
+       CancelRemarks,
+       Remarks,
+       PaymentStatus                                     as Altmobilenoone,
+       TitleCode,
+       ExternalRefNo                                     as Altmobilenotwo,
+       ClientName,
+       ClientID,
+       ClientCode,
+       CollectionTimeSlot                                AS NRICNumber,
+       VisitNumber                                       AS NRICType,
+       Color
+from   #tempResultFinal
+order  by 1 desc 
+		   drop table #Temp
+		   drop table #TempResult
+		   drop table #TempResultFinal
+  END
+
+
+
+

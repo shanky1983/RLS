@@ -1,0 +1,103 @@
+---Created BY Arumugam
+--pGetSampleCollectionPersonList_LIMSAPI '202','test'
+--declare @p5 dbo.UT_WorkingTime
+--insert into @p5 values(N'0, 1','11:00:00','11:30:00','01:00:00')
+--insert into @p5 values(N'2, 3','14:00:00','15:30:00','05:00:00')
+
+--declare @p6 dbo.UT_Leaveinfo
+--insert into @p6 values('2021-05-04 00:00:00','2021-09-04 00:00:00',N'03/04/2021')
+--insert into @p6 values('9999-12-31 23:59:59.9999999','9999-12-31 23:59:59.9999999',N'04/04/2021')
+
+--exec pInsertSCPSchedule_LIMSAPI @pOrgCode=N'LIMSAPI',@pSCPerson=N'testAttuneaaru',@pPinCode=N'600117',@pUserID=1122,@Timeslot=@p5,@Leaveslot=@p6
+--go
+
+--select * from SCPSchedules
+--select * from SCPSchedulableResource
+--select * from [SCPScheduleResourceMapping]
+--select * from SCPScheduleTemplate
+--select * from [SCPScheduleResourcePinCodeMapping]
+--select * from [SCPScheduleResourceLeaveMapping]
+--select * from [SCPScheduleResourcePinCodeMapping]
+--  select * from SCPScheduleResourcePinCodeMapping_history
+
+CREATE PROCEDURE [dbo].[pUPdateSCPSchedule_LIMSAPI] 
+   	
+	@pResourceTemplateID	  BIGINT,
+	@pPinCode				  NVARCHAR(1000),
+	@pUserID				  BIGINT,
+	@Timeslot			      [dbo].[UT_WorkingTime]  READONLY,
+	@Leaveslot			      [dbo].[UT_Leaveinfo] READONLY
+
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+
+	DECLARE @pOrgID INT = 0, @pOrgAddrID INT = 0, @ServerdateTime DATETIME, @EnddateTime DATETIME,  @ResourceID BIGINT,  
+           @OrgCode NVARCHAR(100) = null, @LocationCode NVARCHAR(100) = null;
+
+	DECLARE @ScheduleID BIGINT, @ResourceTemplateID BIGINT
+
+	 CREATE TABLE #TempPinCode
+	 (
+		Pincode BIGINT,
+	 )
+
+	INSERT INTO #TempPinCode (Pincode)
+	SELECT item FROM dbo.fnSplit(@pPinCode, '^')  
+
+
+    SET @ServerdateTime = GETDATE();
+    SET @EnddateTime = DATEADD(year, 4, GETDATE())
+
+	-------------Timeslot------------------
+
+	INSERT INTO SCPScheduleTemplate_History(ScheduleTemplateID, ResourceTemplateID, WorkingDays, StartTime, EndTime, 
+												SlotDuration, Status, createdat, CreatedBy)
+	SELECT ScheduleTemplateID, ResourceTemplateID, WorkingDays, StartTime, EndTime, SlotDuration, Status, createdat, CreatedBy 
+		    FROM SCPScheduleTemplate 
+			WHERE ResourceTemplateID = @pResourceTemplateID
+
+	DELETE FROM  SCPScheduleTemplate WHERE ResourceTemplateID = @pResourceTemplateID
+
+	INSERT INTO SCPScheduleTemplate(ResourceTemplateID, WorkingDays, StartTime, EndTime, SlotDuration, Status, CreatedBy,CreatedAt)
+		SELECT  @pResourceTemplateID , T.WorkingDays, T.StartTime, T.EndTime, T.SlotDuration , 'A', @pUserID, @ServerdateTime 
+		FROM @Timeslot AS T  
+
+	-------------LeaveMapping------------------
+
+	INSERT INTO SCPScheduleResourceLeaveMapping_history (ResourceLeaveID, ResourceTemplateID, Holidays,
+											StartDate, EndDate, Status, CreatedBy, CreatedAt)
+	SELECT ResourceLeaveID, ResourceTemplateID, Holidays, StartDate, EndDate, Status, CreatedBy, CreatedAt
+	       FROM SCPScheduleResourceLeaveMapping 
+	WHERE ResourceTemplateID = @pResourceTemplateID
+
+
+	DELETE FROM  SCPScheduleResourceLeaveMapping WHERE ResourceTemplateID = @pResourceTemplateID
+	
+
+	INSERT INTO  SCPScheduleResourceLeaveMapping(ResourceTemplateID, Holidays, StartDate, EndDate, Status, CreatedBy, CreatedAt)
+		SELECT @pResourceTemplateID, Holidays, StartDate, EndDate ,'A', @pUserID, @ServerdateTime  
+		FROM @Leaveslot
+
+	-------------PinCodeMapping------------------
+
+	INSERT INTO SCPScheduleResourcePinCodeMapping_history(ResourcePincodeID, ResourceTemplateID, PinCode, Status, CreatedBy, CreatedAt)
+
+	SELECT ResourcePincodeID, ResourceTemplateID, PinCode, Status, CreatedBy, CreatedAt 
+				FROM SCPScheduleResourcePinCodeMapping 
+				WHERE ResourceTemplateID = @pResourceTemplateID
+
+	DELETE FROM  SCPScheduleResourcePinCodeMapping WHERE ResourceTemplateID = @pResourceTemplateID	
+	
+	
+	INSERT INTO  SCPScheduleResourcePinCodeMapping(ResourceTemplateID,PinCode,Status,CreatedBy,CreatedAt)
+		SELECT @pResourceTemplateID, Pincode, 'A', @pUserID, @ServerdateTime  
+		FROM #TempPinCode
+
+
+
+
+
+END
+

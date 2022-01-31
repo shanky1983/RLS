@@ -1,0 +1,31 @@
+CREATE PROCEDURE pGetUsersByRole (@OrgID       BIGINT,
+                                                     @ContextInfo [UDT_CONTEXT] READONLY)
+     AS
+       BEGIN
+           SET NOCOUNT ON;
+     
+           DECLARE @ConfigKeyID INT;
+           DECLARE @ConfigValue VARCHAR(500);
+     
+           SET @ConfigKeyID=(SELECT ConfigKeyID
+                             FROM   ConfigKeyMaster
+                             WHERE  ConfigKey = 'UserWithMultipleRoles')
+           SET @ConfigValue=(SELECT ConfigValue
+                             FROM   ConfigOrgMaster
+                             WHERE  OrgID = @OrgID
+                                    AND ConfigKeyID = @ConfigKeyID)
+     
+           SELECT DISTINCT lr.LoginID,
+                           ut.Name
+           FROM   LoginRole lr
+                  INNER JOIN Role AS rt
+                          ON rt.RoleID = lr.RoleID
+                  INNER JOIN Users ut
+                          ON ut.LoginID = lr.LoginID
+           WHERE  rt.RoleID IN (SELECT item
+                                FROM   Fnsplit(@ConfigValue, ','))
+                  AND ut.OrgID = @OrgID
+           GROUP  BY lr.LoginID,
+                     ut.Name order by ut.Name asc  -- having count(lr.LoginID)>1
+       END 
+     

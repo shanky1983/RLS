@@ -1,0 +1,656 @@
+CREATE PROCEDURE [dbo].[pGetDayWiseTestWiseCollectionRevenueReportV2]               
+ ( @pFDate [DATETIME]                          
+,@pTDate [DATETIME]                          
+,@pOrgId [INT]                          
+,@Pparamtype VARCHAR(100) = NULL                          
+,@Pparamvalue VARCHAR(100) = NULL                          
+,@pExcelReportId [INT] = NULL                          
+,@pExcelReportName VARCHAR(255) = NULL                          
+,@pToExecute VARCHAR(10) = NULL                
+)              
+AS              
+SET NOCOUNT ON                
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                
+BEGIN               
+              
+set @pFDate = CONVERT(DATETIME, CONVERT(NVARCHAR, @pFDate, 103) + ' 00:00:00')              
+set @pTDate = CONVERT(DATETIME, CONVERT(NVARCHAR, @pTDate, 103) + ' 23:59:59')              
+              
+Declare @Datedifference int              
+Set @Datedifference = Datediff(DAY,@pFDate,@pTDate)              
+              
+              
+if(@Datedifference <= 30)              
+BEGIN               
+Declare @Datedetails Table (Sno Int Identity(1,1),Dates varchar(10))              
+              
+Declare @FROM DATETIME=@pFDate              
+Declare @TO DATETIME=@pTDate              
+while (@FROM<=@TO)              
+BEGIN              
+Insert into @Datedetails(Dates)              
+select Convert(VARCHAR(10),@FROM,103)              
+SET @FROM = DATEADD(dd, 1, @FROM)              
+END              
+              
+              
+Declare @CollectedAmount Table (FinalbillID Bigint, CollectedAmount Decimal(18,2))              
+Declare @CollectedAmount2 Table (FinalbillID Bigint, CollectedAmount Decimal(18,2))              
+Create Table #fistdata (Sno int,Trans Nvarchar(20),PatientVisitID Bigint,FinalBillID Bigint,OrgID Int,CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),              
+VisitDate Varchar(10),VisitNumber nvarchar(50),BillNumber Nvarchar(50),ExtPatientID Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),              
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft decimal(18,2),              
+CollectionDetails Decimal(18,2),AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255),              
+RefDocName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),DueType Nvarchar(50),ClientName nvarchar(255),Specialization nvarchar(255),              
+SourceName nvarchar(255),SalespersonName nvarchar(255),              
+AmountRefund Decimal(18,2),BillStatus Nvarchar(50),LocationID int,ClientID int,Iscash nchar(6),CollectedUser Nvarchar(250),RefundDate varchar(10),IsAdvanceClient bit,Feedescription NVARCHAR(max)              
+, BillingDetailsID bigint,FeeTypePercent Decimal(18,2) DEFAULT 0.00,AmtReceived Decimal (18,2),DeptID Bigint,DeptName varchar(255),FeeID Bigint,FeeType varchar(10)              
+,Gender varchar(10),Age varchar(20),DeptHeaderName Varchar(200) ,[NO of Studies] int ,SumofFinalBillAmount decimal(18,2),Percentageamt  decimal(18,2)            
+)              
+              
+Create Table #fistdata1 (Sno int,Trans Nvarchar(20),PatientVisitID Bigint,FinalBillID Bigint,OrgID Int,CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),              
+VisitDate Varchar(10),VisitNumber nvarchar(50),BillNumber Nvarchar(50),ExtPatientID Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),              
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft decimal(18,2),              
+CollectionDetails Decimal(18,2),AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255),              
+RefDocName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),DueType Nvarchar(50),ClientName nvarchar(255),Specialization nvarchar(255),              
+SourceName nvarchar(255),SalespersonName nvarchar(255),              
+AmountRefund Decimal(18,2),BillStatus Nvarchar(50),LocationID int,ClientID int,Iscash nchar(6),CollectedUser Nvarchar(250),RefundDate varchar(10),IsAdvanceClient bit,Feedescription NVARCHAR(max)              
+, BillingDetailsID bigint ,FeeTypePercent Decimal(18,2) DEFAULT 0.00,AmtReceived Decimal (18,2),DeptID Bigint,DeptName varchar(255),FeeID Bigint,FeeType varchar(10)              
+,Gender varchar(10),Age varchar(20),DeptHeaderName Varchar(200),[NO of Studies] int ,SumofFinalBillAmount decimal(18,2),Percentageamt  decimal(18,2))              
+              
+Declare @CashAmount Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),              
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),Amtreceived Decimal(18,2))              
+              
+Declare @CashAmount2 Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),              
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),Amtreceived Decimal(18,2))              
+Declare @CashAmount1 Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),              
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),Amtreceived Decimal(18,2))              
+              
+Declare @CashAmount12 Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),              
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),Amtreceived Decimal(18,2))              
+Declare @Billdata as table (PatientVisitID Bigint,FinalBillID Bigint,CollectedAmount Decimal(18,2),DiscountAmt Decimal(18,2),DiscountReason Nvarchar(255),Due Decimal(18,2),              
+PaymentName Nvarchar(250),DisApprovedBy Nvarchar(255),AmountRefund decimal(18,2),NetAmount Decimal(18,2))              
+              
+Declare @Billdata1 as table (PatientVisitID Bigint,FinalBillID Bigint,CollectedAmount Decimal(18,2),DiscountAmt Decimal(18,2),DiscountReason Nvarchar(255),Due Decimal(18,2),              
+PaymentName Nvarchar(250),DisApprovedBy Nvarchar(255),AmountRefund decimal(18,2),NetAmount Decimal(18,2))              
+              
+Insert into #fistdata (Sno,Trans,PatientVisitID,FinalBillID,OrgID,CenterName,CircleName,Transactiondate,VisitDate,VisitNumber,BillNumber,ExtPatientID,PatientName,GrossAmount,              
+NetAmount,Prepaid,RefDocName,TransactionType,DueType,AdjustmentAmount,ClientName,BillStatus,Discount,DiscountComment,DisApprovedBy,Specialization,SourceName,SalespersonName,LocationID,ClientID,Iscash,DueComment,DueApprovedBy,RefundDate,IsAdvanceClient    
+          
+,Feedescription, BillingDetailsID ,FeeID,FeeType,Gender,Age,[NO of Studies] )              
+select Distinct 1 as Sno,Convert(varchar,BD.Createdat,103) as Trans,PV.PatientVisitID,FB.FinalBillID,PV.OrgID,OA.location as CenterName,OA.City as CircleName,              
+Convert(varchar,BD.Createdat,103) as Transactiondate,              
+Convert(Varchar,PV.Visitdate,103) as VisitDate,PV.VisitNumber as VisitNumber,FB.BillNumber as BillNumber, P.PatientNumber as ExtPatientID,P.Name as PatientName,              
+--FB.GrossBillValue as GrossAmount,FB.NetValue as NetAmount,case when CM.isadvanceclient=1 Then FB.NetValue ELSE 0 END,              
+BD.Amount as GrossAmount,(BD.Amount-Isnull(BD.DiscountAmount,0)) as NetAmount              
+,case when CM.isadvanceclient=1 Then (BD.Amount-Isnull(BD.DiscountAmount,0))  ELSE 0 END,               
+PV.ReferingPhysicianName as RefDocName,              
+              
+Case when CM.isadvanceclient=1 Then 'PrePaid' when AD.BillStatus!='CANCELLED' Then 'Refund' WHEN AD.BillStatus='CANCELLED' Then 'Cancel' Else 'Billing' END as TransactionType,              
+CASE WHEN CM.ClientCode='GENERAL' THEN 'GENERAL' ELSE 'CLIENT' END AS DueType,0 AS AdjustmentAmount,              
+Case when CM.ClientName='GENERAL' Then '' Else CM.ClientName End as ClientName,              
+AD.BillStatus as BillStatus,              
+--FB.DiscountAmount,              
+Isnull(BD.DiscountAmount,0),              
+FB.DiscountReason,U.Name as DisApprovedBy,'' as Specialization,              
+Case when CM.ClientName='GENERAL' Then '' Else CM.ClientName End as SourceName,'' as SalespersonName,PV.OrgAddressID,CM.ClientID,Iscash,'' ,'' --PDD.DueReason,UU.Name              
+,Convert(Varchar,AD.CreatedAt,103) as RefundDate ,CM.IsAdvanceClient             
+,BD.Feedescription, BD.BillingDetailsID ,BD.FeeID,BD.FeeType              
+,P.Sex,P.Age    ,1          
+from FinalBill FB WITH(NOLOCK) --ON FB.FinalBillID=VCM.FinalBillID AND FB.OrgID=VCM.OrgID              
+Inner join Billingdetails BD WITH(NOLOCK) ON BD.FinalBillID=FB.FinalBillID AND BD.OrgID=FB.OrgID              
+Inner join PatientVisit PV WITH(NOLOCK) ON PV.PatientVisitId=FB.VisitId AND FB.PatientID=PV.PatientID AND PV.OrgID=FB.OrgID              
+Inner Join Patient P WITH(NOLOCK) ON P.PatientID=PV.PatientID              
+Inner join VisitClientMapping VCM WITH(NOLOCK) ON VCM.VisiTID=PV.PatientVisitID AND VCM.OrgID=PV.OrgID AND Isnull(VCM.IsActive,'Y')='Y'              
+LEFT join Amountrefunddetails AD WITH(NOLOCK) ON AD.FinalBillID=BD.FinalBillID and Convert(varchar,AD.Createdat,103) = Convert(varchar,PV.Createdat,103)--AND AD.BillStatus!='CANCELLED'--AD.BillingDetailsID=BD.BillingDetailsID AND               
+AND AD.BillingDetailsID=BD.BillingDetailsID              
+Inner join Organization O WITH(NOLOCK) On O.OrgID=PV.OrgID               
+Inner join OrganizationAddress OA WITH(NOLOCK) ON OA.OrgID=PV.OrgID AND OA.AddressID=PV.OrgAddressID              
+Inner join Clientmaster CM WITH(NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.orgID=VCM.OrgID              
+Left join Users U WITH(NOLOCK) ON U.LoginID=FB.DiscountApprovedBy AND U.OrgID=FB.OrgID AND Isnull(U.LoginID,0)!=0              
+Left join PatientDueDetails PDD WITH(NOLOCK) ON PDD.VisiTID=VCM.VisitID AND PDD.FinalBillID=VCM.FinalBillID AND PDD.OrgID=VCM.OrgID              
+Left join Users UU WITH(NOLOCK) ON UU.LoginID=PDD.DueApprovedBy AND UU.OrgID=PDD.OrgID AND Isnull(UU.LoginID,0)!=0              
+where FB.Createdat Between @pFDate AND @pTDate AND FB.OrgID=@pOrgId --and PV.PatientVisitID=5349602              
+               
+Insert into #fistdata1 (Sno,Trans,PatientVisitID,FinalBillID,OrgID,CenterName,CircleName,Transactiondate,VisitDate,VisitNumber,BillNumber,ExtPatientID,PatientName,GrossAmount,              
+NetAmount,Prepaid,RefDocName,TransactionType,DueType,AdjustmentAmount,ClientName,BillStatus,Discount,DiscountComment,DisApprovedBy,Specialization,SourceName,SalespersonName,LocationID,ClientID,Iscash,DueComment,DueApprovedBy,RefundDate ,IsAdvanceClient   
+          
+,Feedescription,BillingDetailsID ,FeeID,FeeType,Gender,Age,[NO of Studies])              
+select Distinct 1 as Sno,Convert(varchar,AD.Createdat,103) as Trans,PV.PatientVisitID,FB.FinalBillID,PV.OrgID,OA.location as CenterName,OA.City as CircleName,              
+Convert(varchar,AD.Createdat,103) as Transactiondate,Convert(Varchar,PV.Visitdate,103) as VisitDate,PV.VisitNumber as VisitNumber,FB.BillNumber as BillNumber,               
+P.PatientNumber as ExtPatientID,P.Name as PatientName,              
+--FB.GrossBillValue as GrossAmount,FB.NetValue as NetAmount,case when CM.isadvanceclient=1 Then FB.NetValue ELSE 0 END,               
+BD.Amount as GrossAmount,(BD.Amount-Isnull(BD.DiscountAmount,0)) as NetAmount              
+,case when CM.isadvanceclient=1 Then (BD.Amount-Isnull(BD.DiscountAmount,0))  ELSE 0 END,               
+PV.ReferingPhysicianName as RefDocName,               
+Case when CM.isadvanceclient=1 and AD.BillStatus!='CANCELLED' Then 'Refund' WHEN CM.isadvanceclient=1 and AD.BillStatus='CANCELLED' Then 'Cancel' when CM.isadvanceclient=1 Then 'PrePaid'           
+when AD.BillStatus!='CANCELLED' Then 'Refund' WHEN AD.BillStatus='CANCELLED' Then 'Cancel' Else 'Billing' END as TransactionType,              
+CASE WHEN CM.ClientCode='GENERAL' THEN 'GENERAL' ELSE 'CLIENT' END AS DueType,0 AS AdjustmentAmount,              
+Case when CM.ClientName='GENERAL' Then '' Else CM.ClientName End as ClientName,              
+AD.BillStatus as BillStatus,              
+--FB.DiscountAmount             
+Isnull(BD.DiscountAmount,0)              
+,FB.DiscountReason,U.Name as DisApprovedBy,'' as Specialization,              
+Case when CM.ClientName='GENERAL' Then '' Else CM.ClientName End as SourceName,'' as SalespersonName,PV.OrgAddressID,CM.ClientID,Iscash,'','' --PDD.DueReason,UU.Name                      
+,Convert(Varchar,AD.CreatedAt,103) as RefundDate               ,cm.IsAdvanceClient  
+,BD.Feedescription ,BD.BillingDetailsID ,BD.FeeID,BD.FeeType,P.Sex,P.Age,1              
+from Amountrefunddetails AD WITH(NOLOCK)                   
+Inner join Billingdetails BD WITH(NOLOCK) ON BD.BillingdetailsID=AD.BillingdetailsID AND BD.OrgID=AD.OrgID              
+Inner join FinalBill FB WITH(NOLOCK) ON FB.FinalBillID=BD.FinalBillID AND FB.OrgID=BD.OrgID              
+Inner join PatientVisit PV WITH(NOLOCK) ON PV.PatientVisitID=FB.VisitID AND PV.OrgID=FB.OrgID and Convert(varchar,AD.Createdat,103)<> Convert(varchar,PV.Createdat,103)               
+Inner join Patient P WITH(NOLOCK) ON P.OrgID=PV.OrgID and P.PatientID=PV.PatientID                
+Inner join VisitClientMapping VCM WITH(NOLOCK) ON VCM.OrgID=PV.OrgID and VCM.VisitID=PV.PatientVisitID  AND VCM.FinalBillID=FB.FinalBillID              
+AND Isnull(VCM.IsActive,'Y')='Y'              
+Inner join Organization O WITH(NOLOCK) On O.OrgID=PV.OrgID               
+Inner join OrganizationAddress OA WITH(NOLOCK) ON OA.OrgID=PV.OrgID AND OA.AddressID=PV.OrgAddressID              
+Inner join Clientmaster CM WITH(NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.orgID=VCM.OrgID              
+Left join Users U WITH(NOLOCK) ON U.LoginID=FB.DiscountApprovedBy AND U.OrgID=FB.OrgID  AND Isnull(U.LoginID,0)!=0              
+left join PatientDueDetails PDD WITH(NOLOCK) ON PDD.VisiTID=VCM.VisitID AND PDD.FinalBillID=VCM.FinalBillID AND PDD.OrgID=VCM.OrgID              
+Left join Users UU WITH(NOLOCK) ON UU.LoginID=PDD.DueApprovedBy AND UU.OrgID=PDD.OrgID AND Isnull(UU.LoginID,0)!=0              
+where AD.Createdat Between @pFDate AND @pTDate AND BD.OrgID=@pOrgId  and Convert(varchar,AD.Createdat,103)<> Convert(varchar,PV.Createdat,103)               
+               
+Order by PV.PatientVisitID              
+Delete from #fistdata where BillStatus='CANCELLED' and RefundDate=Trans              
+              
+Select Distinct PatientVisitID,FinalBillID,OrgID ,Transactiondate Into #fistdataVID from #fistdata               
+Select Distinct PatientVisitID,FinalBillID,OrgID,Transactiondate Into #fistdataVID1 from #fistdata1               
+              
+    Insert into @Billdata (PatientVisitID,FinalBillID,CollectedAmount,DiscountAmt,DiscountReason,Due,PaymentName,DisApprovedBy,AmountRefund,NetAmount)              
+select Distinct PP.PatientVisitID,PP.FinalBillID,Sum(ARD.OtherCurrencyAmount) as CollectedAmount,P.DiscountAmt,P.DiscountReason,              
+Case when P.DueBillNo is Not null  and FB.Due!=0.00 Then (Sum(FB.Due)-(Isnull(Sum(P.OtherCurrencyAmount),0.00) + isnull(Sum(P.DiscountAmt),0.00))) Else Sum(FB.Due) End as Due,              
+PT.PaymentName  ,U.Name as DisApprovedBy,Sum(FB.AmountRefund) as AmountRefund,FB.NetValue              
+from #fistdataVID PP               
+Inner join FinalBill FB WITH(NOLOCK) ON FB.VisitID=PP.PatientVisitID AND FB.FinalBillID=PP.FinalBillID               
+and FB.OrgID=PP.OrgID               
+left join AmountReceivedDetails ARD WITH(NOLOCK) ON ARD.FinalBillID=FB.FinalBillID AND ARD.OrgID=FB.OrgID AND PP.Transactiondate=Convert(varchar,ARD.Createdat,103)               
+              
+--AND Isnull(ARD.ReceiptNO,0)=0              
+left join Duepaiddetail P WITH(NOLOCK) ON P.PaidBillNo=FB.FinalBillID AND P.OrgID=FB.OrgID AND PP.Transactiondate=Convert(varchar,P.PaidDate,103)              
+left join PaymentType PT WITH(NOLOCK) on PT.PaymentTypeID=ARD.TypeID              
+left join Users U WITH(NOLOCK) ON U.Loginid=P.DiscountApprovedBy  AND Isnull(U.LoginID,0)!=0              
+where FB.FinalBillID=PP.FinalBillID               
+group by PP.PatientVisitID,PP.FinalBillID,P.DiscountAmt,P.DiscountReason,FB.Due,P.OtherCurrencyAmount,P.DiscountAmt,PT.PaymentName,U.Name,P.DueBillNo,FB.NetValue              
+    
+Insert into @Billdata1 (PatientVisitID,FinalBillID,CollectedAmount,DiscountAmt,DiscountReason,Due,PaymentName,DisApprovedBy,AmountRefund,NetAmount)              
+select Distinct PP.PatientVisitID,PP.FinalBillID,Sum(ARD.OtherCurrencyAmount) as CollectedAmount,P.DiscountAmt,P.DiscountReason,              
+Case when P.DueBillNo is Not null and FB.Due!=0.00  Then (Sum(FB.Due)-(Isnull(Sum(P.OtherCurrencyAmount),0.00) + isnull(Sum(P.DiscountAmt),0.00))) Else Sum(FB.Due) End as Due,              
+PT.PaymentName  ,U.Name as DisApprovedBy,Sum(FB.AmountRefund) as AmountRefund,FB.NetValue              
+from #fistdataVID1 PP               
+Inner join FinalBill FB WITH(NOLOCK) ON FB.VisitID=PP.PatientVisitID AND FB.FinalBillID=PP.FinalBillID and FB.OrgID=PP.OrgID               
+left join AmountReceivedDetails ARD WITH(NOLOCK) ON ARD.FinalBillID=FB.FinalBillID AND ARD.OrgID=FB.OrgID AND PP.Transactiondate<>Convert(varchar,ARD.Createdat,103)               
+--AND Isnull(ARD.ReceiptNO,0)=0              
+left join Duepaiddetail P WITH(NOLOCK) ON P.PaidBillNo=FB.FinalBillID AND P.OrgID=FB.OrgID AND PP.Transactiondate<>Convert(varchar,P.PaidDate,103)              
+left join PaymentType PT WITH(NOLOCK) on PT.PaymentTypeID=ARD.TypeID              
+left join Users U WITH(NOLOCK) ON U.Loginid=P.DiscountApprovedBy AND Isnull(U.LoginID,0)!=0              
+where FB.FinalBillID=PP.FinalBillID               
+group by PP.PatientVisitID,PP.FinalBillID,P.DiscountAmt,P.DiscountReason,FB.Due,P.OtherCurrencyAmount,P.DiscountAmt,PT.PaymentName,U.Name,P.DueBillNo ,FB.NetValue              
+               
+              
+--Drop table #fistdataVID              
+--Drop table #fistdataVID1              
+Delete from #fistdata where PatientVisitid not in (select Distinct PatientVisitID from @Billdata)              
+Delete from #fistdata1 where PatientVisitid not in (select Distinct PatientVisitID from @Billdata1)              
+               
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ FROM  #fistdata F Where F.FeeType='INV'              
+              
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ FROM  #fistdata F Where F.FeeType='GRP'              
+              
+Update F Set F.DeptName='PKG'              
+from #fistdata F               
+Where F.FeeType='PKG'              
+                
+              
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+FROM  #fistdata F Where F.FeeType='INV'              
+              
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)           WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ FROM  #fistdata F Where F.FeeType='GRP'              
+              
+Update F Set F.DeptName='PKG'              
+from #fistdata1 F               
+Where F.FeeType='PKG'               
+              
+              
+Insert into @CashAmount (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,Due,NetAmount,AmountRefund,Discount)              
+Select Distinct FinalBillID,Case when PaymentName='Cash' Then Isnull(CollectedAmount,0.00) End as Cash,Case when PaymentName='Cheque' Then Isnull(CollectedAmount,0.00) End as Cheque,              
+Case when PaymentName in ('Credit/Debit Card','VISA','MASTER','MAESTRO','AMEX','DINERS')Then Isnull(CollectedAmount,0.00) End as Card,Case when PaymentName='Demand Draft' Then Isnull(CollectedAmount,0.00) End as DemandDraft,              
+Case when PaymentName='Online' Then Isnull(CollectedAmount,0.00) End as Online,isnull(Due,0.00) as Due,sum(Isnull(DiscountAmt,0.00)) as NetAmount,              
+sum(isnull(AmountRefund,0.00)) as AmountRefund,Sum(Isnull(DiscountAmt,0.00)) as Discount              
+From @Billdata Group by FinalBillID,PaymentName,CollectedAmount,Due              
+            
+Insert into @CashAmount2 (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,Due,NetAmount,AmountRefund,Discount)              
+Select Distinct FinalBillID,Case when PaymentName='Cash' Then Isnull(CollectedAmount,0.00) End as Cash,Case when PaymentName='Cheque' Then Isnull(CollectedAmount,0.00) End as Cheque,              
+Case when PaymentName in ('Credit/Debit Card','VISA','MASTER','MAESTRO','AMEX','DINERS') Then Isnull(CollectedAmount,0.00) End as Card,Case when PaymentName='Demand Draft' Then Isnull(CollectedAmount,0.00) End as DemandDraft,              
+Case when PaymentName='Online' Then Isnull(CollectedAmount,0.00) End as Online,isnull(Due,0.00) as Due,sum(Isnull(DiscountAmt,0.00)) as NetAmount,              
+sum(isnull(AmountRefund,0.00)) as AmountRefund,Sum(Isnull(DiscountAmt,0.00)) as Discount              
+From @Billdata1 Group by FinalBillID,PaymentName,CollectedAmount,Due              
+              
+Insert into @CollectedAmount (FinalBillID,CollectedAmount)              
+Select Distinct FinalBillID,sum(CollectedAmount) from @Billdata group by FinalBillID              
+              
+Insert into @CollectedAmount2 (FinalBillID,CollectedAmount)              
+Select Distinct FinalBillID,sum(CollectedAmount) from @Billdata1 group by FinalBillID              
+              
+Insert into @CashAmount1 (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,Due,NetAmount,AmountRefund,Discount)              
+select Distinct FinalBillID, Sum(isnull(Cash,0)) as Cash, Sum(isnull(Cheque,0)) as Cheque, Sum(isnull(Card,0)) as Card, Sum(isnull(DemandDraft,0)) as DemandDraft,              
+Sum(isnull(Online,0)) as Online,isnull(Due,0.00),Sum(isnull(NetAmount,0.00)) as NetAmount,Sum(isnull(AmountRefund,0.00)) as AmountRefund,Sum(isnull(Discount,0.00)) as Discount               
+from @CashAmount group by FinalBillID,Due              
+              
+Insert into @CashAmount12 (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,Due,NetAmount,AmountRefund,Discount)              
+select Distinct FinalBillID, Sum(isnull(Cash,0)) as Cash, Sum(isnull(Cheque,0)) as Cheque, Sum(isnull(Card,0)) as Card, Sum(isnull(DemandDraft,0)) as DemandDraft,              
+Sum(isnull(Online,0)) as Online,isnull(Due,0.00),Sum(isnull(NetAmount,0.00)) as NetAmount,Sum(isnull(AmountRefund,0.00)) as AmountRefund,Sum(isnull(Discount,0.00)) as Discount               
+from @CashAmount2 group by FinalBillID,Due              
+               
+              
+update FD set FD.Cash=isnull(DF.Cash,0.00),FD.Cheque=isnull(DF.Cheque,0.00),FD.Card=isnull(DF.Card,0.00),FD.DemandDraft=isnull(DF.DemandDraft,0.00),               
+FD.Online=isnull(DF.Online,0.00),FD.Due=isnull(DF.Due,0.00),--FD.NetAmount=(FD.NetAmount-isnull(DF.Discount,0.00)),              
+FD.AmountRefund=isnull(DF.AmountRefund,0.00),FD.Discount=(FD.Discount+ isnull(DF.Discount,0.00))              
+FROM #fistdata FD              
+Inner join @CashAmount1 DF ON DF.FinalBillID=FD.FinalBillID               
+  
+update FD set FD.Collection=DF.CollectedAmount from #fistdata FD              
+Inner join @CollectedAmount DF ON DF.FinalBillID=FD.FinalBillID                                                               
+              
+UPDATE t1    
+SET t1.SumofFinalBillAmount = t2.field2Sum    
+FROM #fistdata t1    
+ Cross Apply (Select Sum(Isnull(Amount,0) ) as field2Sum From BillingDetails BD Where BD.FinalBillID=t1.FinalBillID) t2  
+  
+  
+ UPDATE t1    
+SET t1.Percentageamt = t2.field2Sum    
+FROM #fistdata t1    
+INNER JOIN (select finalbillid,BillingDetailsID, 100.00*GrossAmount/SumofFinalBillAmount as field2Sum    
+   from #fistdata    
+  group by finalbillid,BillingDetailsID,GrossAmount,SumofFinalBillAmount) as t2    
+on t2.finalbillid = t1.finalbillid and t2.BillingDetailsID=t1.BillingDetailsID    
+      
+  UPDATE t1    
+SET Collection =  (Collection* Percentageamt)/100     
+FROM #fistdata  t1                
+             UPDATE t1    
+SET Cash = (cash*Percentageamt)/100 , Cheque=(Cheque*PercentageAmt)/100,Card=(Card*PercentageAmt)/100,DemandDraft=(DemandDraft*Percentageamt)/100,Online=(Online*PercentageAmt)/100  
+,Due=(Due*Percentageamt)/100  
+FROM #fistdata t1       
+   
+            
+              
+update FD set FD.Cash=isnull(DF.Cash,0.00),FD.Cheque=isnull(DF.Cheque,0.00),FD.Card=isnull(DF.Card,0.00),FD.DemandDraft=isnull(DF.DemandDraft,0.00),               
+FD.Online=isnull(DF.Online,0.00),FD.Due=isnull(DF.Due,0.00),--FD.NetAmount=(FD.NetAmount-isnull(DF.Discount,0.00)),              
+FD.AmountRefund=isnull(DF.AmountRefund,0.00),FD.Discount=(FD.Discount+ isnull(DF.Discount,0.00))               
+FROM #fistdata1 FD              
+Inner join @CashAmount12 DF ON DF.FinalBillID=FD.FinalBillID               
+              
+update FD set FD.Collection=DF.CollectedAmount from #fistdata1 FD              
+Inner join @CollectedAmount2 DF ON DF.FinalBillID=FD.FinalBillID      
+  
+UPDATE t1    
+SET t1.SumofFinalBillAmount = t2.field2Sum    
+FROM #fistdata1 t1    
+ Cross Apply (Select Sum(Amount) as field2Sum From BillingDetails BD Where BD.FinalBillID=t1.FinalBillID) t2  
+  
+  
+ UPDATE t1    
+SET t1.Percentageamt = t2.field2Sum    
+FROM #fistdata1 t1    
+INNER JOIN (select finalbillid,BillingDetailsID, 100.00*GrossAmount/SumofFinalBillAmount as field2Sum    
+   from #fistdata1    
+  group by finalbillid,BillingDetailsID,GrossAmount,SumofFinalBillAmount) as t2    
+on t2.finalbillid = t1.finalbillid and t2.BillingDetailsID=t1.BillingDetailsID    
+      
+  UPDATE t1    
+SET Collection =  (Collection* Percentageamt)/100     
+FROM #fistdata1  t1              
+               
+             UPDATE t1    
+SET Cash = (cash*Percentageamt)/100 , Cheque=(Cheque*PercentageAmt)/100,Card=(Card*PercentageAmt)/100,DemandDraft=(DemandDraft*Percentageamt)/100,Online=(Online*PercentageAmt)/100  
+,Due=(Due*Percentageamt)/100  
+FROM #fistdata1 t1    
+              
+Update FD set FD.DiscountComment=(Isnull(FD.DiscountComment,'') + Isnull(BD.DiscountReason,'')),              
+FD.DisApprovedBy=(Isnull(FD.DisApprovedBy,'') +' ' + isnull(BD.DisApprovedBy,''))              
+from #fistdata FD --FD.Collection=BD.CollectedAmount,              
+Inner join @Billdata BD ON BD.PatientVisitID=FD.PatientVisitID AND BD.FinalBillID=FD.FinalBillID              
+              
+Update FD set FD.DiscountComment=(Isnull(FD.DiscountComment,'') + Isnull(BD.DiscountReason,'')),              
+FD.DisApprovedBy=(Isnull(FD.DisApprovedBy,'') +' ' + isnull(BD.DisApprovedBy,''))              
+from #fistdata1 FD --FD.Collection=BD.CollectedAmount,              
+Inner join @Billdata1 BD ON BD.PatientVisitID=FD.PatientVisitID AND BD.FinalBillID=FD.FinalBillID              
+              
+               
+Insert into #fistdata              
+select * from #fistdata1              
+update #fistdata set Due=GrossAmount where Iscash='N'              
+Update #fistdata set GrossAmount= -GrossAmount, NetAmount= -NetAmount,DemandDraft=-DemandDraft,Discount=-Discount,Cash=-Cash,Card=-Card,Cheque=-Cheque,Online=-Online,Collection=-Collection,Due=-Due where TransactionType='Refund'              
+Update #fistdata set Discount=0.00,Cash=0.00,Cheque=0.00,Collection=0.00,Card=0.00,Due=0.00,DemandDraft=0.00,Online=0.00 where TransactionType='Prepaid'              
+                 
+Update #fistdata set GrossAmount= -GrossAmount, NetAmount= -NetAmount,DemandDraft=-DemandDraft,Discount=-Discount,Cash=-Cash,Card=-Card,Cheque=-Cheque,          
+Online=-Online,Collection=-Collection,Due=-Due,Prepaid=-Prepaid where TransactionType='Cancel'              
+update #fistdata set Due=0.00 where Iscash='N' and IsAdvanceClient=1  
+  
+                
+Update FTT Set FTT.CollectedUser=U.Name from #fistdata FTT--selva              
+Inner join FinalBill BDD WITH(NOLOCK) ON BDD.FinalBillid=FTT.FinalBillID AND BDD.OrgID=FTT.OrgID              
+Inner join Users U WITH(NOLOCK) ON U.LoginID=BDD.CreatedBy AND BDD.OrgID=U.OrgID              
+               
+Update FTT Set FTT.CollectedUser= (CASE WHEN FTT.Transactiondate!=FTT.VisitDate THEN U.Name END)from #fistdata FTT--selva              
+Inner join Amountrefunddetails BDD WITH(NOLOCK) ON BDD.FinalBillid=FTT.FinalBillID AND BDD.OrgID=FTT.OrgID              
+Inner join Users U WITH(NOLOCK) ON U.LoginID=BDD.CreatedBy AND BDD.OrgID=U.OrgID     
+WHERE FTT.TransactionType in ('Refund','Cancel')              
+               
+              
+ Insert Into #fistdata (Sno,Trans,PatientName,GrossAmount,Discount,NetAmount,Due,Cash,Cheque,Card,Prepaid,Online,DemandDraft,AdjustmentAmount,Collection,[NO of Studies])              
+ select 2 as Sno,Trans,'TOTAL' as PatientName,Sum(GrossAmount) as GrossAmount,Sum(isnull(Discount,0.00)) as Discount,Sum(isnull(NetAmount,0.00)) as NetAmount,              
+ Sum(isnull(Due,0.00)) as Due, Sum(isnull(Cash,0.00)) as Cash, Sum(isnull(Cheque,0.00)) as Cheque,Sum(isnull(Card,0.00)) as Card,              
+ Sum(isnull(Prepaid,0.00)) as Prepaid,Sum(isnull(Online,0.00)) as Online,Sum(isnull(DemandDraft,0.00)) as DemandDraft,Sum(isnull(AdjustmentAmount,0.00)) as AdjustmentAmount, Sum(isnull(Collection,0.00)) as Collection ,Sum(Isnull([NO of Studies],0))    
+ from #fistdata             WHERE OrgID=@pOrgId Group by Trans              
+-------------------------------------------------------------------------------------------------                
+-------------------------------------------------------------------------------------------------                
+     
+Declare @CollecteddueAmount Table (FinalbillID Bigint, CollectedAmount Decimal(18,2))                
+Create Table #thirddata (Sno int,Trans Nvarchar(20),PatientVisitID Bigint,FinalBillID Bigint,OrgID Int,CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),                
+VisitDate Varchar(10),VisitNumber nvarchar(50),ExtPatientID Nvarchar(50),BillNumber Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),                
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft Decimal(18,2),                
+AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),                
+RefDocName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),DueType Nvarchar(50),ClientName nvarchar(255),                
+ReceiptNo int,Specialization nvarchar(255),SourceName nvarchar(255),SalespersonName nvarchar(255),CollectedUser Nvarchar(250),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255)  
+,SumofFinalBillAmount decimal(18,2),Percentageamt  decimal(18,2),Feedescription varchar(250),BillingDetailsID  Bigint,FeeID Bigint,BillAmount decimal(18,2),  
+FeeType varchar(10),Gender varchar(10),Age varchar(20),DeptHeaderName Varchar(200),[NO of Studies] int ,DeptName varchar(255))                
+Declare @CashdueAmount Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),                
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),CollectedUser Nvarchar(250))                
+Declare @CashdueAmount1 Table (FinalbillID Bigint, Cash Decimal(18,2),Cheque Decimal(18,2),Card Decimal(18,2), DemandDraft Decimal(18,2), Online Decimal(18,2),Due Decimal(18,2),                
+NetAmount Decimal(18,2),AmountRefund Decimal(18,2),Discount Decimal(18,2),CollectedUser Nvarchar(250))                
+                
+Insert into #thirddata (Sno,Trans,PatientVisitID,FinalBillID,OrgID,CenterName,CircleName,Transactiondate,VisitDate,VisitNumber,ExtPatientID,BillNumber,PatientName,                            
+Collection,RefDocName,ClientName,TransactionType,DueType,ReceiptNo,Specialization,SourceName,SalespersonName,DueComment,DueApprovedBy,Feedescription,BillingDetailsID  
+,FeeID,BillAmount, FeeType ,Gender ,Age ,[NO of Studies]   
+)   
+select Distinct 1 as Sno,Convert(varchar,DP.PaidDate,103) as Trans,PV.PatientVisitID,VCM.FinalBillID,PV.OrgID,OA.location as CenterName,OA.City as CircleName,                            
+Convert(varchar,DP.PaidDate,103) as Transactiondate,Convert(Varchar,PV.Createdat,103) as VisitDate,PV.VisitNumber as VisitNumber, P.PatientNumber as ExtPatientID,  
+PDD.BillNo,P.Name as PatientName,                            
+DP.OtherCurrencyAmount as Collection,PV.ReferingPhysicianName as RefDocName,CM.ClientName as ClientName,'Pending Collection' as TransactionType,                
+CASE WHEN CM.ClientCode='GENERAL' THEN 'GENERAL' ELSE 'CLIENT' END AS DueType,DP.ReceiptNo,'' as Specialization,                
+Case when CM.ClientName='GENERAL' Then '' Else CM.ClientName End as SourceName,'' as SalespersonName,PDD.DueReason,UU.Name                
+,FeeDescription,BD.BillingDetailsID,BD.FeeID,BD.Amount ,FeeType,P.Sex,P.Age,1  
+From Duepaiddetail DP (NOLOCK)                 
+Inner Join AmountReceivedDetails ARD (NOLOCK) ON ARD.FinalBillID=DP.DueBillNo AND ARD.OrgID=DP.OrgID And ARD.ReceiptNO!=0  
+Inner Join BillingDetails BD ON BD.FinalBillID=ARD.FinalBillID   
+left join AmountRefundDetails ACD (NOLOCK) ON ACD.FinalBillID=ARD.FinalBillID AND ACD.OrgID=ARD.OrgID and ACD.BillingDetailsID=BD.BillingDetailsID                
+Inner join VisitClientMapping VCM (NOLOCK) ON VCM.FinalBillID=ARD.FinalBillID AND VCM.OrgID=ARD.OrgID AND Isnull(VCM.IsActive,'Y')='Y'                
+Inner Join ClientMaster CM (NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.OrgID=VCM.OrgID                
+Inner join PatientVisit PV (NOLOCK) ON PV.PatientVisitID=VCM.VisitID AND PV.OrgID=VCM.OrgID                
+Inner join Patient P (NOLOCK) ON P.PatientID=PV.PatientID AND P.OrgID=PV.OrgID           
+Inner join OrganizationAddress OA (NOLOCK) ON OA.OrgID=PV.OrgID AND OA.AddressID=PV.OrgAddressID                
+Inner join Organization O (NOLOCK) On O.OrgID=PV.OrgID                 
+Inner join PatientDueDetails PDD (NOLOCK) ON PDD.VisiTID=VCM.VisitID AND PDD.FinalBillID=VCM.FinalBillID AND PDD.OrgID=VCM.OrgID                
+Left join Users UU (NOLOCK) ON UU.LoginID=PDD.DueApprovedBy AND UU.OrgID=PDD.OrgID AND Isnull(UU.LoginID,0)!=0  
+Where DP.OrgID=@pOrgId AND DP.PaidDate Between @pFDate AND @pTDate --AND ACD.FinalBillID is NULL             
+and CONVERT(VARCHAR, DP.CreatedAt,103)!= CONVERT(VARCHAR,PV.CreatedAt,103)AND ISNULL(PV.ReferVisitID,0)=0 --And PV.PatientVisitID Not in (select Distinct PatientVisitID From #fistdata)                            
+                
+Declare @thirddata Table (FinalBillID Bigint,ReceiptNO Decimal(18,2),Collection Decimal(18,2),PaymentName Nvarchar(50),CollectedUser Nvarchar(250))                
+Insert into @thirddata (FinalBillID,ReceiptNO,Collection,PaymentName, CollectedUser)                
+select  Distinct TR.FinalBillID,TR.ReceiptNO,ARS.OtherCurrencyAmount as Collection,PY.PaymentName,U.Name   
+from #thirddata TR                 
+Inner join AmountReceivedDetails ARS (NOLOCK) ON ARS.FinalBillID=TR.FinalBillID AND ARS.OrgID=TR.OrgID                
+Inner join PaymentType PY (NOLOCK) ON PY.PaymentTypeID=ARS.TypeID                
+Left join Users U (NOLOCK) On U.LoginID=ARS.Createdby                
+WHERE TR.ReceiptNO=ARS.ReceiptNO AND TR.OrgID=ARS.OrgID                
+                
+--Update SS Set SS.Cash= Case when TF.PaymentName='Cash' Then TF.Collection END,SS.Cheque= CASE when TF.PaymentName='Cheque' Then TF.Collection END,                 
+--SS.Card= CASE when TF.PaymentName='Credit/Debit Card' Then TF.Collection END,SS.Prepaid= CASE when TF.PaymentName='Prepaid' Then TF.Collection END,                 
+--SS.Online= CASE when TF.PaymentName='Online' Then TF.Collection END,SS.DemandDraft= CASE when TF.PaymentName='DemandDraft' Then TF.Collection END                
+--FROM #thirddata SS                
+--Inner join @thirddata TF On TF.FinalBillID=SS.FinalBillID AND TF.ReceiptNO=SS.ReceiptNO                
+                
+Insert into @CashdueAmount (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,CollectedUser)                
+Select Distinct FinalBillID,Case when PaymentName='Cash' Then Isnull(Collection,0.00) End as Cash,                
+Case when PaymentName='Cheque' Then Isnull(Collection,0.00) End as Cheque,      
+Case when PaymentName in ('Credit/Debit Card','VISA','MASTER','MAESTRO','AMEX','DINERS') Then Isnull(Collection,0.00) End as Card,                
+Case when PaymentName='Demand Draft' Then Isnull(Collection,0.00) End as DemandDraft,                
+Case when PaymentName='Online' Then Isnull(Collection,0.00) End as Online,CollectedUser                
+From @thirddata-- Group by FinalBillID,PaymentName,Collection                
+                
+Insert into @CollecteddueAmount (FinalBillID,CollectedAmount)                
+Select Distinct FinalBillID,sum(Collection) from @thirddata group by FinalBillID                
+                
+Insert into @CashdueAmount1 (FinalBillID,Cash,Cheque,Card,DemandDraft,Online,CollectedUser)                
+select Distinct FinalBillID, Sum(isnull(Cash,0)) as Cash, Sum(isnull(Cheque,0)) as Cheque, Sum(isnull(Card,0)) as Card, Sum(isnull(DemandDraft,0)) as DemandDraft,                
+Sum(isnull(Online,0)) as Online,CollectedUser                
+from @CashdueAmount group by FinalBillID,CollectedUser                
+                
+  
+UPDATE t1    
+SET t1.SumofFinalBillAmount = t2.field2Sum    
+FROM #thirddata t1    
+ Cross Apply (Select Sum(Amount) as field2Sum From BillingDetails BD Where BD.FinalBillID=t1.FinalBillID) t2  
+  
+  
+ UPDATE t1    
+SET t1.Percentageamt = t2.field2Sum    
+FROM #thirddata t1    
+INNER JOIN (select finalbillid,BillingDetailsID, 100.00*BillAmount/SumofFinalBillAmount as field2Sum    
+   from #thirddata    
+  group by finalbillid,BillingDetailsID,BillAmount,SumofFinalBillAmount) as t2    
+on t2.finalbillid = t1.finalbillid and t2.BillingDetailsID=t1.BillingDetailsID    
+     
+     
+  UPDATE t1    
+SET Collection =  (Collection* Percentageamt)/100     
+FROM #thirddata  t1   
+     
+update FD set FD.Cash=isnull(DF.Cash,0.00),FD.Cheque=isnull(DF.Cheque,0.00),FD.Card=isnull(DF.Card,0.00),FD.DemandDraft=isnull(DF.DemandDraft,0.00),                 
+FD.Online=isnull(DF.Online,0.00),FD.CollectedUser=DF.CollectedUser                
+FROM #thirddata FD                
+Inner join @CashdueAmount1 DF ON DF.FinalBillID=FD.FinalBillID                
+                
+--update FD set FD.Collection=DF.CollectedAmount from #thirddata FD                
+--Inner join @CollecteddueAmount DF ON DF.FinalBillID=FD.FinalBillID                
+                 
+  UPDATE t1    
+SET Cash = (cash*Percentageamt)/100 , Cheque=(Cheque*PercentageAmt)/100,Card=(Card*PercentageAmt)/100,DemandDraft=(DemandDraft*Percentageamt)/100,Online=(Online*PercentageAmt)/100  
+FROM #thirddata t1       
+  
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'INV'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ FROM  #thirddata F Where F.FeeType='INV'              
+              
+Update F Set DeptName= stuff((                
+ SELECT DISTINCT ',' + Deptname                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'                
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ ,DeptHeaderName=stuff((                
+ SELECT DISTINCT ',' + HeaderName                
+ FROM VW_TestwithDept TestDept WITH(NOLOCK)                
+ WHERE testdept.ORgid = F.Orgid                
+ AND testdept.Testtype = 'GRP'  and Isnull(HeaderName,'')<>''               
+ AND testdept.Investigationid = F.FeeID                
+ FOR XML path('')                
+ ), 1, 1, '')                
+ FROM  #thirddata F Where F.FeeType='GRP'              
+              
+Update F Set F.DeptName='PKG'              
+from #thirddata F               
+Where F.FeeType='PKG'   
+Delete from #thirddata where VisitNumber in (                
+Select T.VisitNumber from #thirddata T                
+Inner join #fistdata F On F.VisitNumber=T.VisitNumber                 
+WHERE F.VisitNumber=T.VisitNumber AND F.Transactiondate=T.Transactiondate)                
+ Insert Into #thirddata (Sno,Trans,PatientName,GrossAmount,Discount,NetAmount,Due,Cash,Cheque,Card,Prepaid,Online,DemandDraft,AdjustmentAmount,Collection,[NO of Studies])                
+ select 2 as Sno,Trans,'TOTAL' as PatientName,Sum(isnull(GrossAmount,0.00)) as GrossAmount,Sum(isnull(Discount,0.00)) as Discount,                
+ Sum(isnull(NetAmount,0.00)) as NetAmount, Sum(isnull(Due,0.00)) as Due, Sum(isnull(Cash,0.00)) as Cash, Sum(isnull(Cheque,0.00)) as Cheque,                
+ Sum(isnull(Card,0.00)) as Card, Sum(isnull(Prepaid,0.00)) as Prepaid,Sum(isnull(Online,0.00)) as Online,Sum(isnull(DemandDraft,0.00)) as DemandDraft,                
+ Sum(isnull(AdjustmentAmount,0.00)) as AdjustmentAmount, Sum(isnull(Collection,0.00)) as Collection ,Sum(Isnull([NO of Studies],0)) as [NO of Studies]  
+   
+ from #thirddata                
+ WHERE OrgID=@pOrgId Group by Trans                
+                
+--------------------------------------------------------------------------------------                
+--------------------------------------------------------------------------------------            
+                
+Create Table #Totaldata (Sno int,Trans Nvarchar(20),PatientVisitID Bigint,FinalBillID Bigint,OrgID Int,CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),              
+VisitDate Varchar(10),VisitNumber nvarchar(50),BillNumber Nvarchar(50),ExtPatientID Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),              
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft decimal(18,2),              
+AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),              
+RefDocName nvarchar(255),Specialization nvarchar(255),SourceName nvarchar(255),SalespersonName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),DueType Nvarchar(50),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255)              
+
+
+,Feedescription Nvarchar(max))              
+Create Table #Totaldata1 (Sno int,Trans Nvarchar(20),PatientVisitID Bigint,FinalBillID Bigint,OrgID Int,CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),              
+VisitDate Varchar(10),VisitNumber nvarchar(50),BillNumber Nvarchar(50),ExtPatientID Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),              
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft decimal(18,2),              
+AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),              
+RefDocName nvarchar(255),Specialization nvarchar(255),SourceName nvarchar(255),SalespersonName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),DueType Nvarchar(50),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255)              
+,Feedescription Nvarchar(max))              
+              
+   
+           
+-------------------------------------------------------------------------------              
+-------------------------------------------------------------------------------              
+Create Table #Finaldata (Sno int,Trans Varchar(10),Data Nvarchar(255),CenterName Nvarchar(255),CircleName Nvarchar(255),Transactiondate Varchar(10),              
+VisitDate Varchar(10),VisitNumber nvarchar(50),BillNumber Nvarchar(50),ExtPatientID Nvarchar(50),PatientName Nvarchar(255),GrossAmount Decimal(18,2),NetAmount Decimal(18,2),              
+Discount Decimal(18,2),Due Decimal(18,2),Cash decimal(18,2),Cheque decimal(18,2), Card decimal(18,2),Prepaid decimal(18,2),Online decimal(18,2),DemandDraft Decimal(18,2),              
+AdjustmentAmount Decimal(18,2),Collection Decimal(18,2),DiscountComment Nvarchar(255),              
+RefDocName nvarchar(255),Specialization nvarchar(255),SourceName nvarchar(255),SalespersonName nvarchar(255),DisApprovedBy Nvarchar(255),TransactionType Nvarchar(50),              
+DueType Nvarchar(50),CollectedUser Nvarchar(250),DueComment Nvarchar(255),DueApprovedBy Nvarchar(255),Feedescription Nvarchar(max),DeptName Varchar(200)              
+,Gender Varchar(10),Age Varchar(20),DeptHeaderName Varchar(200)   ,[NO of Studies] int            
+)              
+--------------------------------------------------------------------------------------              
+--------------------------------------------------------------------------------------              
+Declare @min int=1              
+Declare @max int= (select max(sno) from @Datedetails)              
+while (@min<=@max)              
+BEGIN              
+Declare @Date VARCHAR(10) = (SELECT Dates from @Datedetails where sno=@min)              
+Insert Into #Finaldata (Sno,Trans,Data,CenterName,CircleName,Transactiondate,VisitDate,VisitNumber,BillNumber,ExtPatientID,PatientName,GrossAmount,Discount,NetAmount,Due,Cash,Cheque,              
+Card,Prepaid,Online,DemandDraft,AdjustmentAmount,Collection,RefDocName,Specialization,SourceName,SalespersonName,DisApprovedBy,DiscountComment,DueApprovedBy,DueComment,TransactionType,DueType,CollectedUser              
+,Feedescription,DeptName,Gender,Age,DeptHeaderName,[NO of Studies])              
+select Sno,Trans,'Daily Collection' as Data,CenterName,CircleName,Transactiondate,VisitDate,Isnull(VisitNumber,'') as VisitNumber,Isnull(BillNumber,'') as BillNumber,Isnull(ExtPatientID,'') as ExtPatientID,              
+Isnull(PatientName,'') as PatientName,Isnull(GrossAmount,0.00) as GrossAmount,Isnull(Discount,0.00) as Discount,Isnull(NetAmount,0.00) AS NetAmount,              
+Isnull(Due,0.00) AS Due,Isnull(Cash,0.00) AS Cash,Isnull(Cheque,0.00) AS Cheque,Isnull(Card,0.00) AS Card,Isnull(Prepaid,0.00) AS Prepaid,              
+Isnull(Online,0.00) AS Online,Isnull(DemandDraft,0.00) AS DemandDraft,Isnull(AdjustmentAmount,0.00) AS AdjustmentAmount,Isnull(Collection,0.00) AS Collection,Isnull(RefDocName,'') AS RefDocName,              
+Isnull(Specialization,'') AS Specialization,Isnull(SourceName,'') AS SourceName,Isnull(SalespersonName,'') AS SalespersonName,              
+Isnull(DisApprovedBy,'') AS DisApprovedBy,Isnull(DiscountComment,'') AS DiscountComment,Isnull(DueApprovedBy,'') AS DueApprovedBy,Isnull(DueComment,'') AS DueComment,  
+Isnull(TransactionType,'') AS TransactionType,Isnull(DueType,'') AS DueType,CollectedUser  
+,Feedescription,DeptName,case when Gender='M' then 'Male' When Gender='F' then 'Female' END,Age,DeptHeaderName  ,[NO of Studies]            
+FROM #fistdata WHERE Trans=@Date               
+Union all                
+select Sno,Trans,'Due Collection' as Data,CenterName,CircleName,Transactiondate,VisitDate,Isnull(VisitNumber,'') as VisitNumber,Isnull(BillNumber,'') as BillNumber,Isnull(ExtPatientID,'') as ExtPatientID,                
+Isnull(PatientName,'') as PatientName,Isnull(GrossAmount,0.00) as GrossAmount,Isnull(Discount,0.00) as Discount,Isnull(NetAmount,0.00) AS NetAmount,                
+Isnull(Due,0.00) AS Due,Isnull(Cash,0.00) AS Cash,Isnull(Cheque,0.00) AS Cheque,Isnull(Card,0.00) AS Card,Isnull(Prepaid,0.00) AS Prepaid,           
+Isnull(Online,0.00) AS Online,Isnull(DemandDraft,0.00) AS DemandDraft,Isnull(AdjustmentAmount,0.00) AS AdjustmentAmount,Isnull(Collection,0.00) AS Collection,Isnull(RefDocName,'') AS RefDocName,                
+Isnull(Specialization,'') AS Specialization,Isnull(SourceName,'') AS SourceName,Isnull(SalespersonName,'') AS SalespersonName,                
+Isnull(DisApprovedBy,'') AS DisApprovedBy,Isnull(DiscountComment,'') AS DiscountComment,Isnull(DueApprovedBy,'') AS DueApprovedBy,Isnull(DueComment,'') AS DueComment,  
+Isnull(TransactionType,'') AS TransactionType,Isnull(DueType,'') AS DueType,CollectedUser  
+ ,Feedescription,DeptName,case when Gender='M' then 'Male' When Gender='F' then 'Female' END,Age,DeptHeaderName,[NO of Studies]    
+          
+            
+              
+                 
+FROM #thirddata WHERE Trans=@Date   
+SET @min = @min + 1              
+END               
+Declare @Oderdetails Table (Dno int Identity(1,1), Data Nvarchar(100))              
+Insert into @Oderdetails (Data)              
+select 'Daily Collection'           
+Union all                
+select 'Due Collection'                
+        
+select  FF.CenterName,FF.CircleName,FF.Transactiondate,FF.VisitDate,FF.VisitNumber,FF.BillNumber,FF.ExtPatientID,FF.PatientName,FF.Gender,FF.Age,              
+ [No of Studies],              
+FF.Feedescription as [Procedure Name],DeptName [Modality Name],DeptHeaderName [Modality Type],FF.GrossAmount,              
+FF.Discount,FF.NetAmount,FF.Due,FF.Cash,FF.Cheque,FF.Card,FF.Prepaid,FF.Online,FF.DemandDraft,FF.AdjustmentAmount,FF.Collection,FF.RefDocName,              
+--FF.Specialization,FF.SourceName,              
+--FF.SalespersonName,              
+FF.DisApprovedBy,FF.DiscountComment,FF.DueApprovedBy as Specialization ,FF.DueComment as SourceName,FF.TransactionType,FF.DueType,FF.CollectedUser as SalespersonName              
+from #Finaldata FF               
+Left join @Oderdetails OT ON OT.Data=FF.Data         
+order by FF.Trans,OT.Dno,FF.Sno,FF.VisitNumber--FF.Sno,OT.Dno,FF.Trans,ROW_NUMBER() OVER ( ORDER BY FF.Data   ) Sno,             
+Drop Table #fistdata              
+Drop Table #fistdata1               
+Drop Table #thirddata     
+Drop Table #Totaldata              
+Drop Table #Totaldata1              
+Drop Table #Finaldata              
+Drop table #fistdataVID              
+Drop table #fistdataVID1              
+END              
+ SET NOCOUNT OFF                
+END 

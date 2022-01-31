@@ -1,0 +1,51 @@
+/****** Object:  StoredProcedure [dbo].[pActiveInActiveDrugLevelMapping]    Script Date: 12/31/2018 4:30:25 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE PROCEDURE [dbo].[pActiveInActiveDrugLevelMapping]
+(
+@ID BIGINT,
+@IsActive INT OUT,
+@ContextInfo [UDT_Context] READONLY
+)
+WITH EXECUTE AS OWNER
+AS 
+/* SP DETAILS => CREATED BY :SABARI ,CREATEDAT 01_12_12018 ,FOR :BEGIN | sabari | 20181129 | Dev | Culture Report */
+BEGIN
+ /*DEC PART*/
+ DECLARE @LoginID BIGINT,@CurrentTDateTime DATETIME=GETDATE(),@OrgID BIGINT
+ DECLARE @Active BIT
+ SELECT TOP 1 @LoginID=LoginID,@OrgID=OrgID FROM @ContextInfo
+
+ SELECT @Active=ISNULL(IsActive,0) FROM DrugLevelMapping DLM  WITH(NOLOCK) WHERE DLM.OrgID=@OrgId AND DLM.LevelID=@ID
+ 
+ SELECT @Active,@ID
+ SELECT * FROM DrugLevelMapping DLM  WITH(NOLOCK) WHERE LevelID=@ID
+    /*UPDATE BLOCK*/
+	IF EXISTS(SELECT 1 FROM DrugLevelMapping DLM  WITH(NOLOCK) WHERE LevelID=@ID )
+	BEGIN
+
+	SELECT 'a'
+		/*HIST CAPTURE BLOCK*/
+		INSERT INTO DrugLevelMappingHist(LevelID,LevelName,DrugID,CreatedBy,CreatedAt,IsActive,OrgID)
+		SELECT DLM.LevelID,DLM.LevelName,DLM.DrugID,DLM.CreatedBy,DLM.CreatedAt,DLM.IsActive,DLM.OrgID
+		FROM DrugLevelMapping DLM   WITH(NOLOCK)
+		WHERE  DLM.LevelID=@ID 
+
+		UPDATE DLM SET DLM.IsActive=CASE  WHEN @Active=0 THEN 1 ELSE 0 END  FROM DrugLevelMapping DLM  WHERE DLM.OrgID=@OrgId AND DLM.LevelID=@ID
+
+		SELECT @IsActive=IsActive from DrugLevelMapping DLM   WITH(NOLOCK) WHERE DLM.OrgID=@OrgId AND DLM.LevelID=@ID
+	END
+
+END
+
+
+
+GO
+
+

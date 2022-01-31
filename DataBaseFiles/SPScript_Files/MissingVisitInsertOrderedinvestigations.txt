@@ -1,0 +1,58 @@
+CREATE proc MissingVisitInsertOrderedinvestigations
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+
+DECLARE @VisitID AS BIGINT,
+		@VisitNumber NVARCHAR(256),
+		@POrgID AS INT,
+		@OrgAddressID AS INT,
+		@Feeid AS BIGINT,
+		@FeeType AS NVARCHAR(50),
+		@FeeDescription AS NVARCHAR(MAX),
+		@Uid uniqueidentifier,
+		@Myid NVARCHAR(500) 
+SET @Uid= NEWID()
+
+SELECT top 1 @VisitID=PatientVisitID
+FROM InsertOrderedinvestigations WITH(NOLOCK) WHERE Insertflag=0
+
+SELECT @Myid=(select @Uid)
+
+SELECT  @VisitID=PatientVisitID,@VisitNumber=VisitNumber,@POrgID=OrgID,@OrgAddressID=OrgAddressID,@Feeid=Feeid,@FeeType=FeeType,@FeeDescription=FeeDescription
+FROM InsertOrderedinvestigations WITH(NOLOCK) where Insertflag=0 and PatientVisitID=@VisitID
+
+select FeeDescription,Feeid,PatientVisitID,0,0,'Paid',FeeType,OrgID,@Myid,0,0,0,N'',0,@Myid,N'',N'',0,0,'31/12/9999 23:59:59','31/12/9999 23:59:59',N'',N'',0 --INTO @p1
+from InsertOrderedinvestigations WITH(NOLOCK) where Insertflag=0 and Patientvisitid=@VisitID
+ /** Against the visits **/
+declare @p1 dbo.OrderedInvestigation
+--insert into @p1 values(@FeeDescription,@Feeid,@VisitID,0,0,N'Paid',@FeeType,@POrgID,@Myid,0,0,0,N'',0,@Myid,N'',N'',0,0,'31/12/9999 23:59:59','31/12/9999 23:59:59',N'',N'',0)
+insert into @p1
+select FeeDescription,Feeid,PatientVisitID,0,0,'Paid',FeeType,OrgID,@Myid,0,0,0,N'',0,@Myid,N'',N'',0,0,'31/12/9999 23:59:59','31/12/9999 23:59:59',N'',N'',0 --INTO @p1
+from InsertOrderedinvestigations WITH(NOLOCK) where Insertflag=0 and Patientvisitid=@VisitID
+declare @p3 int
+set @p3=0
+declare @p4 dbo.OrderedInvestigation
+
+declare @p5 dbo.UDT_Context
+insert into @p5 values(@POrgID,NULL,N'',@OrgAddressID,0,NULL,0,0,NULL,N'',@OrgAddressID,0,N'',NULL,NULL,0,0,0,NULL,0,NULL,NULL,NULL,NULL)
+
+exec pInsertOrderedInvestigation @pOrderedInvTable=@p1,@OrgID=@POrgID,@returnstatus=@p3 output,@pUnOrderedInv=@p4,@ContextInfo=@p5
+select @p3
+
+ /** Collect sample Tasks**/
+exec [Ppmsinsertcollectsampletask] @VisitNumber,@POrgID
+
+update io set Insertflag=1
+from InsertOrderedinvestigations io WITH(ROWLOCK) where PatientVisitID=@VisitID and OrgID=@POrgID --and FeeDescription=@FeeDescription
+END TRY
+BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='MissingVisitInsertOrderedinvestigations'
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH    
+END
+

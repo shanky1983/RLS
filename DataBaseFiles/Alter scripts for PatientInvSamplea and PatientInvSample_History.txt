@@ -1,0 +1,38 @@
+-- PatientInvSample ALTER SCRIPT--
+
+IF NOT EXISTS(
+  SELECT TOP 1 1
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE 
+    [TABLE_NAME] = 'PatientInvSample'
+    AND [COLUMN_NAME] = 'ExternalBarcode')
+BEGIN
+  Alter table PatientInvSample Add ExternalBarcode nvarchar(250)
+END
+GO
+------------------
+-- PatientInvSample_History ALTER SCRIPT--
+
+IF NOT EXISTS(
+  SELECT TOP 1 1
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE 
+    [TABLE_NAME] = 'PatientInvSample_History'
+    AND [COLUMN_NAME] = 'ExternalBarcode')
+BEGIN
+  Alter table PatientInvSample_History Add ExternalBarcode nvarchar(250)
+END
+GO
+--------------------
+-- PatientInvSampleMapping ALTER SCRIPT--
+
+IF NOT EXISTS(
+  SELECT TOP 1 1
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE 
+    [TABLE_NAME] = 'PatientInvSampleMapping'
+    AND [COLUMN_NAME] = 'ExternalBarcode')
+BEGIN
+  Alter table PatientInvSampleMapping Add ExternalBarcode nvarchar(250)
+END
+GO

@@ -1,0 +1,9 @@
+SELECT ProductID,BatchNo,TotalStockReceived,TotalLocationIssued+TotalStockDamage+TotalStockIssued+TotalStockReturn,LocationID FROM StockInHand 
+where TotalLocationIssued+TotalStockDamage+TotalStockIssued+TotalStockReturn>TotalStockReceived 
+
+
+
+
+update s set TotalStockReceived=TotalLocationIssued+TotalStockDamage+TotalStockIssued+TotalStockReturn from StockInHand s 
+where TotalLocationIssued+TotalStockDamage+TotalStockIssued+TotalStockReturn>TotalStockReceived 
+

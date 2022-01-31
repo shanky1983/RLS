@@ -1,0 +1,97 @@
+/****** Object:  StoredProcedure [dbo].[pgetReferencePhysicalwisesalepatientwiseReport]    Script Date: 9/3/2018 1:24:50 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pgetReferencePhysicalwisesalepatientwiseReport]
+(
+@fdate [DATETIME]=null ,    
+ @tdate [DATETIME] =null,      
+ @pOrgID bigint      
+,@Pparamtype VARCHAR(100)=null    
+,@Pparamvalue VARCHAR(100)=null    
+,@pExcelReportId [INT] = NULL    
+,@pExcelReportName VARCHAR(255) = NULL    
+,@pToExecute VARCHAR(10) = NULL 
+)
+As
+Begin
+	SET NOCOUNT ON
+	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+	DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+	Declare @patientinfo as table (VisitID bigint,ReferingphysicianName varchar(255),VisitDate datetime,VisitNumber varchar(255),PatientName varchar(255),
+	 TestName nvarchar(max),BillingAmount decimal(18,2), NetAmount decimal(18,2),Discount decimal(18,2),ReceivedAmount decimal(18,2),RefundAmount decimal(18,2),
+	 PhysicianCode nvarchar(40),Category nvarchar(40),RefFeecategory nvarchar(50),Name nvarchar(50))
+BEGIN TRY 
+
+
+	INSERT @patientinfo
+	SELECT Distinct PV.Patientvisitid,PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name as PatientName,
+	 stuff(                                                                        
+	 (                                                         
+	 select ','+TestName +'' From                                                                        
+	 (                                                                        
+	 select O.Name as TestName from Orderedinvestigations O WITH(NOLOCK) where O.Visitid=PV.patientVisitID and O.OrgID=@pOrgID and O.pkgid is null
+	 union
+	 select O.PkgName as TestName from Orderedinvestigations O WITH(NOLOCK) where O.Visitid=PV.patientVisitID and O.OrgID=@pOrgID and Isnull(O.PkgID,0)>0                                                                                           
+	 ) tp                         
+	 for XML path('') ) ,1,1,'')
+	 ,
+	sum(Isnull(FB.GrossBillValue,0)) over (partition by pv.visitnumber,OI.Name,OI.pkgname) as BillingAmount,
+	sum(Isnull(FB.NetValue,0)) over ( partition by pv.visitnumber,OI.Name,OI.pkgname) as NetAmount,
+	sum(Isnull(FB.DiscountAmount,0)) over (partition by pv.visitnumber,OI.Name,OI.pkgname) as Discount,0 as ReceivedAmount,0 as RefundAmount
+	,RP.PhysicianCode
+	,CASE WHEN RPC.Category='----select-----' THEN '' ELSE RPC.Category END AS 'Category'
+	,C.CategoryName  AS 'RefFeecategory'
+	,ERM.Name AS 'Sales Executive - Name'
+	from Patientvisit  PV (NOLOCK)
+	inner join Patient PA (NOLOCK) ON PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+	inner join Orderedinvestigations OI WITH(NOLOCK) ON OI.Visitid=PV.patientvisitid and OI.OrgID=PV.OrgID
+	inner join finalbill FB (NOLOCK) on FB.Visitid=OI.VisitID and FB.OrgID=OI.OrgID
+	inner join billingdetails BD (NOLOCK) on BD.FInalBillid=FB.FinalBillid and BD.OrgID=FB.OrgID 
+	LEFT JOIN ReferingPhysician RP WITH (NOLOCK) ON RP.ReferingPhysicianID=PV.ReferingPhysicianID AND RP.OrgID=PV.OrgID
+	LEFT JOIN ReferingPhyCategoryMapping RPC WITH (NOLOCK) ON RP.ReferingPhysicianID=RPC.ReferingPhysicianID
+	LEFT JOIN Category C WITH (NOLOCK) ON RP.RefFeeCategoryid=C.CategoryID
+	LEFT JOIN EmployeeRegMaster ERM WITH (NOLOCK) ON ERM.EmpID=RP.ContactPersonID AND ERM.OrgID=RP.ContactPersonID
+	where PV.orgid=@pOrgID and PV.visitdate between Convert(datetime,@fdate) +' 00:00:00' and Convert(Datetime,@tdate) +' 23:59:59'  --and pv.visitnumber='18IDN00566'
+	group by PV.PatientVisitid,PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name,OI.Name,OI.pkgname,FB.Grossbillvalue,Isnull(FB.GrossBillValue,0),Isnull(FB.NetValue,0),Isnull(FB.DiscountAmount,0),PhysicianCode,Category,CategoryName,ERM.Name--,
+	order by PV.VisitNumber  
+	 
+	UPDATE p SET ReceivedAmount = AmtReceived FROM @patientinfo P
+	INNER JOIN 
+	(select SUM(RF.AmtReceived) as AmtReceived,RF.finalbillid,FB.visitid from FinalBill FB WITH(NOLOCK)                                               
+	Inner Join amountreceiveddetails RF ON RF.finalbillid=FB.finalbillid                                                                             
+	group by RF.finalbillid,FB.visitid)TP on TP.visitid =P.visitid 
+
+	UPDATE p SET RefundAmount = AmtRefund FROM @patientinfo P
+	INNER JOIN 
+	(select SUM(RF.AmtRefund) as AmtRefund,RF.finalbillid,FB.visitid from FinalBill FB WITH(NOLOCK)                                  
+	Inner Join AmountRefunddetails RF ON RF.finalbillid=FB.finalbillid                                                                             
+	group by RF.finalbillid,FB.visitid)TP on TP.visitid =P.visitid 
+	 
+	Select '123' as empty ,ReferingphysicianName,VisitDate,VisitNumber,PatientName,TestName,BillingAmount, NetAmount,Discount,ReceivedAmount,RefundAmount,PhysicianCode,Category,RefFeecategory,Name AS 'Sales Executive - Name' from @patientinfo     
+	
+END TRY
+ BEGIN CATCH
+	IF (@@TRANCOUNT > 0)
+			ROLLBACK TRANSACTION
+		SELECT @EMsg = Error_Message(),
+		@ELine = Error_Line(),
+		@Eproc = Error_procedure(),
+		@ESEVERITY = Error_SEVERITY()--,
+		--@sptrace ='PgetReferingPhysicianwiseamountwithtestname_jay18062018 @fdate = '+ @fdate +'@porgid='+CAST(@porgid AS varchar)+'@Pparamtype='+@Pparamtype
+		--exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace
+	END CATCH
+End
+
+
+
+
+      
+
+
+GO
+
+

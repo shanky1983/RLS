@@ -1,0 +1,93 @@
+CREATE PROCEDURE [dbo].[pGetHCPaymentDetails] (  
+          @pOrgID             [INT]
+		 ,@pBookingID         [BIGINT]
+         ,@ContextInfo        [UDT_CONTEXT] READONLY 
+	)
+AS
+BEGIN
+    --exec pGetHCPaymentDetails 202, 12, ''
+	
+	SET NOCOUNT ON
+	DECLARE @LocationID INT, @DiscID BIGINT, @Disc NVARCHAR(10),
+	        @Code NVARCHAR(10), @Value INT, @IsDisc INT, @IsHomeCollection NVARCHAR(5);
+
+    Create Table #tblPayments
+    (
+           RID               int identity(1, 1),
+           PaymentNAME       nvarchar(255),
+           EMIROI            int Default 0,
+           EMITenor          int Default 0,
+           EMIValue          int Default 0,
+           PaymentAmount     decimal(18, 2),
+           PaymenMNumber     bigint,
+           PaymentBank       nvarchar(255),
+           PaymentRemarks    nvarchar(255),
+           PaymentTypeID     int,
+           ChequeValidDate   DateTime,
+           ServiceCharge     int default 0,
+           TotalAmount       decimal(18, 2),
+           OtherCurrAmt      decimal(18, 2),
+           Units             int default 0,
+           ReferenceID       int default 0,
+           ReferenceType     int default 0,
+           CardHolderName    nvarchar(200),
+           AmtReceivedID     int default 0
+		 )
+      
+    SELECT @Value = ISNULL(BookingID,0)  
+	FROM PreBookingPaymentDetails with(Nolock) 
+	WHERE BookingID = @pBookingID AND OrgID =@pOrgID;
+
+    SELECT @IsDisc = ISNULL(DiscountID,0), 
+	       @IsHomeCollection = case when @Value > 0 then 'Y' else 'N' end
+		   --case when SourceType ='Home Collection' then 'Y' when SourceType ='RLS' then 'Y' else 'N' end
+	FROM Bookings with(Nolock) where BookingID = @pBookingID AND OrgID =@pOrgID;
+
+    IF @IsDisc > 0
+	   BEGIN
+	      SELECT @Disc = DM.Discount,  @DiscID= B.DiscountID, @Code=DM.Code 
+	      FROM DiscountMaster DM  with(Nolock)
+		     INNER JOIN Bookings B with(Nolock) ON B.DiscountID = DM.DiscountID AND B.OrgID = @pOrgID
+	      WHERE B.BookingID = @pBookingID AND B.OrgID = @pOrgID
+	   END
+    ELSE
+	   BEGIN
+	      SELECT @Disc = B.Discount 
+	      FROM Bookings B with(Nolock) 
+	      WHERE B.BookingID = @pBookingID AND B.OrgID = @pOrgID
+	   END
+
+	    
+	IF @Value > 0
+		 BEGIN
+		      INSERT INTO #tblPayments
+			         (PaymentNAME,    PaymentAmount,  PaymenMNumber,         PaymentTypeID, TotalAmount,    OtherCurrAmt,   CardHolderName)
+			  SELECT  DISTINCT PT.PaymentName, PB.AmtReceived, PB.ChequeorCardNumber, PB.TypeID,     PB.AmtReceived, PB.AmtReceived, PB.CardHolderName           
+		      FROM PreBookingPaymentDetails PB with(Nolock)
+				   INNER JOIN PaymentTypeOrgMapping PTO with(Nolock) ON PB.TypeID = PTO.PaymentTypeID and PB.OrgID = PTO.OrgID
+				   INNER JOIN PaymentType PT with(Nolock) ON PT.PaymentTypeID = PTO.PaymentTypeID AND ISNULL(PT.LanguageCode,'en-GB') = 'en-GB'
+			  WHERE PB.BookingID = @pBookingID AND PB.OrgID = @pOrgID
+
+			  -- PaymentName + "~" + PaymentAmount + "~" + PaymentMethodNumber + "~" + PaymentBankType + "~" + PaymentRemarks + "~" + PaymentTypeID + "~" + 
+			  -- ChequeValidDate + "~" + ServiceCharge + "~"+ TotalAmount + "~" + OtherCurrAmt + "~" + EMIROI + "~" + EMITenor + "~" + EMIValue + "~" + 
+			  -- Units + "~" + ReferenceID + "~" + ReferenceType + "~" + CardHolderName + "~" + AmtReceivedID 
+
+				SELECT  + Isnull(CONVERT(nvarchar(20), T.PaymentNAME), '')
+						+ '~'+ CONVERT(nvarchar,T.PaymentAmount) 
+						+ '~'+ Isnull(CONVERT(nvarchar,T.PaymenMNumber),'') 
+						+ '~'+'~'+'~'+ Isnull(CONVERT(nvarchar,T.PaymentTypeID),'0') 
+						+ '~'+'~'+'0'+'~'+ CONVERT(nvarchar,T.TotalAmount) +'~'+ CONVERT(nvarchar,T.OtherCurrAmt) 
+						+ '~'+'~'+'~'+'~'+'~'+'~'+'~'+ ISNULL(CONVERT(nvarchar,T.CardHolderName),'') 
+						+ '~'+ '0' as ProcedureName,  
+						case when @DiscID > 0 THEN @Disc +'~'+CONVERT(nvarchar,@DiscID)+'~'+ @Code+'~' else @Disc end as ProcedureType,  
+						@IsHomeCollection as IsTemplateText
+				FROM #tblPayments T
+	  	END
+	ELSE
+	    BEGIN
+		    SELECT '' as ProcedureName, 
+			     case when @DiscID > 0 THEN @Disc +'~'+CONVERT(nvarchar,@DiscID)+'~'+ @Code+'~' else '0' end as ProcedureType,  @IsHomeCollection as IsTemplateText
+		END
+
+	drop table #tblPayments;
+END

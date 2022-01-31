@@ -1,0 +1,88 @@
+
+
+CREATE   PROCEDURE pUploadClientFeeCustomization
+(
+@pOrgId INT
+)
+as
+BEGIN 
+
+-----excel import ExcelTemp_RoomBasedFee
+
+UPDATE R SET R.ClientId=I.ClientID
+FROM ExcelTemp_RoomBasedFee  R
+JOIN InvClientMaster I on 
+R.ClientName=i.ClientName
+and i.OrgID=@pOrgId
+
+
+
+UPDATE ExcelTemp_RoomBasedFee  
+SET [Fee Id]=Tmp.FeeId
+FROM
+(
+SELECT T.[Fee Type],G.GenBillID[FeeId],G.GenBillName[FeeDesc]
+FROM ExcelTemp_RoomBasedFee T WITH (NOLOCK)
+JOIN GeneralBillingMaster G on 
+t.[Fee Description]=g.GenBillName
+AND T.[Fee Type]='GEN'
+and g.OrgID=@pOrgId
+UNION ALL 
+
+
+SELECT T.[Fee Type],i.InvestigationID,I.displaytext
+FROM ExcelTemp_RoomBasedFee T WITH (NOLOCK)
+JOIN InvestigationOrgMapping i ON
+ I.DISPLAYTEXT=T.[Fee Description]
+JOIN InvRateMaster G ON 
+i.InvestigationID=g.ID
+AND T.[Fee Type]='INV'
+and g.OrgID=@pOrgId
+
+UNION ALL 
+
+
+SELECT T.[Fee Type],G.AttGroupID[FeeId],G.DisplayText[FeeDesc]
+FROM ExcelTemp_RoomBasedFee T WITH (NOLOCK)
+JOIN InvOrgGroup G on 
+t.[Fee Description]=g.DisplayText
+AND T.[Fee Type]='PKG'
+and g.OrgID=@pOrgId
+UNION ALL 
+
+
+SELECT T.[Fee Type],G.ProcedureID[FeeId],G.ProcedureName[FeeDesc]
+FROM ExcelTemp_RoomBasedFee T WITH (NOLOCK)
+JOIN ProcedureMaster G on 
+t.[Fee Description]=g.ProcedureName
+AND T.[Fee Type]='PRO'
+and g.OrgID=@pOrgId
+
+UNION ALL 
+
+SELECT T.[Fee Type],G.OrgSpecialityID[FeeId],G.Name[FeeDesc]
+FROM ExcelTemp_RoomBasedFee T WITH (NOLOCK)
+JOIN OrganizationSpeciality G on 
+t.[Fee Description]=g.Name
+AND T.[Fee Type]='SPE'
+and g.OrgID=@pOrgId
+)Tmp
+WHERE [Fee Description]=Tmp.[FeeDesc]
+
+
+insert into ClientFeeTypeRateCustomization(ClientID,FeeType,RoomTypeID,DiscOrEnhancePercent,DiscOrEnhanceType,Applyby,FeeID)
+select ClientID,[Fee Type]FeeType,RoomTypeID,DiscOrEnhancePercent,DiscOrEnhanceType,Applyby,[Fee Id]FeeID
+ from ExcelTemp_RoomBasedFee
+ where Clientid is not null
+ and [fee id] is not null
+ and RoomTypeID is not null
+
+
+	
+
+END 
+
+
+
+
+

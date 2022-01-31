@@ -1,0 +1,392 @@
+ 
+ 
+--PgetAllTestData 'INV',248
+CREATE Proc [dbo].[PgetAllTestData]
+(
+	@Type NVARCHAR(100),
+	@OrgID INT
+)
+AS
+BEGIN
+
+	IF @Type='INV'
+	BEGIN
+	    DECLARE @Invmaster AS TABLE
+		(
+		   OrgName NVARCHAR(1000),
+		   City NVARCHAR(1000),
+		   InvestigationName NVARCHAR(2000),
+		   Type NVARCHAR(100),
+		   InvestigationID BIGINT,
+		   TestCode NVARCHAR(100),
+		   MRP DECIMAL(18,2),
+		   DiscounRate DECIMAL(18,2),
+		   Discount DECIMAL(18,2),
+		   IsOrderable BIT,
+		   ValidFrom DATETIME,
+		   ValidTill DATETIME,
+		   OrgID INT,
+		   Units NVARCHAR(200),
+		   InterPretationNotes NVARCHAR(MAX)
+		) 
+		INSERT INTO @Invmaster (OrgName,City,InvestigationName,Type,InvestigationID,TestCode,MRP,DiscounRate,Discount,IsOrderable,OrgID,
+								Units,InterPretationNotes)
+		Select DISTINCT O.OrgDisplayName,OA.Location,IOM.DisplayText,'Lab test' Type,IOM.InvestigationID,IOM.TestCode,0,0 Discount,0 DiscountRate,
+		       CASE WHEN ISNULL(IOM.Display,'Y')='Y' THEN 1 ELSE 0 END,@OrgID,U.UOMCode,IOM.InterPretation
+		FROM InvestigationOrgMapping IOM (NOLOCK) 
+		INNER JOIN Organization O (NOLOCK) ON O.OrgID=IOM.OrgID
+		INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.OrgID=IOM.OrgID AND OA.OrgID=O.OrgID AND OA.Location like '%main%'
+		LEFT JOIN UOM U (NOLOCK) ON U.UOMID=IOM.UOMID
+		WHERE IOM.OrgID=@OrgID AND ISNULL(IOM.active,'A')='A'
+
+		UPDATE IOM
+		SET   IOM.MRP=IR.Rate,
+			  IOM.ValidFrom=ICM.ValidFrom,
+			  IOM.ValidTill=ICm.ValidTo
+		FROM  @Invmaster IOM
+		INNER JOIN InvRateMaster IR (NOLOCK) ON IOM.InvestigationID=IR.ID AND IR.Type='INV' --AND IOM.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=IOm.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode='GENERAL'
+		INNER JOIN ClientMaster Cm (NOLOCK) ON ICm.ClientID=Cm.ClientID AND Cm.ClientCode='GENERAL'
+
+		UPDATE I
+		SET   I.DiscounRate=IR.Rate
+		FROM  @Invmaster I
+		INNER JOIN InvRateMaster IR (NOLOCK) ON I.InvestigationID=IR.ID AND IR.Type='INV' --AND I.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=I.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode!='GENERAL'
+
+		SELECT OrgName 'Partner Name',City 'City Name',InvestigationName 'Panel Name',Type 'Type(LabTest)',
+			   '' 'Test Abbrevation','' 'Aliases 1','' 'Aliases 2','' 'Aliases 3',
+		InvestigationID TestID,TestCode 'Test_Code','' 'Prerequisite' ,'' 'Condition',
+		MRP,DiscounRate 'Discount Rate',Discount 'Discount %','' 'Home Collection',ValidFrom 'Valid From',ValidTill 'Valid Till',IsOrderable 
+		FROM @Invmaster Order by InvestigationName
+	END
+	ELSE IF @Type='GRP'
+	BEGIN
+	    DECLARE @Groupmaster AS TABLE
+		(
+		   OrgName NVARCHAR(1000),
+		   City NVARCHAR(1000),
+		   InvestigationName NVARCHAR(2000),
+		   Type NVARCHAR(100),
+		   InvestigationID BIGINT,
+		   TestCode NVARCHAR(100),
+		   MRP DECIMAL(18,2),
+		   DiscounRate DECIMAL(18,2),
+		   Discount DECIMAL(18,2), 
+		   ValidFrom DATETIME,
+		   ValidTill DATETIME,
+		   OrgID INT,
+		   OrgGroupID BIGINT,
+		   IsOrderable BIT
+		) 
+		DECLARE @GroupContent As TABLE
+		(
+		   GroupName NVARCHAR(2000),
+		   TestName NVARCHAR(2000) ,
+		   Units NVARCHAR(200),
+		   InterPretationNotes NVARCHAR(MAX),
+		   GroupCode NVARCHAR(1000)
+		)
+		INSERT INTO @Groupmaster (OrgName,City,InvestigationName,Type,InvestigationID,TestCode,MRP,DiscounRate,Discount,OrgID,OrgGroupID,IsOrderable)
+		Select DISTINCT O.OrgDisplayName,OA.Location,IOM.DisplayText,'Group test' Type,IOM.AttGroupID,IOM.TestCode,0,0 Discount,0 DiscountRate,
+		        @OrgID,OrgGroupID,CASE WHEN IOM.IsNonOrderable='Y' THEN 0 ELSE 1 END
+		FROM InvOrgGroup IOM (NOLOCK) 
+		INNER JOIN InvGroupMaster IG (NOLOCK) ON IOM.AttGroupID=IG.GroupID AND IG.Type='GRP' 
+		INNER JOIN Organization O (NOLOCK) ON O.OrgID=IOM.OrgID
+		INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.OrgID=IOM.OrgID AND OA.OrgID=O.OrgID AND  OA.Location like '%main%'
+		WHERE IOM.OrgID=@OrgID  
+
+		UPDATE IOM
+		SET   IOM.MRP=IR.Rate,
+			  IOM.ValidFrom=ICM.ValidFrom,
+			  IOM.ValidTill=ICm.ValidTo
+		FROM  @Groupmaster IOM
+		INNER JOIN InvRateMaster IR (NOLOCK) ON IOM.OrgGroupID=IR.ID AND IR.Type='GRP' --AND IOM.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=IOm.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode='GENERAL'
+		INNER JOIN ClientMaster Cm (NOLOCK) ON ICm.ClientID=Cm.ClientID AND Cm.ClientCode='GENERAL'
+
+		UPDATE I
+		SET   I.DiscounRate=IR.Rate
+		FROM  @Groupmaster I
+		INNER JOIN InvRateMaster IR (NOLOCK) ON I.OrgGroupID=IR.ID AND IR.Type='GRP' --AND I.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=I.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode!='GENERAL'
+	 
+		; WITH pkgdet     
+                       AS (
+	SELECT Cast(GRP.InvestigationID AS BIGINT) AS     
+									  ParentAttGroupID,     
+									  Cast(GRP.OrgGroupID AS BIGINT) AS     
+									  ParentOrgGroupID,     
+									  IGMM.InvestigationID          AS ChildGroupID     
+							   FROM   @Groupmaster GRP      
+									  INNER JOIN InvGroupMapMaster IGMM (nolock)     
+											  ON GRP.OrgGroupID = IGMM.GroupID     
+												 AND IGMM.Parent = 'Y'     
+												 AND Isnull(IGMM.Active, 'Y') = 'Y' 
+												 )  
+	    
+		INSERT INTO @GroupContent (GroupName,TestName,Units,InterPretationNotes,GroupCode)
+		SELECT   DISTINCT GM.InvestigationName,IOM.DisplayText ,U.UOMCode,IOM.Interpretation,GM.TestCode
+		FROM PKGDET   PKGDET
+		INNER JOIN @Groupmaster GM ON PKGDET.ParentAttGroupID=GM.InvestigationID
+		INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON PKGDET.ChildGroupID=IGM.GroupID AND IGM.parent='Y'  AND IGM.Active='Y'
+		INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.InvestigationID
+		AND IOM.OrgID=GM.OrgID  
+		LEFT JOIN UOM U(NOLOCK) ON U.UOMID=IOM.UOMID
+		
+		INSERT INTO @GroupContent (GroupName,TestName,GroupCode)
+		SELECT   DISTINCT GM.InvestigationName,IOM.DisplayText ,GM.TestCode
+		FROM @Groupmaster GM  
+		INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON GM.OrgGroupID=IGM.GroupID
+		INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.InvestigationID
+		AND IOM.OrgID=GM.OrgID AND IGM.Parent='N'  AND IGM.Active='Y'
+		 
+
+	 
+		SELECT OrgName 'Partner Name',City 'City Name',InvestigationName 'Panel Name',Type 'Type(PartnerPanel)',
+		'' 'Test Abbrevation','' 'Aliases 1','' 'Aliases 2','' 'Aliases 3','' 'Attributes',TestCode 'Test_Code',
+		'' 'Prerequisite','' 'Condition',MRP,DiscounRate 'Discount Rate',Discount 'Discount %','' 'Home Collection',
+		ValidFrom 'Valid From',ValidTill 'Valid Till','' 'Integration Code',IsOrderable
+		FROM @Groupmaster order by InvestigationName
+		SELECT GroupName 'Panel Name',GroupCode 'Panel Code',TestName 'Test Name',Units,InterPretationNotes FROM @GroupContent
+		order by GroupName
+
+	END
+	ELSE IF @Type='PKG' 
+	BEGIN
+	    DECLARE @Packagemaster AS TABLE
+		(
+		   OrgName NVARCHAR(1000),
+		   City NVARCHAR(1000),
+		   InvestigationName NVARCHAR(2000),
+		   Type NVARCHAR(100),
+		   InvestigationID BIGINT,
+		   TestCode NVARCHAR(100),
+		   MRP DECIMAL(18,2),
+		   DiscounRate DECIMAL(18,2),
+		   Discount DECIMAL(18,2), 
+		   ValidFrom DATETIME,
+		   ValidTill DATETIME,
+		   OrgID INT,
+		   OrgGroupID BIGINT,
+		   IsOrderable BIT
+		) 
+		DECLARE @PackageContent As TABLE
+		(
+		   PackageName NVARCHAR(2000),
+		   GroupName NVARCHAR(2000),
+		   TestName NVARCHAR(2000) ,
+		   PackageCode NVARCHAR(100),
+		   Units NVARCHAR(200),
+		   InterPretationNotes NVARCHAR(MAX)
+		)
+		INSERT INTO @Packagemaster (OrgName,City,InvestigationName,Type,InvestigationID,TestCode,MRP,DiscounRate,Discount,OrgID,OrgGroupID,IsOrderable)
+		Select O.OrgDisplayName,OA.Location,IOM.DisplayText,'Package test' Type,IOM.AttGroupID,IOM.TestCode,0,0 Discount,0 DiscountRate,
+		        @OrgID,OrgGroupID,CASE WHEN IOM.IsNonOrderable='Y' THEN 0 ELSE 1 END
+		FROM InvOrgGroup IOM (NOLOCK)
+		INNER JOIN InvGroupMaster IG (NOLOCK) ON IOM.AttGroupID=IG.GroupID AND IG.Type='PKG' 
+		INNER JOIN Organization O (NOLOCK) ON O.OrgID=IOM.OrgID
+		INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.OrgID=IOM.OrgID AND OA.OrgID=O.OrgID AND OA.Location like '%main%'
+		WHERE IOM.OrgID=@OrgID
+
+		UPDATE IOM
+		SET   IOM.MRP=IR.Rate,
+			  IOM.ValidFrom=ICM.ValidFrom,
+			  IOM.ValidTill=ICm.ValidTo
+		FROM  @Packagemaster IOM
+		INNER JOIN InvRateMaster IR (NOLOCK) ON IOM.OrgGroupID=IR.ID AND IR.Type='PKG' --AND IOM.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=IOm.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode='GENERAL'
+		INNER JOIN ClientMaster Cm (NOLOCK) ON ICm.ClientID=Cm.ClientID AND Cm.ClientCode='GENERAL'
+
+		UPDATE I
+		SET   I.DiscounRate=IR.Rate
+		FROM  @Packagemaster I
+		INNER JOIN InvRateMaster IR (NOLOCK) ON I.OrgGroupID=IR.ID AND IR.Type='PKG'-- AND I.OrgID=IR.OrgID
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=I.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode!='GENERAL'
+	 
+	 ; WITH pkgdet     
+                       AS (
+SELECT Cast(GRP.InvestigationID AS BIGINT) AS     
+                                  ParentAttGroupID,     
+                                  Cast(GRP.OrgGroupID AS BIGINT) AS     
+                                  ParentOrgGroupID,     
+                                  PM.ID                          AS ChildGroupID     
+         FROM   @Packagemaster GRP      
+                                  LEFT JOIN InvPackageMapping PM (nolock)     
+                                         ON GRP.OrgGroupID = PM.PackageID     
+                                            AND PM.Type = 'GRP'     
+                                            AND Isnull(PM.Active, 'A') IN( 'A', 'Y' )     
+								  UNION ALL     
+                           SELECT PKGDET.ParentOrgGroupID              AS     
+                                  ParentAttGroupID,     
+                                  PKGDET.ParentOrgGroupID              AS     
+                                  ParentOrgGroupID,     
+                                  Cast(IGMM.InvestigationID AS BIGINT) AS     
+                                  ChildGroupID     
+                          FROM  PKGDET  
+                                  INNER JOIN InvGroupMapMaster IGMM (nolock)     
+                                          ON PKGDET.ChildGroupID = IGMM.GroupID     
+											AND IGMM.Parent = 'Y'     
+                                             AND Isnull(IGMM.Active, 'Y') = 'Y'
+											 )  
+															  
+
+		 
+	   INSERT INTO @PackageContent (PackageName,GroupName,TestName,PackageCode,Units,InterPretationNotes)
+		SELECT   DISTINCT GM.InvestigationName,IOG.DisplayText,IOM. DisplayText ,Gm.TestCode,U.UomCode,IOM.Interpretation
+		FROM PKGDET   PKGDET		
+		INNER JOIN @Packagemaster GM  ON PKGDET.ParentOrgGroupID =GM.OrgGroupID    
+		INNER JOIN InvOrgGroup IOG (NOLOCK) ON PKGDET.childGroupID=IOG.OrgGroupID
+		 INNER JOIN InvGroupMapMaster IG(NOLOCK) ON IOG.OrgGroupID=IG.GroupID AND IG.Active='Y'
+		 INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IG.InvestigationID
+		  AND IOM.OrgID=GM.OrgID  AND IG.Parent='N'  
+		  LEFT JOIN UOM U(NOLOCK) ON U.UOMID=IOM.UOMID
+		  
+		 
+		
+		INSERT INTO @PackageContent (PackageName,GroupName,TestName,PackageCode,Units,InterPretationNotes)
+		SELECT   DISTINCT GM.InvestigationName,'',IOM.DisplayText ,Gm.TestCode,U.UomCode,IOM.Interpretation
+		FROM @Packagemaster GM 
+		INNER JOIN InvPackageMapping IGM (NOLOCK) ON GM.OrgGroupID=IGM.PackageID
+		INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.ID
+		AND IOM.OrgID=GM.OrgID   AND IGm.Type='INV' AND IGM.active='A'
+		 LEFT JOIN UOM U(NOLOCK) ON U.UOMID=IOM.UOMID
+		 
+
+	 
+		SELECT  OrgName 'Partner Name',City 'City Name',InvestigationName 'Profile Name',Type 'Type(ProfileProfile)',
+		'' 'Test Abbrevation','' 'Aliases 1','' 'Aliases 2','' 'Aliases 3','' 'Attributes',TestCode 'Test_Code',
+		'' 'Prerequisite','' 'Condition',MRP,DiscounRate 'Discount Rate',Discount 'Discount %','' 'Home Collection',
+		ValidFrom 'Valid From',ValidTill 'Valid Till','' 'Integration Code',IsOrderable
+		FROM @Packagemaster
+		SELECT  PackageName 'Profile Name', GroupName 'Panel Name',TestName 'Test Name',PackageCode ,Units,InterPretationNotes  
+		FROM @PackageContent order by PackageName
+
+	END
+		ELSE 
+	BEGIN
+	    DECLARE @SmartPackagemaster AS TABLE
+		(
+		   OrgName NVARCHAR(1000),
+		   City NVARCHAR(1000),
+		   InvestigationName NVARCHAR(2000),
+		   Type NVARCHAR(100),
+		   InvestigationID BIGINT,
+		   TestCode NVARCHAR(100),
+		   MRP DECIMAL(18,2),
+		   DiscounRate DECIMAL(18,2),
+		   Discount DECIMAL(18,2), 
+		   ValidFrom DATETIME,
+		   ValidTill DATETIME,
+		   OrgID INT,
+		   OrgGroupID BIGINT,
+		   IsOrderable BIT
+		) 
+		DECLARE @SmartPackageContent As TABLE
+		(
+		   PackageName NVARCHAR(2000),
+		   GroupName NVARCHAR(2000),
+		   TestName NVARCHAR(2000) ,
+		   PackageCode NVARCHAR(100),
+		   Units NVARCHAR(200),
+		   InterPretationNotes NVARCHAR(MAX),
+		   Groupcode NVARCHAR(200),
+		   TestCode NVARCHAR(200)
+		)
+		INSERT INTO @SmartPackagemaster (OrgName,City,InvestigationName,Type,InvestigationID,TestCode,MRP,DiscounRate,Discount,OrgID,OrgGroupID,IsOrderable)
+		Select O.OrgDisplayName,OA.Location,IOM.DisplayText,'Package test' Type,IOM.AttGroupID,IOM.TestCode,0,0 Discount,0 DiscountRate,
+		        @OrgID,OrgGroupID,CASE WHEN IOM.IsNonOrderable='Y' THEN 0 ELSE 1 END
+		FROM InvOrgGroup IOM (NOLOCK)
+		INNER JOIN InvGroupMaster IG (NOLOCK) ON IOM.AttGroupID=IG.GroupID AND IG.Type='PKG' 
+		INNER JOIN Organization O (NOLOCK) ON O.OrgID=IOM.OrgID
+		INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.OrgID=IOM.OrgID AND OA.OrgID=O.OrgID AND OA.Location like '%main%'
+		WHERE IOM.OrgID=@OrgID AND IOM.testcode  in ('s0105','s0106','s0107','s0108','s0109','s0110','s0111')
+
+		UPDATE IOM
+		SET   IOM.MRP=IR.Rate,
+			  IOM.ValidFrom=ICM.ValidFrom,
+			  IOM.ValidTill=ICm.ValidTo
+		FROM  @SmartPackagemaster IOM
+		INNER JOIN InvRateMaster IR (NOLOCK) ON IOM.OrgGroupID=IR.ID AND IR.Type='PKG'-- AND IOM.OrgID=ISNULL(IR.OrgID,IOM.OrgID)
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=IOm.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode='GENERAL'
+		INNER JOIN ClientMaster Cm (NOLOCK) ON ICm.ClientID=Cm.ClientID AND Cm.ClientCode='GENERAL'
+
+		UPDATE I
+		SET   I.DiscounRate=IR.Rate
+		FROM  @SmartPackagemaster I
+		INNER JOIN InvRateMaster IR (NOLOCK) ON I.OrgGroupID=IR.ID AND IR.Type='PKG' --AND I.OrgID=ISNULL(IR.OrgID,I.OrgID)
+		INNER JOIN InvClientMaster ICM (NOLOCK) ON ICM.RateId=IR.RateID AND ICm.OrgID=I.OrgID 
+		INNER JOIN RateMaster RM (NOLOCK) ON Rm.RateId=ICM.RateId AND RM.orgid=ICM.OrgID AND Rm.RateCode!='GENERAL'
+	 
+	 ; WITH Smartpkgdet     
+                       AS (
+SELECT Cast(GRP.InvestigationID AS BIGINT) AS     
+                                  ParentAttGroupID,     
+                                  Cast(GRP.OrgGroupID AS BIGINT) AS     
+                                  ParentOrgGroupID,     
+                                  PM.ID                          AS ChildGroupID     
+         FROM   @SmartPackagemaster GRP      
+                                  LEFT JOIN InvPackageMapping PM (nolock)     
+                                         ON GRP.OrgGroupID = PM.PackageID     
+      AND PM.Type = 'GRP'     
+  AND Isnull(PM.Active, 'A') IN( 'A', 'Y' )     
+								  UNION ALL     
+                           SELECT SmartPKGDET.ParentOrgGroupID              AS     
+                                  ParentAttGroupID,     
+                                  SmartPKGDET.ParentOrgGroupID              AS     
+ParentOrgGroupID,     
+                                  Cast(IGMM.InvestigationID AS BIGINT) AS     
+                                  ChildGroupID     
+                          FROM  SmartPKGDET  
+                                  INNER JOIN InvGroupMapMaster IGMM (nolock)     
+                                          ON SmartPKGDET.ChildGroupID = IGMM.GroupID     
+											AND IGMM.Parent = 'Y'     
+                                             AND Isnull(IGMM.Active, 'Y') = 'Y'
+											 )  
+		  
+	   INSERT INTO @SmartPackageContent (PackageName,GroupName,TestName,PackageCode,Units,InterPretationNotes,Groupcode,TestCode)
+		SELECT   DISTINCT GM.InvestigationName,IOG.DisplayText,IOM. DisplayText ,Gm.TestCode,U.UomCode,IOM.Interpretation,IOG.TestCode,IOM.InvestigationCode
+		FROM SmartPKGDET   PKGDET		
+		INNER JOIN @SmartPackagemaster GM  ON PKGDET.ParentOrgGroupID =GM.OrgGroupID 
+		 INNER JOIN InvOrgGroup IOG (NOLOCK) ON PKGDET.childGroupID=IOG.OrgGroupID
+		 INNER JOIN InvGroupMapMaster IG(NOLOCK) ON IOG.OrgGroupID=IG.GroupID
+		 INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IG.InvestigationID
+		  AND IOM.OrgID=GM.OrgID  AND IG.Parent='N'  
+		  LEFT JOIN UOM U(NOLOCK) ON U.UOMID=IOM.UOMID
+		  
+		  
+		
+		INSERT INTO @SmartPackageContent (PackageName,GroupName,TestName,PackageCode,Units,InterPretationNotes,TestCode)
+		SELECT   DISTINCT GM.InvestigationName,'',IOM.DisplayText ,Gm.TestCode,U.UomCode,IOM.Interpretation,IOM.InvestigationCode
+		FROM @SmartPackagemaster GM 
+		INNER JOIN InvPackageMapping IGM (NOLOCK) ON GM.OrgGroupID=IGM.PackageID
+		INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.ID
+		AND IOM.OrgID=GM.OrgID   AND IGm.Type='INV'
+		 LEFT JOIN UOM U(NOLOCK) ON U.UOMID=IOM.UOMID
+		 
+
+	 
+		SELECT  OrgName 'Partner Name',City 'City Name',InvestigationName 'Profile Name',Type 'Type(ProfileProfile)',
+		'' 'Test Abbrevation','' 'Aliases 1','' 'Aliases 2','' 'Aliases 3','' 'Attributes',TestCode 'Test_Code',
+		'' 'Prerequisite','' 'Condition',MRP,DiscounRate 'Discount Rate',Discount 'Discount %','' 'Home Collection',
+		ValidFrom 'Valid From',ValidTill 'Valid Till','' 'Integration Code',IsOrderable
+		FROM @SmartPackagemaster
+		SELECT  PackageName 'Profile Name',PackageCode, GroupName 'Panel Name',Groupcode,TestName 'Test Name',Testcode ,Units,InterPretationNotes  FROM @SmartPackageContent
+
+	END
+END
+
+ 
+
+
+
+
+
+ 

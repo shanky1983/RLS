@@ -1,0 +1,50 @@
+/****** Object:  StoredProcedure [dbo].[pGetBannerBookmarks]    Script Date: 6/14/2016 2:19:25 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetBannerBookmarks] @pOrgID      [bigint],
+                                            @IdentifyID  [int],
+                                            @IdentifyType[nchar](2),
+                                            @ContextInfo [dbo].[UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      Select BB.BannerBookMarksID,
+             B.BannerID,
+             B.BannerText,
+             B.BannerType,
+             Cat.DisplayText As Category,
+             B.CategoryCode,
+             B.EmpDeptID,
+             EDM.EmpDeptText AS EmpDeptName,
+             B.Title,
+             B.DocFileUrl,
+             B.OrgID,
+             BRM.BannerStartDate,
+             BRM.BannerEndDate
+      from   BannerBookmarks (NOLOCK) BB
+             INNER JOIN Banners (NOLOCK) B
+                     ON B.BannerID = BB.BannerID
+             INNER JOIN BannerRoleMapping (NOLOCK) BRM
+                     ON BRM.BannerID = B.BannerID
+             INNER JOIN EmployerDeptMaster(NOLOCK) EDM
+                     ON B.EmpDeptID = EDM.EmpDeptID
+             CROSS APPLY (Select MOM.DisplayText
+                          From   MetaData(NOLOCK) M
+                                 Inner Join MetaDataOrgMapping(NOLOCK) MOM
+                                         ON M.MetaDataID = MOM.MetadataID
+                          Where  Domain = 'NewsCategory'
+                                 AND M.Code = B.CategoryCode
+                                 AND MOM.OrgID = 4) as Cat
+      WHERE  BB.IdentifyID = @IdentifyID
+             AND BB.IdentifyType = @IdentifyType
+             AND B.OrgID = @pOrgID
+             AND BB.Status = 1
+  END 
+
+GO
+
+

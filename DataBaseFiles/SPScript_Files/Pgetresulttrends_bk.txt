@@ -1,0 +1,362 @@
+  
+CREATE PROCEDURE [dbo].[Pgetresulttrends_bk] @pVisitID         BIGINT,  
+                                          @OrgID            INT,  
+                                          @IsServiceRequest CHAR(1)  
+AS  
+  BEGIN  
+      DECLARE @Patientid BIGINT  
+      DECLARE @PatientNumber VARCHAR(30)  
+      DECLARE @VisitCount INT=0  
+  
+      CREATE TABLE #investigationids  
+        (  
+           investigationid BIGINT,  
+           SequenceNO      INT,  
+           ReferenceRange  VARCHAR(MAX)  
+        )  
+  
+      CREATE TABLE #Previousvisits  
+        (  
+           Visitid         BIGINT,  
+           investigationid BIGINT,  
+           Value           NVARCHAR(MAX),  
+           VisitDate       DATETIME,  
+           IsArchive       CHAR(1),  
+           SequenceNO      INT,  
+           Name            VARCHAR(500),  
+           ReferenceRange  VARCHAR(MAX),  
+           UOMCode         VARCHAR(50),  
+           Status          VARCHAR(50)  
+        )  
+  
+      DECLARE @TrendOrgConfig CHAR(1)  
+     
+      SELECT @TrendOrgConfig = ConfigValue  
+      FROM   ConfigOrgMaster WITH(NOLOCK)  
+      WHERE  OrgID = @OrgID  
+             AND ConfigKeyID IN(SELECT TOP 1 ConfigKeyID  
+                                FROM   Configkeymaster WITH(NOLOCK)  
+                                WHERE  configkey = 'OrgLevelTrend')  
+                               set  @TrendOrgConfig='N'  
+      
+      IF ( Isnull(@TrendOrgConfig, 'N') = 'N' )  
+        BEGIN  
+            SELECT @Patientid = P.PatientID,  
+                   @PatientNumber = P.PatientNumber  
+            FROM   Patientvisit(NOLOCK) PV  
+                   INNER JOIN Patient P WITH(NOLOCK)  
+                           ON P.PatientID = PV.PatientID  
+            WHERE  PV.PatientVisitID = @pVisitID        
+                   AND PV.OrgID = @OrgID  
+  
+            SELECT @VisitCount = Count(PV.PatientVisitId)  
+            FROM   Patientvisit(NOLOCK) PV  
+                   INNER JOIN Patient P WITH(NOLOCK)  
+                           ON P.PatientID = PV.PatientID  
+            WHERE  P.PatientNumber = @PatientNumber    
+                   AND PV.VisitPurposeID = 3  
+  
+            IF( @VisitCount > 1 )  
+              BEGIN  
+                  IF( @IsServiceRequest = 'Y' )  
+                    BEGIN  
+                      
+                        INSERT INTO #investigationids  
+                                    (investigationid,  
+                                     SequenceNO,  
+                                     ReferenceRange)  
+                        SELECT DISTINCT Pinv.InvestigationID,  
+                                        IOM.SequenceNO,  
+                                        PInv.ReferenceRange  
+                        FROM   PatientInvestigation PInv (NOLOCK)  
+                               INNER JOIN investigationorgmapping iom (NOLOCK)  
+                                       ON Pinv.investigationid = iom.investigationid  
+                                          AND Pinv.OrgID = iom.OrgID  
+                                         -- AND Isnull(IOM.Trend, 0) = 1  
+                               INNER JOIN OrderedInvestigations OI (NOLOCK)  
+                                       ON PInv.AccessionNumber = OI.AccessionNumber  
+                                          AND OI.OrgID = PInv.OrgID  
+                                          AND PInv.PatientVisitID = OI.VisitID  
+                        WHERE  PInv.PatientVisitID = @pVisitID  
+                               AND OI.Status NOT IN ( 'Cancel', 'Retest', 'InActive', 'ForceClose', 'Recheck' )  
+                               AND Isnull(PInv.statustype, '') NOT IN ( 'RR', 'RC' )  
+                               AND PInv.Status = 'Approve'  
+                                 
+                    END  
+                  ELSE  
+                    BEGIN  
+                        INSERT INTO #investigationids  
+                                    (investigationid,  
+                                     SequenceNO,  
+                                     ReferenceRange)  
+               SELECT DISTINCT Pinv.InvestigationID,  
+                                        IOM.SequenceNO,  
+                              PInv.ReferenceRange  
+                        FROM   PatientInvestigation PInv (NOLOCK)  
+                               INNER JOIN investigationorgmapping iom (NOLOCK)  
+                                       ON Pinv.investigationid = iom.investigationid  
+                                          AND Pinv.OrgID = iom.OrgID  
+                                          --AND Isnull(IOM.Trend, 0) = 1  
+                               INNER JOIN OrderedInvestigations OI (NOLOCK)  
+                                       ON PInv.AccessionNumber = OI.AccessionNumber  
+                                          AND OI.OrgID = PInv.OrgID  
+                                          AND PInv.PatientVisitID = OI.VisitID  
+                        WHERE  PInv.PatientVisitID = @pVisitID  
+                               AND OI.Status NOT IN ( 'Cancel', 'Retest', 'InActive', 'ForceClose', 'Recheck' )  
+                               AND Isnull(PInv.statustype, '') NOT IN ( 'RR', 'RC' )  
+                    END  
+              END  
+        END  
+  
+      IF EXISTS(SELECT 1  
+                FROM   #investigationids)  
+        BEGIN  
+/*BEGIN | LEO | 20190703 | A | PID Merger  */  
+--DECLARE @PatientNumber1  VARCHAR(50),@PatientID1 BIGINT  
+--IF EXISTS (SELECT *  
+--FROM   PatientMergeandUnmergeDetails PM  
+--INNER JOIN Patient P WITH(NOLOCK)  
+--ON P.PatientID = PM.ParentPatientid  
+--WHERE  P.PatientNumber = @PatientNumber)  
+--BEGIN  
+  
+--SELECT @PatientID1=PM.PatientID  
+--FROM   PatientMergeandUnmergeDetails PM  
+--INNER JOIN Patient P WITH(NOLOCK)  
+--ON P.PatientID = PM.ParentPatientid  
+--WHERE  P.PatientNumber = @PatientNumber  
+  
+--SELECT @PatientNumber1=P.PatientNumber  
+--FROM   Patient P WITH(NOLOCK)  
+--WHERE  P.PatientID = @PatientID1  
+--END  
+/*END | LEO | 20190703 | A | PID Merger  */  
+  
+  
+            IF( @IsServiceRequest = 'Y' )  
+              BEGIN  
+                  INSERT INTO #Previousvisits  
+                              (Visitid,  
+                               investigationid,  
+                               Value,  
+                               VisitDate,  
+                               IsArchive,  
+                               SequenceNO,  
+                               NAME,  
+                               ReferenceRange,  
+                               UOMCode,  
+                               Status)  
+                  SELECT DISTINCT Pv.PatientVisitID,  
+                                  Iv.InvestigationID,  
+                                  Iv.Value,  
+                                  PV.VisitDate,  
+                                  'N',  
+                                  I.SequenceNO,  
+                                  IV.Name,  
+                                  I.ReferenceRange,  
+                                  Iv.UOMCode,  
+                                  Iv.Status  
+                  FROM   Patient P WITH(NOLOCK)  
+                         INNER JOIN PatientVisit PV (NOLOCK)  
+                                 ON P.PatientID = PV.PatientID  
+                         INNER JOIN InvestigationValues Iv (NOLOCK)  
+                                 ON PV.PatientVisitId = Iv.PatientVisitID  
+                         INNER JOIN #investigationids I (NOLOCK)  
+                                 ON iv.Investigationid = I.investigationid  
+                  WHERE  P.PatientNumber = @PatientNumber  
+                         and iv.Status NOT IN ( 'Cancel', 'Retest', 'InActive', 'ForceClose', 'Recheck' )  
+                         AND ISNUMERIC(SUBSTRING(Iv.value, 0, 5) ) = 1  
+                         AND ISNULL(IV.statustype, '') NOT IN ( 'RR', 'RC' )  
+                         /*BEGIN | LEO | 20190703 | A | PID Merger  */  
+         
+                         --AND Iv.Status = 'Approve'  
+    /*END | LEO | 20190703 | A | PID Merger  */  
+              END  
+            ELSE  
+              BEGIN  
+                  INSERT INTO #Previousvisits  
+                              (Visitid,  
+                               investigationid,  
+                               Value,  
+                               VisitDate,  
+                               IsArchive,  
+                               SequenceNO,  
+                               NAME,  
+                               ReferenceRange,  
+                               UOMCode,  
+                               Status)  
+                  SELECT DISTINCT Pv.PatientVisitID,  
+                                  Iv.InvestigationID,  
+                                  Iv.Value,  
+                                  PV.VisitDate,  
+                                  'N',  
+                                  I.SequenceNO,  
+                                  IV.Name,  
+                                  I.ReferenceRange,  
+                                  Iv.UOMCode,  
+                                  Iv.Status  
+ FROM   Patient P WITH(NOLOCK)  
+                         INNER JOIN PatientVisit PV (NOLOCK)  
+                                 ON P.PatientID = PV.PatientID  
+                         INNER JOIN InvestigationValues Iv (NOLOCK)  
+                                 ON PV.PatientVisitId = Iv.PatientVisitID  
+                         INNER JOIN #investigationids I (NOLOCK)  
+                                 ON iv.Investigationid = I.investigationid  
+                  WHERE  P.PatientNumber = @PatientNumber  
+                         AND iv.Status NOT IN ( 'Cancel', 'Retest', 'InActive', 'ForceClose', 'Recheck' )  
+                         AND Isnull(IV.statustype, '') NOT IN ( 'RR', 'RC' )  
+                         AND Isnumeric(Substring(Iv.value, 0, 5)) = 1  
+              END  
+  
+            IF EXISTS (SELECT 1  
+                       FROM   Patient P WITH(NOLOCK)  
+                              INNER JOIN PatientVisit PV (NOLOCK)  
+                                      ON P.PatientID = PV.PatientID  
+                              INNER JOIN Visit_Archival VA (NOLOCK)  
+                                      ON PV.PatientVisitID = VA.VisitID  
+                       WHERE  P.PatientNumber = @PatientNumber)  
+              BEGIN  
+                  IF( @IsServiceRequest = 'Y' )  
+                    BEGIN  
+                        INSERT INTO #Previousvisits  
+                                    (Visitid,  
+                                     investigationid,  
+                                     Value,  
+                                     VisitDate,  
+                                     IsArchive,  
+                                     SequenceNO,  
+                                     NAME,  
+                                     ReferenceRange,  
+                                     UOMCode,  
+                                     Status)  
+                        SELECT DISTINCT Pv.PatientVisitID,  
+                                        Iv.InvestigationID,  
+                                        Iv.Value,  
+                                        PV.VisitDate,  
+                                        'Y',  
+                                        I.SequenceNO,  
+                                        Iv.Name,  
+                                        I.ReferenceRange,  
+                                        Iv.UOMCode,  
+                                        Iv.Status  
+                        FROM   Patient P WITH(NOLOCK)  
+                               INNER JOIN PatientVisit PV (NOLOCK)  
+                                       ON P.PatientID = PV.PatientID  
+                               INNER JOIN InvestigationValues_Archival Iv (NOLOCK)  
+                                       ON PV.PatientVisitId = Iv.PatientVisitID  
+                               INNER JOIN #investigationids I (NOLOCK)  
+                                       ON iv.Investigationid = I.investigationid  
+                        WHERE  P.PatientNumber = @PatientNumber  
+                               AND Isnumeric(Substring(Iv.value, 0, 5)) = 1  
+                               --AND Iv.Status = 'Approve'  
+                               AND Isnull(IV.statustype, '') NOT IN ( 'RR', 'RC' )  
+                    END  
+                  ELSE  
+                    BEGIN  
+                        INSERT INTO #Previousvisits  
+                                    (Visitid,  
+                                     investigationid,  
+                                     Value,  
+                                     VisitDate,  
+                                     IsArchive,  
+                                     SequenceNO,  
+                                     NAME,  
+                                     ReferenceRange,  
+                                     UOMCode,  
+                                     Status)  
+                        SELECT DISTINCT Pv.PatientVisitID,  
+                                        Iv.InvestigationID,  
+                                        Iv.Value,  
+PV.VisitDate,  
+            'Y',  
+                                        I.SequenceNO,  
+                                        Iv.Name,  
+                                        I.ReferenceRange,  
+                                        Iv.UOMCode,  
+                                        Iv.Status  
+                        FROM   Patient P WITH(NOLOCK)  
+                               INNER JOIN PatientVisit PV (NOLOCK)  
+                                       ON P.PatientID = PV.PatientID  
+                               INNER JOIN InvestigationValues_Archival Iv (NOLOCK)  
+                                       ON PV.PatientVisitId = Iv.PatientVisitID  
+                               INNER JOIN #investigationids I (NOLOCK)  
+                                       ON iv.Investigationid = I.investigationid  
+                        WHERE  P.PatientNumber = @PatientNumber  
+                               AND Isnumeric(Substring(Iv.value, 0, 5)) = 1  
+                               AND Isnull(IV.statustype, '') NOT IN ( 'RR', 'RC' )  
+                    END  
+              END  
+        END  
+      --DELETE T  
+      --FROM   #Previousvisits T  
+      --WHERE  T.Visitid <> @pVisitID  
+      --       AND T.Status <> 'Approve'  
+      ;  
+  
+      WITH CTE  
+           AS (SELECT Visitid,  
+                      investigationid,  
+                      Value,  
+                      VisitDate,  
+                      IsArchive,  
+                      NAME,  
+                      ReferenceRange,  
+                      UOMCode,  
+                      Status,  
+                      SequenceNo,  
+                      Row_number()  
+                        OVER (  
+                          PARTITION BY investigationid  
+                          ORDER BY VisitDate DESC ) AS Rno  
+               FROM   #Previousvisits)  
+      SELECT Dense_rank()  
+               OVER(  
+                 ORDER BY SequenceNO, InvestigationID ASC ) AS Row_Count,  
+             Cast(VisitDate AS DATE)                        AS VisitDate,  
+             NAME,  
+             Value,  
+             ReferenceRange,  
+             UOMCode,  
+             Status,  
+             investigationid                                AS InvestigationID,  
+             Visitid                                        AS PatientVisitid,  
+             SequenceNo  
+      INTO   #CTE_Table  
+      FROM   cte  
+      WHERE  Rno < = 5  
+      ORDER  BY SequenceNo  
+  
+      SELECT DISTINCT Investigationid  
+      INTO   #ResultTable  
+      FROM   #CTE_Table  
+      GROUP  BY Investigationid  
+      HAVING Count (Investigationid) <= 1  
+  
+      SELECT Dense_rank()  
+               OVER(  
+                 ORDER BY Row_Count ASC ) AS Row_Count,  
+             VisitDate,  
+             NAME,  
+             Value,  
+             ReferenceRange,  
+             UOMCode,  
+             Status,  
+             InvestigationID,  
+             PatientVisitid,  
+             SequenceNo  
+      FROM   #CTE_Table  
+      WHERE  InvestigationID NOT IN (SELECT DISTINCT Investigationid  
+                                     FROM   #ResultTable)  
+      ORDER  BY SequenceNo,  
+   InvestigationID,  
+                VisitDate  
+  
+      DROP TABLE #ResultTable  
+  
+      DROP TABLE #CTE_Table  
+  
+      DROP TABLE #investigationids  
+  
+      DROP TABLE #Previousvisits  
+  END   
+  

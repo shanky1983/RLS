@@ -1,0 +1,50 @@
+CREATE procedure pInsertBookings
+(@OrgID bigint,
+@Name nvarchar(250),
+@SEX varchar(1),
+@DOB datetime,
+@Age varchar(30),
+@MobileNumber varchar(15),
+@EMail varchar(100),
+@Address varchar(500),
+@UserID bigint,
+@ParentPatientID bigint,
+@RowNumber bigint,
+@Add1 varchar(10),
+@dtlstTestOrder [dbo].[OrderedInvestigation] Readonly,
+@BookingID bigint out
+)
+As
+Begin
+Set nocount on;
+
+Set @BookingID=-1;
+Declare @BookID bigint;
+Declare @datetime datetime=getdate(); 
+Begin try
+Begin transaction 
+Insert Into Bookings(TokenNumber,BookingStatus,CreatedAt,ScheduleID,PhoneNumber,PatientName,OrgID,BookingOrgID,SEX,DOB,Age,EMail,SourceType,CollectionAddress2,PatientID,UserID,RefPhysicianID)
+Select @ParentPatientID,'R',@datetime,@ParentPatientID,@MobileNumber,@Name,@OrgID,@OrgID,@SEX,@DOB,@Age,@EMail,@Add1,@Address,-1,@UserID,@RowNumber
+Select @BookID=SCOPE_IDENTITY(); 
+Insert Into PreOrderedInvestigations(QuotationId,ID,Name,Type,Status,OrgID,CreatedAt,ReferralID)
+
+Select @BookID,ID,Name,Type,Status,OrgID,@datetime,ReferralID from @dtlstTestOrder
+
+IF(@BookID>0)
+Begin
+Set @BookingID=@BookID
+End
+Else
+Set @BookingID=0;
+Commit
+return @BookingID; 
+End try
+
+Begin catch  
+IF @@TRANCOUNT > 0
+Declare @error nvarchar(max)
+Set @error=ERROR_MESSAGE(); 
+rollback transaction
+End catch
+
+End

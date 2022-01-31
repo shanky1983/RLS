@@ -1,0 +1,730 @@
+ 
+/****** Object:  StoredProcedure [dbo].[pLoadCategoryTestname]    Script Date: 2/28/2019 2:03:17 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pLoadCategoryTestname] @pOrgID      [int],
+                                               @PrefixText  [VARCHAR](10),
+                                               @SearchType  [nvarchar](10),
+                                               @pItemID     [int],
+                                               @pConfigID   [int],
+                                               @ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      ---***DIRECT TAT TEST LOADING***---
+      if( @pConfigID = 0 )
+        begin
+            if( @SearchType = 0 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND ( IOM.TestCode like @PrefixText + '%'
+                                      OR IM.InvestigationName like @PrefixText + '%' )
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND CONVERT(INT, IOM.InvestigationID) = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 1 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                   AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'GRP' )
+                               AND ( IGM.GroupName like + '%' + @PrefixText + '%'
+                                      OR IOG.TestCode like @PrefixText + '%' )-- or  IOG.AttGroupID=@pItemID
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'GRP' )
+                               AND IOG.AttGroupID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 2 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'PKG'                                                                                           AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'PKG' )
+                               AND ( IGM.GroupName like '%' + @PrefixText + '%'
+                                      OR IOG.TestCode like @PrefixText + '%' )
+       end
+         else
+                  begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'PKG'                                                                                           AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'PKG' )
+                               AND IOG.AttGroupID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 3 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvDeptMaster IDM WITH(NOLOCK)
+                                       ON IDM.DeptID = IOM.DeptID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IDM.DeptName like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvDeptMaster IDM WITH(NOLOCK)
+                                       ON IDM.DeptID = IOM.DeptID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IDM.DeptID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 4 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvestigationHeader IH WITH(NOLOCK)
+                                       ON IH.HeaderID = IOM.HeaderID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               and IH.HeaderName like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvestigationHeader IH WITH(NOLOCK)
+                                       ON IH.HeaderID = IOM.HeaderID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IH.HeaderID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 5 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                   AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOG.ProtocalGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'GRP' )
+                               AND md.DisplayText like '%' + @PrefixText + '%'
+                        union all
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOM.ProtocalGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND md.DisplayText like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                    as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                       as CodeID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOG.ProtocalGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                    ON TS.Scheduleid = IOG.Scheduleid
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IGM.Type in ( 'GRP' )
+                               AND md.MetaDataID = @pItemID
+                        union all
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---')                                           as CodingSchemaName,
+                                        ISNULL(TS.Scheduleid, '')                                                                              as CodeID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOM.ProtocalGroupID
+                               LEFT JOIN Tatschedule TS WITH(NOLOCK)
+                                      ON TS.Scheduleid = IOM.Scheduleid
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND md.DisplayText like '%' + @PrefixText + '%'
+                               AND md.MetaDataID = @pItemID
+                    end
+              END
+        end
+      ---***CLIENT BASED LOADING***---
+      else
+        begin
+            if( @SearchType = 0 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               LEFT JOIN (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                            INNER join ClientMaster Cm with(nolock)
+                                                       on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = iom.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND ( IOM.TestCode like @PrefixText + '%'
+                                      OR IM.InvestigationName like @PrefixText + '%' )
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               LEFT JOIN (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = iom.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               and IOM.InvestigationID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 1 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                        as CodingSchemaName,
+                                        T.IsPrimary,
+                                      T.Scheduleid                                                                                    as CodeID,
+                                        t.ClientID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'GRP') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND ( IGM.GroupName like + '%' + @PrefixText + '%'
+                                      OR IOG.TestCode like @PrefixText + '%' )
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                               as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                    as CodeID,
+                                        t.ClientID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+      INNER join ClientMaster Cm with(nolock)
+                               on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'GRP') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IOG.AttGroupID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 2 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'PKG'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                               as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                    as CodeID,
+                                        t.ClientID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'PKG') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND ( IGM.GroupName like '%' + @PrefixText + '%'
+                                      OR IOG.TestCode like @PrefixText + '%' )
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'PKG'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                               as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                       as CodeID,
+                                        t.ClientID
+                  FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'PKG') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND IOG.AttGroupID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 3 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvDeptMaster IDM WITH(NOLOCK)
+                                       ON IDM.DeptID = IOM.DeptID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+              AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IDM.DeptName like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvDeptMaster IDM WITH(NOLOCK)
+                                       ON IDM.DeptID = IOM.DeptID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IDM.DeptID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 4 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                           as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvestigationHeader IH WITH(NOLOCK)
+                                       ON IH.HeaderID = IOM.HeaderID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               and IH.HeaderName like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        t.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN InvestigationHeader IH WITH(NOLOCK)
+                                       ON IH.HeaderID = IOM.HeaderID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                        cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                            INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND IH.HeaderID = @pItemID
+                    end
+              END
+            ELSE if( @SearchType = 5 )
+              BEGIN
+                  if( @pItemID = 0 )
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                               as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                    as CodeID,
+                                        t.ClientID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOG.ProtocalGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'GRP') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               AND md.DisplayText like '%' + @PrefixText + '%'
+                        union all
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                        as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOM.ProtocalGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND md.DisplayText like '%' + @PrefixText + '%'
+                    end
+                  else
+                    begin
+                        SELECT DISTINCT IGM.GroupName + CASE WHEN LEN(ISNULL(IOG.TestCode, '')) > 0 THEN ':' + IOG.TestCode ELSE '' END AS CodeName,
+                                        IOG.AttGroupID                                                                                  AS IdentifyingID,
+                                        'GRP'                                                                                           AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                               as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                    as CodeID,
+                                        t.ClientID
+                        FROM   InvOrgGroup IOG WITH(NOLOCK)
+                               INNER JOIN InvGroupMaster IGM WITH(NOLOCK)
+                                       ON IGM.GroupID = IOG.AttGroupID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOG.ProtocalGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                     cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                    cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                        ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'GRP') T
+                                      ON T.Testid = IOG.AttGroupID
+                        WHERE  IOG.OrgID = @pOrgID
+                               --AND IGM.Type in ( 'GRP' )
+                               AND md.MetaDataID = @pItemID
+                        union all
+                        SELECT DISTINCT IM.InvestigationName + CASE WHEN LEN(ISNULL(IOM.TestCode, '')) > 0 THEN ':' + IOM.TestCode ELSE '' END AS CodeName,
+                                        CONVERT(INT, IOM.InvestigationID)                                                                      AS IdentifyingID,
+                                        'INV'                                                                                                  AS IdentifyingType,
+                                        ISNULL(T.CodingSchemaName, '---')                                                                      as CodingSchemaName,
+                                        T.IsPrimary,
+                                        T.Scheduleid                                                                                           as CodeID,
+                                        t.ClientID
+                        FROM   InvestigationOrgMapping IOM WITH(NOLOCK)
+                               INNER JOIN InvestigationMaster IM WITH(NOLOCK)
+                                       ON IM.InvestigationID = IOM.InvestigationID
+                               INNER JOIN Metadata MD WITH(NOLOCK)
+                                       ON md.MetaDataID = IOM.ProtocalGroupID
+                               left join (SELECT TS.Scheduleid,
+                                                 ISNULL(TS.Schedulename + '(' + TS.Schedulecode + ')', '---') AS CodingSchemaName,
+                                                 cm.ClientName                                                as IsPrimary,
+                                                 tsm.Testid,
+                                                 cm.ClientID
+                                          FROM   Tatschedulemapping TSM with(nolock)
+                                                 INNER JOIN Tatschedule TS WITH(NOLOCK)
+                                                         ON tsm.Scheduleid = ts.Scheduleid
+                                                            AND IsActive = 1
+                                                 INNER join ClientMaster Cm with(nolock)
+                                                         on cm.ClientID = tsm.Clientid
+                                          WHERE  tsm.Orgid = @pOrgID
+                                                 AND tsm.IsActive = 1
+                                                 and tsm.Testtype = 'INV') T
+                                      ON T.Testid = IOM.InvestigationID
+                        WHERE  IOM.OrgID = @pOrgID
+                               AND md.MetaDataID = @pItemID
+                    end
+              END
+        end
+  end
+

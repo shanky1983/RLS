@@ -1,0 +1,10 @@
+CREATE PROCEDURE [dbo].[pGetPatientDetailsVisitNumber] @VisitNumber    varchar(25),
+                                                   @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      SELECT Top 1 PV.PatientID,PV.PatientVisitId as PatientVisitID,pv.VisitNumber,PV.OrgID AS OrganizationID,PA.MobileNumber
+	  FROM PatientVisit PV with(nolock) 
+	  INNER JOIN PatientAddress PA with(nolock) on Pv.PatientID=PA.PatientID
+	  where  PA.AddressType='P'  and ReferOrgID='-1' and VisitNumber=@VisitNumber
+  END

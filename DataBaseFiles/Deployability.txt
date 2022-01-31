@@ -1,0 +1,447 @@
+drop table Stage2_MHL_T_01_TESTMASTER
+drop table Stage2_MHL_T_03_Package_Master
+drop table Stage2_MHL_T_02_GROUP_MASTER
+drop table Stage2_MHL_T_04_GROUP_TESTS
+drop table Stage2_MHL_T_05_PACKAGE_TESTS
+drop table Stage2_MHL_T_02_RATE_MASTER
+
+drop table Stage_MHL_T_01_TESTMASTER
+drop table Stage_MHL_T_02_GROUP_MASTER
+
+ 
+drop table Stage_MHL_T_03_Package_Master
+drop table Stage_MHL_T_04_GROUP_TESTS
+drop table Stage_MHL_T_05_PACKAGE_TESTS
+
+
+IF OBJECT_ID('Stage2_MHL_T_01_TESTMASTER', 'U') IS  NULL
+CREATE TABLE [dbo].[Stage2_MHL_T_01_TESTMASTER](
+	[LAB] [nvarchar](255) NULL,
+	[TCODE] [nvarchar](255) NULL,
+	[EDOSCode] [nvarchar](255) NULL,
+	[TestName] [varchar](max) NULL,
+	[TEST_ABBREVATION] [varchar](max) NULL,
+	[DISPLAY_NAME] [varchar](max) NULL,
+	[DeptName] [varchar](max) NULL,
+	[SECTION_NAME] [varchar](max) NULL,
+	[TEST_GROUP] [nvarchar](255) NULL,
+	[TEST_PARENT] [nvarchar](255) NULL,
+	[Values_Type] [nvarchar](255) NULL,
+	[Orderable] [nvarchar](255) NULL,
+	[SEQUENCE_No] [nvarchar](255) NULL,
+	[INPUT_FORMAT] [nvarchar](255) NULL,
+	[Sample_Type] [varchar](max) NULL,
+	[Method] [varchar](max) NULL,
+	[Container] [varchar](max) NULL,
+	[Units] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[PROCESSING_LOCATION] [nvarchar](255) NULL,
+	[Decimal_Places] [nvarchar](255) NULL,
+	[Classification] [nvarchar](255) NULL,
+	[IS_MACHINE_INTERFACED] [nvarchar](255) NULL,
+	[REPEATABLE] [nvarchar](255) NULL,
+	[TEST_GENDER] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[IS_SMS] [nvarchar](255) NULL,
+	[IS_STATISTICAL] [nvarchar](255) NULL,
+	[AUTORIZATION] [nvarchar](255) NULL,
+	[CO_AUTHORIZATION] [nvarchar](255) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+[REFERENCE_RANGE] [varchar](max) NULL,
+ [CRITICAL_RANGE] [nvarchar](255) NULL,
+ [IS_CRITICAL_ALERT] [nvarchar](255) NULL,
+ [PANIC_RANGE] [varchar](max) NULL,
+ [AUTO_AUTHORIZATION_RANGE] [nvarchar](255) NULL,
+ [ACCEPTABLE_RANGE] [nvarchar](255) NULL,
+ [TEST_EMERGENCY_STAGE] [nvarchar](255) NULL,
+ [IS_TEST_HISTORY] [nvarchar](255) NULL,
+ [InvestigationID] [nvarchar](255) NULL,
+ [DISCOUNT_CATEGORY] [nvarchar](255) NULL,
+ [TFORMAT] [nvarchar](255) NULL,
+ [SPLFORMAT] [nvarchar](255) NULL,
+ [TESTTYPE] [nvarchar](255) NULL,
+ [CHILDOF] [nvarchar](255) NULL,
+ [LOD] [nvarchar](255) NULL,
+ [NOOFSAMPLES] [nvarchar](255) NULL,
+ [OUTPUT_FORMAT] [nvarchar](255) NULL,
+ [PCTS] [nvarchar](255) NULL,
+ [AttType] [nvarchar](255) NULL,
+ [CutOffTimeValue] [nvarchar](255) NULL,
+ [CutOffTimeType] [nvarchar](255) NULL,
+ [IsActive] [nvarchar](255) NULL,
+ [IsNonReportable] [nvarchar](255) NULL,
+ [PrintSeparately] [nvarchar](255) NULL,
+ [IsParameter] [nvarchar](255) NULL,
+ [Interpretation] [varchar](max) NULL,
+ [DeptID] [nvarchar](255) NULL,
+ [SampleCode] [nvarchar](255) NULL,
+ [MethodID] [nvarchar](255) NULL,
+ [SampleContainerID] [nvarchar](255) NULL,
+ [HeaderId] [nvarchar](255) NULL,
+ [AutoAuthorizationId] [nvarchar](255) NULL,
+ [UOMID] [nvarchar](255) NULL,
+ [Processing_AddressID] [nvarchar](255) NULL,
+ [ProtocolGroup] [nvarchar](100) NULL,
+ [ProtocolGroupID] [int] NULL,
+ [I_Tcode] [nvarchar](100) NULL,
+ [Billing_Name] [varchar](255) NULL,
+ [Flag] [varchar](30) NULL)
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+IF OBJECT_ID('Stage2_MHL_T_03_Package_Master', 'U') IS  NULL
+
+
+CREATE TABLE [dbo].[Stage2_MHL_T_03_Package_Master](
+	[LAB] [nvarchar](255) NULL,
+	[PACKAGE_NAME] [varchar](max) NULL,
+	[METROLAB_PROFILECODE] [nvarchar](255) NULL,
+	[DOSCODE] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[Test] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [nvarchar](255) NULL,
+	[Test_Name] [nvarchar](255) NULL,
+	[DISPLAY_NAME] [varchar](max) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+	[IS_ORDERABLE] [nvarchar](255) NULL,
+	[CLASSIFICATION] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[ValidationText] [varchar](max) NULL,
+	[ValidationRule] [varchar](max) NULL,
+	[IsDiscountable] [nvarchar](255) NULL,
+	[IsServicetaxable] [nvarchar](255) NULL,
+	[Status] [nvarchar](255) NULL,
+	[CutOffTimeValue] [nvarchar](255) NULL,
+	[CutOffTimeType] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[HasHistory] [nvarchar](255) NULL,
+	[Remarks] [nvarchar](255) NULL,
+	[PrintSeparately] [nvarchar](255) NULL,
+	[Gender] [nvarchar](255) NULL,
+	[groupinterpretation] [varchar](max) NULL,
+	[Issummaryworklist] [nvarchar](255) NULL,
+	[IsSpecialFormat] [nvarchar](255) NULL,
+	[ABBREVATION] [nvarchar](255) NULL,
+	[Groupid] [nvarchar](255) NULL,
+	[ProtocolGroup] [nvarchar](100) NULL,
+	[ProtocolGroupID] [int] NULL,
+	[I_Tcode] [varchar](30) NULL,
+	[Billing_Name] [varchar](100) NULL,
+	[Flag] [varchar](30) NULL,Attgroupid int
+) ON [PRIMARY]
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+
+IF OBJECT_ID('Stage2_MHL_T_02_GROUP_MASTER', 'U') IS  NULL
+
+
+
+CREATE TABLE [dbo].[Stage2_MHL_T_02_GROUP_MASTER](
+	[LAB] [nvarchar](255) NULL,
+	[GROUPNAME] [nvarchar](255) NULL,
+	[METRO_COMBINE_CODE] [nvarchar](255) NULL,
+	[EDOSCODE] [nvarchar](255) NULL,
+	[DISPLAY_NAME] [nvarchar](255) NULL,
+	[ABBREVATION] [nvarchar](255) NULL,
+	[IS_ORDERABLE] [nvarchar](255) NULL,
+	[CLASSIFICATION] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[ValidationText] [varchar](max) NULL,
+	[ValidationRule] [nvarchar](max) NULL,
+	[IsDiscountable] [nvarchar](255) NULL,
+	[IsServicetaxable] [nvarchar](255) NULL,
+	[Status] [nvarchar](255) NULL,
+	[CutOffTimeValue] [nvarchar](255) NULL,
+	[CutOffTimeType] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[HasHistory] [nvarchar](255) NULL,
+	[Remarks] [nvarchar](255) NULL,
+	[PrintSeparately] [nvarchar](255) NULL,
+	[Gender] [nvarchar](255) NULL,
+	[groupinterpretation] [varchar](max) NULL,
+	[Issummaryworklist] [nvarchar](255) NULL,
+	[IsSpecialFormat] [nvarchar](255) NULL,
+	[Groupid] [nvarchar](255) NULL,
+	[ProtocolGroup] [nvarchar](100) NULL,
+	[ProtocolGroupID] [int] NULL,
+	[I_Tcode] [nvarchar](100) NULL,
+	[Billing_Name] [varchar](255) NULL,[Flag] [varchar](30) NULL,Attgroupid int
+) ON [PRIMARY]
+SET ANSI_PADDING OFF
+ 
+
+GO
+
+
+
+
+
+
+IF OBJECT_ID('Stage2_MHL_T_04_GROUP_TESTS', 'U') IS  NULL
+CREATE TABLE [dbo].[Stage2_MHL_T_04_GROUP_TESTS](
+	[LAB] [nvarchar](255) NULL,
+	[GROUP_CODE] [nvarchar](255) NULL,
+	[TEST_CODE] [nvarchar](255) NULL,
+	[TEST_NAME] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [float] NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[Type] [nvarchar](255) NULL,
+	[ID] [int] NULL,
+	[Flag] [varchar](30) NULL
+) ON [PRIMARY]
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+
+IF OBJECT_ID('Stage2_MHL_T_05_PACKAGE_TESTS', 'U') IS  NULL
+
+CREATE TABLE [dbo].[Stage2_MHL_T_05_PACKAGE_TESTS](
+	[LAB] [nvarchar](255) NULL,
+	[PACKAGE_CODE] [nvarchar](255) NULL,
+	[TEST_CODE] [nvarchar](255) NULL,
+	[TEST_NAME] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [float] NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[Type] [nvarchar](255) NULL,
+	[ID] [nvarchar](255) NULL,
+	[Flag] [varchar](30) NULL
+) ON [PRIMARY]
+
+GO
+
+SET ANSI_PADDING OFF
+GO
+
+
+
+IF OBJECT_ID('Stage2_MHL_T_02_RATE_MASTER', 'U') IS  NULL
+CREATE TABLE [dbo].[Stage2_MHL_T_02_RATE_MASTER](
+	[SNO] [bigint] NULL,
+	[OrgID] [int] NULL,
+	[TestCode] [varchar](50) NULL,
+	[TestType] [varchar](50) NULL,
+	[TestName] [varchar](50) NULL,
+	[RateName] [varchar](50) NULL,
+	[Rate] [decimal](18, 2) NULL,
+	[Flag] [varchar](50) NULL
+) ON [PRIMARY]
+	
+	
+	
+	
+	
+
+IF OBJECT_ID('Stage_MHL_T_01_TESTMASTER', 'U') IS  NULL
+CREATE TABLE [dbo].[Stage_MHL_T_01_TESTMASTER](
+	[LAB] [nvarchar](255) NULL,
+	[TCODE] [nvarchar](255) NULL,
+	[EDOSCode] [nvarchar](255) NULL,
+	[TestName] [varchar](max) NULL,
+	[TEST_ABBREVATION] [varchar](max) NULL,
+	[DISPLAY_NAME] [varchar](max) NULL,
+	[DeptName] [varchar](max) NULL,
+	[SECTION_NAME] [varchar](max) NULL,
+	[TEST_GROUP] [nvarchar](255) NULL,
+	[TEST_PARENT] [nvarchar](255) NULL,
+	[Values_Type] [nvarchar](255) NULL,
+	[Orderable] [nvarchar](255) NULL,
+	[SEQUENCE_No] [nvarchar](255) NULL,
+	[INPUT_FORMAT] [nvarchar](255) NULL,
+	[Sample_Type] [varchar](max) NULL,
+	[Method] [varchar](max) NULL,
+	[Container] [varchar](max) NULL,
+	[Units] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[PROCESSING_LOCATION] [nvarchar](255) NULL,
+	[Decimal_Places] [nvarchar](255) NULL,
+	[Classification] [nvarchar](255) NULL,
+	[IS_MACHINE_INTERFACED] [nvarchar](255) NULL,
+	[REPEATABLE] [nvarchar](255) NULL,
+	[TEST_GENDER] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[IS_SMS] [nvarchar](255) NULL,
+	[IS_STATISTICAL] [nvarchar](255) NULL,
+	[AUTORIZATION] [nvarchar](255) NULL,
+	[CO_AUTHORIZATION] [nvarchar](255) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+	[REFERENCE_RANGE] [varchar](max) NULL,
+	[CRITICAL_RANGE] [nvarchar](255) NULL,
+	[IS_CRITICAL_ALERT] [nvarchar](255) NULL,
+	[PANIC_RANGE] [varchar](max) NULL,
+	[AUTO_AUTHORIZATION_RANGE] [nvarchar](255) NULL,
+	[ACCEPTABLE_RANGE] [nvarchar](255) NULL,
+	[TEST_EMERGENCY_STAGE] [nvarchar](255) NULL,
+	[IS_TEST_HISTORY] [nvarchar](255) NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[DISCOUNT_CATEGORY] [nvarchar](255) NULL,
+	[TFORMAT] [nvarchar](255) NULL,
+	[SPLFORMAT] [nvarchar](255) NULL,
+	[TESTTYPE] [nvarchar](255) NULL,
+	[CHILDOF] [nvarchar](255) NULL,
+	[LOD] [nvarchar](255) NULL,
+	[NOOFSAMPLES] [nvarchar](255) NULL,
+	[OUTPUT_FORMAT] [nvarchar](255) NULL,
+	[PCTS] [nvarchar](255) NULL,
+	[AttType] [nvarchar](255) NULL,
+	[CutOffTimeValue] [nvarchar](255) NULL,
+	[CutOffTimeType] [nvarchar](255) NULL,
+	[IsActive] [nvarchar](255) NULL,
+	[IsNonReportable] [nvarchar](255) NULL,
+	[PrintSeparately] [nvarchar](255) NULL,
+	[IsParameter] [nvarchar](255) NULL,
+	[Interpretation] [varchar](max) NULL,
+	[DeptID] [nvarchar](255) NULL,
+	[SampleCode] [nvarchar](255) NULL,
+	[MethodID] [nvarchar](255) NULL,
+	[SampleContainerID] [nvarchar](255) NULL,
+	[HeaderId] [nvarchar](255) NULL,
+	[AutoAuthorizationId] [nvarchar](255) NULL,
+	[UOMID] [nvarchar](255) NULL,
+	[Processing_AddressID] [nvarchar](255) NULL,
+	[ProtocolGroup] [nvarchar](100) NULL,
+	[ProtocolGroupID] [int] NULL,
+	[I_Tcode] [nvarchar](100) NULL,
+	[Billing_Name] [varchar](100) NULL,
+	[flag] [varchar](10) NULL
+) ON [PRIMARY]
+
+
+IF OBJECT_ID('Stage_MHL_T_02_GROUP_MASTER', 'U') IS  NULL
+
+
+CREATE TABLE [dbo].[Stage_MHL_T_02_GROUP_MASTER](
+	[LAB] [nvarchar](255) NULL,
+	[GROUPNAME] [nvarchar](255) NULL,
+	[METRO_COMBINE_CODE] [nvarchar](255) NULL,
+	[EDOSCODE] [nvarchar](255) NULL,
+	[DISPLAY_NAME] [nvarchar](255) NULL,
+	[ABBREVATION] [nvarchar](255) NULL,
+	[IS_ORDERABLE] [nvarchar](255) NULL,
+	[CLASSIFICATION] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[ValidationText] [varchar](max) NULL,
+	[ValidationRule] [nvarchar](max) NULL,
+	[IsDiscountable] [nvarchar](255) NULL,
+	[IsServicetaxable] [nvarchar](255) NULL,
+	[Status] [nvarchar](255) NULL,
+	[CutOffTimeValue] [nvarchar](255) NULL,
+	[CutOffTimeType] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[HasHistory] [nvarchar](255) NULL,
+	[Remarks] [nvarchar](255) NULL,
+	[PrintSeparately] [nvarchar](255) NULL,
+	[Gender] [nvarchar](255) NULL,
+	[groupinterpretation] [varchar](max) NULL,
+	[Issummaryworklist] [nvarchar](255) NULL,
+	[IsSpecialFormat] [nvarchar](255) NULL,
+	[Groupid] [nvarchar](255) NULL,
+	[ProtocolGroup] [nvarchar](100) NULL,
+	[ProtocolGroupID] [int] NULL,
+	[I_Tcode] [nvarchar](100) NULL,
+	[Billing_Name] [varchar](100) NULL,
+	[flag] [varchar](10) NULL,
+	Attgroupid int
+) ON [PRIMARY]
+IF OBJECT_ID('Stage_MHL_T_03_Package_Master', 'U') IS  NULL
+
+
+CREATE TABLE [dbo].[Stage_MHL_T_03_Package_Master](
+	[LAB] [nvarchar](255) NULL,
+	[PACKAGE_NAME] [varchar](max) NULL,
+	[METROLAB_PROFILECODE] [nvarchar](255) NULL,
+	[DOSCODE] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[TestName] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [nvarchar](255) NULL,
+	[Test_Name] [nvarchar](255) NULL,
+	[DISPLAY_NAME] [varchar](max) NULL,
+	[TAT_POLICY] [nvarchar](255) NULL,
+	[IS_ORDERABLE] [nvarchar](255) NULL,
+	[CLASSIFICATION] [nvarchar](255) NULL,
+	[IS_NABL] [nvarchar](255) NULL,
+	[IS_CAP] [nvarchar](255) NULL,
+	[IS_STAT] [nvarchar](255) NULL,
+	[ValidationText] [varchar](max) NULL,
+	[ValidationRule] [varchar](max) NULL,
+	[IsDiscountable] [nvarchar](255) NULL,
+	[IsServicetaxable] [nvarchar](255) NULL,
+	[Status] [nvarchar](255) NULL,
+	[CutOffTimeValue] [nvarchar](255) NULL,
+	[CutOffTimeType] [nvarchar](255) NULL,
+	[SubCategory] [nvarchar](255) NULL,
+	[HasHistory] [nvarchar](255) NULL,
+	[Remarks] [nvarchar](255) NULL,
+	[PrintSeparately] [nvarchar](255) NULL,
+	[Gender] [nvarchar](255) NULL,
+	[groupinterpretation] [varchar](max) NULL,
+	[Issummaryworklist] [nvarchar](255) NULL,
+	[IsSpecialFormat] [nvarchar](255) NULL,
+	[ABBREVATION] [nvarchar](255) NULL,
+	[Groupid] [nvarchar](255) NULL,
+	[ProtocolGroup] [nvarchar](100) NULL,
+	[ProtocolGroupID] [int] NULL,
+	[I_Tcode] [varchar](30) NULL,
+	[Billing_Name] [varchar](100) NULL,
+	[Flag] [varchar](10) NULL
+) ON [PRIMARY]
+
+
+IF OBJECT_ID('Stage_MHL_T_04_GROUP_TESTS', 'U') IS  NULL
+
+CREATE TABLE [dbo].[Stage_MHL_T_04_GROUP_TESTS](
+	[LAB] [nvarchar](255) NULL,
+	[GROUP_CODE] [nvarchar](255) NULL,
+	[TEST_CODE] [nvarchar](255) NULL,
+	[TEST_NAME] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [float] NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[Type] [nvarchar](255) NULL,
+	[ID] [int] NULL,
+	[flag] [varchar](10) NULL
+) ON [PRIMARY]
+
+
+IF OBJECT_ID('Stage_MHL_T_05_PACKAGE_TESTS', 'U') IS  NULL
+
+CREATE TABLE [dbo].[Stage_MHL_T_05_PACKAGE_TESTS](
+	[LAB] [nvarchar](255) NULL,
+	[PACKAGE_CODE] [nvarchar](255) NULL,
+	[TEST_CODE] [nvarchar](255) NULL,
+	[TEST_NAME] [nvarchar](255) NULL,
+	[TEST_SEQUENCE_NO] [float] NULL,
+	[InvestigationID] [nvarchar](255) NULL,
+	[OrgGroupID] [nvarchar](255) NULL,
+	[Type] [nvarchar](255) NULL,
+	[ID] [nvarchar](255) NULL,
+	[Flag] [varchar](10) NULL
+) ON [PRIMARY]
+

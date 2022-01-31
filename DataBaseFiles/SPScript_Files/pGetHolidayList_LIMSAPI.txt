@@ -1,0 +1,15 @@
+
+--pGetHolidayList_LIMSAPI 
+CREATE PROCEDURE [dbo].[pGetHolidayList_LIMSAPI] 
+@ContextInfo      [UDT_CONTEXT] READONLY
+AS
+BEGIN
+ 
+    BEGIN              
+			select HolidayID, CONVERT(varchar, StartDate, 103)  AS HolidayDate, Description
+			from SCPHolidayList AS con
+			where Status =1           
+		END    
+   ---
+
+END

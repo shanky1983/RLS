@@ -1,0 +1,344 @@
+--EXEC pGetPatientOrderDetails_LIMSAPI @MessageType='NW',@OrgCode='LIMSAPI'
+CREATE PROCEDURE pGetPatientOrderDetails_LIMSAPI
+@MessageType NVARCHAR(20),
+@OrgCode NVARCHAR(100)
+AS
+BEGIN
+
+ DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL,@pStatus NVARCHAR(50),@OrderID NVARCHAR(100),@ChangeType NVARCHAR(100)
+
+ IF EXISTS(Select 1 from Integrationtypemaster with(NOLOCK) where IntegrationTypeName = @OrgCode)
+  BEGIN
+    SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+          @pStatus = CASE ITM.Status WHEN 1 THEN 'Active' ELSE 'Inactive' END 
+    FROM Integrationtypemaster ITM with(NOLOCK)
+       INNER JOIN VendorOrgMapping VOM with(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+       INNER JOIN vendorOrgAddressMapping VOA with(NOLOCK) ON VOA.VendorID = VOM.VendorID
+    WHERE ITM.IntegrationTypeName = @OrgCode
+  END
+  
+  DECLARE @PatientDetails AS TABLE
+  (
+    PatientID BIGINT,
+	PatientVisitID BIGINT,
+	FirstName  NVARCHAR(255),
+	MiddleName  NVARCHAR(255),
+	LastName  NVARCHAR(255), 
+	Gender NVARCHAR(100),
+	Age NVARCHAR(100),
+	DOB NVARCHAR(100),
+	MobileNumber NVARCHAR(20),
+	EmailID   NVARCHAR(100),
+	URNType   NVARCHAR(100),
+	URNNumber NVARCHAR(255),
+	Address NVARCHAR(MAX),
+	State   NVARCHAR(255),
+	City    NVARCHAR(255),
+	Country NVARCHAR(255),
+	AddressType NVARCHAR(5),
+	SalutationCode  NVARCHAR(10)
+  )
+
+
+   DECLARE @PatientVisitDetails AS TABLE
+  (
+    PatientID BIGINT,
+	PatientVisitId BIGINT, 
+	ExternalVisitNumber  NVARCHAR(100),
+	VisitType NVARCHAR(10),
+	VATRegisterationNo NVARCHAR(100),
+	ClientCode NVARCHAR(100),
+	ClientName NVARCHAR(100),
+	ReferingDoctorCode NVARCHAR(100),
+	ReferingDoctorName NVARCHAR(255),
+	ReferingDoctorMobileNumber NVARCHAR(100),
+	IsNotification NCHAR(1),
+	HospitalNameCode   NVARCHAR(100),
+	HospitalName   NVARCHAR(100),
+	VisitHistory NVARCHAR(255),
+	VisitRemarks NVARCHAR(MAX),
+	RegisterLocation   NVARCHAR(100),
+	BookedDate    DATETIME,
+	CheckinDate DATETIME,
+	CheckOutDate DATETIME,
+	VisitDate  DATETIME,
+	Status   NVARCHAR(100)
+  )
+
+  DECLARE @BillingDetails AS TABLE
+  (
+    PatientID BIGINT,
+	PatientVisitID BIGINT,  
+	FinalBillID BIGINT,
+	BillingDetailsID BIGINT,
+	PaymentStatus  NVARCHAR(100), 
+	GrossAmount DECIMAL(18,2),
+	Discount    DECIMAL(18,2),
+	NetAmount   DECIMAL(18,2),
+	DueAmount   DECIMAL(18,2),
+	TestCode    NVARCHAR(100),
+	TestName    NVARCHAR(1000),
+	TestStatus  NVARCHAR(200),
+	IsStat      NCHAR(1),
+	Price       DECIMAL(18,0),
+	RateCardCode  NVARCHAR(100),
+	TestClinicalHistory NVARCHAR(MAX),
+	Instructions  NVARCHAR(1000),
+	Remarks       NVARCHAR(1000),
+	FeeType       NVARCHAR(10),
+	FeeID        BIGINT,
+	BillStatus   NVARCHAR(100)
+  )
+  
+  DECLARE @PaymentDetails AS TABLE
+  (
+    PatientID BIGINT,
+	PatientVisitID BIGINT,  
+    FinalBillID BIGINT,
+	PaymentType NVARCHAR(100),
+	ReferenceNo  NVARCHAR(1000),
+	AmountReceived DECIMAL 
+  )
+
+  DECLARE @IntegrationAPILog AS TABLE
+  (
+    PatientID BIGINT,
+	PatientVisitID BIGINT,
+	VisitNumber   NVARCHAR(100),
+	OrgID  INT,
+	MessageType   NVARCHAR(5),
+	ChangeType NVARCHAR(200),
+	FinalbillID BIGINT
+  )
+   
+
+  INSERT INTO @IntegrationAPILog (PatientID,PatientVisitID,VisitNumber,MessageType,OrgID,ChangeType,FinalbillID)
+  SELECT TOP 1 PatientID,PatientVisitID,OrderID,MessageType,OrgID,ChangeType,FinalbillID
+  FROM IntegrationOrderAPILog (NOLOCK) 
+  WHERE StatusID=0 AND LTRIM(RTRIM(MessageType)) =@MessageType AND OrgID=@pOrgID
+
+  SELECT @OrderID=VisitNumber,@ChangeType=ChangeType FROM @IntegrationAPILog
+  
+  INSERT INTO @PatientDetails (PatientID,PatientVisitID,FirstName,MiddleName,LastName,Gender,Age,DOB,MobileNumber,
+	                           EmailID,URNType,URNNumber,Address,State,City,Country,AddressType,SalutationCode)
+  SELECT  P.PatientID,IOA.PatientVisitID,P.Name,'','',CASE WHEN P.SEX='M' THEN 'Male' WHEN P.SEX='F' THEN 'Female' ELSE 'Other' END,
+         P.Age,FORMAT(P.DOB,'dd-MM-yyyy') ,PA.MobileNumber,P.Email,UT.URNType,P.URNO,PA.Add1 +
+		 CASE WHEN ISNULL(PA.Add2,'')!='' THEN ', '+PA.Add2 ELSE '' END +CASE WHEN ISNULL(PA.Add3,'')!='' THEN ', '+PA.Add3 ELSE '' END,
+		 S.StateName,ISNULL(C.CityName,PA.City),CY.CountryName,
+		 PA.AddressType,CONVERT(NVARCHAR,SA.TitleID)
+   FROM Patient P(NOLOCK)
+  INNER JOIN @IntegrationAPILog IOA   ON IOA.PatientID =P.PatientId AND P.OrgID=IOA.OrgID
+  INNER JOIN PatientAddress PA (NOLOCK) ON P.PatientID=PA.PatientID  AND Pa.AddressType='C'
+  INNER JOIN State S (NOLOCK) ON S.StateID=PA.StateID
+  LEFT JOIN City C(NOLOCK) ON C.CityID=PA.CityID
+  LEFT JOIN Country CY (NOLOCK) ON CY.NationalityID=PA.CountryID
+  INNER JOIN Salutation SA (NOLOCK) ON SA.TitleID=P.TITLECode
+  LEFT JOIN URNTypes UT (NOLOCK) ON UT.URNTypeId=P.URNTypeId
+
+  INSERT INTO @PatientVisitDetails (PatientID,PatientVisitId,ExternalVisitNumber,VisitType,VATRegisterationNo,ClientCode,ClientName,
+	ReferingDoctorCode,ReferingDoctorName,ReferingDoctorMobileNumber,IsNotification,HospitalNameCode,HospitalName,
+	VisitHistory,VisitRemarks,RegisterLocation,BookedDate,CheckinDate,CheckOutDate,VisitDate,Status)
+  SELECt IOA.PatientID,IOA.PatientVisitID,'',CASE WHEN PV.VisitType =0 THEN 'OP' WHEN PV.VisitType=1 THEN 'IP' END,
+         '',CM.ClientCode,CM.ClientName,P.PhysicianCode,P.PhysicianName,'','N',O.CentreCode,O.OrgDisplayName,
+		 '','',OA.LocationCode,PV.VisitDate,BD.CheckInDate,BD.CheckOutDate
+		 ,PV.VisitDate,BD.Status
+  FROM @IntegrationAPILog IOA
+  INNER JOIN PatientVisit PV(NOLOCK)  ON IOA.PatientID =PV.PatientId AND PV.OrgID=IOA.OrgID AND IOA.PatientVisitID=PV.PatientVisitID
+  INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitID
+  INNER JOIN ClientMaster CM (NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.OrgID=VCM.OrgID
+  INNER JOIN Organization O (NOLOCK) ON O.OrgID=IOA.OrgID
+  INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.OrgID=IOA.OrgID AND OA.AddressID=PV.OrgAddressID
+  LEFT JOIN ReferingPhysician P (NOLOCK) ON P.ReferingPhysicianID=PV.ReferingPhysicianID
+  LEFT JOIN BookingDetails BD (NOLOCK) ON BD.PatientID=PV.PatientID AND BD.PatientVisitID=PV.PatientVisitID
+  
+  INSERT INTO @BillingDetails (PatientID,PatientVisitID,FinalBillID,BillingDetailsID,PaymentStatus,GrossAmount,Discount,NetAmount,DueAmount,TestCode,
+	TestName,TestStatus,IsStat,Price,RateCardCode,TestClinicalHistory,Instructions,Remarks,FeeID,FeeType)
+  SELECT IOA.PatientID,IOA.PatientVisitID,FB.FinalBillID,BillingDetailsID,BD.Status,FB.GrossBillValue,FB.DiscountAmount,FB.NetValue,FB.Due,'',
+	FeeDescription,'',IsStat,BD.Rate,RM.RateCode,'','','',BD.FeeId,BD.FeeType
+  FROM  @IntegrationAPILog IOA
+  INNER JOIN FinalBill FB(NOLOCK)  ON IOA.PatientID =FB.PatientId AND FB.OrgID=IOA.OrgID AND IOA.PatientVisitID=FB.VisitID AND IOA.FinalbillID=FB.FinalBillID
+  INNER JOIN BillingDetails BD (NOLOCK) ON BD.FinalBillID=FB.FinalBillID  
+  INNER JOIN RateMaster RM (NOLOCK) ON RM.RateId=BD.RateID AND RM.OrgID=IOA.OrgID
+
+    UPDATE BD
+	SET  BD.BillStatus=CASE WHEN ARD.AmtRefund=ARD.CancelAmount THEN 'Cancel' ELSE 'Refund' END
+	FROM @BillingDetails BD 
+	INNER JOIN AmountRefundDetails ARD (NOLOCK)
+	ON BD.FinalBillId=ARD.FinalbillID AND BD.BillingDetailsID=ARD.BillingDetailsID
+
+    UPDATE BD 
+	SET TestCode=Tmp.TestCode
+	FROM @BillingDetails BD
+	INNER JOIN (
+	SELECT T.FeeId,T.FeeType, IOM.TestCode FROM @BillingDetails T
+	INNER JOIN InvestigationOrgMapping IOM(NOLOCK) ON 
+		IOM.OrgID=@pOrgId
+		AND IOM.InvestigationID=T.FeeID
+		WHERE T.FeeTYPE='INV'
+		UNION ALL 
+		SELECT T.FeeId,T.FeeType,IOG.TestCode FROM  @BillingDetails T
+	     INNER JOIN InvOrgGroup IOG(NOLOCK) ON 
+		IOG.AttGroupID=T.FeeID
+		WHERE (T.FeeTYPE='GRP' OR T.FeeTYPE='PKG')
+		)TMP
+	ON Tmp.FeeId=BD.FeeID
+	AND TMP.FeeType=BD.FeeType
+
+
+	UPDATE BD
+	SET  BD.TestStatus=OI.Status
+	FROM @BillingDetails BD
+	INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.ID=BD.BillingDetailsID
+	AND Oi.Type=BD.FeeType
+	WHERE OI.Type IN ('INV','GRP') AND ISNULL(OI.PkgID,0)=0
+
+	UPDATE BD
+	SET  BD.TestStatus=OI.Status
+	FROM @BillingDetails BD
+	INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.PkgID=BD.BillingDetailsID
+	AND Oi.Type=BD.FeeType
+	WHERE OI.Type IN ('INV','GRP') AND ISNULL(OI.PkgID,0)!=0
+
+	UPDATE BD
+	SET BD.Instructions =R.RemarksText
+	FROM @BillingDetails BD 
+	INNER JOIN InvRemarks IR (NOLOCK) ON IR.ID=BD.FeeID AND IR.Type=BD.FeeType
+	INNER JOIN remarks R (NOLOCK) ON R.RemarksID=IR.RemarksID
+	WHERE R.RemarksType='I'
+
+	UPDATE BD
+	SET BD.Remarks =R.RemarksText
+	FROM @BillingDetails BD 
+	INNER JOIN InvRemarks IR (NOLOCK) ON IR.ID=BD.FeeID AND IR.Type=BD.FeeType
+	INNER JOIN remarks R (NOLOCK) ON R.RemarksID=IR.RemarksID
+	WHERE R.RemarksType='m'
+
+	UPDATE BD
+	SET BD.TestClinicalHistory =IR.FieldValue
+	FROM @BillingDetails BD 
+	INNER JOIN PatientAttributeFields IR (NOLOCK) ON IR.PatientVisitID=BD.PatientVisitID AND IR.OrgID=@pOrgId 
+	WHERE IR.ReferenceType='test'
+	      
+	      
+
+  INSERT INTO @PaymentDetails( PatientID,PatientVisitID,FinalBillID,PaymentType,ReferenceNo ,AmountReceived )
+  SELECT IOA.PatientID,IOA.PatientVisitID,FB.FinalBillID,PT.PaymentName,ARD.ChequeorCardNumber ,ARD.AmtReceived
+  FROM @IntegrationAPILog IOA 
+  INNER JOIN FInalBill FB (NOLOCK) ON FB.PatientID=IOA.PatientID AND FB.VisitID=IOA.PatientVisitID AND IOA.FinalbillID=FB.FinalBillID
+  INNER JOIN AmountReceivedDetails ARD (NOLOCK) ON ARD.FinalBillID=FB.FinalBillID
+  INNER JOIN PaymentType PT(NOLOCK) ON PT.PaymentTypeID=ARD.TypeID
+
+
+  UPDATE IOA
+  SET  IOA.StatusID=1,
+       IOA.ModifiedAt=GETDATE()
+  FROM IntegrationOrderAPILog IOA (NOLOCK)
+  INNER JOIN @IntegrationAPILog I ON IOA.PatientID=I.PatientID AND IOA.PatientVisitID =I.PatientVisitID
+  AND IOA.MessageType=@MessageType AND IOA.OrderID=I.VisitNumber
+
+  IF @MessageType='NW'
+  BEGIN
+	  SELECT CONVERT(NVARCHAR,PatientID) PatientID,FirstName,MiddleName,LastName,Gender,Age,DOB,MobileNumber,
+	   EmailID,URNType,URNNumber,Address,State,City,Country,AddressType,SalutationCode , @MessageType MessageType,@OrderID OrderID
+	   FROM @PatientDetails 
+
+	  SELECT CONVERT(NVARCHAR,PatientVisitId) PatientVisitId,ExternalVisitNumber,VisitType,VATRegisterationNo,ClientCode,ClientName,
+			 ReferingDoctorCode,ReferingDoctorName,ReferingDoctorMobileNumber,IsNotification,HospitalNameCode,HospitalName,
+			 VisitHistory,VisitRemarks,RegisterLocation,BookedDate,CheckinDate,CheckOutDate,Status ,VisitDate
+	  FROM @PatientVisitDetails 
+
+	  SELECT PatientID,PatientVisitID,FinalBillID,BillingDetailsID,PaymentStatus,GrossAmount,Discount,NetAmount,DueAmount,TestCode,
+	         TestName,CASE WHEN TestStatus='' THEN 'Ordered' ELSE ISNULL(TestStatus,'Ordered') END Status,IsStat,CONVERT(NVARCHAR,Price) Price,
+			 RateCardCode,
+			 TestClinicalHistory,Instructions,Remarks,FeeID,FeeType
+	  FROM @BillingDetails 
+
+	  SELECT PaymentType,ReferenceNo ,AmountReceived FROM @PaymentDetails
+	  
+  END
+  ELSE IF @MessageType='MO'  
+  BEGIN  
+    IF  @ChangeType='Patient'
+	BEGIN
+		 SELECT CONVERT(NVARCHAR,PatientID) PatientID,FirstName,MiddleName,LastName,Gender,Age,DOB,MobileNumber,
+	   EmailID,URNType,URNNumber,Address,State,City,Country,AddressType,SalutationCode , @MessageType MessageType,@OrderID OrderID
+	   FROM @PatientDetails 
+
+	  SELECT CONVERT(NVARCHAR,PatientVisitId) PatientVisitId,ExternalVisitNumber,VisitType,VATRegisterationNo,ClientCode,ClientName,
+			 ReferingDoctorCode,ReferingDoctorName,ReferingDoctorMobileNumber,IsNotification,HospitalNameCode,HospitalName,
+			 VisitHistory,VisitRemarks,RegisterLocation,BookedDate,CheckinDate,CheckOutDate,Status 
+	  FROM @PatientVisitDetails WHERE 1=2
+
+	  SELECT PatientID,PatientVisitID,FinalBillID,BillingDetailsID,PaymentStatus,GrossAmount,Discount,NetAmount,DueAmount,TestCode,
+	         TestName,TestStatus,IsStat,CONVERT(NVARCHAR,Price) Price,RateCardCode,TestClinicalHistory,Instructions,Remarks,FeeID,FeeType
+	  FROM @BillingDetails  WHERE 1=2
+
+	  SELECT PaymentType,ReferenceNo ,AmountReceived FROM @PaymentDetails where 1=2
+	END
+	ELSE
+	BEGIN
+
+       SELECT CONVERT(NVARCHAR,PatientID) PatientID,FirstName,MiddleName,LastName,Gender,Age,DOB,MobileNumber,
+	   EmailID,URNType,URNNumber,Address,State,City,Country,AddressType,SalutationCode , @MessageType MessageType,@OrderID OrderID
+	   FROM @PatientDetails   
+
+	  SELECT CONVERT(NVARCHAR,PatientVisitId) PatientVisitId,ExternalVisitNumber,VisitType,VATRegisterationNo,ClientCode,ClientName,
+			 ReferingDoctorCode,ReferingDoctorName,ReferingDoctorMobileNumber,IsNotification,HospitalNameCode,HospitalName,
+			 VisitHistory,VisitRemarks,RegisterLocation,BookedDate,CheckinDate,CheckOutDate,Status 
+	  FROM @PatientVisitDetails WHERE 1=2
+
+	  SELECT PatientID,PatientVisitID,FinalBillID,BillingDetailsID,PaymentStatus,GrossAmount,Discount,NetAmount,DueAmount,TestCode,
+	         TestName,CASE WHEN TestStatus='' THEN 'Ordered' ELSE ISNULL(TestStatus,'Ordered') END Status,IsStat,CONVERT(NVARCHAR,Price) Price,RateCardCode,TestClinicalHistory,Instructions,Remarks,FeeID,FeeType
+			 ,@MessageType MessageType,@OrderID OrderID
+	  FROM @BillingDetails  
+
+	  SELECT PaymentType,ReferenceNo ,AmountReceived FROM @PaymentDetails where 1=2
+	   
+	 END
+  END
+  ELSE IF @MessageType='CA'
+  BEGIN
+
+      
+       SELECT CONVERT(NVARCHAR,PatientID) PatientID,FirstName,MiddleName,LastName,Gender,Age,DOB,MobileNumber,
+	   EmailID,URNType,URNNumber,Address,State,City,Country,AddressType,SalutationCode, @MessageType MessageType,@OrderID OrderID
+	   FROM @PatientDetails   
+
+	  SELECT CONVERT(NVARCHAR,PatientVisitId) PatientVisitId,ExternalVisitNumber,VisitType,VATRegisterationNo,ClientCode,ClientName,
+			 ReferingDoctorCode,ReferingDoctorName,ReferingDoctorMobileNumber,IsNotification,HospitalNameCode,HospitalName,
+			 VisitHistory,VisitRemarks,RegisterLocation,BookedDate,CheckinDate,CheckOutDate,Status
+	  FROM @PatientVisitDetails  where 1=2
+
+	  DECLARE @CancelCnt INT,@Billcnt INT  
+	  SELECT @Billcnt =COUNT(1) FROM @BillingDetails 
+	  SELECT @CancelCnt =COUNT(1) FROM @BillingDetails  where BillStatus='Cancel'
+	   
+	  IF EXISTS (SELECT 1 FROM @IntegrationAPILog WHERE CHangeType='Cancel')
+	  BEGIN
+		  IF @Billcnt!=@CancelCnt
+		  BEGIN
+			SELECT * FROM @BillingDetails BD
+			INNER JOIN AmountRefundDetails ARD(NOLOCK) ON BD.FinalBillID=ARD.FinalBillID AND BD.BillingDetailsID=ARD.BillingDetailsID
+			WHERE ARD.RefundBy='Cancelled'
+		  END
+		  ELSE
+		  BEGIN
+		    SELECT * FROM @BillingDetails WHERE 1=2
+		  END
+	  END
+	  ELSE
+	  BEGIN
+		SELECT PatientID,PatientVisitID,FinalBillID,BillingDetailsID,PaymentStatus,GrossAmount,Discount,NetAmount,DueAmount,TestCode,
+	         TestName, CASE WHEN BillStatus='Cancel' THEN 'Cancel' ELSE 'Ordered' END  Status,IsStat,CONVERT(NVARCHAR,Price) Price,RateCardCode,TestClinicalHistory,Instructions,Remarks,FeeID,FeeType
+			 , @MessageType MessageType,@OrderID OrderID
+		 FROM @BillingDetails
+	  END
+	  SELECT PaymentType,ReferenceNo ,AmountReceived FROM @PaymentDetails where 1=2 
+  END
+
+END
+
+
+
+
+

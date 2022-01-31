@@ -1,0 +1,454 @@
+  
+----select * from  [LIS_PDT_Integration]..[DashboardOrderDetail] where amount is  null  
+----Salutation  
+  
+  
+  
+--select top 10 * from [Diag-QA]..patientvisit  
+  
+CREATE PROCEDURE [dbo].[Pgetorderedinvestigationssync]   
+(  
+@pOrgId INT  
+)  
+AS   
+  BEGIN   
+      DECLARE @P_FromDate DATETIME   
+      DECLARE @P_ToDate DATETIME   
+      DECLARE @ServerDate DATETIME   
+      DECLARE @SynInterval INT   
+      DECLARE @ServerName NVARCHAR(200)   
+      DECLARE @ServerIP NVARCHAR(100)   
+      DECLARE @CurrentDatabase NVARCHAR(100)   
+      DECLARE @TableName NVARCHAR(100)   
+     
+   CREATE TABLE #TempOrg  
+   (  
+   OrgId INT  
+   )  
+  
+  insert into #TempOrg(OrgId)  
+  select @pOrgId  
+  
+      SET @TableName='OrderedInvestigations'   
+  
+      SELECT @ServerName = @@servername,   
+             @CurrentDatabase = Db_name()   
+  
+      SELECT @ServerIP = dec.local_net_address   
+      FROM   sys.dm_exec_connections AS dec   
+      WHERE  dec.session_id = @@SPID   
+  
+      SET @ServerDate=Getdate()   
+      SET NOCOUNT ON   
+  
+      SELECT @P_FromDate = Cast('1753-1-1' AS DATETIME),   
+   ---@P_FromDate ='2019-04-01 16:22:14.377',  
+             @SynInterval = 0,   
+             @P_ToDate = @ServerDate   
+  
+      SELECT @P_FromDate = lastrun,   
+             @P_ToDate = @ServerDate,   
+             @SynInterval = syninterval   
+      FROM   [integrationdatasync]   
+      WHERE  servername = @ServerName   
+             AND dbname = @CurrentDatabase   
+             AND tablename = 'OrderedInvestigations'   
+    AND OrgId=@pOrgId  
+      
+  
+      IF Isnull(Datediff(mi, @P_FromDate, @P_ToDate), 0) >= @SynInterval   
+        BEGIN   
+            --*****************Physician Sync *********************     
+     --       CREATE TABLE [BiOrderedinvestigations_IntSync]   
+     --         (   
+     --            [orderdetailid]         [BIGINT] IDENTITY(1, 1) NOT NULL,   
+     --            orgid                   BIGINT,   
+     --            locationid              BIGINT,   
+     --            orgname                 NVARCHAR(200),   
+     --            locationname            NVARCHAR(200),   
+     --            [patientid]             [BIGINT] NOT NULL,   
+     --            [patientnumber]         [NVARCHAR](100) NULL,   
+     --            [visitnumber]           [NVARCHAR](255) NULL,   
+     --            [patientvisitid]        [BIGINT] NULL,   
+     --            [testid]                [BIGINT] NULL,   
+     --            [testname]              [NVARCHAR](255) NULL,   
+     --            [type]                  [NVARCHAR](10) NULL,   
+     --            [deptid]                [BIGINT] NULL,   
+     --            [departname]            [NVARCHAR](255) NULL,   
+     --            [accessionnumber]       [BIGINT] NULL,   
+     --            [ordereddate]           [DATETIME] NULL,   
+     --            [referingphysicianid]   [BIGINT] NULL,   
+     --            [referingphysicianname] [NVARCHAR](255) NULL,   
+     --            [clientid]              [BIGINT] NULL,   
+     --            [clientname]            [NVARCHAR](255) NULL,   
+     --            [clienttype]            [NVARCHAR](50) NULL,   
+     --            [collecteddate]         [DATETIME] NULL,   
+     --            --[CollectedDate] NVARCHAR(50) NULL,   
+     --            [pendingdate]           [DATETIME] NULL,   
+     --            [completedate]          [DATETIME] NULL,   
+     --            [validatedate]          [DATETIME] NULL,   
+     --            [approvedate]           [DATETIME] NULL,   
+     --            [retestgivendate]       [DATETIME] NULL,   
+     --            [recheckgivendate]      [DATETIME] NULL,   
+     --            [currentstatus]         [NVARCHAR](50) NULL,   
+     --            [createdat]             [DATETIME] NULL,   
+     --            [createdby]             [BIGINT] NULL,   
+     --            [modifiedat]            [DATETIME] NULL,   
+     --            [modifiedby]            [BIGINT] NULL,   
+     --            amount                  DECIMAL(10, 2),   
+     --            labno                   BIGINT,  
+     --TitleCode tinyint,  
+     --Salutation NVARCHAR(30),   
+     --[TatDateTime]           [DATETIME] NULL  
+     --         )   
+  
+            INSERT INTO BiOrderedinvestigations_IntSync   
+                        (patientid,   
+                  patientnumber,   
+       visitnumber,   
+          patientvisitid,   
+                         orgid,   
+                         testid,   
+                         testname,   
+                         type,   
+                         deptid,   
+          departname,   
+                         accessionnumber,   
+                         ordereddate,   
+                         referingphysicianid,   
+                         referingphysicianname,   
+                         clientid,   
+                         clientname,   
+                         currentstatus,   
+                         clienttype,   
+                         labno,  
+       LocationId,  
+       TitleCode,  
+       TatDateTime)   
+            SELECT P.patientid,   
+                   P.patientnumber,   
+                   PV.visitnumber,   
+                   PV.patientvisitid,   
+                   PV.orgid,   
+                   OI.id,   
+                   OI.NAME,   
+                   OI.type,   
+                   IDM.deptid,   
+                   IDM.deptname,   
+                   OI.accessionnumber,   
+                   OI.createdat AS OrderedDate,   
+                   PV.referingphysicianid,   
+                   PV.referingphysicianname,   
+                   INC.clientid,   
+                   INC.clientname,   
+                   OI.status,   
+                   clienttypename,   
+                   OI.labno,  
+       PV.OrgAddressID,  
+       TitleCode,  
+       OI.TatDateTime   
+            FROM   orderedinvestigations(nolock) OI   
+   INNER JOIN #TempOrg T ON T.OrgId=OI.OrgId  
+                   INNER JOIN patientvisit PV(nolock)   
+                           ON PV.patientvisitid = OI.visitid   
+                              AND OI.orgid = PV.orgid   
+                   INNER JOIN patient(nolock) P   
+                           ON p.patientid = pv.patientid   
+                              AND P.orgid = PV.orgid   
+                   INNER JOIN visitclientmapping(nolock) VCM   
+                           ON VCM.visitid = PV.patientvisitid   
+                              AND VCM.orgid = PV.orgid   
+                   INNER JOIN invclientmaster INC   
+                           ON INC.clientid = VCM.clientid   
+                              AND INC.orgid = VCM.orgid   
+                   INNER JOIN invclienttype it   
+                           ON IT.clienttypeid = INC.clienttypeid   
+                   INNER JOIN investigationorgmapping(nolock) IOM   
+                           ON IOM.investigationid = OI.id   
+                              AND IOM.orgid = OI.orgid   
+                   INNER JOIN invdeptmaster(nolock) IDM   
+                           ON IDM.deptid = IOM.deptid   
+                              AND IDM.orgid = OI.orgid   
+            WHERE  ( OI.createdat >= @P_FromDate   
+                     AND OI.createdat < @P_ToDate )   
+                   AND oi.type = 'INV'   
+       and IDM.LangCode='en-GB'  
+        and oi.status<>'retest'  
+            ---ORDER  BY OI.labno DESC   
+   UNION  
+   SELECT P.patientid,   
+                   P.patientnumber,   
+                   PV.visitnumber,   
+                   PV.patientvisitid,   
+                   PV.orgid,   
+                   OI.id,   
+                   OI.NAME,   
+                   OI.type,   
+                   0 as deptid,   
+                   '' as deptname,   
+                   OI.accessionnumber,   
+                   OI.createdat AS OrderedDate,   
+                   PV.referingphysicianid,   
+                   PV.referingphysicianname,   
+                   INC.clientid,   
+                   INC.clientname,   
+                   OI.status,   
+                   clienttypename,   
+                   OI.labno,  
+       PV.OrgAddressID,  
+       TitleCode,  
+       OI.TatDateTime  
+            FROM  orderedinvestigations(nolock) OI   
+   INNER JOIN #TempOrg T ON T.OrgId=OI.OrgId  
+           INNER JOIN patientvisit PV(nolock)   
+                           ON PV.patientvisitid = OI.visitid   
+                              AND OI.orgid = PV.orgid   
+                   INNER JOIN patient(nolock) P   
+             ON p.patientid = pv.patientid   
+                              AND P.orgid = PV.orgid   
+  INNER JOIN visitclientmapping(nolock) VCM   
+                           ON VCM.visitid = PV.patientvisitid   
+                              AND VCM.orgid = PV.orgid   
+                   INNER JOIN invclientmaster INC   
+                           ON INC.clientid = VCM.clientid   
+                              AND INC.orgid = VCM.orgid   
+                   INNER JOIN invclienttype it   
+                           ON IT.clienttypeid = INC.clienttypeid   
+                   --INNER JOIN investigationorgmapping(nolock) IOM   
+                   --        ON IOM.investigationid = OI.id   
+                   --           AND IOM.orgid = OI.orgid   
+                   --INNER JOIN invdeptmaster(nolock) IDM   
+                   --        ON IDM.deptid = IOM.deptid   
+                   --           AND IDM.orgid = OI.orgid   
+            WHERE  ( OI.createdat >= @P_FromDate   
+                     AND OI.createdat < @P_ToDate )   
+                   AND oi.type = 'GRP'   
+       --and IDM.LangCode='en-GB'   
+        and oi.status<>'retest'  
+       
+ Declare @max int;  
+ Declare @min int=1;  
+ Declare @temp as table (ID int identity,Groupid int, AccessionNumber bigint)  
+ Insert into @temp (Groupid,AccessionNumber)  
+ Select Testid,AccessionNumber from BiOrderedinvestigations_IntSync where type='GRP'   
+ Select @max=count(Groupid) from @temp  
+ -- Loop Start --  
+  while @min<=@max  
+  Begin  
+  Declare @GrpID int; Declare @AccessionNumber Bigint;  
+  Declare @InvID bigint; Declare @DeptID Bigint; Declare @DeptName nvarchar(50);  
+  Select top 1 @GrpID=Groupid,@AccessionNumber=AccessionNumber from @temp where ID=@min  
+     
+ UPDATE BiOrderedinvestigations_IntSync SET departname=tmp.DeptName,deptid=tmp.DeptID FROM   
+ (  
+ SELECT top 1 T.OrderDetailId,IDM.DeptName,IDM.DeptID   
+ FROM  BiOrderedinvestigations_IntSync T  
+ INNER JOIN InvOrgGroup iog WITH (NOLOCK)  
+    ON iog.AttGroupID = T.Testid  
+    AND iog.OrgID = T.OrgID  
+ INNER JOIN InvGroupMapMaster igmm WITH (NOLOCK)  
+    ON igmm.GroupID = iog.OrgGroupID  
+ INNER JOIN InvestigationOrgMapping IOM   
+    ON IOM.InvestigationID=igmm.InvestigationID   
+    AND IOM.OrgID=T.OrgID  
+ INNER JOIN invdeptmaster(nolock) IDM   
+    ON IDM.deptid = IOM.deptid   
+    AND IDM.orgid = IOM.orgid   
+    AND IDM.LangCode='en-GB'  
+ Where IOG.AttGroupID=@GrpID AND Type='GRP'  
+ )tmp  
+ WHERE BiOrderedinvestigations_IntSync.OrderDetailId=tmp.OrderDetailId   
+ AND BiOrderedinvestigations_IntSync.AccessionNumber=@AccessionNumber  
+  
+ Set @min= @min+1   
+  End  
+ -- Loop End --  
+UPDATE BiOrderedinvestigations_IntSync SET Amount=tmp.Amount FROM   
+(  
+SELECT T.OrderDetailId,TestID,BD.Amount   
+FROM  BiOrderedinvestigations_IntSync T  
+INNER JOIN FinalBill F(Nolock) ON F.VisitId=T.PatientVisitId  
+AND F.OrgId=T.OrgId  
+INNER JOIN BillingDetails(NOLOCK) BD ON   
+BD.FinalBillid=F.Finalbillid  
+AND  BD.FeeId=T.TestID  
+AND BD.OrgID=T.OrgId  
+  
+)tmp  
+WHERE BiOrderedinvestigations_IntSync.OrderDetailId=tmp.OrderDetailId  
+  
+  
+UPDATE BiOrderedinvestigations_IntSync SET OrgName=tmp.Name FROM   
+(  
+SELECT T.OrderDetailId,Name FROM  BiOrderedinvestigations_IntSync T  
+INNER JOIN Organization(NOLOCK) O ON   
+O.OrgId=T.OrgId  
+)tmp  
+WHERE BiOrderedinvestigations_IntSync.OrderDetailId=tmp.OrderDetailId  
+  
+UPDATE BiOrderedinvestigations_IntSync SET locationname=tmp.Location FROM   
+(  
+SELECT T.OrderDetailId,Location FROM  BiOrderedinvestigations_IntSync T  
+INNER JOIN OrganizationAddress(NOLOCK) OA ON   
+OA.OrgId=T.OrgId  
+and OA.AddressID=T.LocationId  
+)tmp  
+WHERE BiOrderedinvestigations_IntSync.OrderDetailId=tmp.OrderDetailId  
+  
+  
+UPDATE BiOrderedinvestigations_IntSync SET Salutation=tmp.TitleName FROM   
+(  
+SELECT T.OrderDetailId,TitleName   
+FROM    
+BiOrderedinvestigations_IntSync T  
+INNER JOIN salutation(NOLOCK) OA ON   
+  
+ OA.TitleId=T.TitleCode  
+)tmp  
+WHERE BiOrderedinvestigations_IntSync.OrderDetailId=tmp.OrderDetailId  
+  
+            UPDATE Sur   
+            SET    Sur.referingphysicianid = tmp.referingphysicianid,   
+  Sur.referingphysicianname = tmp.referingphysicianname,   
+                   Sur.clientid = tmp.clientid,   
+                   Sur.clientname = tmp.clientname,   
+                   Sur.clienttype = tmp.clienttype,   
+                   Sur.currentstatus = tmp.currentstatus   
+            FROM   BiOrderedinvestigations_IntSync tmp   
+                   INNER JOIN bidashboardorderdetail(nolock) Sur   
+                           ON Sur.patientid = tmp.patientid   
+                              AND Sur.patientvisitid = tmp.patientvisitid   
+         AND Sur.TestId=tmp.testid  
+         AND Sur.Type=tmp.Type  
+           
+  
+            INSERT INTO bidashboardorderdetail   
+                        (patientid,   
+                         patientnumber,   
+                         visitnumber,   
+                         patientvisitid,   
+                         orgid,   
+                         testid,   
+                         testname,   
+                         type,   
+                         deptid,   
+                         departname,   
+                         accessionnumber,   
+                         ordereddate,   
+                         referingphysicianid,   
+                         referingphysicianname,   
+                         clientid,   
+                         clientname,   
+                         clienttype,   
+                         collecteddate,   
+                         pendingdate,   
+                         completedate,   
+                validatedate,   
+                         approvedate,   
+                         retestgivendate,   
+                         recheckgivendate,   
+                         currentstatus,   
+                         createdat,   
+                         createdby,   
+                         modifiedat,   
+                         modifiedby,  
+       LocationId,  
+       LocationName,  
+       Amount,  
+       OrgName,  
+       Salutation,  
+       TatDateTime)   
+            SELECT TMP.patientid,   
+                   TMP.patientnumber,   
+                   TMP.visitnumber,   
+                   TMP.patientvisitid,   
+                   TMP.orgid,   
+                   TMP.testid,   
+                   TMP.testname,   
+                   TMP.type,   
+                   TMP.deptid,   
+                   TMP.departname,   
+                   TMP.accessionnumber,   
+                   TMP.ordereddate,   
+                   TMP.referingphysicianid,   
+                   TMP.referingphysicianname,   
+                   TMP.clientid,   
+                   TMP.clientname,   
+                   TMP.clienttype,   
+                   TMP.collecteddate,   
+                   TMP.pendingdate,   
+                   TMP.completedate,   
+                   TMP.validatedate,   
+                   TMP.approvedate,   
+                   TMP.retestgivendate,   
+                   TMP.recheckgivendate,   
+                   TMP.currentstatus,   
+                   TMP.createdat,   
+                   TMP.createdby,   
+                   TMP.modifiedat,   
+                   TMP.modifiedby,  
+       TMP.LocationId,  
+       TMP.LocationName,  
+       TMP.Amount,  
+       TMP.OrgName,  
+       TMP.Salutation,  
+       TMP.TatDateTime  
+            FROM   BiOrderedinvestigations_IntSync tmp   
+                   LEFT JOIN bidashboardorderdetail(nolock) Sur   
+                          ON Sur.patientid = tmp.patientid   
+                             AND Sur.patientvisitid = tmp.patientvisitid   
+         AND Sur.TestId=tmp.TestId  
+         AND Sur.Type=tmp.Type  
+            WHERE  Sur.patientid IS NULL   
+                   AND Sur.patientvisitid IS NULL   
+       AND Sur.TestId IS NULL  
+        AND Sur.Type IS NULL    
+IF EXISTS (SELECT TOP 1 1   
+                FROM   BiOrderedinvestigations_IntSync)   
+              BEGIN   
+                  IF NOT EXISTS (SELECT 1   
+                                 FROM   integrationdatasync   
+               WHERE  servername = @ServerName   
+                                        AND dbname = @CurrentDatabase   
+                                AND tablename = @TableName)   
+                    BEGIN   
+                        INSERT INTO integrationdatasync   
+                                    (ipaddress,   
+                                     servername,   
+                                     dbname,   
+                                     lastrun,   
+                                     tablename,   
+                                     syninterval,  
+          OrgId)   
+                        SELECT @ServerIP,   
+                               @ServerName,   
+                               @CurrentDatabase,   
+                               @P_ToDate,   
+                               @TableName,   
+                               30,  
+          @pOrgId  
+                    END   
+                  ELSE   
+                    BEGIN Select 1  
+                        UPDATE integrationdatasync   
+                        SET    lastrun = @P_ToDate   
+                        WHERE  servername = @ServerName   
+                               AND dbname = @CurrentDatabase   
+                               AND tablename = @TableName   
+          AND OrgId=@pOrgId  
+                    END   
+              END   
+  
+            ----TRUNCATE TABLE BiOrderedinvestigations_IntSync   
+   EXECUTE dbo.pTruncateTableBySynonymName @SchemaName = 'dbo', @SynonymName = 'BiOrderedinvestigations_IntSync'  
+        END   
+  END   
+  
+  
+  
+  
+  
+  
+  
+  
+  

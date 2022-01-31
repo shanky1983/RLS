@@ -1,0 +1,77 @@
+CREATE procedure [dbo].[pGetCovidIntegrationStatus]
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+	  
+		CREATE TABLE #BulkRegnotify (NotificationID BIGINT,VisitID BIGINT,PatientID BIGINT, OrgID INT,CovidStatus NVARCHAR(1000), CompletedAt DATETIME)
+		INSERT INTO #BulkRegnotify (NotificationID,VisitID,PatientID,OrgID,CovidStatus,CompletedAt)
+	select NotificationID,VisitID,PatientID,OrgID,CovidStatus,CovidCompletedAt FROM 
+	(
+	select  BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID,BI.COvidStatus,BI.CovidCompletedAt from BulkReg_IntegrationNotification BI (NOLOCK)
+	INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid
+	INNER JOIN InvestigationOrgmapping  IOM (NOLOCK) ON OI.ID=IOM.InvestigationID AND Oi.Type='INV' AND BI.OrgID=IOM.OrgID AND IOM.TestCode IN ('S0003','S0004','S0005')
+	WHERE BI.OrgID=@pOrgId and BI.Createdat between @pFDate and @pTDate
+		UNION
+		select   BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID,BI.COvidStatus,BI.CovidCompletedAt from BulkReg_IntegrationNotification BI (NOLOCK)
+	INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid 
+	INNER JOIN Invorggroup  IOG (NOLOCK) ON OI.ID=IOG.AttgroupID  AND Oi.Type='GRP'  AND BI.OrgID=IOG.OrgID AND IOG.TestCode IN ('S0006','S0007','MDLRT0610') 
+	WHERE BI.OrgID=@pOrgId and BI.Createdat between @pFDate and @pTDate
+	UNION
+	select   BI.NotificationID,BI.VisitID,BI.PatientID,BI.OrgID,BI.COvidStatus,BI.CovidCompletedAt from BulkReg_IntegrationNotification BI (NOLOCK)
+	INNER JOIN OrderedInvestigations OI (NOLOCK) ON OI.VIsitID=BI.VisitID AND BI.Orgid=OI.orgid 
+	INNER JOIN Invorggroup  IOP (NOLOCK) ON OI.PkgID=IOP.AttGroupID AND BI.OrgID=IOP.OrgID AND IOP.TestCode IN ('S0006','S0007','MDLRT0610')
+	WHERE BI.OrgID=@pOrgId and BI.Createdat between @pFDate and @pTDate
+	) A Order by NotificationID 
+
+SELECT  P.Name as PatientName,P.dob DOB,P.Sex as Gender,
+       CASE  WHEN Isnull(PA.MobileNumber, '') <> ''  AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                WHEN Isnull(PA.LandLineNumber, '') <> '' AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                ELSE '' END   as phoneNumber,
+          P.PatientNumber as PatientNumber,
+		  p.email Email, 
+		  P.healthHubId as HealthHubId,
+		  PV.VisitNumber VisitNumber,
+		  O.Name OrgName,
+		  CASE WHEN ISNULL(B.ExternalRefNo,'')=''  THEN PV.ExternalVisitID ELSE ISNULL(B.ExternalRefNo,'') END ExternalRefNo,
+		  ISNUll(B.SourceType,PV.SourceType) SourceType,
+		  ISNULL(BI.CovidStatus,'') CovidHMSStatus, BI.CovidCompletedAt CovidHMSCompletedAt ,BI.PDFStatus,BI.PDFCompletedAt,BI.ResultStatus 'StructureDataStatus'
+		  ,BI.ResultCompletedAt 'StructureDataCompletedAt'
+    FROM PatientVisit PV WITH(NOLOCK)
+       INNER JOIN Patient P WITH(NOLOCK)
+		    ON P.PatientID=PV.PatientID
+        INNER JOIN PatientAddress PA WITH (NOLOCK)
+            ON PA.PatientID = P.PatientID 
+			   AND PA.AddressType='P'
+		INNER JOIN Organization O WITH(NOLOCK)
+		    ON PV.OrgID=O.OrgID 
+		INNER JOIN OrganizationAddress OA WITH(NOLOCK)
+		    ON PV.OrgID=OA.OrgID
+			   AND PV.OrgAddressID=OA.AddressID
+		INNER JOIN BulkReg_IntegrationNotification BI WITH(NOLOCK)
+		    ON PV.PatientID=BI.PatientID 
+			   AND PV.PatientVisitID=BI.VisitID
+			   AND PV.OrgID=BI.OrgID
+		INNER JOIN Notifications N (NOLOCK) 
+		    ON PV.PatientVisitId=N.IdentityID
+			   AND PV.OrgID=N.OrgID    
+	    LEFT JOIN Bookings B (NOLOCK) 
+		ON B.PatientVisitID=BI.VisitID AND B.OrgID=BI.OrgID
+	 WHERE  N.Category='Report' AND N.ActionType='PDF' AND N.Status='COMPLETED' 
+	  AND PV.OrgID=@pOrgId
+	 DROP TABLE #BulkRegnotify
+ END
+GO
+ 

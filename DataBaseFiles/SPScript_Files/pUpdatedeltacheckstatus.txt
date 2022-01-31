@@ -1,0 +1,15 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+Create procedure pUpdatedeltacheckstatus  
+(  
+@Patientvisitid bigint,  
+@Investigationid bigint,  
+@IsdeltacheckPass bit,  
+@ContextInfo [UDT_Context] READONLY  
+)  
+as  
+begin  
+update PatientInvestigationAttributes set DeltaCheckStatus=@IsdeltacheckPass where PatientVisitID=@Patientvisitid and investigationid= @Investigationid  
+End

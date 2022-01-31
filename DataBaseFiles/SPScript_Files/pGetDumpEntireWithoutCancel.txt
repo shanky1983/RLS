@@ -1,0 +1,123 @@
+ 
+CREATE PROCEDURE [dbo].[pGetDumpEntireWithoutCancel] (
+@Fromdate DATETIME = NULL      
+,@Todate DATETIME = NULL      
+,@pOrgID INT      
+,@Pparamtype VARCHAR(100)      
+,@Pparamvalue VARCHAR(100)      
+,@pExcelReportId [INT] = NULL      
+,@pExcelReportName VARCHAR(255) = NULL      
+,@pToExecute VARCHAR(10) = NULL  
+)    
+AS      
+BEGIN   
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED  
+SET NOCOUNT ON;      
+BEGIN  TRY    
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)       
+
+Create Table #Temp (PatientVisitid bigint,OrgName varchar(200),OrgCode int,LocationCode Varchar(100),RegisteredDate DateTime,VisitNumber Varchar(100)
+,BillNumber Varchar(100),PatientName Varchar(255),PatientNumber Varchar(255),ClientName Varchar(255),ClientCode Varchar(50)
+,ClientType Varchar(20),BusinessType Varchar(50),ReferingPhysicianName varchar(255),Location Varchar(100),Tcode Varchar(100),TestName Varchar(255)
+,MRP Decimal(12,2),NetAmount Decimal(18,2),FeeID BigInt,Type Varchar(20),Status varchar(20), DepartmentName Varchar(100),AccessionNUmber bigint,OrgID Int
+,BDM Varchar(100),ASM Varchar(100),RSM VarChar(100)
+)
+
+Insert Into #Temp (OrgID,
+PatientVisitid,OrgName,OrgCode,LocationCode,RegisteredDate,VisitNumber,BillNumber,PatientName,PatientNumber,ClientName,ClientCode
+,ClientType,ReferingPhysicianName,Location,TestName
+,MRP,NetAmount,FeeID,Type,BusinessType,BDM,ASM,RSM)
+SELECT PV.OrgID,
+PV.PatientVisitID,
+ og.NAME       
+,og.Orgid      
+,oa.LocationCode      
+,pv.VisitDate AS RegisteredDate      
+,pv.VisitNumber      
+,fb.BillNumber      
+,pt.NAME AS PatientName      
+,pt.PatientNumber      
+,cm.ClientName      
+,cm.ClientCode      
+,CASE cm.IsCash      
+WHEN 'Y'      
+THEN 'CashClient'      
+WHEN 'N'      
+THEN 'CreditClient'      
+END AS ClientType       
+,pv.ReferingPhysicianName      
+,oa.Location                  
+,bd.FeeDescription AS TestName      
+,bd.ActualAmount AS MRP      
+,bd.Amount AS NetAmount 
+,BD.FeeId  
+,bd.FeeType AS Type,MV.Description 
+,Case When ad.ContactType Like '%BDM%' THEN ad.Name  ELSE '' END  AS BDM      
+,Case When ad.ContactType Like '%ASM%' THEN ad.Name  ELSE '' END  AS ASM      
+,Case When ad.ContactType Like '%RSM%' THEN ad.Name  ELSE '' END  AS RSM   
+FROM patientvisit pv  WITH (NOLOCK)       
+INNER JOIN patient pt   WITH (NOLOCK)  ON pt.Orgid = pv.Orgid  and pt.PatientId = pv.PatientId 
+INNER JOIN OrganizationAddress oa  WITH (NOLOCK)  ON oa.OrgID = pv.OrgID AND oa.AddressID = pv.OrgAddressID      
+INNER JOIN VisitClientMapping vcm   WITH (NOLOCK)  ON vcm.OrgID = pv.OrgID   and vcm.VisitID = pv.PatientVisitId  
+INNER JOIN clientmaster cm  WITH (NOLOCK)  ON cm.ClientId = vcm.ClientId      
+AND cm.Orgid = pv.OrgID
+inner join Metavalue_common MV WITH (NOLOCK)  on MV.MetaValueID=CM.CustomerType and MV.Orgid=CM.Orgid  
+INNER JOIN AddressDetails ad  WITH (NOLOCK)  ON cm.ClientId = ad.ReferenceID      
+AND cm.Orgid = ad.OrgID          
+INNER JOIN FinalBill fb  WITH (NOLOCK)  ON fb.VisitID = pv.PatientVisitId      
+AND fb.OrgId = pv.Orgid       
+INNER JOIN BillingDetails bd  WITH (NOLOCK)  ON bd.FinalBillId = fb.FinalBillId      
+AND bd.OrgID = pv.OrgID   
+INNER JOIN Organization og   WITH (NOLOCK) ON og.Orgid = pv.Orgid      
+WHERE pv.Orgid = @pOrgID      
+AND Convert(DATE, pv.VisitDate) BETWEEN Convert(DATE, @FromDate)      
+AND CONVERT(DATE, @Todate)         
+AND Isnull(VCM.IsActive, 'Y') != 'N' 
+
+Update T set T.AccessionNumber=OI.AccessionNumber,T.Status=OI.Status
+from #Temp T
+INNER JOIN orderedinvestigations oi  WITH (NOLOCK)  ON oi.VisitId = T.PatientVisitId      
+AND oi.Orgid = T.Orgid AND OI.ID = T.FeeId      
+Where OI.PkgID is null and T.Type<>'PKG' 
+
+Delete From #Temp where Status in ('Cancel','Retest')
+
+Update T set T.DepartmentName=IDM.DeptName
+from #Temp T
+Inner join Misordereddept MO WITH (NOLOCK)  on MO.AccessionNumber  =  T.AccessionNumber
+inner join Invdeptmaster IDM WITH (NOLOCK)  on IDM.deptid=MO.deptid and IDM.orgid=T.orgid 
+
+update T set T.Departmentname=IDM.DeptName
+from #Temp T
+Inner join InvestigationOrgMapping IOM WITH (NOLOCK)  on IOM.InvestigationID=T.FeeID and IOM.OrgID=T.OrgID
+inner join Invdeptmaster IDM WITH (NOLOCK)  on IDM.deptid=IOM.deptid and IDM.orgid=T.orgid 
+Where T.Type='INV' and Isnull(T.Departmentname,'')=''
+ 
+Update T set T.Tcode=IOM.TestCode
+from #Temp T
+Inner join InvestigationOrgMapping IOM WITH(NOLOCK) ON IOM.InvestigationID=T.FeeID and IOM.OrgID=T.OrgID
+Where T.Type='INV'
+
+Update T set T.Tcode=IOM.TestCode
+from #Temp T
+Inner join InvOrgGroup IOM WITH(NOLOCK) ON IOM.AttGroupID=T.FeeID and IOM.OrgID=T.OrgID
+Where T.Type<>'INV'
+
+Select Distinct -- '123' as Empty,  
+OrgName,OrgCode,LocationCode,RegisteredDate,VisitNumber,BillNumber,PatientName,PatientNumber,ClientName,ClientCode,ClientType,BusinessType,    
+ReferingPhysicianName,Location,Tcode,TestName,MRP,NetAmount,Isnull(Status,'') Status,Type,Isnull(DepartmentName,'') DepartmentName,      
+max(BDM) over ( partition by VisitNumber,clientcode,testname) as BDM,      
+max(ASM) over ( partition by VisitNumber,clientcode,testname) as ASM,      
+max(RSM) over ( partition by VisitNumber,clientcode,testname) as RSM from #Temp 
+Order by VisitNumber
+
+Drop Table #Temp     
+ 
+  END TRY                                   
+  BEGIN CATCH     
+                                
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetDumpEntireWithoutCancel @pOrgID = '+cast(@pOrgID as varchar)  
+exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH   
+END      
+      

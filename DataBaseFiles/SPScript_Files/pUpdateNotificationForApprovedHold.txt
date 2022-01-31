@@ -1,0 +1,45 @@
+/****** Object:  StoredProcedure [dbo].[pUpdateNotificationForApprovedHold]    Script Date: 4/30/2019 4:31:16 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pUpdateNotificationForApprovedHold] @pVisitID    [BIGINT],
+                                                          @pOrgid      [INT],
+                                                          @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+    
+
+	DECLARE @ApprovedHoldCount INT,@ApprovedCount INT
+
+
+	
+	SELECT @ApprovedHoldCount =  COUNT(*) FROM PatientInvestigation PINV WITH(NOLOCK) 
+	                                      WHERE PatientVisitID=@pVisitID AND OrgID=@pOrgid AND Status='Approve' AND ISNULL(IsReportable,0)=1
+
+    SELECT @ApprovedCount =  COUNT(*) FROM PatientInvestigation PINV WITH(NOLOCK) 
+	                                      WHERE PatientVisitID=@pVisitID AND OrgID=@pOrgid AND Status='Approve'
+
+
+    IF(@ApprovedHoldCount = @ApprovedHoldCount AND @ApprovedHoldCount<>0)
+	BEGIN
+		/*Notifiction Update Block*/
+		IF EXISTS (SELECT 1 FROM Notifications WITH (NOLOCK) WHERE IdentityID=@pVisitID and OrgID=@pOrgid)
+		BEGIN
+			UPDATE Notifications WITH (ROWLOCK) SET status='Hold' where IdentityID=@pVisitID and OrgID=@pOrgid AND Status<>'DIFFERED' AND  Status=''
+
+			DELETE FROM ReportSnapshot where visitid=@pVisitID and orgid=@pOrgid
+
+			INSERT INTO NoticiationHist(VisitID,OrgID,Comments,Createdat,Notificationid)
+			SELECT @pVisitID,@pOrgid,'StatusChangesDIFFERED',getdate(),NotificationID FROM Notifications WITH (NOLOCK) WHERE IdentityID=@pVisitID and orgid=@pOrgid and ActionType in ('Pdf','ROUNDBPDF')
+		END
+	END
+	
+END 
+
+GO
+
+

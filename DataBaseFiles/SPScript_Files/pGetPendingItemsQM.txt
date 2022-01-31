@@ -1,0 +1,44 @@
+CREATE PROCEDURE [dbo].[pGetPendingItemsQM]    
+@pVisitID bigint,                        
+@OrgID int,                     
+@InvestigationID VARCHAR(max)                                          
+AS                                                                                                                              
+BEGIN             
+Set nocount ON    
+                      
+DECLARE @tblResultSelectID TABLE                                                                                         
+(                                                                                                                                          
+accessionno BIGINT                                                                                                                                          
+)                                                                                                                                             
+                                                                                                                                              
+INSERT INTO @tblResultSelectID                                                                                                         
+(accessionno)                                                                         
+SELECT DISTINCT item                                                                                                                                              
+FROM   Fnsplit(@InvestigationID, ',')          
+        
+                      
+ Declare @PendingList Table (Name varchar(255),Status varchar(50),AccessionNo bigint,ID INT,Type Varchar(50))          
+ Declare @PendingList1 Table (Name varchar(255),Status varchar(50),AccessionNo bigint,ID INT,Type Varchar(50))         
+ Declare @PendingList2 Table (Name varchar(255),Status varchar(50),AccessionNo bigint,ID INT,Type Varchar(50))                           
+                       
+ --select * from @tblResultSelectID                      
+ dECLARE @UID Varchar(Max)                      
+ --set @UID=( SELECT distinct UID  FROM OrderedInvestigations WHERE OrgID=@OrgID AND VISITID =@pVisitID  AND AccessionNumber IN (SELECT  accessionno FROM @tblResultSelectID))                                
+ -- select  @UID          
+         
+           
+ INSERT INTO @PendingList2(Name,Status,AccessionNo,ID,Type)        
+ Select  Name,Status,AccessionNumber,ID,Type from OrderedInvestigations Ord(nolock)                    
+ where Ord.VisitID=@pVisitID and Ord.OrgID= @OrgID  and Ord.Status ='Approve' AND AccessionNumber IN (SELECT accessionno FROM @tblResultSelectID)                        
+       
+ Insert into @PendingList (Name,Status,AccessionNo,ID,Type)                            
+ Select Distinct Name,Status,AccessionNumber,ID,Type from OrderedInvestigations Ord(nolock)                    
+ where Ord.VisitID=@pVisitID and Ord.OrgID= @OrgID  and Ord.Status in('SampleReceived','Pending','Completed','Validate','Retest','Recheck','SampleCollected','SampleInTransist','SampleTransferred')                            
+ AND TYPE='INV' and ID not in (Select ID from @PendingList2 where TYPE='INV' )         
+ UNION ALL        
+ Select Distinct Name,Status,AccessionNumber,ID,Type from OrderedInvestigations Ord(nolock)                    
+ where Ord.VisitID=@pVisitID and Ord.OrgID= @OrgID  and Ord.Status in('SampleReceived','Pending','Completed','Validate','Retest','Recheck','SampleCollected','SampleInTransist','SampleTransferred')                            
+ AND TYPE='GRP' and ID not in (Select ID from @PendingList2 where TYPE='GRP' )        
+         
+ SELECT DISTINCT Name FROM @PendingList        
+END 

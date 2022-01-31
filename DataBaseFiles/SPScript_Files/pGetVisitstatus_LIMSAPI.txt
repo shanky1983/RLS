@@ -1,0 +1,57 @@
+CREATE PROCEDURE [dbo].[pGetVisitstatus_LIMSAPI]
+	@pOrgCode NVARCHAR(100),
+	@pBookingID INT,
+	@pVisitNumber NVARCHAR(100)
+AS
+BEGIN
+
+ IF @pBookingID = 0 OR @pBookingID = -1
+   SET @pBookingID = ''
+
+ IF @pVisitNumber = '0' OR @pVisitNumber = '-1'
+   SET @pVisitNumber = ''
+ 
+ DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),@pVisitTypeID INT = NULL
+
+ IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+      SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+             @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+        FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+
+    END
+	
+	;WITH CTE_VisitInfo
+	AS
+	(
+		SELECT distinct case when ISNULL(OI.PkgID,'') = '' then OI.ID when ISNULL(OI.PkgID,'') != '' then OI.PkgID else OI.ID end ID,
+        case when ISNULL(OI.PkgName,'') = '' then OI.Type when ISNULL(OI.PkgName,'') != '' then OI.PkgName else OI.Type end Type,
+		P.PatientId,PV.VisitNumber,P.ExternalPatientNumber, --OI.ID, OI.Type,
+		OI.status,OI.Orgid
+		FROM PatientVisit PV with(NOLOCK)
+			INNER JOIN Patient P with(NOLOCK) ON P.OrgId=PV.OrgId
+				AND P.PatientId=PV.PatientId
+			INNER JOIN MISOrderedInvestigations OI with(NOLOCK) ON OI.OrgId=PV.OrgId
+				AND OI.VisitId=PV.PatientVisitId
+			LEFT JOIN Bookings B with(NOLOCK) ON PV.OrgID=B.OrgID 
+				AND PV.PatientVisitId=B.PatientVisitID AND B.BookingID = PV.BookingID
+		WHERE PV.OrgID=@pOrgID
+		AND (B.BookingId=@pBookingID OR @pBookingID='')
+		AND (PV.VisitNumber=@pVisitNumber OR @pVisitNumber='')
+	) 
+	SELECT CV.Orgid as OrgID, CV.PatientId as PatientID,CV.VisitNumber,CV.ExternalPatientNumber as ExternalPatientID, CV.Type, 
+	            IM.TestCode,IM.DisplayText AS TestName,CV.status as Status, @pOrgAddrID as LocationID
+	FROM CTE_VisitInfo CV
+		INNER JOIN InvestigationOrgMapping IM ON IM.OrgID=CV.OrgId
+			AND IM.InvestigationID=CV.ID
+	WHERE CV.TYPE='INV' OR CV.TYPE='ACK_PACK'
+	UNION ALL
+	SELECT CV.Orgid as OrgID, CV.PatientId as PatientID, CV.VisitNumber,CV.ExternalPatientNumber as ExternalPatientID, CV.Type, 
+	             IG.TestCode,IG.DisplayText as TestName,CV.status as Status, @pOrgAddrID as LocationID
+	FROM CTE_VisitInfo CV
+		INNER JOIN InvOrgGroup IG ON IG.AttGroupID = CV.ID AND IG.OrgID = CV.OrgID
+	--WHERE CV.TYPE='GRP'
+END

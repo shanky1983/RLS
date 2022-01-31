@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{90B80731-72F4-491A-BB2C-BE9B9B9EA00E}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Attune.Solution.QMSBusinessLogic</RootNamespace>
+    <AssemblyName>Attune.Solution.QMSBusinessLogic</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\WebApp\Bin\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework, Version=9.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="Microsoft.VisualStudio.TeamSystem.Data.UnitTesting, Version=9.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core">
+      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.Transactions" />
+    <Reference Include="System.Xml.Linq">
+      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.Data.DataSetExtensions">
+      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AnalyteMasterBL.cs" />
+    <Compile Include="AnalyzerMapping_BL.cs" />
+    <Compile Include="AnalyzerMaster_BL.cs" />
+    <Compile Include="Country_BL.cs" />
+    <Compile Include="DatabaseSetup.cs" />
+    <Compile Include="EQAMaster_BL.cs" />
+    <Compile Include="ExternalAudit_BL.cs" />
+    <Compile Include="Filemanager_BL.cs" />
+    <Compile Include="InternalQualityControl_BL.cs" />
+    <Compile Include="LotManagement_BL.cs" />
+    <Compile Include="PlanAndScheduleQMS_BL.cs" />
+    <Compile Include="PNC_BL.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="QCRuleMaster_BL.cs" />
+    <Compile Include="QMS_Dashboard_BL.cs" />
+    <Compile Include="RoleMenu_BL.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="TrainingProgram_BL.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Podium\Common\Common.csproj">
+      <Project>{DEED9B35-5EA6-46E1-BB97-00411F536F79}</Project>
+      <Name>Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\QMSBusinessEntities\QMSBusinessEntities.csproj">
+      <Project>{4BE31B7F-2183-4BE0-8B29-E5BB2D6DD15C}</Project>
+      <Name>QMSBusinessEntities</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\QMSDataAccessLayer\QMSDataAccessLayer.csproj">
+      <Project>{BC967166-C258-4BDE-A316-015B7A8D56C0}</Project>
+      <Name>QMSDataAccessLayer</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

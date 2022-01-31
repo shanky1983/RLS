@@ -1,0 +1,450 @@
+CREATE PROCEDURE pInsertBookingwithSample_LIMSAPI
+(   @pOrgCode NVARCHAR(150),
+	@pType NVARCHAR(150),
+	@BookingStatus [dbo].[BookingInfo] READONLY,
+	@Payment [dbo].[HCPaymentInfo] READONLY,
+	@TestInfo [dbo].[BookingInfo] READONLY,
+	@Samples [dbo].[BookingInfo] READONLY,
+	@pOutResult NVARCHAR(250) OUTPUT )
+AS
+BEGIN   
+   DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	
+            @BookingDTTM DATETIME, @pGrossAmt DECIMAL(18,2), @pDiscAmt DECIMAL(18,2), 
+			@pNetAmt DECIMAL(18,2), @pPincode BIGINT, @pExtRefNo NVARCHAR(50),
+			@LoginID NVARCHAR(30), @DOB DATETIME, @Age NVARCHAR(30),
+			@pCount INT, @pDiscID BIGINT, @pSourceType NVARCHAR(60), @pOrderedFrom NVARCHAR(60),
+			@pMob NVARCHAR(25), @pMandatoryBlank VARCHAR(4), @pPExtRefNo NVARCHAR(50), @pTestCode NVARCHAR(60),
+			@pTType NVARCHAR(15), @pReceivedAmount Decimal(18,2), @pCurrencyType NVARCHAR(20), 
+			@pPaymentMode NVARCHAR(60), @pPaymentStatus NVARCHAR(50), @pPrice Decimal(18,2),
+			@TestCount INT, @OrgCount INT, @CurrencyCount INT, @OrgCode NVARCHAR(25), @pLocationCode NVARCHAR(25),
+			@pValidCode INT, @GrossAmt Decimal(18,2), @DiscountAmt Decimal(18,2), @NetAmt Decimal(18,2),
+			@IsCreditBill VARCHAR(5), @OrderCount INT, @UserID BIGINT
+	
+   SELECT @OrgCount = Count(0)
+   FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode
+ 
+   IF (@OrgCount > 0)
+   BEGIN
+	  SELECT --@pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+   CREATE Table #TempPincode
+   ( Pincode bigint,
+	 CityID bigint,
+	 StateID smallint,
+	 CountryID smallint,
+	 CityName nvarchar(100),
+	 StateName nvarchar(100),
+	 CountryName nvarchar(100),
+	 LocationName nvarchar(150)  )
+   
+   SELECT @pPincode = cast(PostalCode as bigint), @BookingDTTM = BookingDTTM, @pSourceType = ISNULL(SourceType,''),
+          @DOB = DateofBirth,  @pExtRefNo = ISNULL(ExternalRefNo,''), @pMob = ISNULL(MobileNumber,''), @pPaymentStatus = ISNULL(PaymentStatus,''),
+		  @OrgCode = ISNULL(OrgCode,''),  @pLocationCode = ISNULL(LocationCode,''),
+		  @pOrgID = ISNULL(OrgID,0), @pOrgAddrID = ISNULL(LocationID,0),
+		  @GrossAmt = TotalGrossAmount, @DiscountAmt = DiscountAmount, @NetAmt = NetAmount, @IsCreditBill = IsNull(ISProcessed,'')
+   FROM @BookingStatus
+
+   SELECT @pOrderedFrom = ISNULL(OrderedFrom,''), @pTestCode = ISNULL(TestCode,''), @pTType = ISNULL(Type,''), @pPrice = Price
+   FROM @TestInfo
+
+   SELECT @pPExtRefNo = ISNULL(ExternalRefNo,''), @pReceivedAmount = ReceivedAmount, @pCurrencyType = ISNULL(CurrencyType,''),
+          @pPaymentMode = ISNULL(PaymentMode,'')
+   FROM @Payment
+
+   SELECT @TestCount = Count(0) 
+   FROM InvestigationMaster with(Nolock) where TestCode = @pTestCode
+
+   SELECT @CurrencyCount = Count(0) 
+   FROM CurrencyMaster with(Nolock) where CurrencyCode = @pCurrencyType
+   
+   SELECT @OrderCount = Count(0)
+   FROM @TestInfo
+   
+   SET @pValidCode = -1
+   IF (@OrgCode != '' AND  @pLocationCode != '')
+     BEGIN
+	   SELECT @pValidCode = Count(0)
+	   FROM organization O with(Nolock)
+	   INNER JOIN OrganizationAddress OA with(Nolock) ON O.OrgID = OA.OrgID
+	   WHERE O.IntegrationName = @OrgCode AND OA.LocationCode = @pLocationCode
+
+	   IF @pValidCode > 0
+	    BEGIN
+		  SELECT @pOrgID = O.OrgID, @pOrgAddrID = OA.AddressID
+		   FROM organization O with(Nolock)
+		   INNER JOIN OrganizationAddress OA with(Nolock) ON O.OrgID = OA.OrgID
+		   WHERE O.IntegrationName = @OrgCode AND OA.LocationCode = @pLocationCode
+		END
+     END
+ 
+   SET @pMandatoryBlank = 'N'
+
+   IF(@pType = '')
+     BEGIN 
+	   SET @pOutResult = 'M|TransType field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pExtRefNo = '' OR @pPExtRefNo = '')
+     BEGIN 
+	   SET @pOutResult = 'M|ExternalRefNo field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END 
+   ELSE IF(@pSourceType = '')
+     BEGIN 
+	   SET @pOutResult = 'M|SourceType field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END 
+   ELSE IF(@pOrderedFrom = '')
+     BEGIN 
+	   SET @pOutResult = 'M|OrderedFrom field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END 
+   ELSE IF(@pMob = '' OR LEN(@pMob) <= 9 OR LEN(@pMob) > 10)
+     BEGIN 
+	   SET @pOutResult = 'M|Mobile Number is required or has an invalid value (10 digit)'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(YEAR(@DOB) = 9999)
+     BEGIN 
+	   SET @pOutResult = 'M|DOB field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pTestCode = '') --OR @TestCount = 0)
+     BEGIN 
+	   SET @pOutResult = 'M|TestCode field should not be blank (OR) Invalid of TestCode.'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pTType = '' OR (@pTType !='INV' AND @pTType !='GRP' AND @pTType !='PKG') )
+     BEGIN 
+	   SET @pOutResult = 'M|Type field should not be blank (OR) Invalid of Type'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pReceivedAmount = 0 AND UPPER(@pPaymentStatus) = 'PAID')
+     BEGIN 
+	   SET @pOutResult = 'M|ReceivedAmount field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF((@pCurrencyType = '' OR @CurrencyCount = 0 ) AND @pReceivedAmount > 0)
+     BEGIN 
+	   SET @pOutResult = 'M|CurrencyType field should not be blank (OR) Invalid of CurrencyType'
+	   SET @pMandatoryBlank = 'Y'
+	 END  
+   ELSE IF(@pPaymentMode = '' AND @pReceivedAmount > 0)
+     BEGIN 
+	   SET @pOutResult = 'M|PaymentMode field should not be blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(UPPER(@pPaymentStatus) != 'PAID' AND @pReceivedAmount > 0)
+     BEGIN 
+	   SET @pOutResult = 'M|PaymentStatus field should be Paid'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pOrgCode = '' OR @OrgCount = 0)
+     BEGIN 
+	   SET @pOutResult = 'M|OrgCode field should not be blank (OR) Invalid of OrgCode in Header'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(YEAR(@BookingDTTM) = 9999)
+     BEGIN 
+	   SET @pOutResult = 'M|BookingDTTM field should not be Blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pPrice = 0)
+     BEGIN 
+	   SET @pOutResult = 'M|Price field should not be Blank'
+	   SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pValidCode = 0)
+     BEGIN
+	    SET @pOutResult = 'M|Invalid of OrgCode (OR) LocationCode'
+	    SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@pValidCode = -1 AND (@pOrgAddrID = 0 OR @pOrgID = 0))
+     BEGIN
+	    SET @pOutResult = 'M|LocationID / OrgID field should not be Blank'
+	    SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@IsCreditBill = 'Y' AND @pReceivedAmount > 0)
+	 BEGIN
+	    SET @pOutResult = 'M|IsCreditBill field should be N'
+	    SET @pMandatoryBlank = 'Y'
+	 END
+   ELSE IF(@IsCreditBill = 'N' AND @pReceivedAmount = 0)
+	 BEGIN
+	    SET @pOutResult = 'M|IsCreditBill field should be N'
+	    SET @pMandatoryBlank = 'Y'
+	 END 
+   ELSE IF(@OrderCount = 0)
+     BEGIN
+	    SET @pOutResult = 'M|TestInfo should not be Blank'
+	    SET @pMandatoryBlank = 'Y'
+	 END 
+
+   SELECT @LoginID = cast(CreatedBy as NVARCHAR(30)) FROM @Payment
+
+   SELECT @pCount = Count(0)
+   FROM Bookings B
+   INNER JOIN @BookingStatus BS ON B.ExternalRefNo = BS.ExternalRefNo AND B.OrgID = @pOrgID 
+   
+   IF (@pCount > 0)
+     BEGIN
+	   SET @pOutResult = 'Y|'+ @pExtRefNo
+	 END
+   
+   IF (YEAR(@DOB) != 9999) 
+      BEGIN
+	    --SELECT @Age = substring([dbo].[fn_getAge](@DOB),0,3) + ' ' + 'Year(s)'
+		 SELECT @Age = [dbo].[fn_getAgeDecimalAge](@DOB, @pOrgID)
+	  END
+   ELSE 
+     BEGIN  
+	   SET @Age = NULL
+	 END
+
+   IF EXISTS (SELECT 1 FROM Location where PinCode = @pPincode)
+      BEGIN
+		INSERT INTO #TempPincode 
+				 ( Pincode,         CityID,   CityName,   StateID,   StateName,   CountryID,    CountryName, LocationName ) 
+		SELECT TOP 1 BS.PostalCode, C.CityID, C.CityName, S.StateID, S.StateName, CT.CountryID, CT.CountryName, L.LocationName
+		FROM @BookingStatus BS
+			INNER JOIN Location L With(Nolock) ON cast(BS.PostalCode as bigint) = L.PinCode
+			INNER JOIN City C With(Nolock) ON L.CityID = C.CityID
+			INNER JOIN State S With(Nolock) ON S.StateID = C.StateID
+			INNER JOIN Country CT With(Nolock) ON CT.CountryID = S.CountryID
+		WHERE L.PinCode = @pPincode
+	  END
+   ELSE 
+      BEGIN
+	    INSERT INTO #TempPincode 
+				 ( Pincode,         CityID,      CityName,   StateID,             StateName,    CountryID,     CountryName )     
+		SELECT TOP 1 BS.PostalCode, ISNULL(C.CityID,0), C.CityName, ISNULL(S.StateID,0), S.StateName, ISNULL(CT.CountryID,0), CT.CountryName
+		FROM @BookingStatus BS
+			INNER JOIN City C With(Nolock) ON C.CityName = BS.City
+			INNER JOIN State S With(Nolock) ON S.StateName = BS.State
+			INNER JOIN Country CT With(Nolock) ON CT.CountryID = S.CountryID
+	  END
+   
+    /*declare @Pcode int
+    SELECT @Pcode = Count(0) FROM #TempPincode 
+
+	IF (@Pcode = 0)
+	 BEGIN
+	   SET @pOutResult = 'M|Specified Pincode / City not available in Master'
+	   SET @pMandatoryBlank = 'Y'
+	 END*/
+	 
+   IF (@pType = 'Add' AND @pCount = 0 AND @pMandatoryBlank = 'N')
+      BEGIN
+	       INSERT INTO ERPHCBookingInBound
+			   ( [BookingID],	    [BookingDTTM],   
+			     [DispatchType],	[Status],  [Salutation],  FirstName,	   MiddleName,        LastName,	         Age,
+			     DateofBirth,   
+				 Gender,   	      MobileNumber,  Email,	      LISPatientID,    ExternalPatientNo, City,	    
+				 [State],	                                                   Country,       
+				 PostalCode,    OrderedFrom,   OrgID,	      
+				 LocationID, 	LoginID,  	   CreatedBy,	  CreatedAt,	   ISProcessed,   
+				 JsonValue,	    JsonString,    FullName,      AddressType,  
+				 [Address],     URNNo,         URNType,       ExternalRefNo,   TotalGrossAmount,  DiscountAmount,    NetAmount, 
+				 DiscountID,    ClientID,      ClientCode,    SourceType,      HealthHubID,       EmployeeID,        Reason )
+	       
+		   SELECT B.BookingID,    CASE YEAR(B.BookingDTTM) WHEN 9999 THEN NULL ELSE B.BookingDTTM END,  
+		          B.DispatchType, B.Status,     B.Salutation,   B.FirstName,    B.MiddleName,     B.LastName,        @Age,
+	              CASE YEAR(B.DateofBirth) WHEN 9999 THEN NULL ELSE DateofBirth END, 
+				  B.Gender,       B.MobileNumber, B.Email,      B.PatientID,    B.ExternalPatientNumber, case when B.City = '' then T.CityName else B.City end,        
+				  case when B.[State] = '' then T.StateName else B.[State] end,       case when B.Country = '' then T.CountryName else B.Country end,     
+				  B.PostalCode,  B.OrderedFrom,  case when B.OrgID = 0 then @pOrgID else B.OrgID end,       
+				  B.LocationID,  @LoginID,       @LoginID,      @BookingDTTM,    'Y',      
+				  B.JsonValue,   B.JsonValue,  	 B.Name,        ISNULL(B.AddressType,'P'),  
+				  B.Address,     B.URNNo,        B.URNType,     B.ExternalRefNo,  B.TotalGrossAmount,     B.DiscountAmount,   B.NetAmount, 
+				  B.DiscountID,  B.ClientID,     B.ClientCode,  B.SourceType,     B.ExternalPatientRefNo, B.EmployeeID,       B.Reason  
+		   FROM @BookingStatus B
+		   LEFT JOIN #TempPincode T ON B.PostalCode = T.Pincode
+		   
+
+		   INSERT INTO ERPHCPaymentDetailsInBound 
+				([ExternalRefNo],         [AmtReceived],	 [OrgID],          
+				 [CreatedBy],             [CreatedAt],       [ReceivedBy],
+				 [ChequeorCardNumber],    [BaseCurrencyID],  [PaidCurrencyID],  [CardHolderName],  [TransactionID], 
+				 [PaymentMode],           [IsProcessed])
+		   
+		   SELECT Pay.ExternalRefNo,      Pay.ReceivedAmount, case when Pay.OrgID = 0 then @pOrgID else Pay.OrgID end, 
+		          Pay.CreatedBy,          @BookingDTTM,       Pay.CreatedBy,
+		          Pay.ChequeorCardNumber, CM.CurrencyID,      CM.CurrencyID,  Pay.CardHolderName,  Pay.TransactionID, 
+				  Pay.PaymentMode,        'Y'
+		   FROM @Payment Pay
+		      LEFT JOIN CurrencyMaster CM ON CM.CurrencyCode = coalesce(Pay.CurrencyType,CM.CurrencyCode)
+
+		   
+		   INSERT INTO ERPHCTestInBound
+				  ( [ExternalRefNo],        [OrderedFrom],     [Type],                    [TestCode],         [SampleID],   [SampleName],
+				    [ContainerID],          [ContainerName],   [SampleContainerColour],   [CollectionStatus], [AmtReceived], 	[OrgID],
+				    [CreatedBy],            [CreatedAt],       [SampleCollectedTime],     
+					[IsAdded],              [BookingID],       [IsProcessed],
+					[BarcodeNo],            [Reason] )
+		   
+		   SELECT Test.ExternalRefNo,       Test.OrderedFrom,   Test.Type,                 Test.TestCode,     Test.SampleID,    Test.SampleName,
+		          Test.ContainerID,         Test.ContainerName, Test.SampleContainerColour,Test.[Status],       Test.Price,       case when Test.OrgID = 0 then @pOrgID else Test.OrgID end, 
+		          @LoginID,                 @BookingDTTM,       CASE YEAR(Test.SampleCollectionTime) WHEN 9999 THEN @BookingDTTM ELSE Test.SampleCollectionTime END, 
+				  Test.Remarks,             Test.BookingID,     'Y',
+				  Test.BarcodeNo,           Test.Reason
+		   FROM @TestInfo Test
+
+
+		   INSERT INTO ERPHCTestSampleInBound
+				  ( [BookingID],             [SampleCode],        [SampleName],	       [ContainerID],        [ContainerName],   [SampleContainerColour],   
+				    [SampleCollectedTime],   [BarcodeNo],         [IsNewSampleYN],     [OrgID],              
+					[LocationID],	         [CreatedBy],   	  [CreatedAt],         [IsProcessed],        
+					[CollectionStatus],      [Reason] )
+
+		   SELECT   TS.BookingID,            TS.SampleID,          TS.SampleName,            TS.ContainerID,   TS.ContainerName,   TS.SampleContainerColour,
+		            TS.SampleCollectionTime, TS.BarcodeNo,         ISNULL(TS.Remarks,'N'),   case when TS.OrgID = 0 then @pOrgID else TS.OrgID end,
+					case when TS.LocationID = 0 then @pOrgAddrID else TS.LocationID end,     TS.LoginID,    @BookingDTTM,         'Y',  
+					TS.SampleStatus,         TS.Reason
+		   FROM @Samples TS
+		   
+
+		   IF EXISTS (SELECT 1 FROM @BookingStatus WHERE BookingID = 0 )
+		     BEGIN
+			   
+			   SELECT @pGrossAmt = TotalGrossAmount, @pDiscAmt = DiscountAmount, @pNetAmt = NetAmount, @pDiscID = DiscountID
+			   FROM @BookingStatus 
+
+			   SET @UserID = 0
+			   IF EXISTS(SELECT 1
+			          FROM Users with(Nolock) WHERE OrgID = @pOrgID AND loginid = cast(@LoginID as bigint))
+                BEGIN
+				   SELECT @UserID = UserID 
+				   FROM Users with(Nolock) WHERE OrgID = @pOrgID AND loginid = cast(@LoginID as bigint)
+				END
+
+			   DECLARE @SerQuotation dbo.UDTServiceQuotation
+			   INSERT INTO @SerQuotation 
+				 ( TokenNumber,			TITLECode,     SEX,                DOB,                Age,               CreatedAt,         
+				   PhoneNumber,			EMail,         ClientID,  		   FeeType,            SourceType,        
+				   OrgID,  	      	    CreatedBy,     PatientID,          OrgAddressID,	   
+				   CollectionAddress,   RoleID,        UserID,          
+				   CollectionTime,      BookingOrgID,  BookingStatus,      Pincode,           
+				   ExterNalPatNo,       TokenID,
+				   PatientNumber,       BookingID,     URNTypeID,          URNO,               DispatchValue,     ReferalID, 
+				   City,                                                   [State],		   
+				   StateID,                                                CityID,             
+				   OtherOrgID,                                             PatientName,        
+				   LandLineNumber,     CollectionAddress2,                 NRICType,           Comments   ) 
+
+			   SELECT 
+				   0,                ISNULL(SOM.TitleID,0),  B.Gender,      B.DateofBirth,      @Age,             @BookingDTTM,   
+				   B.MobileNumber,   B.Email,                ISNULL(CM.ClientID,0),    B.ExternalRefNo, B.SourceType,  
+				   case when B.OrgID = 0 then @pOrgID else B.OrgID end,    @LoginID,   -1,    case when B.LocationID = 0 then @pOrgAddrID else B.LocationID end,  
+				   B.Address,        0,                      @UserID,       
+				   B.CollectionTime, case when B.OrgID = 0 then @pOrgID else B.OrgID end,    case when B.Status = 'Completed' then 'N' else 'B' end,        B.PostalCode,    
+				   B.ExternalPatientRefNo,     0,
+				   0,                0,                      UOM.URNTypeId, B.URNNo,         B.DispatchType,         0,                   
+				   case when B.City ='' then T.CityName else B.City end,      case when B.[State] ='' then T.StateName else B.[State] end,                
+				   case when B.StateID = 0 then T.StateID else B.StateID end, case when B.CityID = 0 then T.CityID else B.CityID end, 
+				   case when B.OrgID = 0 then @pOrgID else B.OrgID end,       case when B.Name = '' then B.FirstName + ''+ B.MiddleName + ''+ B.LastName 
+				                                                                else B.Name end,  
+				   '',               T.LocationName,                         B.EmployeeID,    B.BookingRemarks
+			   FROM @BookingStatus B 
+			   LEFT JOIN Clientmaster CM (nolock) on CM.ClientCode = B.ClientCode AND CM.OrgID = @pOrgID
+			   LEFT JOIN SalutationOrgMapping SOM (nolock) ON B.Salutation = SOM.DisplayText 
+			          AND SOM.OrgID = @pOrgID AND SOM.LanguageCode ='en-GB'
+			   LEFT JOIN URNOrgMapping UOM (nolock) ON UOM.DisplayText = B.URNType 
+			         AND UOM.OrgID = @pOrgID AND UOM.LangCode ='en-GB'
+			   LEFT JOIN #TempPincode T ON B.PostalCode = T.Pincode
+
+
+			   DECLARE @Orders dbo.OrderedInvestigation
+			   INSERT INTO @Orders
+					( Name,               ID,                  VisitID,           CreatedBy,         Type,                  
+					  ComplaintId,        ReferedToOrgID,      ReferedToLocation, ReferralID,		 OrgID,       
+					  ReportDateTime,     InvestigationsType,  TatDateTime,		  
+					  Status )  
+
+			   SELECT IOM.DisplayText,    IOM.InvestigationID, -1,                @LoginID,          Test.Type, 
+					   0,     0,                   0,                 0,         	  case when Test.OrgID != 0 then Test.OrgID else @pOrgID end,
+					   @BookingDTTM,      Test.BarcodeNo,      CASE YEAR(Test.SampleCollectionTime) WHEN 9999 THEN @BookingDTTM ELSE Test.SampleCollectionTime END,
+					   case Test.[Status] when 'Deleted' then  Test.[Status] else 'Ordered' end
+			   FROM @TestInfo Test
+			   INNER JOIN InvestigationOrgMapping IOM with(Nolock) ON IOM.TestCode = Test.TestCode AND IOM.OrgID = @pOrgID AND test.Type='INV'
+			   UNION
+			   SELECT  IOM.DisplayText, IOM.AttGroupID,        -1,                @LoginID,          P.Type, 
+					   0,               0,                     0,                 0,             	 case when p.OrgID != 0 then p.OrgID else @pOrgID end,
+					   @BookingDTTM,    P.BarcodeNo,           CASE YEAR(P.SampleCollectionTime) WHEN 9999 THEN @BookingDTTM ELSE P.SampleCollectionTime END,
+					   case P.[Status] when 'Deleted' then  P.[Status] else 'Ordered' end 
+			   FROM @TestInfo P
+			   INNER JOIN InvOrggroup IOM with(Nolock) ON IOM.TestCode = P.TestCode AND IOM.OrgID = @pOrgID  AND P.Type IN ('GRP','PKG')
+		       
+
+			   DECLARE @pPreOrdered [dbo].[PreOrdered]
+			   INSERT INTO @pPreOrdered
+					   ( Name,           ID,                  VisitID,              Status,             
+					     Type,    OrgID,    
+					     Rate, 			 ActualAmount,        SalesAmount,          DiscountAmount,     PkgID   )	
+
+			   SELECT	IOM.DisplayText, IOM.InvestigationID, -1,                   case P.[Status] when 'Deleted' then  P.[Status] else 'Ordered' end,          
+			            P.Type,   case when P.OrgID != 0 then P.OrgID  else @pOrgID end,  
+			            P.Price,		 ISNULL(@pGrossAmt,0.00), ISNULL(@pNetAmt,0.00),  ISNULL(@pDiscAmt,0.00),  ISNULL(@pDiscID,0)
+			   FROM @TestInfo P
+			   INNER JOIN InvestigationOrgMapping IOM with(Nolock) ON IOM.TestCode = P.TestCode AND IOM.OrgID = @pOrgID AND P.Type='INV'
+			   UNION
+			   SELECT	IOM.DisplayText, IOM.AttGroupID,     -1,                   case P.[Status] when 'Deleted' then  P.[Status] else 'Ordered' end,          
+			            P.Type,   case when P.OrgID != 0 then P.OrgID  else @pOrgID end,  
+			            P.Price,		 ISNULL(@pGrossAmt,0.00), ISNULL(@pNetAmt,0.00),  ISNULL(@pDiscAmt,0.00),  ISNULL(@pDiscID,0)
+			   FROM @TestInfo P
+			   INNER JOIN InvOrggroup IOM with(Nolock) ON IOM.TestCode = P.TestCode AND IOM.OrgID = @pOrgID  AND P.Type IN ('GRP','PKG')
+
+
+			   DECLARE @BookingID BIGINT
+			   DECLARE @UDTContext dbo.UDT_Context
+			   INSERT INTO @UDTContext 
+					  ( OrgID,   OrgAddressID, LoginID,  LocationID,  PharmacyLocationID,  LanguageCode)
+			   SELECT  @pOrgID,  @pOrgAddrID,  @LoginID, @pOrgAddrID, -1,                  'en-GB'
+			   			    
+			   EXEC pHCSaveServiceQuotationDetails @SerQuotation, @Orders, @pPreOrdered, @pOrgID, @LoginID, @BookingID output, @UDTContext
+
+		   IF (@BookingID > 0)
+	         BEGIN
+
+			   IF EXISTS (SELECT 1 FROM @Payment WHERE ReceivedAmount > 0 AND ISNULL(PaymentMode,'') != '' )
+		       BEGIN
+				   INSERT INTO PreBookingPaymentdetails 
+					 (	  BookingID,      TypeID,           AmtReceived,         ChequeorCardNumber,   CardHolderName,  TransactionID,
+						  BaseCurrencyID, PaidCurrencyID,   OtherCurrencyAmount, OrgID,                CreatedBy,       CreatedAt,     ExternalRefNo )
+				   SELECT @BookingID,     PT.PaymentTypeID, P.ReceivedAmount,    P.ChequeorCardNumber, P.CardHolderName,P.TransactionID,
+						  CM.CurrencyID,  CM.CurrencyID,    P.ReceivedAmount,    @pOrgID,              @LoginID,        @BookingDTTM,      @pExtRefNo 
+				   FROM @Payment P
+				   INNER JOIN PaymentType PT with(Nolock) ON PT.PaymentCode = P.PaymentMode
+							AND ISNULL(PT.LanguageCode,'en-GB') = 'en-GB'
+				   LEFT JOIN CurrencyMaster CM ON CM.CurrencyCode = coalesce(P.CurrencyType,CM.CurrencyCode)
+			   END
+
+			   IF EXISTS (SELECT 1 FROM @Samples WHERE SampleID > 0)
+		       BEGIN
+				     INSERT INTO PreBookingSample
+				    		 ( BookingID,      SampleCode,      SampleName,     SampleContainerColour,        SampleCollectedTime, 
+							   ContainerID,    ContainerName,   OrgID,          LocationID,                   ExternalRefNo,
+							   BarcodeNo,  	   Reason,          Createdby,      Createdat,                    CollectionStatus   )
+					SELECT     @BookingID,     SampleID,        SampleName,     SampleContainerColour,        SampleCollectionTime,      
+							   ContainerID,    ContainerName,   OrgID,          @pOrgAddrID,                  ExternalRefNo,                
+							   BarcodeNo,      Reason,          @LoginID,       @BookingDTTM,                 SampleStatus
+					FROM  @Samples
+			   END
+			 
+			 END  
+		  
+		  END
+		
+	  END
+	  
+	  IF (@BookingID > 0)
+	    BEGIN
+	      SET @pOutResult = 'N|'+ CONVERT(varchar(10),@BookingID)
+        END 
+	  DROP TABLE #TempPincode
+END

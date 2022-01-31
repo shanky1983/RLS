@@ -1,0 +1,80 @@
+CREATE PROCEDURE [dbo].[PGetPhysicianName_LIMSAPI]
+	@pOrgCode NVARCHAR(100),
+	@Page INT,
+	@Size INT
+
+AS
+Begin    
+
+	 DECLARE @MaxRecordCount INT
+	 DECLARE @MaxCountReached BIT
+	 DECLARE @TotalRecords INT
+
+	 SELECT @MaxRecordCount = MaximumRecordCount 
+	 FROM APIConfiguration 
+	 WHERE SPName='PGetPhysicianName_LIMSAPI'
+
+	 IF @Size > @MaxRecordCount
+	 BEGIN
+	 SET @Size = @MaxRecordCount
+	 SET @MaxCountReached=1
+	 END
+
+
+	 DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)
+
+	 IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+	   BEGIN
+		  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+				 @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+
+			FROM Integrationtypemaster ITM
+				INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+				INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+			WHERE ITM.IntegrationTypeName = @pOrgCode
+
+		END
+
+	 SELECT @TotalRecords = COUNT(1) 
+	 FROM ReferingPhysician R(NOLOCK)
+	   LEFT JOIN EmployeeRegMaster E(NOLOCK) ON E.EmpID=ContactPersonID
+		 		AND E.OrgID=R.OrgID
+	 WHERE R.OrgID=@pOrgID 
+
+
+	;with CTE_RefPhysician
+	AS
+	(
+		SELECT  R.ReferingPhysicianID AS UserId,S.TitleName,R.PhysicianName,R.PhysicianCode,E.MobileNo,
+				case when R.Gender='M' then 'Male' when R.Gender='F' then 'Female' else '' end as Gender, R.DOB,
+				E.Email,R.Qualification,CM.IsRemoteAccess as PortalAccess,ISNULL(R.IsClient,'N') AS IsClient,
+				EDM.EmpDeptName AS ContactPersonType, E.Name as ContactPersonName,
+				E.MobileNo AS ContactPersonMobileNo,E.EMail AS ContactPersonEmailId,
+		--		case when ISNULL(R.Status,'N') = 'Y' then 'Active' else 'Inactive' end as Status,
+					case when R.IsActive = 'Y' then 'Active' when R.Status='N' then 'Inactive'  else 'Inactive' end as Status,
+				R.HasReportingEmail,R.HasReportingSms,R.OrgID, @pOrgAddrID as LocationID
+		FROM ReferingPhysician R(NOLOCK)
+			INNER JOIN Salutation S(NOLOCK) ON S.TitleID=R.Salutation
+			left JOIN EmployeeRegMaster E(NOLOCK) ON E.EmpID=R.ContactPersonID
+					--AND E.OrgID=R.OrgID
+			left join EmployerDeptMaster EDM (NOLOCK) ON E.DeptID=EDM.EmpDeptID
+			left join Users u  (NOLOCK) ON u.loginID=r.Loginid
+			left join Login l (NOLOCK) ON l.loginID=r.Loginid
+			left Join AddressDetails AD on AD.EmpID=E.EmpID 
+			left join Clientmaster CM(NOLOCK) ON AD.ReferenceID=CM.ClientID
+		WHERE R.OrgID=@pOrgID 
+		ORDER BY R.ReferingPhysicianID desc
+		OFFSET (@Page -1) * @Size ROWS
+		FETCH NEXT @Size ROWS ONLY  
+	)
+	SELECT UserId,TitleName as Salutation,PhysicianName,PhysicianCode,MobileNo,R.Gender,R.DOB,
+	Email,R.Qualification,ISNULL(PortalAccess,0) as PortalAccess,IsClient,
+	ContactPersonType, ContactPersonName,ContactPersonMobileNo,ContactPersonEmailID,
+	Status, HasReportingEmail,HasReportingSms,OrgID,LocationID
+	FROM CTE_RefPhysician R(NOLOCK)
+	--order by 1 desc
+
+	SELECT @TotalRecords as TotalRecords,cast(CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as int) as TotalPages, 
+	@MaxRecordCount as AllowableRecordCount
+
+END

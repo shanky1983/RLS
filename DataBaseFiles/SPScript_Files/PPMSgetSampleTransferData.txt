@@ -1,0 +1,39 @@
+
+
+/****** Object:  StoredProcedure [dbo].[PPMSgetSampleTransferData]    Script Date: 2/2/2021 11:45:54 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+Create Procedure [dbo].[PPMSgetSampleTransferData] ( @FromDate date, @ToDate date, @FromOrg int, @ToLocation int ) 
+As  
+Begin 
+
+--SET @FromDate = CONVERT(DATETIME, CONVERT(nvarchar, @FromDate, 103) + ' 00:00:00')  
+--SET @ToDate = CONVERT(DATETIME, CONVERT(nvarchar, @ToDate, 103) + ' 23:59:59')  
+  
+DECLARE @DayCount INT = DATEDIFF(DAY, @FromDate, @ToDate)  
+  
+    
+IF ( @DayCount <= 31 )  Begin  Declare @temp as table (Orgname nvarchar(250), visitdate Datetime,Visitnumber varchar(200),PatientName varchar(250),Id bigint,type varchar(100) ,Accessionnumber bigint,clientname nvarchar(250),pkgname varchar(250),OrderTestID Bigint,VisitID bigint,OrgID int)  
+--investigationid bigint,name varchar(250),Value nvarchar(250),Groupname varchar(250)  
+Insert into @temp  Select Distinct O.Name as OrgName,PV.Createdat As 'Visit date',PV.Visitnumber,P.Name as PatientName, OI.Id,OI.Type,  OI.AccessionNumber,CM.ClientName,isnull(oI.PkgName ,''),(Case when PkgID is null then OI.ID Else OI.PkgID End) as OrderTestID,OI.VisitID,OI.OrgID  from PatientVisit PV WITH (NOLOCK) inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid inner Join PatientAddress PA WITH (NOLOCK) ON P.PatientID=PA.PatientID and PA.addressType='P' --and PA.Orgid=P.Orgid 
+inner join Organization O WITH (NOLOCK) ON O.Orgid=PV.Orgid inner join OrganizationAddress OAA  WITH (NOLOCK) ON OAA.AddressID=PV.OrgAddressID  
+Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid and OI.ResCaptureLoc=@ToLocation inner join VisitClientMapping VCM WITH (NOLOCK) ON VCM.Visitid=OI.Visitid and OI.Orgid=VCM.OrgID  
+inner join ClientMaster CM WITH (NOLOCK) ON CM.Clientid=VCM.Clientid and VCM.orgid=CM.Orgid 
+where PV.OrgAddressID=@FromOrg and PV.Createdat Between @FromDate And @ToDate   
+select T.*,BD.Amount into #temp from @temp T inner join Finalbill FB  WITH (NOLOCK) ON   
+  
+ FB.Visitid=T.Visitid  and FB.Orgid=T.Orgid inner join Billingdetails BD WITH (NOLOCK) ON BD.Finalbillid=FB.Finalbillid and BD.Feeid=T.OrderTestID and BD.Orgid=FB.Orgid   select distinct t.OrgName,Convert(Varchar,t.Visitdate,105) as Visitdate,t.VisitNumber,t.PatientName,t.ClientName,t.Type,t.PKGName,V.groupname,  
+Case when OI.Type='GRP' then '' else V.Name End as InvestigationName ,t.Amount --, V.value--,OI.AccessionNumber--P.ReferenceRange,IOM.UOMCode,p.Approvedby,LO.LoginName  
+from #temp t  Inner join OrderedInvestigations OI ON OI.ReferredAccessionNo=t.AccessionNumber inner Join PatientInvestigation p WITH (NOLOCK) ON p.AccessionNumber=OI.AccessionNumber and P.Status not in ('Retest','Recollect') inner Join InvestigationValues v WITH (NOLOCK) ON v.InvestigationID=p.InvestigationID and v.GroupID=p.GroupID   
+and  v.PatientVisitID  = p.PatientVisitId and p.Orgid =V.Orgid and v.Status not in ('Retest','Recollect') 
+--Inner join InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=V.InvestigationID   and IOM.Orgid=V.OrgID --inner join Login LO WITH (NOLOCK) ON LO.Loginid=P.Approvedby and LO.Orgid=P.Orgid --where P.Orgid=247
+Drop Table #temp 
+END 
+END  
+GO
+
+

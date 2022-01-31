@@ -1,0 +1,284 @@
+CREATE PROCEDURE [dbo].[pInsertPatientInvestigationCovidBulkRegistration]                    
+ @pOrderedInvTable [dbo].[OrderedInvestigation] READONLY,                    
+ @OrgID [bigint],                    
+ @pVisitid [bigint],                       
+ @ContextInfo [UDT_Context] READONLY                    
+WITH EXECUTE AS OWNER                    
+AS                    
+BEGIN     SET NOCOUNT ON   
+                      
+  --  declare @pVisitid [bigint] =31465;                    
+  --  declare @pOrderedInvTable [dbo].[OrderedInvestigation]                                                                                    
+  --    insert into @pOrderedInvTable (VisitID,ID,OrgID,Type,status,UID)                   
+  -- select 31465,126,247,'GRP','SampleReceived','ABF6B7B5-A3D5-4D3D-98BA-0E3CC9F3AF3C'                 
+  -- --Select  20981,124,202,'GRP'                  
+  --declare @ContextInfo [UDT_Context]                                                                
+  --insert into @ContextInfo values(202,N'RLS-Gorakhpur',N'',417,6610,N'LabReception',0,171814,NULL,N'',417,0,N'',NULL,NULL,1,75,11,N'en-GB',0,NULL,NULL,NULL,NULL)                  
+                      
+ Declare @CreatedBy bigint                  
+ Select @CreatedBy=RoleID from  @ContextInfo                  
+              
+  INSERT INTO PatientInvestigation(InvestigationName, GroupID, GroupName, PackageID, PackageName, PatientVisitID, InvestigationID, CreatedBy, CreatedAt,  
+  IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber,Interpretation,SampleID)                          
+
+
+  
+                                               
+  SELECT CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+  ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                                  
+  ,GMP.GroupID                                          
+  ,CASE ISNULL(GMP.GroupName,OG3.DisplayText ) WHEN '' THEN GMP.GroupName                                          
+  ELSE ISNULL(GMP.GroupName,OG3.DisplayText ) END AS GroupName                                          
+                                        
+  ,0 as PackageID                                                                                
+  ,'' as PackageName                                        
+                                      
+  ,PInv.VisitID                                                                                
+  ,IM.InvestigationID                                                                                
+  ,OI.CreatedBy as CreatedBy                                                                               
+  ,OI.CreatedAt as CreatedAt                                                                               
+  ,'N'                                                                             
+  ,PInv.Status                                                                                
+  ,PInv.orgid                                                                               
+  ,IOM.ReferenceRange                
+  ,PInv.[UID]                
+  ,OI.AccessionNumber     
+  ,IOM.Interpretation                                                                            
+  ,IOM.SampleCode  
+  FROM @pOrderedInvTable PInv                  
+  Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.PKGID=PInv.ID AND OI.OrgID = PInv.orgid                
+  INNER JOIN InvOrgGroup OG3 ON OG3.AttGroupID = OI.PkgID AND OG3.OrgID = OI.orgid                                                                
+  INNER JOIN InvPackageMapping IPM ON IPM.PackageID = OG3.OrgGroupID AND IPM.Type = 'GRP'                 
+  INNER JOIN InvGroupMaster GMP ON GMP.GroupID = IPM.ID AND GMP.Type = OI.Type                                                                  
+  INNER JOIN invGroupMapMaster GMM ON GMM.GroupID = GMP.GroupID  AND GMM.Parent ='N'   and Isnull(GMM.Active, 'Y') = 'Y'                                
+  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = GMM.InvestigationID AND IOM.OrgID = OI.orgid                                       
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                  
+             
+  WHERE (PInv.Type = 'PKG')  AND (GMM.Parent ='N' OR GMM.Parent IS NULL)  AND OI.Visitid=@pVisitid  and oi.id=IPM.ID                 
+                  
+   UNION              
+                                     
+  ----INSERT INTO PatientInvestigation(InvestigationName, GroupID, GroupName, PackageID, PackageName, PatientVisitID, InvestigationID, CreatedBy, CreatedAt, IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber)                                  
+     
+                                     
+  SELECT DISTINCT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+  ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                                  
+  ,GMM1.GroupID                                        
+  ,CASE ISNULL(OG2.DisplayText ,GMP2.GroupName) WHEN '' THEN GMP2.GroupName                                          
+  ELSE ISNULL(OG2.DisplayText ,GMP2.GroupName) END AS GroupName                                          
+                                        
+  ,0 as PackageID                                                                                
+  ,'' as PackageName                                       
+                                      
+  ,PInv.VisitID                                                                    
+  ,IM.InvestigationID                                                                    
+  ,OI.CreatedBy as CreatedBy                                                                 
+  ,OI.CreatedAt as CreatedAt                
+  ,'N'                                                                    
+  ,PInv.Status                                                                    
+  ,PInv.orgid                                                                    
+  ,IOM.ReferenceRange                                                    
+  ,PInv.[UID]                
+  ,OI.AccessionNumber
+  ,IOM.Interpretation                                                                              
+  ,IOM.SampleCode  
+  FROM @pOrderedInvTable PInv                                         
+  Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.PKGID=PInv.ID                  
+  INNER JOIN InvOrgGroup OG3 ON OG3.AttGroupID = OI.PkgID AND OG3.OrgID = OI.orgid                                                                
+  INNER JOIN InvPackageMapping IPM ON IPM.PackageID = OG3.OrgGroupID AND IPM.Type = 'GRP'                 
+  INNER JOIN InvGroupMaster GMP ON GMP.GroupID = IPM.ID AND GMP.Type = OI.Type                                                                    
+  INNER JOIN invGroupMapMaster GMM ON GMM.GroupID = IPM.ID  AND GMM.Parent ='Y'                                                                
+  INNER JOIN InvOrgGroup OG2 ON OG2.OrgGroupID = GMM.InvestigationID   AND OG2.OrgID = PInv.orgid                                                     
+  INNER JOIN InvGroupMaster GMP2 ON GMP2.GroupID = OG2.AttGroupID                                                             
+  INNER JOIN invGroupMapMaster GMM1 ON GMM1.GroupID = GMM.InvestigationID   and Isnull(GMM1.Active, 'Y') = 'Y'                                                                    
+  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = GMM1.InvestigationID AND IOM.OrgID = PInv.orgid                                                                  
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                          
+                                 
+  WHERE (PInv.Type = 'PKG') AND GMM.Parent ='Y'    AND OI.Visitid=@pVisitid and oi.id=IPM.ID                
+   UNION                                                                        
+                         
+  ----INSERT INTO PatientInvestigation(InvestigationName, GroupID, GroupName, PackageID, PackageName, PatientVisitID, InvestigationID, CreatedBy, CreatedAt, IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber)                                   
+    
+     
+    SELECT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+     ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                                                                   
+  ,0                                             
+  ,''               
+  ,0 as PackageID                                        
+  ,'' as PackageName                                                                                 
+  ,PInv.VisitID                                                      
+  ,IM.InvestigationID                                                                                  
+  ,OI.CreatedBy as CreatedBy                                                                              
+  ,OI.CreatedAt as CreatedAt                  
+  ,'N'                                                                                  
+  ,PInv.Status                                                                                  
+  ,PInv.orgid                                                                                
+  ,IOM.ReferenceRange                  
+  ,PInv.[UID]                  
+  ,OI.AccessionNumber 
+  ,IOM.Interpretation                                                         
+  ,IOM.SampleCode  
+  FROM @pOrderedInvTable PInv                         
+  Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.PkgID=PInv.ID                    
+  INNER JOIN InvOrgGroup OG ON OG.AttGroupID = OI.PkgID AND OG.OrgID = OI.OrgID                       
+  INNER JOIN InvPackageMapping IPM ON IPM.PackageID = OG.OrgGroupID AND IPM.Type = 'INV' --and IPM.ID=1778                   
+  INNER JOIN InvGroupMaster GMP ON GMP.GroupID = PInv.ID AND GMP.Type = PInv.Type                     
+  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = IPM.ID AND IOM.OrgID = OI.OrgID                                                                                
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                    
+                      
+  WHERE (PInv.Type = 'PKG')  AND OI.Visitid=@pVisitid and oi.id=IPM.ID                                                                                
+   UNION                                     
+                       
+  --INSERT INTO  PatientInvestigation(InvestigationName, GroupID, GroupName, PackageID, PatientVisitID, InvestigationID, CreatedBy, CreatedAt, IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber)                                                 
+  
+     
+                     
+                              
+  SELECT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+  ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                                  
+  ,IGMM.GroupID                                    
+  ,CASE ISNULL(OG.DisplayText ,IGM.GroupName) WHEN '' THEN IGM.GroupName                                          
+  ELSE ISNULL(OG.DisplayText ,IGM.GroupName) END AS GroupName                                                                                 
+  ,0 as PackageID                  
+  ,'' As PackageName                                                 
+  ,PInv.VisitID                                                                                  
+  ,IM.InvestigationID                                                                                  
+  ,PInv.CreatedBy                                                                 
+  ,OI.CreatedAt as CreatedAt          
+  ,'N'                  
+  ,PInv.Status                                                                                  
+  ,PInv.OrgID                                                                                    
+  ,IOM.ReferenceRange                              
+  ,PInv.[UID],OI.AccessionNumber  
+  ,IOM.Interpretation                                                                                    
+  ,IOM.SampleCode  
+  FROM                   
+    @pOrderedInvTable PInv                            
+    Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.ID=PInv.ID                   
+   INNER JOIN InvOrgGroup OG ON OG.AttGroupID = OI.ID  AND OG.OrgID = OI.Orgid            
+ INNER JOIN InvGroupMaster IGM ON IGM.GroupID=OG.AttGroupID  AND IGM.type='GRP'                       
+ INNER JOIN invGroupMapMaster IGMM ON IGMM.GroupID=OG.OrgGroupID AND IGMM.Parent ='N' and Isnull(IGMM.Active, 'Y') = 'Y'                      
+ INNER JOIN InvestigationOrgMapping  IOM ON IOM.InvestigationID = IGMM.InvestigationID  AND IOM.OrgID = OI.Orgid                                                                           
+    INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                                           
+  WHERE PInv.type='GRP'  AND  (IGMM.Parent ='N' OR IGMM.Parent IS NULL) AND IOM.OrgID = OI.Orgid   AND OI.Visitid=@pVisitid                                                                                  
+    UNION                                    
+  --INSERT INTO  PatientInvestigation(InvestigationName, GroupID, GroupName, PackageID, PatientVisitID, InvestigationID, CreatedBy, CreatedAt, IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber)                                                
+  
+                            
+                  
+   SELECT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+  ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                                  
+  ,IGM.GroupID                                    
+  ,CASE ISNULL(OG.DisplayText ,IGM.GroupName) WHEN '' THEN IGM.GroupName                                          
+  ELSE ISNULL(OG.DisplayText ,IGM.GroupName) END AS GroupName                                                                                 
+  ,0 as PackageID                  
+  ,'' As PackageName                                                 
+  ,PInv.VisitID                                                                                  
+  ,IM.InvestigationID                                                                                  
+  ,PInv.CreatedBy                                                                                  
+  ,OI.CreatedAt as CreatedAt                  
+  ,'N'                                                                                  
+  ,PInv.Status                                                                                  
+  ,PInv.OrgID                                                                                    
+  ,IOM.ReferenceRange                                                                 
+  ,PInv.[UID],OI.AccessionNumber 
+  ,IOM.Interpretation                                                                                      
+  ,IOM.SampleCode  
+   FROM InvestigationOrgMapping IOM                                                               
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                                                                                 
+  INNER JOIN invGroupMapMaster IGMM2 ON IGMM2.InvestigationID = IOM.InvestigationID  and Isnull(IGMM2.Active, 'Y') = 'Y'                                                                                  
+  INNER JOIN InvOrgGroup OG1 ON OG1.OrgGroupID = IGMM2.GroupID AND OG1.OrgID = IOM.OrgID                  
+  INNER JOIN invGroupMapMaster IGMM1 ON IGMM1.InvestigationID = OG1.OrgGroupID                                                                            
+  INNER JOIN InvOrgGroup OG ON OG.OrgGroupID = IGMM1.GroupID AND OG.OrgID = IOM.OrgID                                                                          
+  INNER JOIN InvGroupMaster IGM ON IGM.GroupID = OG.AttGroupID                                                                         
+  INNER JOIN InvGroupMaster IGM1 ON IGM1.GroupID = OG1.AttGroupID                                                                           
+  INNER JOIN @pOrderedInvTable PInv ON IGM.GroupID = PInv.ID                              
+  Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.ID=PInv.ID                                                                          
+  WHERE PInv.type='GRP' AND OG.OrgID = PInv.orgID  AND IGMM1.Parent = 'Y' AND IOM.OrgID = PInv.Orgid  AND OI.Visitid=@pVisitid                                                      
+                                        
+   UNION                                     
+ ---- --INSERT INTO PatientInvestigation(InvestigationName, GroupID, PackageID, PatientVisitID, InvestigationID, CreatedBy, CreatedAt, IsCompleted, Status, OrgID, ReferenceRange,UID,AccessionNumber)                                                        
+    
+                       
+   SELECT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+     ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                  
+  ,0 as GroupID                                               
+  ,'' as GroupName                  
+  ,0 as PackageID                                                                                  
+  ,'' as PackageName                                                                                   
+  ,PInv.VisitID                                                      
+  ,IM.InvestigationID                                                                                  
+  ,OI.CreatedBy as CreatedBy                                                                                  
+  ,OI.CreatedAt as CreatedAt                  
+  ,'N'                                                                                  
+  ,PInv.Status                              
+  ,PInv.orgid                                                                                   
+  ,IOM.ReferenceRange                  
+  ,PInv.[UID]                  
+  ,OI.AccessionNumber 
+  ,IOM.Interpretation                                                                                          
+  ,IOM.SampleCode  
+  FROM @pOrderedInvTable PInv                                                                             
+  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = PInv.ID AND IOM.OrgID = PInv.OrgID                                                                                 
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                              
+  Inner Join OrderedInvestigations OI on OI.VisitID=PInv.VisitID and OI.ID=PInv.ID                                                                                
+  WHERE pInv.type='INV'  AND OI.Visitid=@pVisitid   
+
+  Union 
+
+    SELECT                   
+  CASE ISNULL(IOM.DisplayText ,IM.InvestigationName) WHEN '' THEN IM.InvestigationName                                                   
+     ELSE ISNULL(IOM.DisplayText ,IM.InvestigationName) END AS InvestigationName                                  
+  ,0 as GroupID                                               
+  ,'' as GroupName                  
+  ,0 as PackageID                                                                                  
+  ,'' as PackageName                                                                                   
+  ,OI.VisitID                                                      
+  ,IM.InvestigationID                                                                                  
+  ,OI.CreatedBy as CreatedBy                                                                                  
+  ,OI.CreatedAt as CreatedAt                  
+  ,'N'                                                                                  
+  ,OI.Status                              
+  ,OI.orgid                                                                                   
+  ,IOM.ReferenceRange                  
+  ,OI.[UID]                  
+  ,OI.AccessionNumber   
+  ,IOM.Interpretation                                                                                        
+  ,IOM.SampleCode  
+  FROM  OrderedInvestigations OI
+  
+  Inner Join InvestigationOrgMapping IOM ON IOM.InvestigationID = OI.ID AND IOM.OrgID = OI.OrgID                                                                                 
+  INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID                              
+                                                                            
+  WHERE OI.type='INV'  AND OI.Visitid=@pVisitid  and ISNULL(OI.PKGID,0)=0 and OI.Status='ReflexTest' 
+
+  ---- Seetha Part for Reflex Test statut updated as 'SampleReceived Issue'---
+  
+  Update  PI set PI.Status= OI.Status    from PatientInvestigation PI 
+
+  Inner Join OrderedInvestigations OI on OI.VisitID=PI.PatientVisitID and OI.AccessionNumber=PI.AccessionNumber
+  
+  
+  where PI.PatientvisitID=@pVisitid
+
+  Insert Into MISordereddept(AccessionNumber,Deptid)    
+Select    
+tp.AccessionNumber,tp.Deptid    
+From     
+(    
+Select distinct MPIS.AccessionNumber,IOM.Deptid    
+From @pOrderedInvTable tOrd    
+Inner join Patientinvestigation MPIS(nolock)  on tord.VisitID = MPIS.Patientvisitid
+Inner Join Investigationorgmapping IOM (nolock) on   MPIS.Investigationid=IOM.Investigationid and MPIS.Orgid=IOM.Orgid  
+) tp    
+Left join MISordereddept Dpt  on tp.AccessionNumber = Dpt.AccessionNumber and tp.Deptid = dpt.Deptid    
+Where Dpt.AccessionNumber is null   
+
+  ---- Seetha Part for Reflex Test statut updated as 'SampleReceived Issue'---
+                                    
+END 

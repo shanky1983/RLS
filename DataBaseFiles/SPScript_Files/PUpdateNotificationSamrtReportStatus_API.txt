@@ -1,0 +1,16 @@
+create Procedure [dbo].[PUpdateNotificationSamrtReportStatus_API]
+(
+ @NotificationID BIGINT,
+ @patientVisitID BIGINT,
+ @orgID BIGINT,
+ @Flag Varchar(255)
+)
+AS
+BEGIN
+
+
+
+UPdATE Notifications SET Status=@Flag where NotificationID=@NotificationID  AND IdentityID=@patientVisitID AND OrgID=@orgID
+
+
+END

@@ -1,0 +1,110 @@
+
+/****** Object:  StoredProcedure [dbo].[PGetResultValuesforCoronaAndersonByApprovedate]    Script Date: 7/14/2020 3:14:54 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[PGetResultValuesforCoronaAndersonByApprovedate]         
+(             
+@Fdate Datetime,                  
+@Tdate Datetime,  
+@OrgID int,
+@Pparamtype VARCHAR(100),
+@Pparamvalue VARCHAR(100)               
+)                
+As                
+Begin       
+          
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+ 
+
+
+create table #temp11(
+                                      Patientvisitid bigint,
+                                      Visitnumber varchar(200),
+                                      LabNumber  varchar(200),
+                                      PatientName varchar(250),
+                                     Age varchar(20)
+                                     ,Sex varchar(10)
+                                     ,[Registration Date] nvarchar(100),
+                                     --Id bigint,
+                                     --Accessionnumber bigint, 
+                                     Result nvarchar (250),
+                                     InvestigationName nvarchar(250),
+                                     TestStatus nvarchar(100),
+									 [Approved Date]  nvarchar(100),
+                                     ReferingPhysicianName nvarchar(200),
+                                     ClientName nvarchar (200),
+                                     ClientAddress nvarchar(2000)
+                        )
+ 
+
+
+if(@Datediff <= 31)
+
+ 
+
+BEGIN
+
+Insert into #temp11 
+
+Select Distinct 
+PV.[PatientVisitId],
+PV.Visitnumber,
+pv.externalvisitid as LabNumber, 
+P.Name as PatientName,
+P.Age,
+P.Sex,
+PV.Createdat As 'Registration Date',
+--pi.investigationid as Id,
+--pi.AccessionNumber,
+iv.value as Result,
+pi.investigationname as InvestigationName,
+pi.Status as TestStatus,
+PI.Approvedat as 'Approved Date',
+PV.ReferingPhysicianname as ReferingPhysicianName,
+CM.ClientName as ClientName,
+AD.Address1 as ClientAddress
+
+from PatientVisit PV WITH (NOLOCK)
+ inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid
+ inner join PatientAddress PA WITH (NOLOCK) ON PA.PatientID=P.PatientID and PA.AddressType='P'
+ --Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid
+ INNER JOIN patientinvestigation PI ON   pv.orgid=pi.orgid and pv.PatientVisitId=pi.patientvisitid and PI.statustype is null 
+ inner join investigationvalues iv  on   iv.patientvisitid=pi.patientvisitid and iv.investigationid=pi.investigationid and iv.orgid=pi.orgid
+ Inner join OrderableTcodeForFormL OT WITH (NOLOCK) ON OT.InvestigationID=pi.investigationid and OT.Orgid=pi.OrgID and OT.Description='COVID-19'
+ Inner join VisitClientMapping VCM WITH (NOLOCK) ON VCM.VisitID=PV.PatientVisitId and VCM.OrgID=PV.OrgID  and Isnull(VCM.IsActive,'Y')<>'N'
+ Inner join ClientMaster CM WITH (NOLOCK) ON CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID
+ Left join AddressDetails AD WITH (NOLOCK) ON AD.ReferenceID=CM.ClientID and AD.Orgid=PV.Orgid and AD.ReferenceType='Client' and    Isnull(AD.AddressTypeID,1)=1
+ where  PV.orgid=@OrgID and PI.Approvedat Between @Fdate +' 00:00:00' and @Tdate+' 23:59:59'  
+ --and pv.VisitNumber='20106300377'
+
+Select distinct 
+Row_number() over (order by Visitnumber desc) as 'SLNo',
+Visitnumber,
+LabNumber,
+PatientName,
+Age,
+Sex,
+[Registration Date],
+InvestigationName,
+TestStatus,
+Result,
+[Approved Date],
+ReferingPhysicianName,
+ClientName,
+ClientAddress
+
+from #temp11 
+order by Visitnumber,[Approved Date] desc
+drop table #temp11
+
+END
+END
+GO
+
+

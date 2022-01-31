@@ -1,0 +1,151 @@
+CREATE PROCEDURE PGetCovidMISReport ( 
+@Porgid     INT ,   
+@pFdate     DATETIME ,   
+@pTdate     DATETIME ,   
+@ClientCode VARCHAR(30)  ,
+@TestName Varchar(255) 
+)
+AS
+Begin
+  CREATE TABLE #PatientDetails  
+  (  
+    ID INT Identity(1,1),  
+    PatientID BIGINT,  
+    PatientNumber NVARCHAR(300),  
+    PatientName NVARCHAR(500),  
+    PatientVisitID BIGINT,  
+    VisitNumber NVARCHAR(300),  
+    Age NVARCHAR(100),  
+    Gender NVARCHAR(100),   
+    VisitDate DATETIME,    
+    OrgID INT,   
+	DOB DATETIME
+	,Address Varchar(250)
+	,PassportNumber Varchar(25)
+	,AadharNumber Varchar(25) 
+	,City Varchar(150)
+	,State Varchar(150)
+	,Country Varchar(150)
+	,StateID BigInt
+	,CountryID BigInt
+	,SRFID Varchar(100)
+  )  
+   
+  INSERT INTO #PatientDetails(PatientID,PatientNumber,PatientName,PatientVisitID,VisitNumber,OrgID,  
+  P.Age,Gender,VisitDate,DOB,Address,PassportNumber,City,StateID,CountryID,AadharNumber,SRFID)  
+  SELECT DISTINCT P.PatientID,P.PatientNumber, P.Name,PV.PatientVisitID,PV.VisitNumber ,P.OrgID,P.Age,  
+  CASE WHEN P.Sex='F' THEN 'Female' WHEN P.Sex='M' THEN 'Male' ELSE 'Both' END ,PV.VisitDate  
+  ,P.DOB,(PA.Add1+PA.Add2),Case When UOM.DisplayText like 'Passport%' then P.URNO Else '' END--PA.PassportNo,PV.SRFID
+  ,PA.City,PA.StateID,PA.CountryID
+  ,Case When UOM.DisplayText like 'Aadhaar%' then P.URNO Else '' END
+  ,PV.SRFID
+  FROM PatientVisit PV (NOLOCK)  
+  INNER JOIN   Patient P (NOLOCK)  ON P.PatientID=PV.PatientID  
+  INNER JOIN PatientAddress PA (NOLOCK) ON P.PatientID=PA.PatientID AND PA.AddressType='P'
+  Inner Join URNOrgMapping UOM WITH(NOLOCK) ON UOM.OrgID=P.OrgID and UOM.URNTypeID=P.URNTypeId
+  INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.VisitID=PV.PatientVisitID   
+  INNER JOIN ClientMaster CM (NOLOCK) ON CM.ClientID=VCM.ClientID AND CM.OrgID=VCM.OrgID  
+  WHERE PV.CreatedAt BETWEEN @pFDate AND @pTdate  and CM.ClientCode=@ClientCode
+  AND PV.OrgID=@pOrgID  
+
+  Update P Set State=StateName,Country=CountryName
+  from #PatientDetails P
+  Inner Join Country C ON C.CountryID=P.CountryID
+  Inner Join State S ON S.StateID=P.StateID
+
+    CREATE TABLE #PatientVisit  
+  (     
+    PatientVisitID BIGINT,     
+    OrgID INT,  
+	AccessionNumber  BigInt
+	,TestName Varchar(100)
+	,TestType varchar(10)
+	,TypeofSample  Varchar(255)
+	,GroupID BigInt
+	,InvestigationID BigInt
+,SampleID Varchar(100) 
+,[Type of Sample] Varchar(200)
+,[Date and Time of Sample Tested *] Nvarchar(500)
+,[Testing Kit Used *] Nvarchar(500)
+,[E Gene/N Gene (ABI Kits only)/TrueNAT] Nvarchar(500)
+,[ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)] Nvarchar(500)
+,[RdRp/S Gene] Nvarchar(500)
+,[Final Result of SARS-CoV2(COVID19) for this Sample ] Nvarchar(500)
+ ,PatientID BIGINT,  
+    PatientNumber NVARCHAR(300),  
+    PatientName NVARCHAR(500), 
+    VisitNumber NVARCHAR(300),  
+    Age NVARCHAR(100),  
+    Gender NVARCHAR(100),   
+    VisitDate DATETIME,    
+	DOB DATETIME
+	,Address Varchar(250)
+	,PassportNumber Varchar(25)
+	,AadharNumber Varchar(25)
+	,SRFID Varchar(100)
+	,City Varchar(150)
+	,State Varchar(150)
+	,Country Varchar(150) 
+  )  
+  
+  --Insert Into #PatientVisit (PatientVisitID , OrgID,AccessionNumber,TestName,TestType,TypeofSample )
+  Select P.PatientVisitID,P.OrgID,OI.AccessionNumber,OI.Name,OI.Type 
+   ,PatientID,    PatientNumber,      PatientName ,      VisitNumber,      Age,      Gender,       VisitDate,    
+   	DOB 	,Address 	,PassportNumber  	,City 	,State 	,Country ,AadharNumber,SRFID
+  Into #TempGrpLevelVisits
+  from #PatientDetails P
+  Inner Join OrderedInvestigations  OI WITH(NOLOCK) ON OI.VisitID=P.PatientVisitid and OI.OrgID=P.OrgID
+  Where OI.Name=@TestName and OI.OrgID=@pOrgID
+   
+  Insert Into #PatientVisit (PatientVisitID , OrgID,AccessionNumber,TestName,TestType,GroupID,InvestigationID,PatientID,    PatientNumber,      PatientName ,      VisitNumber,      Age,      Gender,       VisitDate,    
+   DOB 	,Address 	,PassportNumber ,AadharNumber	 	,City 	,State 	,Country,SRFID ,[Date and Time of Sample Tested *])
+  Select P.PatientVisitID,P.OrgID,PI.AccessionNumber,PI.InvestigationName,Type,PI.GroupID,PI.InvestigationID,PatientID,    PatientNumber,      PatientName ,      VisitNumber,      Age,      Gender,       VisitDate,    
+   	DOB 	,Address 	,PassportNumber ,AadharNumber	 	,City 	,State 	,Country ,SRFID,PI.ApprovedAt
+  from #TempGrpLevelVisits P
+  Inner Join PatientInvestigation  PI WITH(NOLOCK) ON PI.AccessionNumber=P.AccessionNumber And PI.PatientVisitID=P.PatientVisitid and PI.OrgID=@pOrgID
+  Where  PI.OrgID=@pOrgID
+  
+  DROP TABLE #TempGrpLevelVisits
+
+  Insert Into #PatientVisit (PatientVisitID , OrgID,AccessionNumber,TestName,TestType,GroupID,InvestigationID,PatientID,    PatientNumber,      PatientName ,      VisitNumber,      Age,      Gender,       VisitDate,    
+    DOB 	,Address 	,PassportNumber ,AadharNumber	 	,City 	,State 	,Country ,SRFID,[Date and Time of Sample Tested *])
+  Select P.PatientVisitID,P.OrgID,PI.AccessionNumber,PI.InvestigationName,'INV',PI.GroupID,PI.InvestigationID,PatientID,    PatientNumber,      PatientName,       VisitNumber,      Age,      Gender,       VisitDate,    
+    	DOB 	,Address 	,PassportNumber ,AadharNumber	 	,City 	,State 	,Country ,SRFID,PI.ApprovedAt
+  from #PatientDetails P
+  Inner Join PatientInvestigation  PI WITH(NOLOCK) ON PI.PatientVisitID=P.PatientVisitid and PI.OrgID=@pOrgID
+  Where PI.InvestigationName=@TestName and PI.OrgID=@pOrgID
+ 
+ Update PV Set 
+  [E Gene/N Gene (ABI Kits only)/TrueNAT] = Case When IV.Name ='E Gene' Then IV.Value Else '' END -- as  [E Gene/N Gene (ABI Kits only)/TrueNAT]
+ ,[ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)] = Case When IV.Name ='ORF 1 AB' Then IV.Value Else '' END -- as  [ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)] 
+ ,[RdRp/S Gene]= Case When IV.Name ='RDRP Gene' Then IV.Value Else '' END --as [RdRp/S Gene]
+ ,[Final Result of SARS-CoV2(COVID19) for this Sample ]= Case When IV.Name ='Interpretation' Then IV.Value Else '' END --as [Final Result of SARS-CoV2(COVID19) for this Sample ]
+  from #PatientVisit PV
+  Inner Join InvestigationValues IV WITH(NOLOCK) ON IV.PatientVisitID=PV.PatientVisitID and IV.InvestigationID=PV.InvestigationID and IV.GroupID=PV.GroupID
+
+
+ Update PV Set 
+  [E Gene/N Gene (ABI Kits only)/TrueNAT] =  [E Gene/N Gene (ABI Kits only)/TrueNAT]+( Case When IV.Name ='N Gene' Then '/'+ IV.Value  END)
+ ,[ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)]=[ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)]+(Case When IV.Name ='ORF 1 GENE' Then '/'+IV.Value END)
+ ,[RdRp/S Gene]=[RdRp/S Gene]+ (Case When IV.Name ='RDRP Gene' Then '/'+ IV.Value END  )
+  from #PatientVisit PV
+  Inner Join InvestigationValues IV WITH(NOLOCK) ON IV.PatientVisitID=PV.PatientVisitID and IV.InvestigationID=PV.InvestigationID and IV.GroupID=PV.GroupID
+   
+  Update PV Set PV.SampleID=PISM.Barcode,PV.[Type of Sample]=ISM.SampleDesc
+  from #PatientVisit PV
+  Inner Join PatientInvSampleMapping PISM WITH(NOLOCK) ON PISM.AccessionNumber=PV.AccessionNumber
+  Inner Join InvSampleMaster ISM WITH(NOLOCK) ON ISM.SampleCode=PISM.SampleID and ISM.OrgID=@pOrgID
+
+  Select PatientID,PatientNumber,PatientName,VisitNumber,Age,Gender,VisitDate,DOB,Isnull(Address,'') as Address,Isnull(PassportNumber,'') AS PassportNumber
+  ,Isnull(AadharNumber,'') AS AadharNumber,Isnull(City,'') AS City,Isnull(State,'') State,Isnull(Country,'')Country ,
+Isnull(SRFID,'') SRFID	,Isnull(SampleID,'') SampleID,Isnull([Type of Sample],'') [Type of Sample],isnull([Date and Time of Sample Tested *],'') [Date and Time of Sample Tested *]
+,Isnull([Testing Kit Used *],'') [Testing Kit Used *],Isnull([E Gene/N Gene (ABI Kits only)/TrueNAT],'') [E Gene/N Gene (ABI Kits only)/TrueNAT]
+,Isnull([ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)],'') [ORF1a/ORF1b/N/N2 Gene(For Seegene & Cepheid)],Isnull([RdRp/S Gene],'') [RdRp/S Gene]
+,Isnull([Final Result of SARS-CoV2(COVID19) for this Sample ],'') [Final Result of SARS-CoV2(COVID19) for this Sample ]
+	from #PatientVisit
+
+
+Drop Table #PatientVisit
+DROP Table #PatientDetails
+
+END

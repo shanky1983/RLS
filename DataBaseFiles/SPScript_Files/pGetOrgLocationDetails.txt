@@ -1,0 +1,27 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+CREATE PROCEDURE [dbo].[pGetOrgLocationDetails] @pOrgID      int,
+                                        @pLocID      bigint,
+                                        @ContextInfo [UDT_CONTEXT] READONLY
+as
+  begin
+      IF( @pOrgID = '0' )
+        SET @pOrgID=NULL
+
+      SELECT distinct org.NAME           as Fromorgname,
+                      org.OrgID as Fromorgid,
+                      OA.AddressID       as Fromorgaddressid,
+                      OA.Location        as Fromlocationname
+      FROM   Organization org WITH(NOLOCK)
+             inner join OrganizationAddress OA WITH(NOLOCK)
+                     on org.OrgID = oa.OrgID
+              --INNER JOIN LoginLocationMapping LLM WITH(NOLOCK)
+             --        ON OA.OrganizationID = LLM.OrgID
+             --           AND OA.AddressID = LLM.AddressID
+      WHERE  OA.OrgID = isnull(@pOrgID,OA.OrgID)
+             AND OA.status = 'A'
+      ORDER  BY Location
+  end 
+

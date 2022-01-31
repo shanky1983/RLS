@@ -1,0 +1,18 @@
+CREATE PROCEDURE [dbo].[pGetHCTRFfileName] 
+(
+    @pBookingID   BIGINT
+   ,@ContextInfo  [UDT_CONTEXT] READONLY 
+)
+AS  
+BEGIN
+    --pGetHCTRFfileName_LIMSAPI 51, 202
+    DECLARE @pOrgID INT
+	
+	SELECT @pOrgID = OrgID 
+	FROM @ContextInfo
+
+    SELECT BookingID as TemplateID, FilePath + [FileName] AS IsTemplateText, [FileName] as Descrip
+	       FROM TRFfilemanager_hc (Nolock)
+		   WHERE BookingID = @pBookingID AND OrgID = @pOrgID 
+END
+

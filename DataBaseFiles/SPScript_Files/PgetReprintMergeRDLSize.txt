@@ -1,0 +1,12 @@
+
+CREATE Procedure PgetReprintMergeRDLSize                    
+(            
+@OrgID int,                                        
+@ContextInfo [dbo].[UDT_Context] READONLY                               
+)                              
+As                              
+Begin                      
+		   
+		   select MoveX,MoveY,LineX,LineY,FontSize from ReprintMergeRDLSize where Orgid=@OrgID        
+                   
+End 

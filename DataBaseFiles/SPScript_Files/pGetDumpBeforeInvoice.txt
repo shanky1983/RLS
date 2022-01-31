@@ -1,0 +1,298 @@
+CREATE proc [dbo].[pGetDumpBeforeInvoice]
+(
+	@Fromdate DATETIME
+	,@Todate DATETIME,
+@Orgid int,
+@Pparamtype nvarchar(20) = null,
+@pValue smallint = null,@ContextInfo [UDT_Context] READONLY
+)
+as
+Begin
+Set nocount on
+
+
+
+Create table #TempDumpInvoice
+
+(
+VisitID bigint,
+OrgID bigint,
+Visitnumber Nvarchar(50),
+PatientName Nvarchar (200),
+RegistrationDate Nvarchar(100),
+TestCode Nvarchar(30),
+TestName 	Nvarchar(100),
+GeneralPrice decimal(18,2),
+Amounttobill decimal(18,2),
+Status Nvarchar(30),
+ClientName Nvarchar(100),
+ReferringDoctor Nvarchar(100),
+ReferringHospital nvarchar(100),
+ProcessingLocation Nvarchar(100),
+SampleCollectedLocation Nvarchar(100),
+Type Nvarchar(50),
+ID bigint,
+FinalbillID bigint,
+InvoiceNumber Nvarchar(50)  ,
+BillofSupplyNo Nvarchar(30),
+ClientCode Nvarchar(40)   ,
+ResCaptureLocID int  ,
+AccessionNumber bigint,    
+ReferredAccessionNumber bigint  ,  
+RegisterLocation Nvarchar(100),  
+   
+SID bigint  ,
+LabShareAmount Decimal(18,2),
+FranchiseShareAmount Decimal(18,2),
+InvoiceDate Nvarchar(100),
+CancellationDate Nvarchar(100),
+CreditNoteNumber Nvarchar(200)
+)
+
+Insert Into  #TempDumpInvoice (VisitID,OrgID,Visitnumber ,PatientName ,RegistrationDate ,TestCode ,TestName,Status ,ClientName  ,ReferringHospital,
+ProcessingLocation,SampleCollectedLocation,Type,ID,Amounttobill,FinalbillID,ClientCode,ResCaptureLocID,AccessionNumber,ReferredAccessionNumber,SID,RegisterLocation,
+InvoiceDate,CancellationDate,CreditNoteNumber)                          
+select PV.PatientVisitID,PV.OrgID,Pv.visitnumber,P.Name,Convert(Nvarchar(100),Pv.Createdat,103) + ' ' + Convert(Nvarchar(100),Pv.Createdat,108),IOM.TestCode ,    
+OI.Name,OI.Status,CM.ClientName,PV.HospitalName,OA.Location,OA1.Location,'INV',OI.ID,BD.Amount ,FB.finalBillID , CM.ClientCode ,OI.ResCaptureLoc  ,OI.AccessionNumber,OI.ReferredAccessionNo ,PISM.SID,OA2.Location,
+Convert(Nvarchar(100),TMPINV.InvoiceDate,103) + ' ' + Convert(Nvarchar(100),TMPINV.InvoiceDate,108),
+Convert(Nvarchar(100),TMPCRE.CancelledDate,103) + ' ' + Convert(Nvarchar(100),TMPCRE.CancelledDate,108),TMPCRE.CreditNote
+from Patientvisit PV    
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID    
+Inner Join ORderedInvestigations OI on OI.visitID=PV.PatientvisitID and OI.OrgID=PV.OrgID and OI.Type='INV'          
+left join PatientInvSampleMapping PISM on OI.VisitID=PISM.VisitID and  PISM.ID=OI.ID and PISM.Type=OI.Type and PISM.OrgID=OI.OrgID  
+left Join PatientINvSample MPIV on  MPIV.Patientvisitid=OI.VisitID and MPIV.OrGId=OI.OrGID          and MPIV.SampleID=PISM.SID      
+left Join OrganizationAddress OA1 on OA1.AddressID=MPIV.CollectedLocID and OA1.OrgID=PV.ORgID          
+Inner Join InvestigationOrgMapping IOM on IOM.InvestigationID=OI.ID and IOM.OrgID=OI.OrgID                          
+Inner Join VisitClientMapping VCM on  VCM.VisitID=Pv.PAtientvisitID and VCM.OrgID=PV.OrgID                  
+Inner Join Finalbill FB on FB.FinalbillID=VCM.FinalbillID and FB.OrgID=VCM.OrgID                
+Inner join billingDetails BD on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID and OI.ID=BD.FEEID and OI.Type=BD.FeeType                
+Inner Join OrganizationAddress OA2 on OA2.AddressID=PV.OrgAddressID and OA2.OrgID=PV.OrgID                        
+Inner Join Clientmaster CM On CM.ClientID=VCM.ClientID and CM.OrgID=VCM.ORgID      and ISCAsh='N'          
+left Join OrganizationAddress OA on OA.AddressID=OI.RescaptureLoc and OA.OrgID=OI.OrgID                
+OUTER APPLY(
+SELECT IV.Createdat AS InvoiceDate
+FROM InvoiceDetails ID 
+INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = ID.ClientId AND IV.Orgid = BD.Orgid 
+WHERE ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+)TMPINV
+OUTER APPLY(
+SELECT ARD.Createdat AS CancelledDate,ARD.CreditNote AS CreditNote
+FROM amountrefunddetails ARD 	
+WHERE ARD.Finalbillid =BD.Finalbillid AND ARD.BillingDetailsid=BD.BillingDetailsid AND ARD.Orgid =BD.Orgid
+)TMPCRE
+where FB.Createdat between @Fromdate+' 00:00:00'  and @Todate+' 23:59:59' and  ISNull(VCM.IsActive,'Y')='Y' and PV.OrgID=@OrgId                Union                          
+select PV.PatientVisitID,PV.OrgID,Pv.visitnumber,P.Name,Convert(Nvarchar(100),Pv.Createdat,103) + ' ' + Convert(Nvarchar(100),Pv.Createdat,108),IOM.TestCode ,                          
+OI.Name,OI.Status,CM.ClientName,PV.HospitalName,OA.Location,OA1.Location,'GRP',IOM.OrgGroupID,BD.Amount,FB.FinalbillID   , CM.ClientCode  ,OI.ResCaptureLoc ,OI.AccessionNumber,OI.ReferredAccessionNo,PISM.SID,OA2.Location,
+Convert(Nvarchar(100),TMPINV.InvoiceDate,103) + ' ' + Convert(Nvarchar(100),TMPINV.InvoiceDate,108),
+Convert(Nvarchar(100),TMPCRE.CancelledDate,103) + ' ' + Convert(Nvarchar(100),TMPCRE.CancelledDate,108),TMPCRE.CreditNote
+from Patientvisit PV                          
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID                          
+Inner Join ORderedInvestigations OI on OI.visitID=PV.PatientvisitID and OI.OrgID=PV.OrgID and OI.Type='GRP'   --and OI.Status <>'Dumpdata'            
+           
+left join PatientInvSampleMapping PISM on OI.VisitID=PISM.VisitID and  PISM.ID=OI.ID and PISM.Type=OI.Type and PISM.OrgID=OI.OrgID            
+left Join PatientINvSample MPIV on  MPIV.Patientvisitid=OI.VisitID and MPIV.OrGId=OI.OrGID     and MPIV.SampleID=PISM.SID  
+Inner Join OrganizationAddress OA2 on OA2.AddressID=PV.OrgAddressID and OA2.OrgID=PV.OrgID  
+left Join OrganizationAddress OA1 on OA1.AddressID=MPIV.CollectedLocID and OA1.OrgID=PV.ORgID                          
+Inner Join InvOrgGroup IOM on IOM.AttGroupID=OI.ID and IOM.OrgID=OI.OrgID                          
+Inner Join VisitClientMapping VCM on  VCM.VisitID=Pv.PAtientvisitID and VCM.OrgID=PV.OrgID                            
+Inner Join Finalbill FB on FB.FinalbillID=VCM.FinalbillID and FB.OrgID=VCM.OrgID                          
+Inner join billingDetails BD on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID and OI.ID=BD.FEEID and OI.Type=BD.FeeType                          
+Inner Join Clientmaster CM On CM.ClientID=VCM.ClientID and CM.OrgID=VCM.ORgID     and ISCash='N'                    
+left Join OrganizationAddress OA on OA.AddressID=OI.RescaptureLoc and OA.OrgID=OI.OrgID           
+OUTER APPLY(
+SELECT IV.Createdat AS InvoiceDate
+FROM InvoiceDetails ID 
+INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = ID.ClientId AND IV.Orgid = BD.Orgid 
+WHERE ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+)TMPINV
+OUTER APPLY(
+SELECT ARD.Createdat AS CancelledDate,ARD.CreditNote AS CreditNote
+FROM amountrefunddetails ARD 	
+WHERE ARD.Finalbillid =BD.Finalbillid AND ARD.BillingDetailsid=BD.BillingDetailsid AND ARD.Orgid =BD.Orgid
+)TMPCRE               
+where FB.Createdat between @Fromdate+' 00:00:00'  and @Todate+' 23:59:59' and  ISNull(VCM.IsActive,'Y')='Y' and PV.OrgID=@OrgId                        
+Union                        
+select PV.PatientVisitID,PV.OrgID,Pv.visitnumber,P.Name,Convert(Nvarchar(100),Pv.Createdat,103) + ' ' + Convert(Nvarchar(100),Pv.Createdat,108),IOM.TestCode ,                        
+BD.FeeDescription,(SELECT Status FROM InvestigationStatus (NOLOCK) WHERE Sequence=MAX(OT.Sequence)),CM.ClientName,PV.HospitalName,OA.Location,OA1.Location,                      
+'PKG',IOM.OrgGroupID,BD.Amount,FB.FinalbillID  , CM.ClientCode  ,OI.ResCaptureLoc      ,OI.AccessionNumber,OI.ReferredAccessionNo  ,PISM.SID,OA2.Location,
+Convert(Nvarchar(100),TMPINV.InvoiceDate,103) + ' ' + Convert(Nvarchar(100),TMPINV.InvoiceDate,108),
+Convert(Nvarchar(100),TMPCRE.CancelledDate,103) + ' ' + Convert(Nvarchar(100),TMPCRE.CancelledDate,108),TMPCRE.CreditNote            
+from Patientvisit PV                        
+Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID                        
+Inner Join ORderedInvestigations OI on OI.visitID=PV.PatientvisitID and OI.OrgID=PV.OrgID and ISNULL(OI.PKGID,0)!=0 and OI.Status != 'ReflexTest'            
+           
+left join PatientInvSampleMapping PISM on OI.VisitID=PISM.VisitID and  PISM.ID=OI.ID and PISM.Type=OI.Type and PISM.OrgID=OI.OrgID            
+left Join PatientINvSample MPIV on MPIV.PatientvisitID=OI.VisitID and MPIV.OrgID=OI.OrgID         and MPIV.SampleID=PISM.SID        
+Inner Join OrganizationAddress OA2 on OA2.AddressID=PV.OrgAddressID and OA2.OrgID=PV.OrgID  
+left Join OrganizationAddress OA1 on OA1.AddressID=MPIV.CollectedLocID and OA1.OrgID=PV.ORgID                        
+ INNER JOIN InvestigationStatus OT (NOLOCK) ON OT.Status = OI.Status                        
+Inner Join VisitClientMapping VCM on  VCM.VisitID=Pv.PAtientvisitID and VCM.OrgID=PV.OrgID                          
+Inner Join Finalbill FB on FB.FinalbillID=VCM.FinalbillID and FB.OrgID=VCM.OrgID                  
+Inner join billingDetails BD on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID and BD.FeeID=OI.PkgID  and BD.FeeType='PKG'                      
+Inner Join InvOrgGroup IOM on IOM.AttGroupID=BD.FEEID and IOM.OrgID=BD.OrgID                      
+Inner Join InvPackageMapping IPM on IPM.PackageID=IOM.OrgGroupID                
+Inner Join Clientmaster CM On CM.ClientID=VCM.ClientID and CM.OrgID=VCM.ORgID    and ISCash='N'                    
+left Join OrganizationAddress OA on OA.AddressID=OI.RescaptureLoc and OA.OrgID=OI.OrgID              
+OUTER APPLY(
+SELECT IV.Createdat AS InvoiceDate
+FROM InvoiceDetails ID 
+INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = ID.ClientId AND IV.Orgid = BD.Orgid 
+WHERE ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+)TMPINV
+OUTER APPLY(
+SELECT ARD.Createdat AS CancelledDate,ARD.CreditNote AS CreditNote
+FROM amountrefunddetails ARD 	
+WHERE ARD.Finalbillid =BD.Finalbillid AND ARD.BillingDetailsid=BD.BillingDetailsid AND ARD.Orgid =BD.Orgid
+)TMPCRE          
+where FB.Createdat between @Fromdate+' 00:00:00'  and @Todate+' 23:59:59' and  ISNull(VCM.IsActive,'Y')='Y' and PV.OrgID=@OrgId                          
+Group by PV.PAtientvisitID,PV.OrgID,Pv.visitnumber,P.Name,PV.Createdat,IOM.TestCode,BD.FeeDescription,CM.ClientNAme,PV.HospitalNAme,                        
+OA.Location,OA1.Location,IOM.OrgGroupID,BD.Amount,FB.FinalBillID  ,CM.ClientCode  ,OI.ResCaptureLoc      ,OI.AccessionNumber,OI.ReferredAccessionNo  
+,PISM.SID,OA2.Location,TMPINV.InvoiceDate,TMPCRE.CancelledDate,TMPCRE.CreditNote
+                       
+                       
+                             
+    -- Processing Location ---                  
+                 
+Update temp set  temp.ProcessingLocation=OA.Location                    
+from #TempDumpInvoice temp                    
+Inner Join OrganizationAddress OA on OA.AddressID= temp.ResCaptureLocID            
+where temp.ProcessingLocation is null   and Type<>'PKG'          
+     
+     
+Update temp set  temp.Status =  temp2.Status                    
+from #TempDumpInvoice temp          
+Inner Join #TempDumpInvoice temp2 on temp.TestCode=temp2.TestCode      
+where temp.ProcessingLocation is null   and temp.Type='PKG'        
+and temp2.ProcessingLocation is not null      
+     
+  select Max(OT.Sequence) as Sequence,temp.TestCode,temp.VisitID into #Temp from   #TempDumpInvoice temp                
+Inner Join #TempDumpInvoice temp2 on temp.TestCode=temp2.TestCode  and temp.visitID= temp2.visitID  
+Inner Join InvestigationStatus OT on OT.Status=Temp2.Status
+where    temp.Type='PKG'  Group by temp.TestCode,temp.VisitID
+
+  Update temp set  temp.Status =  OT.Status                          
+from #TempDumpInvoice temp                
+Inner Join #Temp temp2 on temp.TestCode=temp2.TestCode  and temp.visitID= temp2.visitID  
+Inner Join InvestigationStatus OT on OT.Sequence=temp2.Sequence
+where   temp.Type='PKG'    
+--Update temp set  temp.ProcessingLocation=temp.SampleCollectedLocation                        
+--from #TempDumpInvoice temp                        
+--Inner Join OrganizationAddress OA on OA.AddressID= temp.ResCaptureLocID                
+--where temp.ProcessingLocation is null   and Type='PKG'      
+
+Update temp set  temp.ProcessingLocation=temp.RegisterLocation                  
+from #TempDumpInvoice temp                    
+         where   Type='PKG'    
+                 
+ -- Processing Location ---      
+   
+ --- Sample Collected Location -----------------  
+ Update temp set  temp.SampleCollectedLocation=temp.RegisterLocation                  
+from #TempDumpInvoice temp                    
+         where   Type='PKG'    
+ -- Sample Collected Location ------------------------  
+ ----Retest status update -----------    
+   
+ Update temp set  temp.status= case when temp.status!='Cancel' then temp2.status    else temp.Status END              
+from #TempDumpInvoice temp                
+Inner Join #TempDumpInvoice temp2 on temp.AccessionNumber= temp2.ReferredAccessionNumber    
+ where ISNULL(temp2.ReferredAccessionNumber,0) <> 0   
+   
+ Declare @DupRetestRemove table (TestCode nvarchar(50),AccessionNumber bigint,ReferredAccessionNumber bigint,status nvarchar(50))  
+insert into @DupRetestRemove  
+select TestCode,AccessionNumber,ReferredAccessionNumber,status from #TempDumpInvoice where ISNULL(ReferredAccessionNumber,0) <> 0   
+  
+--Update temp set  temp.status=temp2.status  
+   
+--from #TempDumpInvoice temp                     
+--Inner Join @DupRetestRemove temp2 on temp.AccessionNumber= temp2.ReferredAccessionNumber        
+delete temp from #TempDumpInvoice temp                     
+Inner Join @DupRetestRemove temp2 on temp.AccessionNumber= temp2.ReferredAccessionNumber          and temp.Status !='Cancel'  
+   
+Update temp set temp.SampleCollectedLocation =OA.Location
+from #TempDumpInvoice temp Inner Join OrderedInvestigations OI on OI.AccessionNumber=temp.AccessionNumber and OI.Status!='Retest'
+Inner join PatientInvSample PIV on PIV.PatientVisitID=OI.visitID and PIV.OrGId=OI.OrGID and PIV.UID=OI.UID
+Inner Join OrganizationAddress OA on OA.AddressID=PIV.CollectedLocID
+where ISNULL(temp.ReferredAccessionNumber,0) <> 0
+   
+ ---- Retest status update --------------    
+ 
+ --- delete dup sid while retest -------------  
+ 
+ Declare @DuplSID as table  
+ 
+ (  
+ SID Bigint,  
+ Testcode Nvarchar(40),  
+ VisitID bigint  
+ )  
+ 
+Declare @MinSID table ( SID Bigint,    
+ Testcode Nvarchar(40),    
+ VisitID bigint  )
+ Insert into @MinSID
+ select Distinct SID, Testcode,VisitID from #TempDumpInvoice
+
+ Insert into @DuplSID    
+     
+  select  Min(SID),testcode,visitid  from @MinSID  Group by testcode,VISITID having Count(VISITID) > 1    
+   
+delete temp from #TempDumpInvoice temp      
+Inner Join  @DuplSID tempdup on temp.SID=tempdup.SID and temp.testcode=tempdup.testcode and temp.visitid=tempdup.visitID    
+   
+   
+ ------- delete dup sid while retest --------------    
+   
+ --- Referring Doctor ------                
+               
+Update temp set  temp.ReferringDoctor= ISNULL(PV.ReferingPhysicianName,RF.PhysicianName)                
+from #TempDumpInvoice temp                
+Inner Join Patientvisit PV on PV.PatientvisitID = temp.VisitID and PV.OrgID=temp.OrgID            
+Inner Join ReferingPhysician RF on PV.ReferingPhysicianID=RF.ReferingPhysicianID and PV.OrgID=RF.OrgID                
+               
+Update temp set  temp.ReferringDoctor=  case                
+when ISNULL(temp.ReferringHospital,'') <> '' and ISNULL(temp.ReferringDoctor,'') <> '' then temp.ReferringDoctor + ' / ' + temp.ReferringHospital                
+when ISNULL(temp.ReferringHospital,'') <> '' and ISNULL(temp.ReferringDoctor,'') = '' then  temp.ReferringHospital                
+when ISNULL(temp.ReferringDoctor,'') <> '' and ISNULL(temp.ReferringHospital,'') = '' then  temp.ReferringDoctor                
+else ''                
+END                
+from #TempDumpInvoice temp                
+               
+--- Referring Doctor ------                
+               
+------------ General Price-- Start ----------                
+Update temp set temp.GeneralPrice= IRM.Rate from #TempDumpInvoice temp                
+Inner Join Ratemaster RM on RM.RateName='General' and RM.OrgID=@OrgID                
+Inner Join InvRateMaster IRM on  IRM.ID=temp.ID and IRM.Type=temp.Type and IRM.RateID=RM.RateID                
+where IRM.ISActive='Y'                
+           
+------------ General Price -- END----------                
+               
+---------- Invoice No -- Start----------------                
+               
+Update temp set temp.InvoiceNumber= I.InvoiceNumber,temp.BillofSupplyNo=I.BillSupplyNumber from #TempDumpInvoice temp                
+Inner Join InvoiceDetails ID on ID.FinalbillID=temp.FinalbillID                
+Inner Join Invoice I on  I.InvoiceID=ID.InvoiceID and I.OrgID=@Orgid                
+               
+----------Invoice No -- END ------------------                
+               
+			   Update temp set temp.LabShareAmount= IRM.LabShareAmount,temp.FranchiseShareAmount=IRM.FranchiseeShareAmount from #TempDumpInvoice temp                
+Inner Join Ratemaster RM on RM.RateName <> 'General' and RM.OrgID=@OrgID                
+Inner Join InvRateMaster IRM on  IRM.ID=temp.ID and IRM.Type=temp.Type and IRM.RateID=RM.RateID                
+where IRM.ISActive='Y'     
+               
+-------------------------------------                
+               
+               
+               
+select distinct Visitnumber 'Accession No./Visit Number',PatientName 'Name of the Patient',RegistrationDate 'Date of Accession' ,TestCode 'Test Code',TestName 'Test Name'                
+,GeneralPrice 'General Price' ,Amounttobill 'Amount  to Bill',Status 'Accepted/Rejected',ClientName 'Client /Collection Centre Name',                
+ReferringDoctor 'Referring Doctor/Hospital/Company',ProcessingLocation 'Test Performed Location' ,SampleCollectedLocation 'Sample Collected Location',ClientCode as 'ClientCode',
+BillofSupplyNo as 'Bill of Supply Number',ISNULL(InvoiceNumber,'') as 'AttuneInv No.',
+CASE WHEN ISNULL(CreditNoteNumber,'') <> '' THEN InvoiceDate ELSE '' END AS 'Invoice Date',CASE WHEN ISNULL(CreditNoteNumber,'') <> '' THEN CancellationDate ELSE '' END AS 'Cancellation Date',CASE WHEN ISNULL(CreditNoteNumber,'') <> '' THEN CreditNoteNumber ELSE '' END AS 'Cr. Note Number',
+FranchiseShareAmount as 'Franchisee Lab Share' ,LabShareAmount as 'RLS Share' from #TempDumpInvoice        
+       
+
+Drop table #TempDumpInvoice        
+       
+END

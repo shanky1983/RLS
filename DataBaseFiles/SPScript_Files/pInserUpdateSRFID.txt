@@ -1,0 +1,203 @@
+CREATE PROCEDURE [dbo].[pInserUpdateSRFID] (@BulkUploadData [TT_UDTCampDetail] Readonly,
+                                                      @ContextInfo        [UDT_Context] READONLY,
+													  @Flag	 NVARCHAR(20))
+--WITH EXECUTE AS OWNER                                                                                            
+AS
+  BEGIN
+      Set nocount on
+
+	  Declare @LoginID BIGINT,@Orgid INT    
+      Declare @LoginName NVARCHAR(100)    
+	  DECLARE @DateNow DATETIME =dbo.Fn_getserverdate(@ContextInfo)    
+	select @LoginID = LoginID    
+	from   @ContextInfo    
+                        
+	select @LoginName = LoginName
+	from   Login    
+	where  loginID = @LoginID   
+
+	SET @Orgid = (SELECT OrgID FROM @ContextInfo)
+
+	  Declare @VisitDetail as table    
+       (                        
+           ID                     [int] NULL,                     
+           Orgid                  [int] NULL,                        
+           SlNo                   [int] NULL,                        
+           NAME                   [NVARCHAR](1000) NULL,                        
+		   AGE                    [NVARCHAR](50) NULL, 
+		   AGEtype                    [NVARCHAR](50) NULL,                                   
+           SEX                    [NVARCHAR](20) NULL,                                    
+           MobileNo               [NVARCHAR](40) NULL,                        
+		   MRNNumber              NVARCHAR(100) NULL,               --EmployeeID
+		   VisitNumber            NVARCHAR(100) NULL,               --PatientNumber
+		   VisitDate              [datetime] NULL,                  --PDate                                 
+		   Flag                   NVARCHAR(10) NULL,				--SourceType
+		   SRFID                  NVARCHAR(100) NULL,               ---HealthHubID 
+		   ErrorDesc              [NVARCHAR](4000) NULL, 
+		   ErrorStatus            [bit] NOT NULL        
+      )
+	  Declare @VisitDetail1 as table    
+       (                                                   
+           NAME                   [NVARCHAR](1000) NULL,                        		           
+		   VisitNumber            NVARCHAR(100) NULL,               --PatientNumber		 
+		   SRFID                  NVARCHAR(100) NULL               ---HealthHubID 		  
+      )
+
+	  INSERT INTO @VisitDetail
+	  (
+	  ID,         
+	  Orgid,      
+	  SlNo,       
+	  NAME,       
+	  AGE, 
+	  AGEtype,       
+	  SEX,        
+	  MobileNo,   
+	  MRNNumber,  
+	  VisitNumber,
+	  VisitDate,  
+	  Flag,       
+	  SRFID,
+	  ErrorStatus,
+	  ErrorDesc      
+	  )
+	  select dense_RANK()                        
+		  over (                        
+		  order by Orgid, SlNo, Name) as ID,
+		  @Orgid,
+		  SlNo,
+		  Name,
+		  Age,
+		  AGEtype,
+		  Sex,
+		  MobileNo,
+		  EmployeeID,
+		  PatientNumber,
+		  PDate,
+		  SourceType,
+		  HealthHubID,
+		  0,
+		  ''
+		FROM @BulkUploadData
+
+		UPDATE TMP SET TMP.ErrorStatus = 1, TMP.ErrorDesc='SRF ID Not Available' FROM @VisitDetail TMP INNER JOIN Patientvisit PV ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+			WHERE TMP.Flag ='N'
+	---if srfid(y/n) flag is not avail
+		UPDATE TMP SET TMP.ErrorStatus = 1, TMP.ErrorDesc='SRF ID Flag Not Available' FROM @VisitDetail TMP INNER JOIN Patientvisit PV ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+			WHERE ISNULL(TMP.Flag,'') =''
+		
+		UPDATE TMP SET TMP.ErrorStatus = 1, TMP.ErrorDesc='VisitNumber Not Available' FROM @VisitDetail TMP WHERE TMP.VisitNumber Not In (SELECT VisitNumber FROM Patientvisit WHERE Orgid = @Orgid)
+
+		UPDATE TMP SET TMP.ErrorStatus = 1, TMP.ErrorDesc='Same SRF ID already exists for Same visit' FROM @VisitDetail TMP INNER JOIN Patientvisit PV ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+		WHERE TMP.Flag ='Y' AND PV.VisitNumber = TMP.VisitNumber AND PV.SRFId= TMP.SRFID
+
+		IF EXISTS (SELECT  1 FROM Patientvisit PV INNER JOIN @VisitDetail TMP ON PV.SRFId = TMP.SRFId AND PV.Orgid = TMP.Orgid 
+		WHERE TMP.Flag ='Y' AND PV.VisitNumber <> TMP.VisitNumber )
+		BEGIN		
+			UPDATE TMP SET TMP.ErrorStatus = 1, TMP.ErrorDesc='Same SRF ID already exists for different visit' FROM @VisitDetail TMP INNER JOIN Patientvisit PV ON PV.SRFId = TMP.SRFId AND PV.Orgid = TMP.Orgid 
+			WHERE TMP.Flag ='Y' AND PV.VisitNumber <> TMP.VisitNumber-- AND PV.SRFId = TMP.SRFID	
+		END
+		
+		IF ISNULL(@Flag,'') ='Update'
+		BEGIN
+			INSERT INTO @VisitDetail1(Name,VisitNumber,SRFID)
+			select Name,TMP.VisitNumber,TMP.SRFID FROM Patientvisit PV INNER JOIN @VisitDetail TMP ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+
+			WHERE TMP.Flag ='Y' AND PV.VisitNumber = TMP.VisitNumber AND ISNULL(PV.SRFId,'') <> TMP.SRFID and ISNULL(TMP.SRFID,'') <>''
+			UPDATE PV SET PV.SRFID =TMP.SRFID,PV.ModifiedBy =@LoginID,PV.ModifiedAt=@DateNow FROM Patientvisit PV INNER JOIN @VisitDetail TMP ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+			WHERE TMP.Flag ='Y' AND PV.VisitNumber = TMP.VisitNumber AND ISNULL(PV.SRFId,'') <> TMP.SRFID and ISNULL(TMP.SRFID,'') <>''
+
+			----update srf id to child org also
+			Update PV1 SET PV1.SRFID =PV.SRFID,PV1.ModifiedBy =@LoginID,PV1.ModifiedAt=@DateNow 
+			FROM Patientvisit PV1 INNER JOIN Patientvisit PV ON PV1.ReferVisitID = PV.patientvisitID 
+			INNER JOIN @VisitDetail TMP ON PV.Visitnumber = TMP.VisitNumber AND PV.Orgid = TMP.Orgid 
+			WHERE TMP.Flag ='Y' AND PV.VisitNumber = TMP.VisitNumber AND ISNULL(TMP.SRFID,'') <>''
+			---
+		END
+
+		IF ISNULL(@Flag,'') ='Validate'
+		BEGIN
+			Select distinct Id,                        
+			''OrgName,                        
+			SlNo,                        
+			isnull(Cast(VisitDate as NVARCHAR(30)), '') PDate,                        
+			isnull(Cast(VisitDate as NVARCHAR(30)), '') SDate,                        
+			''SCollectedBy,                        
+			''PatId,                        
+			''Title,                        
+			Name,                        
+			isnull(Cast(VisitDate as NVARCHAR(30)), '') DOB,                        		                        
+			Age,                        
+			AgeType,                        
+			Sex,                        
+			''Location,                        
+			''Doctor,                        
+			''RefHospital,                        
+			''Priority,                        
+			''DispatchMode,                        		
+			CAST(0 AS DECIMAL(19,2)) AmountPaid,                        
+			CAST(0 AS DECIMAL(19,2)) AmountDiscount,                        
+			'' DiscountReason,                        
+			''DiscountAuthorisedBy,                        
+			''History,                        
+			''Remarks,                        
+			MobileNo,                        
+			'' CreatedBy,                        
+			'' ClientCode,                        
+			'' EmailId,                        
+			VisitNumber PatientNumber,          
+			ErrorStatus,                        		
+			CAST(0 AS bigint) ClientID,                        
+			CAST(0 AS bigint) LocationID,                        
+			CAST(0 AS bigint) TitleID,                        
+			CAST(0 AS bigint) DoctorID,                        
+			CAST(0 AS bigint) RefHospitalID,                        		
+			CAST(0 AS bigint) SCollectedByID,                        
+			CAST(0 AS int) PriorityID,                        
+			'N' IsClientPatient,                        
+			CAST(0 AS bigint) CreatedbyId,                        		                       
+			CAST(0 AS DECIMAL(18,2)) DueAmount,                        
+			CAST(0 AS int) OrgId,                        
+			CAST(0 AS bigint) DiscountAuthorisedByID,                        
+			'' HasHealthCoupon,                        
+			'' MyCardActiveDays,                        
+			'' IsCreditBill,                        
+			CAST(0 AS DECIMAL(18,2)) GrossAmount,                        
+			CAST(0 AS DECIMAL(18,2))   NetAmount, 
+			Flag SourceType,                         
+			SRFID HealthHubID,                         
+			MRNNumber EmployeeID,                  
+			'' BookingID, -- IsNull(BookingID,'') as BookingID,                  
+			''ExternalRefNo, --IsNull(ExternalRefNo,'') as ExternalRefNo,                  
+			'' SampleNumber  --, IsNull(SampleNumber,'') as SampleNumber                        
+			from   @VisitDetail cd                        
+                               
+                        
+		  select Id,                        
+				 '' as TestRequested,                        
+				 CAST(0 AS DECIMAL(19,2)) Charged,                        
+				 -- ErrorStatus,                        
+				 ISNULL(ErrorDesc,'') AS ErrorDesc,                        
+				 ''       as TestCode,                        
+				 CAST(0 AS bigint) RateId,                        
+				 ''       as TestType,                        
+				 ''          as FeeId,                        
+				 CAST(0 AS int) CampId,                        
+				 '' IsDiscountable                        
+		  from   @VisitDetail  
+		END
+		ELSE
+		BEGIN
+			SELECT TMP.VisitNumber,         
+			TMP.VisitNumber PatientNumber,                  
+			Name,                  
+			TMP.SRFID BillNumber,                  
+			''Location,                  
+			'' AS TestDetails                  
+			FROM @VisitDetail1 TMP
+
+		END
+  END
+
+
+

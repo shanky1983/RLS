@@ -1,0 +1,790 @@
+--drop proc pValidateBulkBookingDetails_test
+--select top 100  * from bookings order by 1 desc 
+--select top 100  * from PreOrderedInvestigations order by 1 desc  
+--declare @p1 dbo.TT_UDTBookingDetail
+--insert into @p1 values(1,N'Attune Demo',N'Collection Center','2021-05-02 14:04:00',N'P2100012',N'7',N'TEST LINE','',N'34',N'Year(s)',N'M',N'700001',N'Kolkata G P O',N'No 68798','2021-03-05 03:00:00',
+--N'Admin938103',N'BHA006,BHS019',100,N'GENERAL',N'9898989898',N'testclient@t.com',N'',NULL,N'null')
+
+--declare @p2 dbo.UDT_Context
+--insert into @p2 values(202,N'Attune Demo',N'',528,8184,N'Scheduler',0,171814,NULL,N'',528,0,N'',NULL,NULL,1,75,35,N'en-GB',0,NULL,NULL,NULL,NULL)
+
+--exec pValidateBulkBookingDetails @BulkBook=@p1,@ContextInfo=@p2
+--go
+--drop proc pValidateBulkBookingDetails
+
+CREATE PROCEDURE [dbo].[pValidateBulkBookingDetails] 
+(
+ @BulkBook    dbo.[TT_UDTBookingDetail] Readonly,
+ @ContextInfo dbo.[UDT_CONTEXT] readonly
+ )
+As
+  BEGIN
+      DECLARE @TotalSlNo BIGINT
+      DECLARE @LoginID BIGINT
+      DECLARE @LoginName NVARCHAR(100)
+	  DECLARE @DateNow DATETIME =dbo.Fn_getserverdate(@ContextInfo)
+
+     
+
+      SELECT @LoginID = LoginID
+      FROM   @ContextInfo
+
+      SELECT @LoginName = LoginName
+      FROM   LOGIN
+      WHERE  loginID = @LoginID
+
+	    CREATE TABLE #BulkBookingDetail
+        (
+		AutoID					INT IDENTITY(0,1),
+        SlNo					INT,
+        OrgName					VARCHAR(60),
+        OrgLocation				VARCHAR(1000),
+        BookingDate				DATETIME,        
+        PatientNumber			VARCHAR(100),       
+        Salutation				VARCHAR(50),
+        PatientName				VARCHAR(100),
+        DOB						VARCHAR(20),
+        Age						VARCHAR(20),
+        AgeType					VARCHAR(20),
+        Sex						VARCHAR(20),
+		Pincode					VARCHAR(20),
+		Location				VARCHAR(1000),    
+		CollectionAddress		VARCHAR(1000),
+		CollectionDate			VARCHAR(20),
+        Technician				VARCHAR(100),
+		TestCodes				VARCHAR(max) NULL,        
+		Discount				VARCHAR(20),     
+		ClientCode				VARCHAR(100),
+		MobileNo				VARCHAR(100),
+        EmailID					VARCHAR(100),
+        DispatchMode			VARCHAR(100),
+        RefDr				    VARCHAR(100),       
+        Remarks					VARCHAR(MAX)     
+        
+        )
+
+
+						
+
+			INSERT INTO #BulkBookingDetail(SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,RefDr,Remarks)
+			SELECT ROW_NUMBER() OVER (ORDER BY Slno), OrgName, OrgLocation, BookingDate	,		
+								CASE WHEN PatientNumber = '' then '~' else PatientNumber END,
+								Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode, RefDr,Remarks FROM @BulkBook
+
+
+							
+
+
+
+		Create table #CampDetail
+        (
+		ID                     INT IDENTITY(1,1),
+        SlNo					INT,
+        OrgName					VARCHAR(60),
+        OrgLocation				VARCHAR(1000),
+        BookingDate				DATETIME,        
+        PatientNumber			VARCHAR(100),       
+        Salutation				VARCHAR(50),
+        PatientName				VARCHAR(100),
+        DOB						VARCHAR(20),
+        Age						INT,
+        AgeType					VARCHAR(20),
+        Sex						VARCHAR(20),
+		Pincode					BIGINT,
+		Location				VARCHAR(1000),    
+		CollectionAddress		VARCHAR(1000),
+		CollectionDate			VARCHAR(20),
+        Technician				VARCHAR(100),
+		TestCodes				VARCHAR(max) NULL,        
+		Discount				VARCHAR(20),   
+		ClientCode				VARCHAR(100),
+		MobileNo				VARCHAR(100),
+        EmailID					VARCHAR(100),
+        DispatchMode			VARCHAR(100),
+        RefDr				    VARCHAR(100),       
+        Remarks					VARCHAR(MAX), 
+		OrgID					INT,
+		ErrorStatus            [bit] NOT NULL,
+        ErrorDesc              [NVARCHAR](4000) NULL,
+        ClientID               [bigint] NULL,
+        LOCATIONID             [bigint] NULL, 
+		OrgLOCATIONID           [bigint] NULL,         
+        TechnicianID			[bigint] NULL ,        
+        TESTCODE               [NVARCHAR](MAX) NULL,
+		RateId                 [bigint] NULL,
+        TestType               [NVARCHAR](30) NULL,
+        FeeId                  [NVARCHAR](30) NULL,
+		DoctorID				VARCHAR(20)             
+        )
+
+
+		Declare @CampDetail as table
+       (
+		ID                     [int] NULL,
+        SlNo					INT,
+        OrgName					VARCHAR(60),
+        OrgLocation				VARCHAR(1000),
+        BookingDate				DATETIME,        
+        PatientNumber			VARCHAR(100),       
+        Salutation				VARCHAR(50),
+        PatientName				VARCHAR(100),
+        DOB						VARCHAR(20),
+        Age						INT,
+        AgeType					VARCHAR(20),
+        Sex						VARCHAR(20),
+		Pincode					BIGINT,
+		Location				VARCHAR(1000),    
+		CollectionAddress		VARCHAR(1000),
+		CollectionDate			VARCHAR(20),
+        Technician				VARCHAR(100),
+		TestCodes				VARCHAR(max) NULL,        
+		Discount				VARCHAR(20),     
+		ClientCode				VARCHAR(100),
+		MobileNo				VARCHAR(100),
+        EmailID					VARCHAR(100),
+        DispatchMode			VARCHAR(100),
+        RefDr					VARCHAR(100),       
+        Remarks					VARCHAR(MAX), 
+		OrgID					INT,
+		ErrorStatus            [bit]  NOT NULL,
+        ErrorDesc              [NVARCHAR](4000) NULL,
+        ClientID               [bigint] NULL,
+        LOCATIONID             [bigint] NULL,     
+		OrgLOCATIONID           [bigint] NULL,             
+        TechnicianID				[bigint] NULL ,        
+        TESTCODE               [NVARCHAR](MAX) NULL ,
+		RateId                 [bigint] NULL,
+        TestType               [NVARCHAR](30) NULL,
+        FeeId                  [NVARCHAR](30) NULL,        
+        Title                  [NVARCHAR](30) NULL ,
+		PatientStatus          [int] NULL default(0)  ,
+		DoctorID				VARCHAR(20)             
+        )
+
+
+
+INSERT INTO #CampDetail(SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,RefDr,Remarks, TESTCODE, ErrorStatus)
+		SELECT Slno, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes, Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode, RefDr,Remarks, TestCodes, 0 FROM #BulkBookingDetail
+
+
+
+
+
+	Update CD
+      set    CD.Orgid = O.OrgID
+      from   #CampDetail CD (Nolock)
+             INNER JOIN Organization O with(nolock)
+                     on LTRIM(RTRIM(CD.OrgName)) = LTRIM(RTRIM(O.Name))
+             INNER JOIN @ContextInfo CT
+                     on O.OrgID = CT.OrgId
+
+	 UPDATE CD
+      SET    CD.DoctorID = RP.ReferingPhysicianID
+      FROM   #CampDetail CD (Nolock)
+             INNER JOIN ReferingPhysician RP (NOLOCK)
+                     ON LTRIM(RTRIM(RP.PhysicianName)) = LTRIM(RTRIM(CD.RefDr))
+
+	UPDATE CD
+      SET    CD.ClientID = Cm.ClientID             
+      FROM   #CampDetail CD (Nolock)
+             INNER JOIN ClientMaster CM (NOLOCK)
+                     ON LTRIM(RTRIM(CM.ClientCode)) = LTRIM(RTRIM(CD.ClientCode))
+                        AND CM.Orgid = CD.OrgID
+
+	UPDATE CD
+      SET    CD.LOCATIONID = OA.LocationID
+      FROM   #CampDetail CD (Nolock)
+             INNER JOIN Location OA (NOLOCK)
+                     ON LTRIM(RTRIM(OA.LocationName)) = LTRIM(RTRIM(CD.Location))
+                       
+
+
+	UPDATE CD
+      SET    CD.OrgLOCATIONID = OA.AddressID
+      FROM   #CampDetail CD (Nolock)
+             INNER JOIN OrganizationAddress OA (NOLOCK)
+                     ON LTRIM(RTRIM(OA.Location)) = LTRIM(RTRIM(CD.OrgLocation))
+                        AND OA.OrgID = CD.OrgID
+
+
+	UPDATE CD
+      SET    CD.TechnicianID = L.loginID
+      FROM   #CampDetail CD (Nolock)
+             INNER JOIN Login L (NOLOCK)
+                     ON LTRIM(RTRIM(L.LoginName)) = LTRIM(RTRIM(CD.Technician))
+             INNER JOIN LoginRole LR (NOLOCK)
+                     ON LR.LoginID = L.LoginID
+             INNER JOIN Role R (NOLOCK)
+                     ON R.RoleID = LR.RoleID
+    --  WHERE  R.RoleName = 'Phlebotomist'
+
+
+	DECLARE @CampDetailList AS TABLE
+        (
+		ID                      [int] NULL,
+        SlNo					INT,
+        OrgName					VARCHAR(60),
+        OrgLocation				VARCHAR(1000),
+        BookingDate				DATETIME,        
+        PatientNumber			VARCHAR(100),       
+        Salutation				VARCHAR(50),
+        PatientName				VARCHAR(100),
+        DOB						VARCHAR(20),
+        Age						INT,
+        AgeType					VARCHAR(20),
+        Sex						VARCHAR(20),
+		Pincode					BIGINT,
+		Location				VARCHAR(1000),    
+		CollectionAddress		VARCHAR(1000),
+		CollectionDate			VARCHAR(20),
+        Technician				VARCHAR(100),
+		TestCodes				VARCHAR(max) NULL,        
+		Discount				VARCHAR(20),       
+		ClientCode				VARCHAR(100),
+		MobileNo				VARCHAR(100),
+        EmailID					VARCHAR(100),
+        DispatchMode			VARCHAR(100),
+        RefDr					VARCHAR(100),       
+        Remarks					VARCHAR(MAX), 
+		OrgID					INT,
+		ErrorStatus            [bit]  NOT NULL,
+        ErrorDesc              [NVARCHAR](4000) NULL,
+        ClientID               [bigint] NULL,
+        LOCATIONID             [bigint] NULL,         
+        TechnicianID				[bigint] NULL ,        
+        TESTCODE               [NVARCHAR](MAX) NULL,        
+        OrgLOCATIONID           [bigint] NULL,
+		DoctorID				VARCHAR(20)                       
+        )
+
+
+
+		 INSERT INTO @CampDetailList(ID, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,TestCodes,RefDr,Remarks, OrgID,ClientID,LOCATIONID, TechnicianID, TESTCODE,ErrorStatus,OrgLOCATIONID, DoctorID)
+					SELECT ID, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,TestCodes,RefDr,Remarks, OrgID,ClientID,LOCATIONID,TechnicianID, TESTCODE , ErrorStatus,OrgLOCATIONID, DoctorID
+								FROM #CampDetail (Nolock)
+								ORDER  BY ID
+
+
+
+	DECLARE @TempTestCode AS TABLE
+    (
+        ID       INT,
+        TestCode NVARCHAR(500)
+    )
+
+
+
+      DECLARE @CCount int, @CLoop  int =1
+
+      SELECT @CCount = COUNT(1) FROM   @CampDetailList
+
+      While @CLoop <= @CCount
+        BEGIN
+            DECLARE @Tests NVARCHAR(MAX)
+			
+            SELECT @Tests = TESTCODE from   @CampDetailList WHERE  ID = @CLoop
+
+
+            INSERT INTO @TempTestCode (ID,TestCode)
+            SELECT Distinct @CLoop, item from fnSplit(@Tests, ',')
+
+
+				--SELECT * FROM @TempTestCode
+
+
+				IF( @Tests = '' )
+				  BEGIN
+					INSERT @CampDetail (ID, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TESTCODE,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,TestCodes, RefDr,Remarks, OrgID,ClientID,LOCATIONID,TechnicianID, ErrorStatus,OrgLOCATIONID, DoctorID)
+					  SELECT @CLoop, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,'', RefDr,Remarks, OrgID,ClientID,LOCATIONID,TechnicianID , ErrorStatus,OrgLOCATIONID, DoctorID
+								From   @CampDetailList T
+					  WHERE  t.ID = @CLoop
+				  END
+
+					  INSERT @CampDetail (ID, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TESTCODE,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode,TestCodes, RefDr,Remarks, OrgID,ClientID,LOCATIONID,TechnicianID, ErrorStatus,OrgLOCATIONID, DoctorID)
+					  SELECT TTC.ID, SlNo, OrgName, OrgLocation, BookingDate, PatientNumber, Salutation, PatientName, DOB,Age,AgeType,Sex,Pincode,		
+								Location,CollectionAddress,	CollectionDate,	Technician,	TestCodes,Discount,	ClientCode,MobileNo,EmailID,		
+								DispatchMode, TTC.TestCode, RefDr,Remarks, OrgID,ClientID,LOCATIONID,TechnicianID ,ErrorStatus,OrgLOCATIONID, DoctorID
+								FROM   @CampDetailList T
+								INNER JOIN @TempTestCode TTC ON TTC.ID = T.ID
+
+
+            DELETE @TempTestCode
+		 
+			SET @CLoop=@CLoop + 1		 
+		 
+		  END
+
+		 
+
+		  UPDATE CD
+			SET Title  = A.TitleID			
+			FROM  @CampDetail CD
+			JOIN Salutation AS A ON CD.Salutation = A.TitleName
+
+
+
+
+		  UPDATE CD
+      SET    CD.TestCode = LTRIM(RTRIM(ISNULL(IOM.DisplayText, IOM.BillingName))),            
+             CD.TestType = 'INV',
+			 CD.FeeID = IOM.InvestigationID
+      from   @CampDetail CD
+             INNER JOIN InvestigationOrgMapping IOM WITH(NOLOCK)
+                     ON CD.TESTCODEs = IOM.TestCode
+                        AND IOM.OrgID = CD.Orgid
+                        and CD.TESTCODES <> ''
+
+					--	 SELECT * FROM @CampDetail
+
+
+	UPDATE CD
+      SET    CD.TestCode = LTRIM(RTRIM(ISNULL(IOG.DisplayText, IOG.BillingName))), 
+			 CD.FeeId = IGM.GroupID,          
+             CD.TestType = IGM.Type
+      from   @CampDetail CD
+             INNER JOIN InvOrgGroup IOG WITH(NOLOCK)
+                     ON CD.TESTCODEs = IOG.TestCode
+                        AND IOG.OrgID = CD.Orgid
+             INNER JOIN InvGroupMaster IGM (NOLOCK)
+                     on IOG.AttGroupID = IGM.GroupID
+                        and CD.TESTCODES <> ''
+
+      Update CD
+      SET    CD.TestCode = LTRIM(RTRIM(CD.TestCodes)),     
+			 CD.FeeId = GBI.GenBillID,  
+             CD.TestType = 'GEN'
+      from   @CampDetail CD
+             INNER JOIN GeneralBillingItems GBI (NOLOCK)
+                     ON LTRIM(RTRIM(CD.TestCodes)) = LTRIM(RTRIM(GBI.ItemName))
+                      and CD.Orgid = GBI.OrgID
+                        and CD.TESTCODES <> ''
+
+
+
+ /* Error Status Updation*/
+
+
+	Update CD
+      set    CD.SlNo = 1,
+             CD.ErrorDesc = 'SLNo is Empty ' + CD.OrgName
+      from   @CampDetail CD
+      Where  CD.SlNo = ''
+             
+
+
+	Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid OrgName ' + cast( CD.SlNo as varchar(10))
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and ISNULL(CD.Orgid, 0) = 0
+
+	Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid OrgLocation ' + cast( CD.SlNo as varchar(10))
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and ISNULL(CD.OrgLOCATIONID, 0) = 0
+			 
+
+	Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'PatientName is Empty ' + cast( CD.SlNo as varchar(10))
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and CD.PatientName =''
+	 
+	  Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Collection Address is Empty ' + cast( CD.SlNo as varchar(10))
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and CD.CollectionAddress =''
+
+	  Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'TestCodes is Empty ' + cast( CD.SlNo as varchar(10))
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and CD.TestCodes =''
+
+
+	 UPDATE CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = ' EmailID is Empty '+ cast( CD.SlNo as varchar(10))            
+      from   @CampDetail CD
+      where  CD.Errorstatus = 0
+             AND CD.EmailID = '' 
+	  
+	   
+      --UPDATE CD
+      --set    CD.ErrorStatus = 1,
+      --       CD.ErrorDesc = 'Please Check BookingDate and Collection Date Column Entered Correctly',
+      --       CD.BookingDate = NULL,
+      --       CD.CollectionDate = NULL
+      --from   @CampDetail CD
+      --where  CD.Errorstatus = 0
+      --       and CD.BookingDate = '1900-01-01 00:00:00.000'
+      --       and CD.CollectionDate = '1900-01-01 00:00:00.000'
+
+	  UPDATE CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Please Check BookingDate Column Entered Correctly',
+             CD.BookingDate = NULL             
+      from   @CampDetail CD
+      where  CD.Errorstatus = 0
+             and CD.BookingDate = '1900-01-01 00:00:00.000'
+            
+		
+
+	   
+             
+		UPDATE CD
+      set    CD.DOB = NULL
+      from   @CampDetail CD
+      where  CD.DOB = '1900-01-01 00:00:00.000'
+	  
+	   
+
+		update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'BookingDate is greater than current date'
+      from   @CampDetail CD
+      where  CD.Errorstatus = 0
+             and CD.BookingDate > @DateNow
+
+
+	update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'DOB and Age Column is Empty',
+             CD.DOB = NULL
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.DOB IS NULL
+             and CD.AGE = ''
+
+      update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Please Check Sample Collection Date Column is Entered Correctly',
+             CD.CollectionDate = NULL
+      from   @CampDetail CD
+      where  CD.Errorstatus = 0
+             and CD.CollectionDate = '1900-01-01 00:00:00.000'
+
+
+	--update CD
+ --     set    CD.ErrorStatus = 1,
+ --            CD.ErrorDesc = 'Salutation is Empty',
+ --            CD.Title = NULL
+ --     from   @CampDetail CD
+ --     where  CD.ErrorStatus = 0
+ --            and CD.Title = ''
+           
+
+		
+    update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Salutation'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.Salutation not in ( 'Ms.', 'Mrs.', 'Shri.', 'Baby.',
+                                   'Mr.', 'Master.', 'Dr.', '',
+         'Baby of.', 'Miss', 'Ms.', 'Vet.' )
+
+	update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Mismatch Salutation and Sex'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and ( CD.Salutation in ( 'Ms.', 'Mrs.', 'Miss' )
+                   and CD.SEX Not in ( 'F', 'NA' ) )
+              OR ( CD.Salutation = 'Mr.'
+                   and CD.SEX Not in ( 'M', 'NA' ) )
+              OR ( CD.Salutation = 'Vet.'
+                   and CD.SEX <> 'V' )
+
+	--update CD
+ --     set    CD.ErrorStatus = 1,
+ --            CD.ErrorDesc = 'Invalid Patient Name'
+ --     from   @CampDetail CD
+ --     where  CD.Errorstatus = 0
+ --            and CD.PatientName = ''
+
+	--update CD
+ --     set    CD.ErrorStatus = 1,
+ --            CD.ErrorDesc = 'Invalid Age Type'
+ --     from   @CampDetail CD
+ --     where  CD.ErrorStatus = 0
+ --            AND ISNUMERIC(CD.AGE) = 1
+ --            and CD.AgeType not in ( 'Day(s)', 'Week(s)', 'Month(s)', 'Year(s)' )
+
+
+	update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Provide age in Weeks or Months'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.AgeType = 'Day(s)'
+		and CD.DOB IS NULL
+             and ( isnull(CD.AGE, 0) < 0
+                    OR isnull(CD.AGE, 0) > 7 )
+
+      update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Provide age in Months'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.AgeType = 'Week(s)'
+             and CD.DOB is NULL
+             and ( isnull(CD.AGE, 0) < 0
+                    OR isnull(CD.AGE, 0) > 4 )
+
+      update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Provide age in Years'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.AgeType = 'Month(s)'
+             and CD.DOB is NULL
+             and ( isnull(CD.AGE, 0) < 0
+                    OR isnull(CD.AGE, 0) > 12 )
+
+      update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Gender'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and CD.SEX not in( 'M', 'F', 'NA', 'V' )
+
+
+	Update CD
+      set    CD.PatientStatus = 1
+      from   @CampDetail CD
+             inner join Patient p (nolock)
+                     on Ltrim(Rtrim(p.PatientNumber)) = Ltrim(Rtrim(CD.PatientNumber))
+      where  CD.PatientNumber <> '~'
+
+	  UPDATE CD
+      SET    CD.PatientNumber = P.PatientNumber,
+	         CD.PatientStatus = 1
+	  FROM   @CampDetail CD
+	      INNER JOIN Patient P (Nolock) ON P.OrgID = CD.Orgid
+		  INNER JOIN patientaddress PA (Nolock) 
+	           ON P.PatientID = PA.PatientID 
+	      WHERE RTRIM(LTRIM(P.Name)) = RTRIM(LTRIM(CD.PatientName)) 
+				   AND CONVERT(VARCHAR(10),P.DOB, 103) = CONVERT(VARCHAR(10),CD.DOB, 103) 
+				   AND P.Sex = CD.Sex
+				   AND RTRIM(LTRIM(P.Email)) = RTRIM(LTRIM(CD.EmailID))
+				   AND RIGHT(PA.MobileNumber,10) = RIGHT(CD.MobileNo,10) 
+		AND PA.AddressType = 'P' AND CD.PatientNumber = '~'
+
+
+		  update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Patient Number'
+      from   @CampDetail CD
+      where  CD.Errorstatus = 0
+             and CD.PatientStatus = 0
+             and CD.PatientNumber <> '~'
+
+      
+
+	Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Location Name ' + CD.LOCATION
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and ISNULL(CD.LOCATIONID, 0) = 0
+
+	
+
+	Update CD
+      set   CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Age should be between 0.1 years to 105 years'
+                            + CD.LOCATION
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and ( ( ISNULL(CD.AGE, 0) < 0 )
+                    OR ( ISNULL(CD.AGE, 0) > 105 ) )
+
+
+      Update CD
+     set    CD.ErrorStatus = 1,
+           CD.ErrorDesc = 'Invalid Client Code ' + CD.ClientCode
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and isnull(CD.ClientID, 0) = 0
+
+	Update CD
+      Set    CD.ErrorStatus = Case
+                                when ISDATE(CD.BookingDate) = 0 then 1
+                                else 0
+                              end,
+             CD.ErrorDesc = Case
+                              when ISDATE(CD.BookingDate) = 0 then 'Invalid Date Format'
+                              ELSE null
+                            END
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+
+
+
+	  Update CD
+      Set    CD.ErrorStatus = Case
+                                when ISDATE(CD.CollectionDate) = 0 then 1
+                                else 0
+                              end,
+             CD.ErrorDesc = Case
+                              when ISDATE(CD.CollectionDate) = 0 then 'Invalid Date Format'
+                              ELSE null
+                            END
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0 AND ISDATE(CD.CollectionDate) <> ''
+
+	  Update CD
+      Set    CD.ErrorStatus = Case
+                                when ISDATE(CD.DOB) = 0 then 1
+                                else 0
+                              end,
+             CD.ErrorDesc = Case
+                              when ISDATE(CD.DOB) = 0 then 'Invalid Date Format'
+                              ELSE null
+                            END
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0 AND ISDATE(CD.DOB) <> ''
+
+
+	  Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Test Code ' + CD.TESTCODE
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and ISNULL(CD.TestCodes, '') = ''
+
+
+		 update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Mobile Number is not given'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and isnull(CD.MobileNo, '') = ''
+
+      update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Mobile Number'
+      from   @CampDetail CD
+      where  CD.ErrorStatus = 0
+             and isnumeric(CD.MobileNo) = 0
+
+
+			 Update CD
+      set    CD.ErrorStatus = 1,
+             CD.ErrorDesc = 'Invalid Ref Dr Name ' + CD.RefDr
+      from   @CampDetail CD
+      Where  CD.Errorstatus = 0
+             and isnull(Ltrim(Rtrim(CD.RefDr)), '') <> ''
+             and Isnull(CD.DoctorID, 0) = 0
+	
+	--Update CD
+ --     set    CD.ErrorStatus = 1,
+ --            CD.ErrorDesc = 'Invalid Technician Name '
+ --                           + CD.Technician
+ --     from   @CampDetail CD
+ --     Where  CD.Errorstatus = 0
+ --            and ISNULL(CD.TechnicianID, 0) = 0
+
+			  DECLARE @dateDT DATETIME = @DateNow
+
+--SELECT * FROM @CampDetail
+
+		SELECT DISTINCT Id,
+                      OrgName,
+					  OrgLOCATIONID AS OrgLocationID,
+					  OrgLOCATION AS OrgLocation,
+                      cast(SlNo as VARCHAR(10)) SlNo,
+                      isnull(convert(varchar(17), BookingDate, 13), '') as BookingDate,
+                      isnull(convert(varchar(17), CollectionDate, 13), '') As CollectionDate,
+                      Technician,                     
+                      Title AS Salutation,
+                      PatientName,
+                      case
+                        when isnull(Cast(DOB as NVARCHAR(30)), '') = '' then
+                          case
+                            when AgeType = 'Year(s)' then cast(DATEADD(YEAR, ( Year(@dateDT) - AGE ) - YEAR(@dateDT), @dateDT) as NVARCHAR(30))--dbo.[fn_getDOB](Age, 'Y')
+                            when AgeType = 'Day(s)' then dbo.[fn_getDOB](Age, 'D')
+        when AgeType = 'Week(s)' then dbo.[fn_getDOB](Age, 'W')
+                            when AgeType = 'Month(s)' then dbo.[fn_getDOB](Age, 'M')
+                            else ''
+          END--cast(DATEADD(YY, -1 * cast(Age as int), cast(@DateNow as datetime)) as NVARCHAR(30))
+                        else isnull(convert(varchar(11), DOB, 13), '')
+                      end                                    as DOB ,
+
+					  cast(
+					  case
+                        when isnull(Age, '') = '' then substring(dbo.[fn_getAge](DOB), 1, len(dbo.[fn_getAge](DOB)) - 7)--isnull(cast(cast(round(( DATEDIFF(hour, DOB, @DateNow) / 8766.0 ), 0) as int) as NVARCHAR), '')
+                        else isnull(Age, '')
+                      end          as varchar(20)) Age,
+                      case
+                        when isnull(Age, '') = '' then substring(dbo.[fn_getAge](DOB), len(dbo.[fn_getAge](DOB)) - 6, len(dbo.[fn_getAge](DOB)))
+                        else isnull(AgeType, '')
+                      end                                    as AgeType,
+                      Sex,
+                      cast(Location as VARCHAR(100)) Location ,
+					  RefDr AS RefDocName,
+					  DispatchMode, 
+					  Remarks,
+                      MobileNo,
+                      @LoginName                             as CreatedBy,
+					  @LoginID                               as CreatedbyId,
+                      isnull(ClientCode, '')                 as ClientCode,
+                      EmailID,
+                      case
+                        when PatientNumber = '~' Then '--'
+                        else PatientNumber
+                      END                                    as PatientNumber,
+                      ErrorStatus,                     
+                      isnull(ClientID,0)                    as ClientID,
+                      LocationID,
+					  Salutation AS Title,
+					  cast(OrgID as VARCHAR(10)) OrgID,
+					  CollectionAddress,
+					 cast(Pincode as VARCHAR(10)) 	Pincode,
+					  cast(Discount as VARCHAR(10)) Discount , 
+					  PatientNumber,
+					  cast(TechnicianID as VARCHAR(100)) AS SCollectedBy
+					  FROM @CampDetail 
+
+
+
+			select Id,
+             isnull(TestCodes, '')      as TestCodes,            
+             ISNULL(ErrorDesc, '')      AS ErrorDesc,
+             isnull(TESTCODE, '')       as TestCode,            
+             isnull(TestType, '')       as TestType,
+             isnull(FeeId, 0)           as FeeId
+      from   @CampDetail
+
+
+
+END
+
+
+   

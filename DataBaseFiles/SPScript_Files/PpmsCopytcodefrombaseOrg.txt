@@ -1,0 +1,2236 @@
+
+/****** Object:  StoredProcedure [dbo].[PpmsCopytcodefrombaseOrg]    Script Date: 8/21/2019 12:53:42 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER on
+GO
+
+CREATE PROCEDURE [dbo].[PpmsCopytcodefrombaseOrg] 
+@FromOrgid INT,
+@ToOrgid   INT,
+@CodeName  VARCHAR(100)
+AS
+BEGIN
+SET QUOTED_IDENTIFIER on
+CREATE TABLE #Stage_MHL_T_02_GROUP_MASTER
+(
+[LAB]                 [NVARCHAR](255) NULL,
+[GROUPNAME]           [NVARCHAR](255) NULL,
+[METRO_COMBINE_CODE]  [NVARCHAR](255) NULL,
+[EDOSCODE]            [NVARCHAR](255) NULL,
+[DISPLAY_NAME]        [NVARCHAR](255) NULL,
+[ABBREVATION]         [NVARCHAR](255) NULL,
+[IS_ORDERABLE]        [NVARCHAR](255) NULL,
+[CLASSIFICATION]      [NVARCHAR](255) NULL,
+[IS_NABL]             [NVARCHAR](255) NULL,
+[IS_CAP]              [NVARCHAR](255) NULL,
+[IS_STAT]             [NVARCHAR](255) NULL,
+[TAT_POLICY]          [NVARCHAR](255) NULL,
+[OrgGroupID]          [NVARCHAR](255) NULL,
+[ValidationText]      [VARCHAR](max) NULL,
+[ValidationRule]      [NVARCHAR](max) NULL,
+[IsDiscountable]      [NVARCHAR](255) NULL,
+[IsServicetaxable]    [NVARCHAR](255) NULL,
+[Status]              [NVARCHAR](255) NULL,
+[CutOffTimeValue]     [NVARCHAR](255) NULL,
+[CutOffTimeType]      [NVARCHAR](255) NULL,
+[SubCategory]         [NVARCHAR](255) NULL,
+[HasHistory]          [NVARCHAR](255) NULL,
+[Remarks]             [NVARCHAR](255) NULL,
+[PrintSeparately]     [NVARCHAR](255) NULL,
+[Gender]              [NVARCHAR](255) NULL,
+[groupinterpretation] [VARCHAR](max) NULL,
+[Issummaryworklist]   [NVARCHAR](255) NULL,
+[IsSpecialFormat]     [NVARCHAR](255) NULL,
+[Groupid]             [NVARCHAR](255) NULL,
+[ProtocolGroup]       [NVARCHAR](100) NULL,
+[ProtocolGroupID]     [INT] NULL,
+Attgroupid            BIGINT,
+IsAttachmentMandatory BIT
+)
+CREATE TABLE #Stage_MHL_T_01_TESTMASTER
+(
+[LAB]                      [NVARCHAR](255) NULL,
+[TCODE]                    [NVARCHAR](255) NULL,
+[EDOSCode]                 [NVARCHAR](255) NULL,
+[TestName]                 [VARCHAR](max) NULL,
+[TEST_ABBREVATION]         [VARCHAR](max) NULL,
+[DISPLAY_NAME]             [VARCHAR](max) NULL,
+[DeptName]                 [VARCHAR](max) NULL,
+[SECTION_NAME]             [VARCHAR](max) NULL,
+[TEST_GROUP]               [NVARCHAR](255) NULL,
+[TEST_PARENT]              [NVARCHAR](255) NULL,
+[Values_Type]              [NVARCHAR](255) NULL,
+[Orderable]                [NVARCHAR](255) NULL,
+[SEQUENCE_No]              [NVARCHAR](255) NULL,
+[INPUT_FORMAT]             [NVARCHAR](255) NULL,
+[Sample_Type]              [VARCHAR](max) NULL,
+[Method]                   [VARCHAR](max) NULL,
+[Container]                [VARCHAR](max) NULL,
+[Units]                    [NVARCHAR](255) NULL,
+[SubCategory]              [NVARCHAR](255) NULL,
+[PROCESSING_LOCATION]      [NVARCHAR](255) NULL,
+[Decimal_Places]           [NVARCHAR](255) NULL,
+[Classification]           [NVARCHAR](255) NULL,
+[IS_MACHINE_INTERFACED]    [NVARCHAR](255) NULL,
+[REPEATABLE]               [NVARCHAR](255) NULL,
+[TEST_GENDER]              [NVARCHAR](255) NULL,
+[IS_NABL]                  [NVARCHAR](255) NULL,
+[IS_CAP]                   [NVARCHAR](255) NULL,
+[IS_STAT]                  [NVARCHAR](255) NULL,
+[IS_SMS]                   [NVARCHAR](255) NULL,
+[IS_STATISTICAL]           [NVARCHAR](255) NULL,
+[AUTORIZATION]             [NVARCHAR](255) NULL,
+[CO_AUTHORIZATION]         [NVARCHAR](255) NULL,
+[TAT_POLICY]               [NVARCHAR](255) NULL,
+[REFERENCE_RANGE]          [VARCHAR](max) NULL,
+[CRITICAL_RANGE]           [NVARCHAR](255) NULL,
+[IS_CRITICAL_ALERT]        [NVARCHAR](255) NULL,
+[PANIC_RANGE]              [VARCHAR](max) NULL,
+[AUTO_AUTHORIZATION_RANGE] [NVARCHAR](255) NULL,
+[ACCEPTABLE_RANGE]         [NVARCHAR](255) NULL,
+[TEST_EMERGENCY_STAGE]     [NVARCHAR](255) NULL,
+[IS_TEST_HISTORY]          [NVARCHAR](255) NULL,
+[InvestigationID]          [NVARCHAR](255) NULL,
+[DISCOUNT_CATEGORY]        [NVARCHAR](255) NULL,
+[TFORMAT]                  [NVARCHAR](255) NULL,
+[SPLFORMAT]                [NVARCHAR](255) NULL,
+[TESTTYPE]                 [NVARCHAR](255) NULL,
+[CHILDOF]                  [NVARCHAR](255) NULL,
+[LOD]                      [NVARCHAR](255) NULL,
+[NOOFSAMPLES]              [NVARCHAR](255) NULL,
+[OUTPUT_FORMAT]            [NVARCHAR](255) NULL,
+[PCTS]                     [NVARCHAR](255) NULL,
+[AttType]                  [NVARCHAR](255) NULL,
+[CutOffTimeValue]          [NVARCHAR](255) NULL,
+[CutOffTimeType]           [NVARCHAR](255) NULL,
+[IsActive]                 [NVARCHAR](255) NULL,
+[IsNonReportable]          [NVARCHAR](255) NULL,
+[PrintSeparately]          [NVARCHAR](255) NULL,
+[IsParameter]              [NVARCHAR](255) NULL,
+[Interpretation]           [VARCHAR](max) NULL,
+[DeptID]                   [NVARCHAR](255) NULL,
+[SampleCode]               [NVARCHAR](255) NULL,
+[MethodID]                 [NVARCHAR](255) NULL,
+[SampleContainerID]        [NVARCHAR](255) NULL,
+[HeaderId]                 [NVARCHAR](255) NULL,
+[AutoAuthorizationId]      [NVARCHAR](255) NULL,
+[UOMID]                    [NVARCHAR](255) NULL,
+[Processing_AddressID]     [NVARCHAR](255) NULL,
+[ProtocolGroup]            [NVARCHAR](100) NULL,
+[ProtocolGroupID]          [INT] NULL,
+[Attgroupid]               BIGINT,
+IsAttachmentMandatory      BIT
+)
+CREATE TABLE #Stage_MHL_T_04_GROUP_TESTS
+(
+[LAB]              [NVARCHAR](255) NULL,
+[GROUP_CODE]       [NVARCHAR](255) NULL,
+[TEST_CODE]        [NVARCHAR](255) NULL,
+[TEST_NAME]        [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO] [FLOAT] NULL,
+[InvestigationID]  [NVARCHAR](255) NULL,
+[OrgGroupID]       [NVARCHAR](255) NULL,
+[Type]             [NVARCHAR](255) NULL,
+[ID]               [INT] NULL
+)
+CREATE TABLE #Stage_MHL_T_03_Package_Master
+(
+[LAB]                  [NVARCHAR](255) NULL,
+[PACKAGE_NAME]         [VARCHAR](max) NULL,
+[METROLAB_PROFILECODE] [NVARCHAR](255) NULL,
+[DOSCODE]              [NVARCHAR](255) NULL,
+[OrgGroupID]           [NVARCHAR](255) NULL,
+[InvestigationID]      [NVARCHAR](255) NULL,
+[Test Name]            [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO]     [NVARCHAR](255) NULL,
+[Test_Name]            [NVARCHAR](255) NULL,
+[DISPLAY_NAME]         [VARCHAR](max) NULL,
+[TAT_POLICY]           [NVARCHAR](255) NULL,
+[IS_ORDERABLE]         [NVARCHAR](255) NULL,
+[CLASSIFICATION]       [NVARCHAR](255) NULL,
+[IS_NABL]              [NVARCHAR](255) NULL,
+[IS_CAP]               [NVARCHAR](255) NULL,
+[IS_STAT]              [NVARCHAR](255) NULL,
+[ValidationText]       [VARCHAR](max) NULL,
+[ValidationRule]       [VARCHAR](max) NULL,
+[IsDiscountable]       [NVARCHAR](255) NULL,
+[IsServicetaxable]     [NVARCHAR](255) NULL,
+[Status]               [NVARCHAR](255) NULL,
+[CutOffTimeValue]      [NVARCHAR](255) NULL,
+[CutOffTimeType]       [NVARCHAR](255) NULL,
+[SubCategory]          [NVARCHAR](255) NULL,
+[HasHistory]           [NVARCHAR](255) NULL,
+[Remarks]              [NVARCHAR](255) NULL,
+[PrintSeparately]      [NVARCHAR](255) NULL,
+[Gender]               [NVARCHAR](255) NULL,
+[groupinterpretation]  [VARCHAR](max) NULL,
+[Issummaryworklist]    [NVARCHAR](255) NULL,
+[IsSpecialFormat]      [NVARCHAR](255) NULL,
+[ABBREVATION]          [NVARCHAR](255) NULL,
+[Groupid]              [NVARCHAR](255) NULL,
+[ProtocolGroup]        [NVARCHAR](100) NULL,
+[ProtocolGroupID]      [INT] NULL,
+Attgroupid             BIGINT,
+IsAttachmentMandatory      BIT
+)
+CREATE TABLE #Stage_MHL_T_05_PACKAGE_TESTS
+(
+[LAB]              [NVARCHAR](255) NULL,
+[PACKAGE_CODE]     [NVARCHAR](255) NULL,
+[TEST_CODE]        [NVARCHAR](255) NULL,
+[TEST_NAME]        [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO] [FLOAT] NULL,
+[InvestigationID]  [NVARCHAR](255) NULL,
+[OrgGroupID]       [NVARCHAR](255) NULL,
+[Type]             [NVARCHAR](255) NULL,
+[ID]               [NVARCHAR](255) NULL
+)
+CREATE TABLE #Stage2_MHL_T_02_GROUP_MASTER
+(
+[LAB]                 [NVARCHAR](255) NULL,
+[GROUPNAME]           [NVARCHAR](255) NULL,
+[METRO_COMBINE_CODE]  [NVARCHAR](255) NULL,
+[EDOSCODE]            [NVARCHAR](255) NULL,
+[DISPLAY_NAME]        [NVARCHAR](255) NULL,
+[ABBREVATION]         [NVARCHAR](255) NULL,
+[IS_ORDERABLE]        [NVARCHAR](255) NULL,
+[CLASSIFICATION]      [NVARCHAR](255) NULL,
+[IS_NABL]             [NVARCHAR](255) NULL,
+[IS_CAP]              [NVARCHAR](255) NULL,
+[IS_STAT]             [NVARCHAR](255) NULL,
+[TAT_POLICY]          [NVARCHAR](255) NULL,
+[OrgGroupID]          [NVARCHAR](255) NULL,
+[ValidationText]      [VARCHAR](max) NULL,
+[ValidationRule]      [NVARCHAR](max) NULL,
+[IsDiscountable]      [NVARCHAR](255) NULL,
+[IsServicetaxable]    [NVARCHAR](255) NULL,
+[Status]              [NVARCHAR](255) NULL,
+[CutOffTimeValue]     [NVARCHAR](255) NULL,
+[CutOffTimeType]      [NVARCHAR](255) NULL,
+[SubCategory]         [NVARCHAR](255) NULL,
+[HasHistory]          [NVARCHAR](255) NULL,
+[Remarks]             [NVARCHAR](255) NULL,
+[PrintSeparately]     [NVARCHAR](255) NULL,
+[Gender]              [NVARCHAR](255) NULL,
+[groupinterpretation] [VARCHAR](max) NULL,
+[Issummaryworklist]   [NVARCHAR](255) NULL,
+[IsSpecialFormat]     [NVARCHAR](255) NULL,
+[Groupid]             [NVARCHAR](255) NULL,
+[ProtocolGroup]       [NVARCHAR](100) NULL,
+[ProtocolGroupID]     [INT] NULL,
+Attgroupid            BIGINT,
+IsAttachmentMandatory BIT
+)
+CREATE TABLE #Stage2_MHL_T_01_TESTMASTER
+(
+[LAB]                      [NVARCHAR](255) NULL,
+[TCODE]                    [NVARCHAR](255) NULL,
+[EDOSCode]                 [NVARCHAR](255) NULL,
+[TestName]                 [VARCHAR](max) NULL,
+[TEST_ABBREVATION]         [VARCHAR](max) NULL,
+[DISPLAY_NAME]             [VARCHAR](max) NULL,
+[DeptName]        [VARCHAR](max) NULL,
+[SECTION_NAME]             [VARCHAR](max) NULL,
+[TEST_GROUP]               [NVARCHAR](255) NULL,
+[TEST_PARENT]              [NVARCHAR](255) NULL,
+[Values_Type]              [NVARCHAR](255) NULL,
+[Orderable]                [NVARCHAR](255) NULL,
+[SEQUENCE_No]              [NVARCHAR](255) NULL,
+[INPUT_FORMAT]             [NVARCHAR](255) NULL,
+[Sample_Type]              [VARCHAR](max) NULL,
+[Method]                   [VARCHAR](max) NULL,
+[Container]                [VARCHAR](max) NULL,
+[Units]                    [NVARCHAR](255) NULL,
+[SubCategory]              [NVARCHAR](255) NULL,
+[PROCESSING_LOCATION]      [NVARCHAR](255) NULL,
+[Decimal_Places]           [NVARCHAR](255) NULL,
+[Classification]           [NVARCHAR](255) NULL,
+[IS_MACHINE_INTERFACED]    [NVARCHAR](255) NULL,
+[REPEATABLE]               [NVARCHAR](255) NULL,
+[TEST_GENDER]              [NVARCHAR](255) NULL,
+[IS_NABL]                  [NVARCHAR](255) NULL,
+[IS_CAP]                   [NVARCHAR](255) NULL,
+[IS_STAT]                  [NVARCHAR](255) NULL,
+[IS_SMS]                   [NVARCHAR](255) NULL,
+[IS_STATISTICAL]           [NVARCHAR](255) NULL,
+[AUTORIZATION]             [NVARCHAR](255) NULL,
+[CO_AUTHORIZATION]         [NVARCHAR](255) NULL,
+[TAT_POLICY]               [NVARCHAR](255) NULL,
+[REFERENCE_RANGE]          [VARCHAR](max) NULL,
+[CRITICAL_RANGE]           [NVARCHAR](255) NULL,
+[IS_CRITICAL_ALERT]        [NVARCHAR](255) NULL,
+[PANIC_RANGE]              [VARCHAR](max) NULL,
+[AUTO_AUTHORIZATION_RANGE] [NVARCHAR](255) NULL,
+[ACCEPTABLE_RANGE]         [NVARCHAR](255) NULL,
+[TEST_EMERGENCY_STAGE]     [NVARCHAR](255) NULL,
+[IS_TEST_HISTORY]          [NVARCHAR](255) NULL,
+[InvestigationID]          [NVARCHAR](255) NULL,
+[DISCOUNT_CATEGORY]        [NVARCHAR](255) NULL,
+[TFORMAT]                  [NVARCHAR](255) NULL,
+[SPLFORMAT]                [NVARCHAR](255) NULL,
+[TESTTYPE]                 [NVARCHAR](255) NULL,
+[CHILDOF]                  [NVARCHAR](255) NULL,
+[LOD]                      [NVARCHAR](255) NULL,
+[NOOFSAMPLES]              [NVARCHAR](255) NULL,
+[OUTPUT_FORMAT]            [NVARCHAR](255) NULL,
+[PCTS]                     [NVARCHAR](255) NULL,
+[AttType]                  [NVARCHAR](255) NULL,
+[CutOffTimeValue]          [NVARCHAR](255) NULL,
+[CutOffTimeType]           [NVARCHAR](255) NULL,
+[IsActive]                 [NVARCHAR](255) NULL,
+[IsNonReportable]          [NVARCHAR](255) NULL,
+[PrintSeparately]          [NVARCHAR](255) NULL,
+[IsParameter]              [NVARCHAR](255) NULL,
+[Interpretation]           [VARCHAR](max) NULL,
+[DeptID]                   [NVARCHAR](255) NULL,
+[SampleCode]               [NVARCHAR](255) NULL,
+[MethodID]                 [NVARCHAR](255) NULL,
+[SampleContainerID]        [NVARCHAR](255) NULL,
+[HeaderId]                 [NVARCHAR](255) NULL,
+[AutoAuthorizationId]      [NVARCHAR](255) NULL,
+[UOMID]                    [NVARCHAR](255) NULL,
+[Processing_AddressID]     [NVARCHAR](255) NULL,
+[ProtocolGroup]            [NVARCHAR](100) NULL,
+[ProtocolGroupID]          [INT] NULL,
+[Attgroupid]               BIGINT,
+IsAttachmentMandatory      BIT
+)
+CREATE TABLE #Stage2_MHL_T_04_GROUP_TESTS
+(
+[LAB]              [NVARCHAR](255) NULL,
+[GROUP_CODE]       [NVARCHAR](255) NULL,
+[TEST_CODE]        [NVARCHAR](255) NULL,
+[TEST_NAME]        [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO] [FLOAT] NULL,
+[InvestigationID]  [NVARCHAR](255) NULL,
+[OrgGroupID]       [NVARCHAR](255) NULL,
+[Type]             [NVARCHAR](255) NULL,
+[ID]               [INT] NULL
+)
+CREATE TABLE #Stage2_MHL_T_03_Package_Master
+(
+[LAB]                  [NVARCHAR](255) NULL,
+[PACKAGE_NAME]         [VARCHAR](max) NULL,
+[METROLAB_PROFILECODE] [NVARCHAR](255) NULL,
+[DOSCODE]              [NVARCHAR](255) NULL,
+[OrgGroupID]           [NVARCHAR](255) NULL,
+[InvestigationID]      [NVARCHAR](255) NULL,
+[Test Name]            [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO]     [NVARCHAR](255) NULL,
+[Test_Name]            [NVARCHAR](255) NULL,
+[DISPLAY_NAME]         [VARCHAR](max) NULL,
+[TAT_POLICY]           [NVARCHAR](255) NULL,
+[IS_ORDERABLE]         [NVARCHAR](255) NULL,
+[CLASSIFICATION]       [NVARCHAR](255) NULL,
+[IS_NABL]              [NVARCHAR](255) NULL,
+[IS_CAP]               [NVARCHAR](255) NULL,
+[IS_STAT]              [NVARCHAR](255) NULL,
+[ValidationText]       [VARCHAR](max) NULL,
+[ValidationRule]       [VARCHAR](max) NULL,
+[IsDiscountable]       [NVARCHAR](255) NULL,
+[IsServicetaxable]     [NVARCHAR](255) NULL,
+[Status]               [NVARCHAR](255) NULL,
+[CutOffTimeValue]      [NVARCHAR](255) NULL,
+[CutOffTimeType]       [NVARCHAR](255) NULL,
+[SubCategory]          [NVARCHAR](255) NULL,
+[HasHistory]           [NVARCHAR](255) NULL,
+[Remarks]              [NVARCHAR](255) NULL,
+[PrintSeparately]      [NVARCHAR](255) NULL,
+[Gender]               [NVARCHAR](255) NULL,
+[groupinterpretation]  [VARCHAR](max) NULL,
+[Issummaryworklist]    [NVARCHAR](255) NULL,
+[IsSpecialFormat]      [NVARCHAR](255) NULL,
+[ABBREVATION]          [NVARCHAR](255) NULL,
+[Groupid]              [NVARCHAR](255) NULL,
+[ProtocolGroup]        [NVARCHAR](100) NULL,
+[ProtocolGroupID]      [INT] NULL,
+Attgroupid             BIGINT,
+IsAttachmentMandatory  BIT
+)
+CREATE TABLE #Stage2_MHL_T_05_PACKAGE_TESTS
+(
+[LAB]              [NVARCHAR](255) NULL,
+[PACKAGE_CODE]     [NVARCHAR](255) NULL,
+[TEST_CODE]        [NVARCHAR](255) NULL,
+[TEST_NAME]        [NVARCHAR](255) NULL,
+[TEST_SEQUENCE_NO] [FLOAT] NULL,
+[InvestigationID]  [NVARCHAR](255) NULL,
+[OrgGroupID]       [NVARCHAR](255) NULL,
+[Type]             [NVARCHAR](255) NULL,
+[ID]               [NVARCHAR](255) NULL
+)
+DECLARE @FromCodeSchemeID INT,
+@OrgName          VARCHAR(10),
+@ToCodeSchemeID   INT
+SELECT @FromCodeSchemeID = CodeTypeid
+FROM   CodingSchemeOrgMapping
+WHERE  OrgID = @FromOrgid
+AND IsPrimary = 'Y'
+SELECT @ToCodeSchemeID = CodeTypeID
+FROM   CodingSchemeOrgMapping
+WHERE  OrgID = @ToOrgid
+AND IsPrimary = 'Y'
+SELECT @orgname = name
+FROM   organization
+WHERE  OrgID = @FromOrgId
+INSERT #Stage2_MHL_T_01_TESTMASTER
+(LAB,
+TCode)
+SELECT DISTINCT @OrgName AS Lab,
+CodeName
+FROM   CodeMaster WITH (NOLOCK)
+WHERE  CodeSchemeID = @FromCodeSchemeID
+AND CodeName = @CodeName
+UPDATE #Stage2_MHL_T_01_TESTMASTER
+SET    TestType = NULL
+UPDATE TM
+SET    TM.TESTTYPE = 'INV'
+FROM   #Stage2_MHL_T_01_TESTMASTER TM
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = TM.Tcode
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = CP.IdentifyingID
+INNER JOIN InvestigationOrgAttributes IOA WITH (NOLOCK)
+ON IOM.InvestigationID = IOA.InvestigationID
+AND IOA.OrgID = IOM.OrgID
+INNER JOIN InvestigationMaster IM WITH (NOLOCK)
+ON IM.InvestigationID = IOM.InvestigationID
+WHERE  CM.CodeSchemeID = @FromCodeSchemeID
+AND CP.IdentifyingType = 'Investigations'
+AND IOM.OrgID = @FromOrgId
+UPDATE TM
+SET    TM.TESTTYPE = 'GRP'
+FROM   #Stage2_MHL_T_01_TESTMASTER TM WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = TM.Tcode
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOM WITH (NOLOCK)
+ON IOM.OrgGroupID = CP.IdentifyingID
+INNER JOIN InvGroupMaster IM WITH (NOLOCK)
+ON IM.GroupID = IOM.AttGroupID
+WHERE  CM.CodeSchemeID = @FromCodeSchemeID
+AND CP.IdentifyingType = 'GRP'
+AND IOM.OrgID = @FromOrgId
+UPDATE TM
+SET    TM.TESTTYPE = 'PKG'
+FROM   #Stage2_MHL_T_01_TESTMASTER TM WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = TM.Tcode
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOM WITH (NOLOCK)
+ON IOM.OrgGroupID = CP.IdentifyingID
+INNER JOIN InvGroupMaster IM WITH (NOLOCK)
+ON IM.GroupID = IOM.AttGroupID
+WHERE  CM.CodeSchemeID = @FromCodeSchemeID
+AND CP.IdentifyingType = 'PKG'
+AND IOM.OrgID = @FromOrgId;
+WITH GROUPDet
+AS (SELECT Cast(tmp.Lab AS VARCHAR(100)) AS Lab,
+Cast(TCODE AS VARCHAR(255))   AS TestCode,
+Cast('' AS VARCHAR(255))      AS EdosCode,
+Cast('' AS VARCHAR(255))      AS Abb
+FROM   #Stage2_MHL_T_01_TESTMASTER tmp WITH (NOLOCK)
+WHERE  tmp.TestType = 'GRP'
+UNION ALL
+SELECT det.lab                            AS Lab,
+Cast(CM1.CodeName AS VARCHAR(255)) AS TestCode,
+Cast('' AS VARCHAR(255))           AS EdosCode,
+Cast('' AS VARCHAR(255))           AS Abb
+FROM   GROUPDet Det
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = Det.TestCode
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup Invgrp WITH (NOLOCK)
+ON CP.IdentifyingID = invgrp.OrgGroupID
+INNER JOIN InvGroupMapMaster grpmap WITH (NOLOCK)
+ON invgrp.OrgGroupID = grpmap.GroupID
+AND grpmap.Parent = 'Y'
+AND grpmap.Active = 'Y'
+INNER JOIN InvOrgGroup g1 WITH (NOLOCK)
+ON grpmap.InvestigationID = g1.OrgGroupID
+INNER JOIN CodeMapper CP1 WITH (NOLOCK)
+ON CP1.IdentifyingID = g1.OrgGroupID
+AND CP1.IdentifyingType = 'GRP'
+INNER JOIN CodeMaster CM1 WITH (NOLOCK)
+ON CM1.CodeMasterID = CP1.CodeMasterID
+AND CM1.CodeSchemeID = @FromCodeSchemeID
+AND CM1.CodeType = CP1.IdentifyingType
+WHERE  Invgrp.OrgID = @FromOrgId
+AND g1.OrgID = @FromOrgId)
+INSERT INTO #Stage2_MHL_T_02_GROUP_MASTER
+(Lab,
+Metro_Combine_Code,
+EDOSCODE,
+Abbrevation)
+SELECT DISTINCT Lab,
+TestCode,
+'',
+''
+FROM   GROUPDet
+/* Insert PKG Tcodes in Stage2_MHL_T_03_Package_Master Table */
+INSERT INTO #Stage2_MHL_T_03_Package_Master
+(Lab,
+METROLAB_PROFILECODE,
+DOSCODE,
+ABBREVATION)
+SELECT DISTINCT Lab,
+TCODE,
+EdosCode,
+TEST_ABBREVATION
+FROM   #Stage2_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  TESTTYPE = 'PKG'
+--select * from #Stage2_MHL_T_03_Package_Master
+/* Insert SubGroup Tcodes under PKGs in Stage2_MHL_T_02_GROUP_MASTER Table */
+DECLARE @InvpackageMapMaster TABLE
+(
+PackageID   BIGINT,
+PackageCode VARCHAR(20),
+ID          BIGINT,
+Type        VARCHAR(10),
+TestCode    VARCHAR(20)
+)
+INSERT INTO @InvpackageMapMaster
+SELECT IGM.GroupID,
+tmp.TCODE,
+IPM.ID,
+IPM.Type,
+CM1.CodeName
+FROM   #Stage2_MHL_T_01_TESTMASTER tmp WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = tmp.TCODE
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'PKG'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON IOG.OrgGroupID = CP.IdentifyingID
+AND IOG.OrgID = @FromOrgId
+INNER JOIN InvGroupMaster IGM WITH (NOLOCK)
+ON IGM.GroupID = IOG.AttGroupID
+INNER JOIN InvPackageMapping IPM WITH (NOLOCK)
+ON IPM.PackageID = IOG.OrgGroupID
+AND IPM.active = 'A'
+AND IPM.Type = 'GRP'
+INNER JOIN InvOrgGroup IOG1 WITH (NOLOCK)
+ON IOG1.OrgGroupID = IPM.ID
+AND IOG1.OrgID = @FromOrgId
+INNER JOIN InvGroupMaster IGM1 WITH (NOLOCK)
+ON IGM1.GroupID = IOG1.AttGroupID
+INNER JOIN CodeMapper CP1 WITH (NOLOCK)
+ON CP1.IdentifyingID = IOG1.OrgGroupID
+AND CP1.IdentifyingType = 'GRP'
+INNER JOIN CodeMaster CM1 WITH (NOLOCK)
+ON CM1.CodeMasterID = CP1.CodeMasterID
+AND CM1.CodeSchemeID = @FromCodeSchemeID
+AND CM1.CodeType = CP1.IdentifyingType
+WHERE  tmp.TestType = 'PKG';
+WITH PACKAGEDet
+AS (SELECT Cast(@OrgName AS VARCHAR(100)) AS Lab,
+Cast(TestCode AS VARCHAR(255)) AS TestCode,
+Cast('' AS VARCHAR(255))       AS EdosCode,
+Cast('' AS VARCHAR(255))       AS Abb
+FROM   @InvpackageMapMaster tmp
+WHERE  tmp.Type = 'GRP'
+UNION ALL
+SELECT det.lab                            AS Lab,
+Cast(CM1.CodeName AS VARCHAR(255)) AS TestCode,
+Cast('' AS VARCHAR(255))           AS EdosCode,
+Cast('' AS VARCHAR(255))           AS Abb
+FROM   PACKAGEDet Det
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = Det.TestCode
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup Invgrp WITH (NOLOCK)
+ON CP.IdentifyingID = invgrp.OrgGroupID
+AND Invgrp.OrgID = @FromOrgId
+INNER JOIN InvGroupMapMaster grpmap WITH (NOLOCK)
+ON invgrp.OrgGroupID = grpmap.GroupID
+AND grpmap.Parent = 'Y'
+AND grpmap.Active = 'Y'
+INNER JOIN InvOrgGroup g1 WITH (NOLOCK)
+ON grpmap.InvestigationID = g1.OrgGroupID
+AND g1.OrgID = @FromOrgId
+INNER JOIN CodeMapper CP1 WITH (NOLOCK)
+ON CP1.IdentifyingID = g1.OrgGroupID
+AND CP1.IdentifyingType = 'GRP'
+INNER JOIN CodeMaster CM1 WITH (NOLOCK)
+ON CM1.CodeMasterID = CP1.CodeMasterID
+AND CM1.CodeSchemeID = @FromCodeSchemeID
+AND CM1.CodeType = CP1.IdentifyingType)
+INSERT INTO #Stage2_MHL_T_02_GROUP_MASTER
+(Lab,
+Metro_Combine_Code,
+EDOSCODE,
+Abbrevation)
+SELECT DISTINCT PkgGrp.Lab,
+PkgGrp.TestCode,
+PkgGrp.EdosCode,
+PkgGrp.abb
+FROM   PACKAGEDet PkgGrp
+LEFT JOIN #Stage2_MHL_T_02_GROUP_MASTER GRP WITH (NOLOCK)
+ON GRP.METRO_COMBINE_CODE = PkgGrp.TestCode
+WHERE  GRP.METRO_COMBINE_CODE IS NULL
+/* Update GRP Details In Stage2_MHL_T_02_GROUP_MASTER Table */
+UPDATE Stg
+SET    [GROUPNAME] = IGM.GroupName,
+[DISPLAY_NAME] = IOG.DisplayText,
+[IS_ORDERABLE] = CASE Isnull(IOG.IsNonOrderable, 'N')
+WHEN 'N' THEN 'Y'
+WHEN 'Y' THEN 'N'
+END,
+[CLASSIFICATION] = IOG.Classification,
+[OrgGroupID] = IOG.OrgGroupID,
+[ValidationText] = IOG.ValidationText,
+[ValidationRule] = IOG.ValidationRule,
+[IsDiscountable] = IOG.IsDiscountable,
+[IsServicetaxable] = IOG.IsServicetaxable,
+[Status] = IOG.Status,
+[CutOffTimeValue] = IOG.CutOffTimeValue,
+[CutOffTimeType] = IOG.CutOffTimeType,
+[SubCategory] = IOG.SubCategory,
+[HasHistory] = IOG.HasHistory,
+[Remarks] = IOG.Remarks,
+[PrintSeparately] = IOG.PrintSeparately,
+[Gender] = IOG.Gender,
+[groupinterpretation] = IOG.groupinterpretation,
+[Issummaryworklist] = IOG.Issummaryworklist,
+[IsSpecialFormat] = IOG.IsSpecialFormat,
+[ProtocolGroup] = MD.DisplayText,
+stg.IsAttachmentMandatory = IOG.IsAttachmentMandatory
+FROM   #Stage2_MHL_T_02_GROUP_MASTER stg WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = stg.METRO_COMBINE_CODE
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON CP.IdentifyingID = IOG.OrgGroupID
+INNER JOIN InvGroupMaster IGM WITH (NOLOCK)
+ON IGM.GroupID = IOG.AttGroupID
+LEFT JOIN MetaData MD WITH (NOLOCK)
+ON IOG.ProtocalGroupID = MD.MetaDataID
+AND MD.Domain = 'ProtocalGroup_Based'
+WHERE  IOG.OrgID = @FromOrgId
+/* Insert GRP Contents Into Stage2_MHL_T_04_GROUP_TESTS Table */
+INSERT INTO #Stage2_MHL_T_04_GROUP_TESTS
+([LAB],
+[GROUP_CODE],
+[TEST_CODE],
+[TEST_SEQUENCE_NO],
+[Type],
+ID)
+SELECT @OrgName,
+T.GROUP_CODE,
+T.TEST_CODE,
+T.SequenceNo,
+T.Type,
+T.ID
+FROM   (SELECT DISTINCT T.METRO_COMBINE_CODE AS GROUP_CODE,
+CM.CodeName          AS TEST_CODE,
+IGMM.SequenceNo,
+'INV'                Type,
+IOM.InvestigationID  AS ID
+FROM   #Stage2_MHL_T_02_GROUP_MASTER T WITH (NOLOCK)
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON IOG.OrgGroupID = T.Orggroupid
+INNER JOIN InvGroupMapMaster IGMM WITH (NOLOCK)
+ON IGMM.GroupID = IOG.OrgGroupID
+AND IGMM.Parent = 'N'
+AND IGMM.Active = 'Y'
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CP.IdentifyingID = IGMM.InvestigationID
+AND CP.IdentifyingType = 'Investigations'
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeSchemeID = @FromCodeSchemeID
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IGMM.Investigationid = IOM.Investigationid
+AND IOM.OrgID = @FromOrgId
+WHERE  IOG.OrgID = @FromOrgId
+UNION ALL
+SELECT DISTINCT T.METRO_COMBINE_CODE AS GROUP_CODE,
+CM.CodeName          AS TEST_CODE,
+IGMM.SequenceNo,
+'GRP'                Type,
+inv.OrgGroupID       AS ID
+FROM   #Stage2_MHL_T_02_GROUP_MASTER T WITH (NOLOCK)
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON IOG.OrgGroupID = T.Orggroupid
+INNER JOIN InvGroupMapMaster IGMM WITH (NOLOCK)
+ON IGMM.GroupID = IOG.OrgGroupID
+AND IGMM.Parent = 'Y'
+AND IGMM.Active = 'Y'
+INNER JOIN InvOrgGroup Inv WITH (NOLOCK)
+ON IGMM.Investigationid = inv.OrgGroupID
+AND Inv.OrgID = @FromOrgId
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CP.IdentifyingID = Inv.OrgGroupID
+AND CP.IdentifyingType = 'GRP'
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeSchemeID = @FromCodeSchemeID
+AND CM.CodeType = CP.IdentifyingType
+WHERE  IOG.OrgID = @FromOrgId) T
+--select * from #Stage2_MHL_T_04_GROUP_TESTS
+/* Insert SubGroup Contents Level INV Into Stage2_MHL_T_01_TESTMASTER Table */
+INSERT #Stage2_MHL_T_01_TESTMASTER
+(Lab,
+TCode,
+EDOSCode,
+TEST_ABBREVATION,
+TESTTYPE)
+SELECT DISTINCT t1.Lab,
+t1.Test_Code,
+'',
+'',
+'INV'
+FROM   #Stage2_MHL_T_04_GROUP_TESTS t1 WITH (NOLOCK)
+LEFT JOIN #Stage2_MHL_T_01_TESTMASTER t2 WITH (NOLOCK)
+ON t1.TEST_CODE = t2.TCODE
+AND t2.TESTTYPE = 'INV'
+WHERE  T1.Type = 'INV'
+AND t2.TCODE IS NULL
+/* Update PKG details Into Stage2_MHL_T_03_Package_Master table */
+UPDATE Stg
+SET    [PACKAGE_NAME] = IGM.GroupName,
+[DISPLAY_NAME] = IOG.DisplayText,
+[IS_ORDERABLE] = CASE Isnull(IOG.IsNonOrderable, 'N')
+WHEN 'N' THEN 'Y'
+WHEN 'Y' THEN 'N'
+END,
+[CLASSIFICATION] = IOG.Classification,
+[OrgGroupID] = IOG.OrgGroupID,
+[ValidationText] = IOG.ValidationText,
+[ValidationRule] = IOG.ValidationRule,
+[IsDiscountable] = IOG.IsDiscountable,
+[IsServicetaxable] = IOG.IsServicetaxable,
+[Status] = IOG.Status,
+[CutOffTimeValue] = IOG.CutOffTimeValue,
+[CutOffTimeType] = IOG.CutOffTimeType,
+[SubCategory] = IOG.SubCategory,
+[HasHistory] = IOG.HasHistory,
+[Remarks] = IOG.Remarks,
+[PrintSeparately] = IOG.PrintSeparately,
+[Gender] = IOG.Gender,
+[groupinterpretation] = IOG.groupinterpretation,
+[Issummaryworklist] = IOG.Issummaryworklist,
+[IsSpecialFormat] = IOG.IsSpecialFormat,
+[stg].[ProtocolGroup] = MD.DisplayText,
+stg.IsAttachmentMandatory = IOG.IsAttachmentMandatory
+FROM   #Stage2_MHL_T_03_Package_Master stg WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = stg.METROLAB_PROFILECODE
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'PKG'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON CP.IdentifyingID = IOG.OrgGroupID
+AND IOG.OrgID = @FromOrgId
+INNER JOIN InvGroupMaster IGM WITH (NOLOCK)
+ON IGM.GroupID = IOG.AttGroupID
+LEFT JOIN MetaData MD WITH (NOLOCK)
+ON IOG.ProtocalGroupID = MD.MetaDataID
+AND MD.Domain = 'ProtocalGroup_Based'
+/* Insert PKG Contents Into Stage2_MHL_T_05_PACKAGE_TESTS Table */
+INSERT INTO #Stage2_MHL_T_05_PACKAGE_TESTS
+([LAB],
+[PACKAGE_CODE],
+[TEST_CODE],
+[TEST_SEQUENCE_NO],
+[Type],
+ID)
+SELECT @OrgName,
+T.GROUP_CODE,
+T.TEST_CODE,
+T.SequenceNo,
+T.Type,
+T.ID
+FROM   (SELECT DISTINCT T.METROLAB_PROFILECODE AS GROUP_CODE,
+CM.CodeName            AS TEST_CODE,
+IPM.SequenceNo,
+'INV'                  Type,
+IOM.InvestigationID    AS ID
+FROM   #Stage2_MHL_T_03_Package_Master T WITH (NOLOCK)
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON IOG.OrgGroupID = T.Orggroupid
+INNER JOIN InvPackageMapping IPM WITH (NOLOCK)
+ON IPM.PackageID = IOG.OrgGroupID
+AND IPM.Type = 'INV'
+AND IPM.active = 'A'
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CP.IdentifyingID = IPM.ID
+AND CP.IdentifyingType = 'Investigations'
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeSchemeID = @FromCodeSchemeID
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IPM.ID = IOM.Investigationid
+AND IOM.OrgID = @FromOrgId
+WHERE  IOG.OrgID = @FromOrgId
+UNION ALL
+SELECT DISTINCT T.METROLAB_PROFILECODE AS GROUP_CODE,
+CM.CodeName            AS TEST_CODE,
+IPM.SequenceNo,
+'GRP'                  Type,
+inv.OrgGroupID         AS ID
+FROM   #Stage2_MHL_T_03_Package_Master T WITH (NOLOCK)
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON IOG.OrgGroupID = T.Orggroupid
+INNER JOIN InvPackageMapping IPM WITH (NOLOCK)
+ON IPM.PackageID = IOG.OrgGroupID
+AND IPM.Type = 'GRP'
+AND IPM.active = 'A'
+INNER JOIN InvOrgGroup Inv WITH (NOLOCK)
+ON IPM.ID = inv.OrgGroupID
+AND Inv.OrgId = @FromOrgId
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CP.IdentifyingID = Inv.OrgGroupID
+AND CP.IdentifyingType = 'GRP'
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CM.CodeSchemeID = @FromCodeSchemeID
+AND CM.CodeType = CP.IdentifyingType
+WHERE  IOG.OrgID = @FromOrgId) T
+--select * from #Stage2_MHL_T_05_PACKAGE_TESTS
+/* Insert PKG Content Level INV Into Stage2_MHL_T_01_TESTMASTER Table */
+INSERT #Stage2_MHL_T_01_TESTMASTER
+(Lab,
+TCode,
+EDOSCode,
+TEST_ABBREVATION,
+TESTTYPE)
+SELECT DISTINCT t1.Lab,
+t1.Test_Code,
+'',
+'',
+'INV'
+FROM   #Stage2_MHL_T_05_PACKAGE_TESTS t1 WITH (NOLOCK)
+LEFT JOIN #Stage2_MHL_T_01_TESTMASTER t2 WITH (NOLOCK)
+ON t1.TEST_CODE = t2.TCODE
+AND t2.TESTTYPE = 'INV'
+WHERE  T1.Type = 'INV'
+AND t2.TCODE IS NULL
+--select * from #Stage2_MHL_T_01_TESTMASTER
+/* Update INV Details Into Stage2_MHL_T_01_TESTMASTER Table */
+UPDATE T
+SET    [InvestigationID] = IOM.InvestigationID,
+[TestName] = IM.InvestigationName,
+[TEST_ABBREVATION] = T.TEST_ABBREVATION,
+[DISPLAY_NAME] = IOM.DisplayText,
+[DeptName] = IDM.DeptName,
+[SECTION_NAME] = IH.HeaderName,
+[Values_Type] = CASE IOA.ResultValueType
+WHEN 'NU' THEN 'N'
+WHEN 'AN' THEN 'A'
+ELSE NULL
+END,
+[Orderable] = CASE Isnull(IOM.Display, 'Y')
+WHEN 'Y' THEN 'Y'
+WHEN 'N' THEN 'N'
+END,
+[INPUT_FORMAT] = '',
+[Sample_Type] = ISM.SampleDesc,
+[Method] = IGM.MethodName,
+[Container] = ISC.ContainerName,
+[Units] = UOM.UOMCode,
+[SubCategory] = IOM.SubCategory,
+[Decimal_Places] = IOA.DecimalPlaces,
+[Classification] = IOA.Classification,
+[IS_MACHINE_INTERFACED] = IOA.IsInterfaced,
+[REPEATABLE] = IOA.IsRepeatable,
+[TEST_GENDER] = IOM.Gender,
+[IS_NABL] = IOA.IsNABL,
+[IS_CAP] = IOA.IsCAP,
+[IS_STAT] = IOA.IsSTAT,
+[IS_SMS] = IOA.IsSMS,
+[IS_TEST_HISTORY] = IOA.HasHistory,
+[OUTPUT_FORMAT] = '',
+[Interpretation] = IOM.Interpretation,
+[CutOffTimeValue] = IOA.CutOffTimeValue,
+[CutOffTimeType] = IOA.CutOffTimeType,
+[IsActive] = IOM.IsActive,
+[IsNonReportable] = IOM.IsNonReportable,
+[PrintSeparately] = IOM.PrintSeparately,
+[IsParameter] = IOM.IsParameter,
+REFERENCE_RANGE = IOM.ReferenceRange,
+SEQUENCE_No = IOM.SequenceNo,
+PANIC_RANGE = IOM.PanicRange,
+T.ProtocolGroup = MD.DisplayText
+FROM   #Stage2_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = T.TCODE
+AND CM.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'Investigations'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvestigationMaster IM WITH (NOLOCK)
+ON CP.IdentifyingID = IM.InvestigationID
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = IM.InvestigationID
+AND IOM.OrgID = @FromOrgId
+LEFT JOIN InvestigationOrgAttributes IOA WITH (NOLOCK)
+ON IOM.InvestigationID = IOA.InvestigationID
+AND IOM.OrgID = IOA.OrgID
+LEFT JOIN InvDeptMaster IDM WITH (NOLOCK)
+ON IDM.DeptID = IOM.DeptID
+AND IDM.OrgID = @FromOrgId
+LEFT JOIN InvestigationHeader IH WITH (NOLOCK)
+ON IH.HeaderID = IOM.HeaderID
+LEFT JOIN InvestigationSampleContainer ISC WITH (NOLOCK)
+ON ISC.SampleContainerID = IOM.SampleContainerID
+AND ISC.OrgID = @FromOrgId
+LEFT JOIN InvSampleMaster ISM WITH (NOLOCK)
+ON ISM.SampleCode = IOM.SampleCode
+AND ISM.OrgID = @FromOrgId
+LEFT JOIN UOM UOM WITH (NOLOCK)
+ON UOM.UOMID = IOM.UOMID
+LEFT JOIN InvestigationMethod IGM WITH (NOLOCK)
+ON IGM.MethodID = IOM.MethodID
+AND IGM.OrgID = @FromOrgId
+LEFT JOIN MetaData MD WITH (NOLOCK)
+ON IOM.ProtocalGroupID = MD.MetaDataID
+AND MD.Domain = 'ProtocalGroup_Based'
+WHERE  T.TestType = 'INV'
+/* Update InputFormat Into Stage2_MHL_T_01_TESTMASTER Table */
+UPDATE T1
+SET    T1.INPUT_FORMAT = T3.DisplayText
+FROM   #Stage2_MHL_T_01_TESTMASTER T1 WITH (NOLOCK)
+INNER JOIN PatternMapping T2 WITH (NOLOCK)
+ON T2.InvestigationID = T1.InvestigationID
+INNER JOIN InvestigationPattern T3
+ON T3.PatternID = T2.PatternID
+AND T3.OrgID = @FromOrgId
+AND T1.TESTTYPE = 'INV'
+/* Update OutputFormat Into Stage2_MHL_T_01_TESTMASTER Table  */
+UPDATE T1
+SET    T1.OUTPUT_FORMAT = T3.TemplateName
+FROM   #Stage2_MHL_T_01_TESTMASTER T1 WITH (NOLOCK)
+INNER JOIN InvReportMapping T2 WITH (NOLOCK)
+ON T2.InvestigationID = T1.InvestigationID
+INNER JOIN InvReportMaster T3 WITH (NOLOCK)
+ON T3.TemplateID = T2.TemplateID
+AND T3.OrgID = @FromOrgId
+AND T1.TESTTYPE = 'INV'
+/* Update Processing Location Into Stage2_MHL_T_01_TESTMASTER Table */
+UPDATE T
+SET    T.PROCESSING_LOCATION = OA.Location
+FROM   #Stage2_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = T.InvestigationID
+INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+ON OA.AddressID = IOM.ProcessingAddressID
+WHERE  Isnull(T.SubCategory, 'INH') = 'INH'
+AND IOM.OrgID = @FromOrgId
+AND OA.OrgID = @FromOrgId
+AND T.TESTTYPE = 'INV'
+UPDATE T
+SET    T.PROCESSING_LOCATION = OA.RefOrgName
+FROM   #Stage2_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = T.InvestigationID
+AND IOM.OrgID = @FromOrgId
+INNER JOIN labreforgaddress LRA WITH (NOLOCK)
+ON IOM.ProcessingAddressID = LRA.AddressID
+INNER JOIN LabReferenceOrg OA WITH (NOLOCK)
+ON OA.LabRefOrgID = LRA.LabRefOrgID
+AND OA.OrgID = @FromOrgId
+WHERE  Isnull(T.SubCategory, 'OUT') = 'OUT'
+AND T.TESTTYPE = 'INV'
+/* Delete Tcodes where TestType Not In INV  */
+DELETE FROM #Stage2_MHL_T_01_TESTMASTER
+WHERE  Isnull(TESTTYPE, 'GRP') <> 'INV'
+-- SET @Status='Completed'
+-- RETURN @Status
+--DECLARE @Temp_Error TABLE
+--  (
+--     Tcode          VARCHAR(50),
+--     Error_Messages VARCHAR(255)
+--  )
+--INSERT INTO @Temp_Error
+--            (Tcode,
+--             Error_Messages)
+--SELECT CM.CodeName,
+--       'Tcode are already available in that Org' AS Error_Messages
+--FROM   #Stage2_MHL_T_01_TESTMASTER TM
+--       INNER JOIN CodeMaster CM (Nolock)
+--               ON CM.CodeName = TM.Tcode
+--       INNER JOIN CodeMapper CP (Nolock)
+--               ON CM.CodeMasterID = CP.CodeMasterID
+--                  AND CM.CodeType = CP.IdentifyingType
+--       INNER JOIN InvestigationOrgMapping IOM (Nolock)
+--               ON IOM.InvestigationID = CP.IdentifyingID
+--       INNER JOIN InvestigationOrgAttributes IOA (Nolock)
+--               ON IOM.InvestigationID = IOA.InvestigationID
+--                  AND IOA.OrgID = IOM.OrgID
+--       INNER JOIN InvestigationMaster IM (Nolock)
+--               ON IM.InvestigationID = IOM.InvestigationID
+--WHERE  CM.CodeSchemeID = @ToCodeSchemeID
+--       AND CP.IdentifyingType = 'Investigations'
+--       AND IOM.OrgID = @ToOrgid
+--       AND CM.CodeName NOT LIKE 'Inactive%'
+--UNION ALL
+--SELECT CM.CodeName,
+--       'Tcode are already available in that Org'
+--FROM   #Stage2_MHL_T_02_GROUP_MASTER TM
+--       INNER JOIN CodeMaster CM (Nolock)
+--               ON CM.CodeNAme = TM.METRO_COMBINE_CODE
+--       INNER JOIN CodeMapper CP (Nolock)
+--               ON CM.CodeMasterID = CP.CodeMasterID
+--                  AND CM.CodeType = CP.IdentifyingType
+--       INNER JOIN InvOrgGroup IOM (Nolock)
+--          ON IOM.OrgGroupID = CP.IdentifyingID
+--       INNER JOIN InvGroupMaster IM (Nolock)
+--               ON IM.GroupID = IOM.AttGroupID
+--WHERE  CM.CodeSchemeID = @ToCodeSchemeID
+--       AND CP.IdentifyingType = 'GRP'
+--       AND IOM.OrgID = @ToOrgid
+--UNION ALL
+--SELECT CM.CodeName,
+--       'Tcode are already available in that Org'
+--FROM   #Stage2_MHL_T_03_Package_Master TM
+--       INNER JOIN CodeMaster CM (Nolock)
+--               ON CM.CodeNAme = TM.METROLAB_PROFILECODE
+--       INNER JOIN CodeMapper CP (Nolock)
+--               ON CM.CodeMasterID = CP.CodeMasterID
+--            AND CM.CodeType = CP.IdentifyingType
+--       INNER JOIN InvOrgGroup IOM (Nolock)
+--               ON IOM.OrgGroupID = CP.IdentifyingID
+--       INNER JOIN InvGroupMaster IM (Nolock)
+--               ON IM.GroupID = IOM.AttGroupID
+--WHERE  CM.CodeSchemeID = @ToCodeSchemeID
+--       AND CP.IdentifyingType = 'PKG'
+--       AND IOM.OrgID = @ToOrgid
+--IF EXISTS (SELECT Tcode
+--           FROM   @Temp_Error
+--           WHERE  Tcode IS NOT NULL)
+--  BEGIN
+--      RAISERROR ('Error Msg: This Test code already available in that org:',16,1)
+--  END
+--ELSE
+DECLARE @ProcessingLocation VARCHAR(100)
+DECLARE @createdby BIGINT=3366
+SELECT @ProcessingLocation = Location
+FROM   OrganizationAddress
+WHERE  OrgID = @FromOrgid
+AND IsDefault = 'Y'
+TRUNCATE TABLE #Stage_MHL_T_02_GROUP_MASTER
+TRUNCATE TABLE #Stage_MHL_T_01_TESTMASTER
+TRUNCATE TABLE #Stage_MHL_T_04_GROUP_TESTS
+TRUNCATE TABLE #Stage_MHL_T_03_Package_Master
+TRUNCATE TABLE #Stage_MHL_T_05_PACKAGE_TESTS
+/* Copy Data From Source Template to Intermediate Template Table */
+INSERT INTO #Stage_MHL_T_02_GROUP_MASTER
+SELECT *
+FROM   #Stage2_MHL_T_02_GROUP_MASTER
+--select * from #Stage_MHL_T_02_GROUP_MASTER
+--    SELECT *
+--    INTO   #Stage_MHL_T_02_GROUP_MASTER
+--   FROM   #Stage2_MHL_T_02_GROUP_MASTER
+INSERT INTO #Stage_MHL_T_01_TESTMASTER
+SELECT *
+FROM   #Stage2_MHL_T_01_TESTMASTER
+--   SELECT *
+-- INTO   #Stage_MHL_T_01_TESTMASTER
+--  FROM   #Stage2_MHL_T_01_TESTMASTER
+INSERT INTO #Stage_MHL_T_04_GROUP_TESTS
+SELECT *
+FROM   #Stage2_MHL_T_04_GROUP_TESTS
+--     SELECT *
+--    INTO   #Stage_MHL_T_04_GROUP_TESTS
+--   FROM   #Stage2_MHL_T_04_GROUP_TESTS
+INSERT INTO #Stage_MHL_T_03_Package_Master
+SELECT *
+FROM   #Stage2_MHL_T_03_Package_Master
+--select * from #Stage_MHL_T_03_Package_Master
+--SELECT *
+--INTO   #Stage_MHL_T_03_Package_Master
+--FROM   #Stage2_MHL_T_03_Package_Master
+INSERT INTO #Stage_MHL_T_05_PACKAGE_TESTS
+SELECT *
+FROM   #Stage2_MHL_T_05_PACKAGE_TESTS
+--select * from #Stage2_MHL_T_05_PACKAGE_TESTS
+--SELECT *
+--INTO   #Stage_MHL_T_05_PACKAGE_TESTS
+--FROM   #Stage2_MHL_T_05_PACKAGE_TESTS
+UPDATE #Stage_MHL_T_02_GROUP_MASTER
+SET    Orggroupid = NULL
+UPDATE #Stage_MHL_T_01_TESTMASTER
+SET    InvestigationID = NULL
+UPDATE #Stage_MHL_T_04_GROUP_TESTS
+SET    InvestigationID = NULL,
+OrgGroupID = NULL
+UPDATE #Stage_MHL_T_03_Package_Master
+SET    OrgGroupID = NULL
+UPDATE #Stage_MHL_T_05_PACKAGE_TESTS
+SET    InvestigationID = NULL,
+OrgGroupID = NULL
+UPDATE #Stage_MHL_T_01_TESTMASTER
+SET    PROCESSING_LOCATION = @ProcessingLocation
+WHERE  SubCategory = 'INH'
+/* InvestigationMaster */
+DECLARE @max BIGINT
+SELECT @max = 0
+SELECT @Max = Isnull(Max(InvestigationID), 0)
+FROM   InvestigationMaster
+UPDATE stg
+SET    stg.attgroupid = cp.IdentifyingID
+FROM   #Stage_MHL_T_01_TESTMASTER stg
+INNER JOIN Codemaster CM
+ON CM.codeName = Stg.Tcode
+INNER JOIN CodeMapper CP
+ON CM.codeMasterid = CP.Codemasterid
+AND cm.codetype = CP.IdentifyingType
+AND CP.IdentifyingType = 'Investigations'
+AND cm.CodeSchemeID = @FromCodeSchemeID--@ToCodeSchemeID
+--select 'we',* from #Stage_MHL_T_01_TESTMASTER
+--return
+INSERT INTO InvestigationMaster
+(InvestigationName,
+Display,
+InvestigationID,
+TestCode,
+IsParameter)
+SELECT TestName,
+CASE
+WHEN stg.Orderable = 'Y' THEN 'Y'
+ELSE 'N'
+END                                          Display,
+Row_number() OVER (ORDER BY TestName) + @max AS InvestigationID,
+TCODE,
+stg.IsParameter
+FROM   #Stage_MHL_T_01_TESTMASTER stg WITH (NOLOCK)
+LEFT JOIN InvestigationMaster inv WITH (NOLOCK)
+ON stg.Attgroupid = inv.InvestigationID
+WHERE  TestType = 'INV'
+AND Inv.TestCode IS NULL
+AND Isnull(stg.TCODE, '') <> ''
+AND inv.InvestigationID IS NULL
+--UPDATE M
+--SET    InvestigationID = T.InvestigationId
+--FROM   #Stage_MHL_T_01_TESTMASTER M WITH (NOLOCK)
+--       INNER JOIN InvestigationMaster T WITH (NOLOCK)
+--               ON T.TestCode = M.TCODE
+--WHERE  M.TestType = 'INV'
+UPDATE M
+SET    InvestigationID = im.InvestigationId
+FROM   #Stage_MHL_T_01_TESTMASTER M WITH (NOLOCK)
+INNER JOIN CodeMaster cm WITH (NOLOCK)
+ON M.TCode = cm.CodeName
+INNER JOIN CodeMapper cp WITH(NOLOCK)
+ON cm.CodeMasterID = cp.CodeMasterID
+AND cm.CodeType = cp.IdentifyingType
+AND CP.IdentifyingType = 'Investigations'
+--INNER JOIN InvestigationOrgMapping iom 
+--        ON cp.IdentifyingID=iom.InvestigationID
+INNER JOIN InvestigationMaster im
+--ON cp.IdentifyingID = im.InvestigationID
+ON im.InvestigationID = m.Attgroupid
+WHERE  M.TestType = 'INV'
+AND cm.CodeSchemeID = @ToCodeSchemeID
+UPDATE M
+SET    InvestigationID = T.InvestigationId
+FROM   #Stage_MHL_T_04_GROUP_TESTS M WITH (NOLOCK)
+INNER JOIN InvestigationMaster T WITH (NOLOCK)
+ON T.TestCode = M.Test_Code
+WHERE  M.TYPE = 'INV'
+/* DeptMaster */
+INSERT INTO DeptMaster
+(DeptName,
+Code)
+SELECT DISTINCT DeptName,
+'' AS SHORTNAME
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  DeptName NOT IN (SELECT Isnull(DeptName, '')
+FROM   DeptMaster WITH (NOLOCK))
+AND Isnull(DeptName, '') <> ''
+SELECT @max = 0
+SELECT @max = Isnull(Max(DeptID), 0)
+FROM   InvDeptMaster WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid
+INSERT INTO InvDeptMaster
+(DeptName,
+SequenceNo,
+Display,
+OrgID,
+DeptID)
+SELECT DeptName,
+''                                           AS SEQUENCE_REPORT,
+'Y',
+@ToOrgid,
+Row_number() OVER (ORDER BY DeptName) + @max AS DeptId
+FROM   (SELECT DISTINCT DeptName
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  DeptName NOT IN (SELECT DeptName
+FROM   InvDeptMaster WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid)
+AND Isnull(DeptName, '') <> '') t
+UPDATE T
+SET    DeptCode = M.DeptCode
+FROM   InvDeptMaster T WITH (NOLOCK)
+INNER JOIN DeptMaster M WITH (NOLOCK)
+ON M.DeptName = T.DeptName
+WHERE  T.OrgID = @ToOrgid
+/* Header(Section) */
+SELECT @max = 0
+SELECT @max = Isnull(Max(HeaderID), 0)
+FROM   InvestigationHeader WITH (NOLOCK)
+INSERT INTO InvestigationHeader
+(HeaderName,
+HeaderID)
+SELECT DISTINCT SECTION,
+Row_number() OVER (ORDER BY SECTION) + @max AS HeaderID
+FROM   (SELECT DISTINCT SECTION_NAME AS SECTION
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  testType = 'INV'
+AND Isnull(Section_name, '') <> '') t
+WHERE  t.SECTION NOT IN (SELECT HeaderName
+FROM   InvestigationHeader WITH (NOLOCK))
+/* UOM */
+SELECT @max = 0
+SELECT @Max = Isnull(Max(UOMID), 0)
+FROM   UOM WITH (NOLOCK)
+INSERT INTO UOM
+(UOMCode,
+UOMDescription,
+UOMID)
+SELECT Units,
+Units,
+Row_number() OVER (ORDER BY Units) + @max AS UOMID
+FROM   (SELECT DISTINCT Units
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK))t
+WHERE  Units NOT IN (SELECT UOMDescription
+FROM   UOM WITH (NOLOCK))
+AND Isnull(Units, '') <> ''
+/* Sample Container */
+SELECT @max = 0
+SELECT @max = Isnull(Max(SampleContainerID), 0)
+FROM   InvestigationSampleContainer WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid
+INSERT INTO InvestigationSampleContainer
+(ContainerName,
+orgId,
+Description,
+Active,
+SampleContainerID)
+SELECT DISTINCT NAME,
+@ToOrgid,
+Substring(NAME, 1, 6)                    AS SHORTNAME,
+'Y',
+Row_number() OVER (ORDER BY NAME) + @max AS SampleContainerID
+FROM   (SELECT DISTINCT Container AS Name
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  Isnull(Container, '') <> '') t
+WHERE  NAME NOT IN (SELECT DISTINCT ContainerName
+FROM   InvestigationSampleContainer WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid)
+/* Sample Master */
+SELECT @max = 0
+SELECT @Max = Isnull(Max(SampleCode), 0)
+FROM   InvSampleMaster WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid
+INSERT INTO InvSampleMaster
+(SampleDesc,
+OrgID,
+Active,
+SampleCode)
+SELECT DISTINCT SAMPLE_DESCRIPTION,
+@ToOrgid,
+'Y',
+Row_number() OVER (ORDER BY SAMPLE_DESCRIPTION)
++ @max AS SampleCode
+FROM   (SELECT DISTINCT Sample_Type AS SAMPLE_DESCRIPTION
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  Isnull(Sample_Type, '') <> '') t
+WHERE  SAMPLE_DESCRIPTION NOT IN (SELECT DISTINCT SampleDesc
+FROM   InvSampleMaster WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid)
+/* Investigation Method */
+SELECT @max = 0
+SELECT @max = Isnull(Max(MethodID), 0)
+FROM   InvestigationMethod WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid
+INSERT INTO InvestigationMethod
+(MethodName,
+OrgID,
+CreatedAt,
+CreatedBy,
+MethodID)
+SELECT DISTINCT NAME,
+@ToOrgid,
+Getdate(),
+3366,
+Row_number() OVER (ORDER BY NAME) + @max AS MethodID
+FROM   (SELECT DISTINCT Method AS NAME
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  Isnull(Method, '') <> '') t
+WHERE  NAME NOT IN (SELECT DISTINCT MethodName
+FROM   InvestigationMethod WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid)
+/* Protocol Group */
+SELECT @max = 0
+SELECT @Max = Isnull(Max(MetaDataID), 0)
+FROM   MetaData
+SET IDENTITY_INSERT MetaData ON
+INSERT INTO MetaData
+(MetaDataID,
+Domain,
+Code,
+DisplayText,
+LangCode)
+SELECT Row_number() OVER (ORDER BY DisplayText)
++ @max AS MetaDataID,
+Domain,
+Row_number() OVER (ORDER BY DisplayText)
++ @max AS Code,
+DisplayText,
+LangCode
+FROM   (SELECT DISTINCT 'ProtocalGroup_Based' AS Domain,
+ProtocolGroup         AS DisplayText,
+'en-GB'               AS LangCode
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  Isnull(ProtocolGroup, '') <> ''
+UNION
+SELECT DISTINCT 'ProtocalGroup_Based' AS Domain,
+ProtocolGroup         AS DisplayText,
+'en-GB'               AS LangCode
+FROM   #Stage_MHL_T_02_GROUP_MASTER WITH (NOLOCK)
+WHERE Isnull(ProtocolGroup, '') <> ''
+UNION
+SELECT DISTINCT 'ProtocalGroup_Based' AS Domain,
+ProtocolGroup         AS DisplayText,
+'en-GB'               AS LangCode
+FROM   #Stage_MHL_T_03_Package_Master WITH (NOLOCK)
+WHERE  Isnull(ProtocolGroup, '') <> ''
+EXCEPT
+SELECT Domain,
+DisplayText,
+LangCode
+FROM   MetaData
+WHERE  Domain = 'ProtocalGroup_Based')t
+SET IDENTITY_INSERT MetaData OFF
+INSERT INTO MetaDataOrgMapping
+(MetadataID,
+OrgID,
+LangCode,
+DisplayText)
+SELECT DISTINCT MD.MetaDataID,
+@ToOrgid         AS OrgID,
+'en-GB'          AS LangCode,
+PR.ProtocolGroup AS DisplayText
+FROM   (SELECT ProtocolGroup
+FROM   #Stage_MHL_T_01_TESTMASTER WITH (NOLOCK)
+WHERE  Isnull(ProtocolGroup, '') <> ''
+UNION
+SELECT ProtocolGroup
+FROM   #Stage_MHL_T_02_GROUP_MASTER WITH (NOLOCK)
+WHERE  Isnull(ProtocolGroup, '') <> ''
+UNION
+SELECT ProtocolGroup
+FROM   #Stage_MHL_T_03_Package_Master WITH (NOLOCK)
+WHERE  Isnull(ProtocolGroup, '') <> '')PR
+INNER JOIN MetaData MD
+ON PR.ProtocolGroup = MD.DisplayText
+WHERE  MD.Domain = 'ProtocalGroup_Based'
+AND MD.MetaDataID NOT IN (SELECT MetaDataID
+FROM   MetaDataOrgMapping
+WHERE  OrgID = @ToOrgid)
+/* InvestigationID,DeptID,SampleCode,MethodID,SampleContainerID,HeaderId,UomId updation Into Stage_MHL_T_01_TESTMASTER  */
+--UPDATE T
+--SET    InvestigationID = IM.InvestigationID
+--FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+--       INNER JOIN InvestigationMaster IM WITH (NOLOCK)
+--               ON T.TCODE = IM.TestCode
+--WHERE  t.testType = 'INV'
+UPDATE T
+SET    T.DeptID = IDM.DeptID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN DeptMaster DM WITH (NOLOCK)
+ON DM.DeptName = T.DeptNAme
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK)
+ON IDM.DeptCode = DM.DeptCode
+WHERE  t.testType = 'INV'
+AND IDM.OrgID = @ToOrgid
+UPDATE T
+SET    SampleCode = ISM.SampleCode
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvSampleMaster ISM WITH (NOLOCK)
+ON T.Sample_Type = ISM.SampleDesc
+WHERE  t.testType = 'INV'
+AND ISM.OrgID = @ToOrgid
+UPDATE T
+SET    MethodID = IM.MethodID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationMethod IM WITH (NOLOCK)
+ON T.Method = IM.MethodName
+WHERE  t.testType = 'INV'
+AND IM.OrgID = @ToOrgid
+UPDATE T
+SET    SampleContainerID = ISC.SampleContainerID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationSampleContainer ISC WITH (NOLOCK)
+ON Ltrim(T.Container) = ISC.ContainerName
+WHERE  t.testType = 'INV'
+AND ISC.OrgID = @ToOrgid
+UPDATE T
+SET    HeaderId = IH.HeaderID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationHeader IH WITH (NOLOCK)
+ON T.SECTION_NAME = IH.HeaderName
+WHERE  t.testType = 'INV'
+UPDATE T
+SET    UOMID = U.UOMID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN UOM U WITH (NOLOCK)
+ON U.UOMCode = T.Units
+WHERE  t.testType = 'INV'
+UPDATE T
+SET    AutoAuthorizationId = U.LoginID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN Users U WITH (NOLOCK)
+ON U.Name = T.AUTORIZATION
+WHERE  t.testType = 'INV'
+AND OrgID = @ToOrgid
+UPDATE T
+SET    T.ProtocolGroupID = MD.MetaDataID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN MetaData MD WITH (NOLOCK)
+ON T.ProtocolGroup = MD.DisplayText
+WHERE  T.TESTTYPE = 'INV'
+AND MD.Domain = 'ProtocalGroup_Based'
+UPDATE T
+SET    T.ProtocolGroupID = MD.MetaDataID
+FROM   #Stage_MHL_T_02_GROUP_MASTER T WITH (NOLOCK)
+INNER JOIN MetaData MD WITH (NOLOCK)
+ON T.ProtocolGroup = MD.DisplayText
+WHERE  MD.Domain = 'ProtocalGroup_Based'
+UPDATE T
+SET    T.ProtocolGroupID = MD.MetaDataID
+FROM   #Stage_MHL_T_03_Package_Master T WITH (NOLOCK)
+INNER JOIN MetaData MD WITH (NOLOCK)
+ON T.ProtocolGroup = MD.DisplayText
+WHERE  MD.Domain = 'ProtocalGroup_Based'
+/* Insert INV - Tcode,EdosCode and AbbCode into CodeMAster and CodeMapper */
+INSERT INTO CodeMaster
+(CodeName,
+CodeType,
+CodeSchemeID,
+CodeDesc)
+SELECT Stg.Tcode,
+'Investigations',
+@ToCodeSchemeID,
+Testname
+FROM   #Stage_MHL_T_01_TESTMASTER stg WITH (NOLOCK)
+LEFT JOIN Codemaster CM WITH (NOLOCK)
+ON stg.TCode = Cm.Codename
+AND Cm.Codeschemeid = @ToCodeSchemeID
+WHERE  stg.TestType = 'INV'
+AND Isnull(Stg.TCode, '') <> ''
+AND CM.Codemasterid IS NULL
+INSERT INTO CodeMapper
+(IdentifyingType,
+IdentifyingID,
+CodeMasterID)
+SELECT 'investigations',
+Stg.Investigationid,
+CM.Codemasterid
+FROM   #Stage_MHL_T_01_TESTMASTER stg WITH (NOLOCK)
+INNER JOIN Codemaster CM WITH (NOLOCK)
+ON stg.TCode = Cm.Codename
+AND Cm.Codeschemeid = @ToCodeSchemeID
+LEFT JOIN CodeMapper CM2 WITH (NOLOCK)
+ON CM2.CodeMasterID = CM.CodemasterID
+AND CM2.IdentifyingID = Stg.Investigationid
+AND CM2.IdentifyingType = 'Investigations'
+WHERE  stg.TestType = 'INV'
+AND CM2.CodeMasterID IS NULL
+AND Isnull(Stg.TCode, '') <> ''
+UPDATE T
+SET    Processing_AddressID = OA.AddressID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+ON OA.Location = T.PROCESSING_LOCATION
+WHERE  Isnull(T.SubCategory, '') <> 'OUT'
+AND T.testType = 'INV'
+AND OA.OrgID = @ToOrgid
+UPDATE T
+SET    Processing_AddressID = LRA.AddressID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN LabReferenceORg OA WITH (NOLOCK)
+ON OA.RefOrgName = T.PROCESSING_LOCATION
+AND OA.OrgID = @ToOrgid
+INNER JOIN labreforgaddress LRA WITH (NOLOCK)
+ON LRA.LabRefOrgId = OA.LabRefOrgId
+WHERE  Isnull(T.SubCategory, '') = 'OUT'
+AND T.testType = 'INV'
+/* Insert InvestigationOrgMapping  */
+INSERT INTO InvestigationOrgMapping
+(orgID,
+DisplayText,
+InvestigationID,
+DeptID,
+SampleCode,
+MethodID,
+SampleContainerID,
+UOMID,
+SubCategory,
+ProcessingAddressID,
+AutoApproveLoginID,
+HeaderID,
+InvestigationCode,
+Display,
+Interpretation,
+IsActive,
+IsNonReportable,
+PrintSeparately,
+UOMCode,
+Gender,
+IsSTAT,
+IsDiscountable,
+ReferenceRange,
+SequenceNo,
+PanicRange,
+ProtocalGroupID,
+BillingName,
+TestCode)
+SELECT DISTINCT @ToOrgid,
+DISPLAY_NAME,
+stg.InvestigationID,
+stg.DeptID,
+stg.SampleCode,
+stg.MethodID,
+stg.SampleContainerID,
+stg.UOMID,
+CASE stg.subCategory
+WHEN 'INH' THEN 'INH'
+WHEN 'InHouse' THEN 'INH'
+WHEN 'OUT' THEN 'OUT'
+WHEN 'OutSourced' THEN 'OUT'
+END AS subCategory,
+stg.Processing_AddressID,
+stg.AutoAuthorizationId,
+stg.HeaderID,
+stg.TCODE,
+CASE
+WHEN stg.Orderable IS NULL THEN 'Y'
+ELSE Orderable
+END Orderable,
+stg.Interpretation,
+Isnull(stg.IsActive, ''),
+stg.IsNonReportable,
+stg.PrintSeparately,
+-- stg.IsParameter,
+stg.units,
+stg.TEST_GENDER,
+CASE stg.IS_STAT
+WHEN '1' THEN 1
+ELSE 0
+END,
+1,
+stg.REFERENCE_RANGE,
+SEQUENCE_No,
+stg.PANIC_RANGE,
+ProtocolGroupID,
+DISPLAY_NAME,
+Stg.Tcode
+FROM   #Stage_MHL_T_01_TESTMASTER stg WITH (NOLOCK)
+LEFT JOIN InvestigationOrgmapping Invmap WITH (NOLOCK)
+ON stg.Investigationid = invmap.Investigationid
+AND Invmap.OrgID = @ToOrgid
+WHERE  stg.TestType = 'INV'
+AND stg.InvestigationID IS NOT NULL
+AND invmap.investigationid IS NULL
+AND Isnull(stg.TCODE, '') <> ''
+/* Insert InvestigationOrgAttributes */
+INSERT INTO InvestigationOrgAttributes
+(OrgID,
+InvestigationID,
+ResultValueType,
+DecimalPlaces,
+IsCAP,
+Classification,
+IsRepeatable,
+IsSMS,
+IsSTAT,
+IsInterfaced,
+IsNABL,
+HasHistory,
+CutOffTimeValue,
+CutOffTimeType,
+IsNonReportable,
+IsDiscountable)
+SELECT DISTINCT @ToOrgid,
+stg.InvestigationID,
+CASE
+WHEN stg.Values_Type = 'N'
+OR stg.Values_Type = 'Numeric' THEN 'NU'
+WHEN stg.Values_Type = 'A'
+OR stg.Values_Type = 'Alpha Numeric' THEN 'AN'
+ELSE NULL
+END,
+stg.Decimal_Places,
+stg.IS_CAP,
+stg.Classification,
+stg.[REPEATABLE],
+stg.IS_SMS,
+stg.IS_STATISTICAL,
+stg.IS_MACHINE_INTERFACED,
+stg.IS_NABL,
+stg.IS_TEST_HISTORY,
+stg.CutOffTimeValue,
+stg.CutOffTimeType,
+stg.IsNonReportable,
+'Y'
+FROM   #Stage_MHL_T_01_TESTMASTER stg WITH (NOLOCK)
+LEFT JOIN InvestigationOrgAttributes Invmap WITH (NOLOCK)
+ON stg.Investigationid = invmap.Investigationid
+AND Invmap.OrgID = @ToOrgid
+WHERE  stg.TestType = 'INV'
+AND stg.InvestigationID IS NOT NULL
+AND invmap.investigationid IS NULL
+AND Isnull(stg.TCODE, '') <> ''
+/* Insert Input and Output Format */
+INSERT INTO PatternMapping
+(PatternID,
+InvestigationID)
+SELECT DISTINCT T.PatternID,
+T.InvestigationID
+FROM   (SELECT DISTINCT IP.PatternID,
+T.InvestigationID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvestigationPattern IP WITH (NOLOCK)
+ON IP.DisplayText = T.INPUT_FORMAT
+AND IP.OrgID = @ToOrgid
+WHERE  t.TestType = 'INV'
+AND Isnull(t.input_format, '') <> '')t
+LEFT JOIN PatternMapping PM WITH(NOLOCK)
+ON PM.InvestigationID = t.InvestigationID 
+WHERE  PM.PatternID IS NULL and PM.OrgID=@ToOrgid
+--select * from #Stage_MHL_T_01_TESTMASTER
+--return
+INSERT INTO InvReportMapping
+(TemplateID,
+InvestigationID)
+SELECT DISTINCT T.TemplateID,
+T.InvestigationID
+FROM   (SELECT IP.TemplateID,
+T.InvestigationID
+FROM   #Stage_MHL_T_01_TESTMASTER T WITH (NOLOCK)
+INNER JOIN InvReportMaster IP WITH (NOLOCK)
+ON IP.TemplateName = T.OUTPUT_FORMAT
+AND IP.OrgID = @ToOrgid
+WHERE  t.TestType = 'INV'
+AND Isnull(t.OUTPUT_FORMAT, '') <> '')t
+LEFT JOIN InvReportMapping IRM WITH (NOLOCK)
+ON IRM.InvestigationID = t.InvestigationID
+WHERE  IRM.Mappingid IS NULL
+/* Insert OutSource Test */
+DECLARE @pOrgAddressID INT
+SELECT @pOrgAddressID = Max(AddressID)
+FROM   OrganizationAddress WITH (NOLOCK)
+WHERE  OrgID = @ToOrgid
+AND Isnull(IsDefault, '') = 'Y'
+INSERT INTO InvestigationLocationMapping
+(InvestigationID,
+OrgID,
+LocationID,
+ProcessingOrgID,
+ProcessingAddressID,
+Type)
+SELECT InvestigationID,
+OrgID,
+LocationID,
+ProcessingOrgID,
+ProcessingAddressID,
+Type
+FROM   (SELECT DISTINCT TM.InvestigationID,
+@ToOrgid        AS OrgID,
+@pOrgAddressID  AS LocationID,
+LRO.LabRefOrgID AS ProcessingOrgID,
+LRA.AddressID   AS ProcessingAddressID,
+12              AS Type
+FROM   #Stage_MHL_T_01_TESTMASTER TM WITH (NOLOCK)
+INNER JOIN LabReferenceORg LRO WITH (NOLOCK)
+ON LRO.RefOrgName = TM.PROCESSING_LOCATION
+AND LRO.OrgID = @ToOrgid
+INNER JOIN labreforgaddress LRA WITH (NOLOCK)
+ON LRA.LabRefOrgId = LRO.LabRefOrgId
+LEFT JOIN InvestigationLocationMapping ILM WITH (NOLOCK)
+ON ILM.InvestigationID = TM.InvestigationID
+AND ILM.ProcessingOrgID = LRO.LabRefOrgID
+AND ILM.ProcessingAddressID = LRA.AddressID
+AND ILM.OrgID = @ToOrgid
+AND ILM.LocationID = @pOrgAddressID
+WHERE  ILM.InvestigationID IS NULL
+AND Isnull(TM.SubCategory, '') = 'OUT'
+AND TM.TestType = 'INV') T
+/* Group Insertions */
+SELECT @max = 0
+SELECT @Max = Isnull(Max(GroupID), 0)
+FROM   InvGroupMaster WITH (NOLOCK)
+UPDATE stg
+SET    stg.attgroupid = iog.AttGroupID
+FROM   #Stage_MHL_T_02_GROUP_MASTER stg
+INNER JOIN Codemaster CM
+ON CM.codeName = stg.METRO_COMBINE_CODE
+INNER JOIN CodeMapper CP
+ON CM.codeMasterid = CP.Codemasterid
+AND cm.codetype = CP.IdentifyingType
+AND CP.IdentifyingType = 'Grp'
+AND cm.CodeSchemeID = @FromCodeSchemeID--@ToCodeSchemeID
+INNER JOIN InvOrgGroup iog
+ON cp.IdentifyingID = iog.OrgGroupID
+AND iog.OrgID = @FromOrgid--@TOOrgid
+--select * from #Stage_MHL_T_02_GROUP_MASTER
+--return
+--select 'as',*	FROM   #Stage_MHL_T_02_GROUP_MASTER stg
+--              INNER JOIN Codemaster CM
+--                      ON CM.codeName = stg.METRO_COMBINE_CODE
+--              INNER JOIN CodeMapper CP
+--                      ON CM.codeMasterid = CP.Codemasterid
+--                         AND cm.codetype = CP.IdentifyingType
+--                         AND CP.IdentifyingType = 'Grp'
+--                         AND cm.CodeSchemeID = 271
+--              INNER JOIN InvOrgGroup iog
+--                      ON cp.IdentifyingID = iog.OrgGroupID
+--                         AND iog.OrgID = 228
+--select 'ss',*	FROM   #Stage_MHL_T_02_GROUP_MASTER stg
+--              INNER JOIN Codemaster CM
+--                      ON CM.codeName = stg.METRO_COMBINE_CODE
+--              INNER JOIN CodeMapper CP
+--                      ON CM.codeMasterid = CP.Codemasterid
+--                         AND cm.codetype = CP.IdentifyingType
+--                         AND CP.IdentifyingType = 'Grp'
+--                         AND cm.CodeSchemeID = 271
+--              INNER JOIN InvOrgGroup iog
+--                      ON cp.IdentifyingID = iog.OrgGroupID
+--                         AND iog.OrgID = 218
+INSERT INTO InvGroupMaster
+(GroupName,
+Type,
+GroupID,
+TestCode)
+SELECT stg.GROUPNAME,
+'GRP',
+Row_number() OVER (ORDER BY stg.GroupName)
++ @max AS GroupID,
+stg.METRO_COMBINE_CODE
+FROM   #Stage_MHL_T_02_GROUP_MASTER Stg WITH (NOLOCK)
+LEFT JOIN Invgroupmaster grp WITH(NOLOCK)
+ON Stg.attgroupid = grp.groupid
+WHERE  Isnull(stg.METRO_COMBINE_CODE, '') <> ''
+AND grp.Groupid IS NULL
+SELECT @max = 0
+SELECT @Max = Isnull(Max(OrgGroupID), 0)
+FROM   InvOrgGroup WITH (NOLOCK)
+INSERT INTO InvOrgGroup
+(AttGroupID,
+OrgID,
+DisplayText,
+IsNonOrderable,
+Classification,
+OrgGroupID,
+TestCode,
+ValidationText,
+ValidationRule,
+IsDiscountable,
+IsServicetaxable,
+Status,
+CutOffTimeValue,
+CutOffTimeType,
+SubCategory,
+HasHistory,
+Remarks,
+PrintSeparately,
+Gender,
+groupinterpretation,
+Issummaryworklist,
+IsSpecialFormat,
+SequenceNo,
+ProtocalGroupID,
+BillingName,
+IsAttachmentMandatory)
+SELECT DISTINCT stg.Attgroupid,
+@ToOrgid,
+stg.DISPLAY_NAME,
+CASE
+WHEN Isnull(stg.IS_ORDERABLE, 'N') = 'N' THEN 'Y'
+ELSE 'N'
+END,
+stg.CLASSIFICATION,
+Row_number() OVER (ORDER BY stg.DISPLAY_NAME)
++ @max AS OrgGroupID,
+stg.METRO_COMBINE_CODE,
+stg.ValidationText,
+stg.ValidationRule,
+'Y',
+stg.IsServicetaxable,
+stg.Status,
+stg.CutOffTimeValue,
+stg.CutOffTimeType,
+stg.SubCategory,
+stg.HasHistory,
+stg.Remarks,
+stg.PrintSeparately,
+stg.Gender,
+stg.groupinterpretation,
+'Y',
+stg.IsSpecialFormat,
+Row_number() OVER (ORDER BY stg.DISPLAY_NAME)
++ @max AS SequenceNo,
+ProtocolGroupID,
+stg.DISPLAY_NAME,
+stg.IsAttachmentMandatory
+FROM   #Stage_MHL_T_02_GROUP_MASTER stg WITH (NOLOCK)
+LEFT JOIN InvOrgGroup Invgrp WITH (NOLOCK)
+ON stg.Attgroupid = invgrp.Attgroupid
+AND invgrp.OrgID = @ToOrgid
+WHERE  Isnull(stg.METRO_COMBINE_CODE, '') <> ''
+AND invgrp.attgroupid IS NULL
+UPDATE T
+SET    T.OrgGroupID = S.OrgGroupID
+FROM   #Stage_MHL_T_02_GROUP_MASTER T WITH (NOLOCK)
+INNER JOIN InvGroupMaster I WITH (NOLOCK)
+--ON T.METRO_COMBINE_CODE = I.TestCode
+ON T.Attgroupid = i.GroupID
+INNER JOIN InvOrgGroup S WITH (NOLOCK)
+ON S.AttGroupID = T.Attgroupid
+WHERE  S.OrgID = @ToOrgid
+AND I.Type = 'GRP'
+/* Insert GRP - Tcodes,EdosCode and AbbCode Into CodeMaster and CodeMapper */
+--  SELECT METRO_COMBINE_CODE AS CodeName,
+--                 'GRP',
+--                 @ToCodeSchemeID,
+--                 GROUPNAME          AS CodeDesc
+--          FROM   #Stage_MHL_T_02_GROUP_MASTER stg WITH (NOLOCK)
+--                 LEFT JOIN Codemaster CM WITH (NOLOCK)
+--                        ON Stg.METRO_COMBINE_CODE = CM.Codename
+--                           AND CM.Codeschemeid = @ToCodeSchemeID
+--                           AND Cm.CodeType = 'GRP'
+--          WHERE  Isnull(Stg.METRO_COMBINE_CODE, '') <> ''
+--                 AND CM.Codemasterid IS NULL
+-- select 'aa',* from #Stage_MHL_T_02_GROUP_MASTER
+--return
+INSERT INTO CodeMaster
+(CodeName,
+CodeType,
+CodeSchemeID,
+CodeDesc)
+SELECT METRO_COMBINE_CODE AS CodeName,
+'GRP',
+@ToCodeSchemeID,
+GROUPNAME          AS CodeDesc
+FROM   #Stage_MHL_T_02_GROUP_MASTER stg WITH (NOLOCK)
+LEFT JOIN Codemaster CM WITH (NOLOCK)
+ON Stg.METRO_COMBINE_CODE = CM.Codename
+AND CM.Codeschemeid = @ToCodeSchemeID
+AND Cm.CodeType = 'GRP'
+WHERE  Isnull(Stg.METRO_COMBINE_CODE, '') <> ''
+AND CM.Codemasterid IS NULL
+INSERT INTO CodeMapper
+(IdentifyingType,
+IdentifyingID,
+CodeMasterID)
+SELECT 'GRP',
+Stg.orggroupid,
+CM.Codemasterid
+FROM   #Stage_MHL_T_02_GROUP_MASTER stg WITH (NOLOCK)
+INNER JOIN Codemaster CM WITH (NOLOCK)
+ON Stg.METRO_COMBINE_CODE = CM.Codename
+AND CM.Codeschemeid = @ToCodeSchemeID
+AND Cm.CodeType = 'GRP'
+LEFT JOIN Codemapper CMAP WITH (NOLOCK)
+ON cm.Codemasterid = Cmap.Codemasterid
+AND stg.orggroupid = CMap.identifyingid
+AND CMAP.IdentifyingType = 'GRP'
+WHERE  Isnull(Stg.METRO_COMBINE_CODE, '') <> ''
+AND CMAP.Codemasterid IS NULL
+UPDATE M
+SET    InvestigationID = im.InvestigationId
+FROM   #Stage_MHL_T_04_GROUP_TESTS M WITH (NOLOCK)
+INNER JOIN CodeMaster cm WITH(NOLOCK)
+ON M.TEST_CODE = cm.CodeName
+INNER JOIN CodeMapper cp WITH (NOLOCK)
+ON cm.CodeMasterID = cp.CodeMasterID
+AND cm.CodeType = cp.IdentifyingType
+AND CP.IdentifyingType = 'Investigations'
+INNER JOIN InvestigationOrgMapping iom WITH(NOLOCK)
+ON iom.InvestigationID = cp.IdentifyingID
+INNER JOIN InvestigationMaster im WITH (NOLOCK)
+ON im.InvestigationID = iom.InvestigationID
+WHERE  M.Type = 'INV'
+AND iom.OrgID = @ToOrgid
+AND cm.CodeSchemeID = @ToCodeSchemeID
+UPDATE T
+SET    OrgGroupID = IOG.OrgGroupId
+FROM   #Stage_MHL_T_04_GROUP_TESTS T WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = T.GROUP_CODE
+AND CM.CodeSchemeID = @ToCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON CP.IdentifyingID = IOG.OrgGroupID
+WHERE  IOG.OrgID = @ToOrgid
+UPDATE M
+SET    InvestigationID = T.OrgGroupID
+FROM   #Stage_MHL_T_04_GROUP_TESTS M WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = M.TEST_CODE
+AND CM.CodeSchemeID = @ToCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup T WITH (NOLOCK)
+ON CP.IdentifyingID = T.OrgGroupID
+WHERE  Isnull(Type, 'INV') = 'GRP'
+AND T.OrgID = @ToOrgid
+/* Insert Group Contents */
+INSERT INTO InvGroupMapMaster
+(GroupID,
+InvestigationID,
+SequenceNo,
+Parent,
+Active)
+SELECT stg.OrgGroupID,
+stg.InvestigationID,
+stg.test_Sequence_No,
+'N',
+'Y' AS Active
+FROM   #Stage_MHL_T_04_GROUP_TESTS stg WITH (NOLOCK)
+LEFT JOIN InvGroupMapMaster grp WITH (NOLOCK)
+ON stg.orggroupid = grp.GroupID
+AND stg.investigationid = grp.investigationid
+AND grp.Parent = 'N'
+WHERE  Isnull(stg.Type, 'INV') = 'INV'
+AND grp.GroupID IS NULL
+AND stg.OrgGroupID IS NOT NULL
+AND stg.investigationid IS NOT NULL
+INSERT INTO InvGroupMapMaster
+(GroupID,
+InvestigationID,
+SequenceNo,
+Parent,
+Active)
+SELECT stg.OrgGroupID,
+stg.InvestigationID,
+stg.test_Sequence_No,
+'Y',
+'Y' AS Active
+FROM   #Stage_MHL_T_04_GROUP_TESTS stg WITH (NOLOCK)
+LEFT JOIN InvGroupMapMaster grp WITH (NOLOCK)
+ON stg.orggroupid = grp.GroupID
+AND stg.investigationid = grp.investigationid
+AND grp.Parent = 'Y'
+WHERE  Isnull(stg.Type, 'INV') = 'GRP'
+AND grp.GroupID IS NULL
+AND stg.OrgGroupID IS NOT NULL
+AND stg.investigationid IS NOT NULL
+/*  Packages Insertions */
+SELECT @max = 0
+SELECT @Max = Isnull(Max(GroupID), 0)
+FROM   InvGroupMaster WITH (NOLOCK)
+UPDATE stg
+SET    stg.attgroupid = iog.AttGroupID
+FROM   #Stage_MHL_T_03_Package_Master stg
+INNER JOIN Codemaster CM
+ON CM.codeName = stg.METROLAB_PROFILECODE
+INNER JOIN CodeMapper CP
+ON CM.codeMasterid = CP.Codemasterid
+AND cm.codetype = CP.IdentifyingType
+AND CP.IdentifyingType = 'pkg'
+AND cm.CodeSchemeID = @FromCodeSchemeID
+INNER JOIN InvOrgGroup iog
+ON cp.IdentifyingID = iog.OrgGroupID
+AND iog.OrgID = @FromOrgid
+--select * FROM   #Stage_MHL_T_03_Package_Master stg
+--                    INNER JOIN Codemaster CM
+--                            ON CM.codeName = stg.METROLAB_PROFILECODE
+--                    INNER JOIN CodeMapper CP
+--                            ON CM.codeMasterid = CP.Codemasterid
+--                               AND cm.codetype = CP.IdentifyingType
+--                               AND CP.IdentifyingType = 'pkg'
+--                               AND cm.CodeSchemeID = @FromCodeSchemeID
+--                    INNER JOIN InvOrgGroup iog
+--                            ON cp.IdentifyingID = iog.OrgGroupID
+--                               AND iog.OrgID = @fromOrgid
+--							select 'sd',* from #Stage_MHL_T_03_Package_Master
+INSERT INTO InvGroupMaster
+(GroupName,
+Type,
+GroupID,
+TestCode)
+SELECT stg.PACKAGE_NAME,
+'PKG',
+Row_number() OVER (ORDER BY stg.PACKAGE_NAME)
++ @max AS GroupID,
+stg.METROLAB_PROFILECODE
+FROM   #Stage_MHL_T_03_Package_Master Stg WITH (NOLOCK)
+LEFT JOIN Invgroupmaster grp WITH (NOLOCK)
+ON stg.Attgroupid = grp.GroupID
+WHERE  Isnull(stg.METROLAB_PROFILECODE, '') <> ''
+AND grp.Groupid IS NULL
+SELECT @max = 0
+SELECT @Max = Isnull(Max(OrgGroupID), 0)
+FROM   InvOrgGroup WITH (NOLOCK)
+INSERT INTO InvOrgGroup
+(AttGroupID,
+OrgID,
+DisplayText,
+IsNonOrderable,
+Classification,
+OrgGroupID,
+TestCode,
+ValidationText,
+ValidationRule,
+IsDiscountable,
+IsServicetaxable,
+Status,
+CutOffTimeValue,
+CutOffTimeType,
+SubCategory,
+HasHistory,
+Remarks,
+PrintSeparately,
+Gender,
+groupinterpretation,
+Issummaryworklist,
+IsSpecialFormat,
+SequenceNo,
+ProtocalGroupID,
+BillingName,
+IsAttachmentMandatory)
+SELECT DISTINCT stg.Attgroupid,
+@ToOrgid,
+stg.DISPLAY_NAME,
+CASE
+WHEN Isnull(stg.IS_ORDERABLE, 'N') = 'N' THEN 'Y'
+ELSE 'N'
+END,
+stg.CLASSIFICATION,
+Row_number() OVER (ORDER BY stg.DISPLAY_NAME)
++ @max AS OrgGroupID,
+stg.METROLAB_PROFILECODE,
+stg.ValidationText,
+stg.ValidationRule,
+'Y',
+stg.IsServicetaxable,
+stg.Status,
+stg.CutOffTimeValue,
+stg.CutOffTimeType,
+stg.SubCategory,
+stg.HasHistory,
+stg.Remarks,
+stg.PrintSeparately,
+stg.Gender,
+stg.groupinterpretation,
+'Y',
+stg.IsSpecialFormat,
+Row_number() OVER (ORDER BY stg.DISPLAY_NAME)
++ @max AS SequenceNo,
+ProtocolGroupID,
+stg.DISPLAY_NAME,
+stg.IsAttachmentMandatory
+FROM   #Stage_MHL_T_03_Package_Master stg WITH (NOLOCK)
+INNER JOIN InvGroupMaster igm
+ON igm.GroupID = stg.Attgroupid
+LEFT JOIN InvOrgGroup Invgrp WITH (NOLOCK)
+ON stg.Attgroupid = invgrp.Attgroupid
+AND invgrp.OrgID = @ToOrgid
+WHERE  Isnull(stg.METROLAB_PROFILECODE, '') <> ''
+AND invgrp.attgroupid IS NULL
+AND IGM.Type = 'PKG'
+--SELECT DISTINCT 'ss',stg.Attgroupid,
+--                        @ToOrgid
+--        FROM   #Stage_MHL_T_03_Package_Master stg WITH (NOLOCK)
+--               INNER JOIN InvGroupMaster igm
+--                       ON igm.GroupID = stg.Attgroupid
+--               LEFT JOIN InvOrgGroup Invgrp WITH (NOLOCK)
+--                      ON stg.Attgroupid = invgrp.Attgroupid
+--                         AND invgrp.OrgID = @ToOrgid
+--        WHERE  Isnull(stg.METROLAB_PROFILECODE, '') <> ''  and Invgrp.Orgid=228
+--               --AND invgrp.attgroupid IS NULL
+--               --AND IGM.Type = 'PKG'
+--select * from #Stage_MHL_T_03_Package_Master
+UPDATE T
+SET    T.OrgGroupID = S.OrgGroupID
+FROM   #Stage_MHL_T_03_Package_Master T WITH (NOLOCK)
+INNER JOIN InvGroupMaster I WITH (NOLOCK)
+--ON T.METROLAB_PROFILECODE = I.TestCode
+ON i.GroupID = T.Attgroupid
+INNER JOIN InvOrgGroup S WITH (NOLOCK)
+ON T.Attgroupid = S.AttGroupID
+AND S.OrgID = @ToOrgid
+WHERE  1 = 1
+AND I.Type = 'PKG'
+/* Insert PKG - Tcodes,EdosCode and AbbCode Into CodeMaster and CodeMapper */
+INSERT INTO CodeMaster
+(CodeName,
+CodeType,
+CodeSchemeID,
+CodeDesc)
+SELECT METROLAB_PROFILECODE AS CodeName,
+'PKG',
+@ToCodeSchemeID,
+PACKAGE_NAME         AS CodeDesc
+FROM   #Stage_MHL_T_03_Package_Master stg WITH (NOLOCK)
+LEFT JOIN Codemaster CM WITH (NOLOCK)
+ON Stg.METROLAB_PROFILECODE = CM.Codename
+AND CM.Codeschemeid = @ToCodeSchemeID
+AND Cm.CodeType = 'PKG'
+WHERE  Isnull(Stg.METROLAB_PROFILECODE, '') <> ''
+AND CM.Codemasterid IS NULL
+INSERT INTO CodeMapper
+(IdentifyingType,
+IdentifyingID,
+CodeMasterID)
+SELECT 'PKG',
+Stg.orggroupid,
+CM.Codemasterid
+FROM   #Stage_MHL_T_03_Package_Master stg WITH (NOLOCK)
+INNER JOIN Codemaster CM WITH (NOLOCK)
+ON Stg.METROLAB_PROFILECODE = CM.Codename
+AND CM.Codeschemeid = @ToCodeSchemeID
+AND Cm.CodeType = 'PKG'
+LEFT JOIN Codemapper CMAP WITH (NOLOCK)
+ON cm.Codemasterid = Cmap.Codemasterid
+AND stg.orggroupid = CMap.identifyingid
+AND CMAP.IdentifyingType = 'PKG'
+WHERE  Isnull(Stg.METROLAB_PROFILECODE, '') <> ''
+AND CMAP.Codemasterid IS NULL
+--select * from #Stage_MHL_T_05_PACKAGE_TESTS
+UPDATE T
+SET    OrgGroupID = IOG.OrgGroupId
+FROM   #Stage_MHL_T_05_PACKAGE_TESTS T WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = T.PACKAGE_CODE
+AND CM.CodeSchemeID = @ToCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'PKG'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK)
+ON CP.IdentifyingID = IOG.OrgGroupID
+WHERE  IOG.OrgID = @ToOrgid
+UPDATE M
+SET    InvestigationID = T.OrgGroupID
+FROM   #Stage_MHL_T_05_PACKAGE_TESTS M WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = M.TEST_CODE
+AND CM.CodeSchemeID = @ToCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'GRP'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvOrgGroup T WITH (NOLOCK)
+ON T.OrgGroupID = CP.IdentifyingID
+WHERE  Isnull(M.Type, 'INV') = 'GRP'
+AND T.OrgID = @ToOrgid
+UPDATE M
+SET    InvestigationID = IOM.InvestigationID
+FROM   #Stage_MHL_T_05_PACKAGE_TESTS M WITH (NOLOCK)
+INNER JOIN CodeMaster CM WITH (NOLOCK)
+ON CM.CodeName = M.TEST_CODE
+AND CM.CodeSchemeID = @ToCodeSchemeID
+INNER JOIN CodeMapper CP WITH (NOLOCK)
+ON CM.CodeMasterID = CP.CodeMasterID
+AND CP.IdentifyingType = 'Investigations'
+AND CM.CodeType = CP.IdentifyingType
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK)
+ON IOM.InvestigationID = CP.IdentifyingID
+AND IOM.OrgID = @ToOrgid
+WHERE  Isnull(M.Type, 'INV') = 'INV'
+/* Insert PKG Contents */
+INSERT INTO InvPackageMapping
+(PackageID,
+ID,
+SequenceNo,
+Type,
+active,
+createdat,
+createdby)
+SELECT stg.OrgGroupID,
+stg.InvestigationID,
+stg.test_Sequence_No,
+'INV',
+'A' AS Active,
+Getdate(),
+-1
+FROM   #Stage_MHL_T_05_PACKAGE_TESTS stg WITH (NOLOCK)
+LEFT JOIN InvPackageMapping grp WITH (NOLOCK)
+ON stg.orggroupid = grp.PackageID
+AND stg.investigationid = grp.ID
+AND grp.Type = 'INV'
+WHERE  Isnull(stg.Type, 'INV') = 'INV'
+AND Isnull(stg.investigationid, '') <> ''
+AND grp.PackageID IS NULL
+AND stg.OrgGroupID IS NOT NULL
+AND stg.investigationid IS NOT NULL
+--select * from #Stage_MHL_T_05_PACKAGE_TESTS
+INSERT INTO InvPackageMapping
+(PackageID,
+ID,
+SequenceNo,
+Type,
+active,
+createdat,
+createdby)
+SELECT stg.OrgGroupID,
+stg.InvestigationID,
+stg.test_Sequence_No,
+'GRP',
+'A' AS Active,
+Getdate(),
+-1
+FROM   #Stage_MHL_T_05_PACKAGE_TESTS stg WITH (NOLOCK)
+LEFT JOIN InvPackageMapping grp WITH (NOLOCK)
+ON stg.orggroupid = grp.PackageID
+AND stg.investigationid = grp.ID
+AND grp.Type = 'GRP'
+WHERE  Isnull(stg.Type, 'INV') = 'GRP'
+AND Isnull(stg.investigationid, '') <> ''
+AND grp.PackageID IS NULL
+AND stg.OrgGroupID IS NOT NULL
+AND stg.investigationid IS NOT NULL
+DROP TABLE #Stage_MHL_T_02_GROUP_MASTER
+DROP TABLE #Stage_MHL_T_01_TESTMASTER
+DROP TABLE #Stage_MHL_T_04_GROUP_TESTS
+DROP TABLE #Stage_MHL_T_03_Package_Master
+DROP TABLE #Stage_MHL_T_05_PACKAGE_TESTS
+DROP TABLE #Stage2_MHL_T_02_GROUP_MASTER
+DROP TABLE #Stage2_MHL_T_01_TESTMASTER
+DROP TABLE #Stage2_MHL_T_04_GROUP_TESTS
+DROP TABLE #Stage2_MHL_T_03_Package_Master
+DROP TABLE #Stage2_MHL_T_05_PACKAGE_TESTS
+end
+
+GO
+
+

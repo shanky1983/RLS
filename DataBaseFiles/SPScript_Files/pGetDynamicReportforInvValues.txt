@@ -1,0 +1,148 @@
+
+CREATE Procedure pGetDynamicReportforInvValues       
+(        
+@Fdate Datetime,              
+@Tdate Datetime,              
+@VisitNo Nvarchar(100),  
+@GroupID bigint,            
+@Param1 Nvarchar(100),
+@Param2 Nvarchar(100),    
+@Param3 Nvarchar(100),
+@Param4 Nvarchar(100),
+@Param5 bigint,       
+@ContextInfo [dbo].[UDT_Context] READONLY               
+)              
+As              
+Begin              
+        
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED           
+  SET NOCOUNT ON;   
+  SET XACT_ABORT ON;   
+
+   Create table #Temp1
+  (
+  VisitID bigint,
+  VisitNumber Nvarchar(100),
+  PatientName Nvarchar(400),
+  Age Nvarchar(20),
+  Gender Nvarchar(10),
+  InvestigationName Nvarchar(200),
+  InvValues Nvarchar(100),
+  MedicalRemarks Nvarchar(500),
+  Status Nvarchar(50),
+  PatientinvID bigint,
+  AccessionNumber bigint,
+  InvestigationValueID bigint,
+  InvestigationID bigint,
+  OrgID int
+  ) 
+
+  Create table #Groupcontent
+  (
+  InvestigationName Nvarchar(100),
+  investigationid   INT
+  )
+   
+
+  Declare @OrgID int,@RoleName Nvarchar(100),@Status Nvarchar(100),@cols AS  NVARCHAR(max)   
+  set @OrgID = (select OrgID from @ContextInfo)
+  
+  set @RoleName = (select RoleName from @ContextInfo)
+
+  Insert into #Groupcontent (InvestigationName,InvestigationID)
+  SElect IOM.DisplayText,IOM.InvestigationID from InvOrgGroup IOG 
+  Inner Join InvGroupMapMaster IGMM on IGMM.GroupID=IOG.OrgGroupID and Parent='N'
+  Inner Join InvestigationOrgMapping IOM on IOM.InvestigationID = IGMM.InvestigationID and IOM.OrgID=@OrgID 
+  Inner Join CovidReportGroup CRG on CRG.InvestigationID=IGMM.InvestigationID and  IGMM.GroupID=CRG.GroupID
+  
+  Where  IOG.OrgID=@OrgID and IOG.AttGroupID=@GroupID
+  
+    SET @cols = stuff(   
+      (   
+	              SELECT   ',' + quotename(investigationname)   
+             FROM   #Groupcontent oi
+	
+		  FOR xml path(''), type ).value('.', 'NVARCHAR(MAX)'), 1, 1, '' )   
+
+  If (@RoleName= 'Lab Technician')
+  BEGIN
+  set @Status='Completed'
+  END
+  If (@RoleName= 'SrLabTech')
+  BEGIN
+  set @Status='Validate'
+  END
+
+  Declare @PatientvisitID bigint 
+  if (@VisitNo <> '' )
+  BEGIN
+  Set @PatientvisitID = (select PatientvisitID from Patientvisit where VisitNumber=@VisitNo and OrgID=@OrgID)
+  END
+  ELSE BEGIN
+  Set @PatientvisitID = 0
+  END
+
+  If (@RoleName= 'Lab Technician')
+  BEGIN
+  if(@PatientvisitID <> 0)
+  BEGIN
+  Insert into #Temp1 (VisitID, VisitNumber ,PatientName ,Age,Gender ,InvestigationName ,InvVAlues,MedicalRemarks ,Status ,PatientinvID ,AccessionNumber ,InvestigationValueID,OrgID,InvestigationID )
+  Select PV.PatientVisitID,PV.VisitNumber,P.Name,P.Age,P.SEX,PI.InvestigationName,IV.Value,PI.MedicalRemarks,@Status,PI.PatientInvID,PI.AccessionNumber,IV.InvestigationValueID,@OrgID,PI.InvestigationID from Patientvisit PV 
+  Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID
+  Inner Join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID
+  Inner Join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber 
+ and PI.Status  in ('Pending')
+  Left join InvestigationValues IV on IV.PatientVisitID=PI.PatientVisitID and IV.Orgid=PI.OrgID and IV.InvestigationID=PI.InvestigationID
+  where PV.CreatedAt between  @Fdate and @Tdate and PV.PatientVisitId=@PatientvisitID and OI.ID=@GroupID
+  END
+  else 
+  BEGIN
+  Insert into #Temp1 (VisitID, VisitNumber ,PatientName ,Age,Gender ,InvestigationName ,InvValues,MedicalRemarks ,Status ,PatientinvID ,AccessionNumber ,InvestigationValueID,OrgID,InvestigationID )
+  Select PV.PatientVisitID,PV.VisitNumber,P.Name,P.Age,P.SEX,PI.InvestigationName,IV.Value,PI.MedicalRemarks,@Status,PI.PatientInvID,PI.AccessionNumber,IV.InvestigationValueID,@OrgID,PI.InvestigationID from Patientvisit PV 
+  Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID
+  Inner Join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID
+  Inner Join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber 
+  and PI.Status in ('Pending')
+  Left join InvestigationValues IV on IV.PatientVisitID=PI.PatientVisitID and IV.Orgid=PI.OrgID and IV.InvestigationID=PI.InvestigationID
+  where PV.CreatedAt between  @Fdate and @Tdate and OI.ID=@GroupID
+  END
+
+  ENd
+  If (@RoleName= 'SrLabTech')
+  BEGIN
+  if(@PatientvisitID <> 0)
+  BEGIN
+  Insert into #Temp1 (VisitID, VisitNumber ,PatientName ,Age,Gender ,InvestigationName ,InvVAlues,MedicalRemarks ,Status ,PatientinvID ,AccessionNumber ,InvestigationValueID,OrgID,InvestigationID )
+  Select PV.PatientVisitID,PV.VisitNumber,P.Name,P.Age,P.SEX,PI.InvestigationName,IV.Value,PI.MedicalRemarks,@Status,PI.PatientInvID,PI.AccessionNumber,IV.InvestigationValueID,@OrgID,PI.InvestigationID from Patientvisit PV 
+  Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID
+  Inner Join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID
+  Inner Join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.Status  in ('Completed')
+  Left join InvestigationValues IV on IV.PatientVisitID=PI.PatientVisitID and IV.Orgid=PI.OrgID and IV.InvestigationID=PI.InvestigationID
+  where PV.CreatedAt between  @Fdate and @Tdate and PV.PatientVisitId=@PatientvisitID and OI.ID=@GroupID
+  END
+  else 
+  BEGIN
+  Insert into #Temp1 (VisitID, VisitNumber ,PatientName ,Age,Gender ,InvestigationName ,InvValues,MedicalRemarks ,Status ,PatientinvID ,AccessionNumber ,InvestigationValueID,OrgID,InvestigationID )
+  Select PV.PatientVisitID,PV.VisitNumber,P.Name,P.Age,P.SEX,PI.InvestigationName,IV.Value,PI.MedicalRemarks,@Status,PI.PatientInvID,PI.AccessionNumber,IV.InvestigationValueID,@OrgID,PI.InvestigationID from Patientvisit PV 
+  Inner Join Patient P on PV.PatientID=P.PatientID and Pv.OrgID=P.OrgID
+  Inner Join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID
+  Inner Join PatientInvestigation PI on PI.AccessionNumber=OI.AccessionNumber and PI.Status in ('Completed')
+  Left join InvestigationValues IV on IV.PatientVisitID=PI.PatientVisitID and IV.Orgid=PI.OrgID and IV.InvestigationID=PI.InvestigationID
+  where PV.CreatedAt between  @Fdate and @Tdate and OI.ID=@GroupID
+  END
+
+  ENd
+
+  DECLARE @query AS NVARCHAR(max)   
+ 
+  SET @query = 'select *  from  
+   (select Distinct VisitID, VisitNumber as ''Visit Number'' ,PatientName as ''Patient Name'',Age + '' / '' + Gender as ''Age/Sex'' ,
+  InvestigationName,(ISNULL(InvValues,'''')+''~''+ Convert(Nvarchar(100),ISNULL(InvestigationID,''''))+''~''+Convert(Nvarchar(100),ISNULL(PatientInvID,''''))+''~''+Convert(Nvarchar(100),ISNULL(InvestigationValueID,'''')))as Results, 
+  AccessionNumber ,OrgID from #Temp1) as x  pivot(max(Results)for InvestigationName in (' + @cols + ') ) as p'
+
+  Execute (@query)
+
+  Drop table #Groupcontent
+
+  Drop table #Temp1
+END

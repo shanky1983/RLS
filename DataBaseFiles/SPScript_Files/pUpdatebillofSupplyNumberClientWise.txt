@@ -1,0 +1,33 @@
+Create PROCEDURE [dbo].[pUpdatebillofSupplyNumberClientWise] (
+@ClientID bigint,
+@OrgID bigint,
+@BillSupplyNumber Nvarchar(50),
+@InvoiceAmount Decimal(18,2),
+@DateofBill Nvarchar(50),
+@ContextInfo [UDT_CONTEXT] readonly)
+AS BEGIN
+
+Declare @ClientCode Nvarchar(50)
+set @ClientCode = (select ClientCode from ClientMAster where ClientID=@ClientID and OrGID=@OrgID)
+Declare @LoginId bigint
+Set @LoginId = (select LoginID from @ContextInfo)
+IF Not Exists (select 1 from ClientBillSupplyDetails where ClientCode=@ClientCode and OrgID=@OrgID and IsProcessed=0)
+BEGIN
+
+Insert Into ClientBillSupplyDetails (ClientCode,OrgID,CreatedAT,CreatedBy,IsProcessed,BillofSupplyNumber,InvoiceAmount,DateofBill)
+select @ClientCode,@OrgID,GETDATE(),@LoginId,0,@BillSupplyNumber,@InvoiceAmount,@DateofBill
+END
+
+IF Exists (select 1 from ClientBillSupplyDetails where ClientCode=@ClientCode and OrgID=@OrgID and IsProcessed=0)
+BEGIN
+
+Insert Into ClientBillSupplyDetails_history (BillSupplyID,ClientCode,OrgID,	CreatedAT,	CreatedBy,IsProcessed,BillofSupplyNumber,InvoiceAmount,SONo,DateofBill,AttuneInvNo)
+select  BillSupplyID,ClientCode	,OrgID,	GETDATE(),	@LoginId,IsProcessed,BillofSupplyNumber,InvoiceAmount,SONo,DateofBill,AttuneInvNo
+from ClientBillSupplyDetails where ClientCode=@ClientCode and OrgID=@OrgID and IsProcessed=0
+
+Update  ClientBillSupplyDetails set BillofSupplyNumber=@BillSupplyNumber,ModifiedAt=GETDATE(),ModifiedBy=@LoginId where ClientCode=@ClientCode and OrgID=@OrgID and IsProcessed=0
+END
+
+END
+
+

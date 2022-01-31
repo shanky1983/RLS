@@ -1,0 +1,34 @@
+CREATE  PROCEDURE [dbo].[pBulkRepushForRISIntegration] 
+(
+@Fromdate varchar(155)
+,@Todate varchar(155)
+,@OrgID INT 
+)
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+SET NOCOUNT ON;
+SET XACT_ABORT ON; 
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+
+Declare @DateMinDiff int
+--select DateDiff(hh,@Fromdate,@Todate)
+set @DateMinDiff= DateDiff(hh,@Fromdate,@Todate)
+ 
+IF (Replace(@DateMinDiff,'-','')<=2)
+Begin
+Update RadiologyDataintegration Set IsProcessed=0 where OrgID=@OrgID and CreatedAt Between CONVERT(DATETIME,CONVERT(VARCHAR(20),@Fromdate,109)) and CONVERT(DATETIME,CONVERT(VARCHAR(20),@Todate,109))
+-- @Fromdate and @Todate
+End
+Else
+Begin
+Select 'Date Range is exceed 2 Hrs'As ErrorMessage
+End
+END TRY
+BEGIN CATCH   			                           
+SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pBulkRepushForRISIntegration @Fromdate = '+ @Fromdate  +'@OrgID = '+CAST(@OrgID AS VARCHAR) +'@Todate = '+  @Todate
+exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH     
+END
+

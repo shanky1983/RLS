@@ -1,0 +1,13 @@
+/*Collection Centres*/
+DELETE FROM CollectionCentreMaster WHERE CollectionCentreID IN (1,2,3,4,5,6,7,8,9,10,11)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (1,'Aranthangi',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (2,'Alangudi',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (3,'Kulithalai',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (4,'Lalgudi',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (5,'Manapparai',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (6,'Karur Shanthi Lab',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (7,'Karur Sabari Lab',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (8,'Thuraiyur',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (9,'Palani',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (10,'Aruppukottai',14)
+INSERT INTO CollectionCentreMaster (CollectionCentreID,CollectionCentreName,OrgID) VALUES (11,'Devakottai',14)

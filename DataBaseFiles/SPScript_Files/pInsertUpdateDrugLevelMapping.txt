@@ -1,0 +1,59 @@
+/****** Object:  StoredProcedure [dbo].[pInsertUpdateDrugLevelMapping]    Script Date: 12/5/2018 5:17:50 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pInsertUpdateDrugLevelMapping]
+(
+@UDTDrugLevelMapping [UDTDrugLevelMapping] READONLY,
+@ContextInfo [UDT_Context] READONLY,
+@ReturnId INT OUT
+)
+WITH EXECUTE AS OWNER
+AS 
+/* SP DETAILS => CREATED BY :SABARI ,CREATEDAT 01_12_12018 ,FOR :BEGIN | sabari | 20181129 | Dev | Culture Report */
+BEGIN
+ /*DEC PART*/
+ DECLARE @LoginID BIGINT,@CurrentTDateTime DATETIME=GETDATE(),@OrgID BIGINT
+
+ SELECT TOP 1 @LoginID=LoginID,@OrgID=OrgID FROM @ContextInfo
+
+ /*UPDATE BLOCK*/
+ IF EXISTS(SELECT 1 FROM DrugLevelMapping DLM  WITH(NOLOCK) INNER JOIN @UDTDrugLevelMapping T  ON DLM.LevelID=T.LevelID  )
+ BEGIN
+ 
+  /*HIST CAPTURE BLOCK*/
+ INSERT INTO DrugLevelMappingHist(LevelID,LevelName,DrugID,CreatedBy,CreatedAt,IsActive,OrgID)
+ SELECT DLM.LevelID,DLM.LevelName,DLM.DrugID,DLM.CreatedBy,DLM.CreatedAt,DLM.IsActive,DLM.OrgID
+ FROM DrugLevelMapping DLM   WITH(NOLOCK)
+ INNER JOIN @UDTDrugLevelMapping T  ON DLM.LevelID=T.LevelID 
+ WHERE T.LevelID>0
+
+ UPDATE DLM SET DLM.LevelName=T.LevelName,
+				DLM.DrugID=T.DrugID,
+				DLM.ModifiedBy=@LoginID,
+				DLM.ModifiedAt=@CurrentTDateTime
+				--DLM.IsActive=
+ FROM DrugLevelMapping DLM 
+ INNER JOIN @UDTDrugLevelMapping T  ON DLM.LevelID=T.LevelID 
+ WHERE T.LevelID>0
+
+ SET @ReturnId=2
+ END
+ ELSE
+ BEGIN
+/*INSERT BLOCK*/
+ INSERT INTO DrugLevelMapping(LevelName,DrugID,CreatedBy,CreatedAt,OrgID)
+ SELECT T.LevelName,T.DrugID,@LoginID,@CurrentTDateTime,@OrgID
+ FROM @UDTDrugLevelMapping T WHERE T.LevelID <= 0
+
+
+ END
+ SET @ReturnId=-1
+END
+
+GO
+
+

@@ -1,0 +1,107 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Schema Namespace="LisMediaMessgaeModel" Alias="Self" annotation:UseStrongSpatialTypes="false" xmlns:annotation="http://schemas.microsoft.com/ado/2009/02/edm/annotation" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+  <EntityType Name="CommunicationConfig">
+    <Key>
+      <PropertyRef Name="ID" />
+    </Key>
+    <Property Name="ID" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+    <Property Name="OrgID" Type="Int32" Nullable="false" />
+    <Property Name="Type" Type="String" MaxLength="50" FixedLength="false" Unicode="true" Nullable="false" />
+    <Property Name="Name" Type="String" MaxLength="100" FixedLength="false" Unicode="true" Nullable="false" />
+    <Property Name="Value" Type="String" MaxLength="500" FixedLength="false" Unicode="true" Nullable="false" />
+    <Property Name="IsActive" Type="String" MaxLength="1" FixedLength="true" Unicode="true" />
+    <Property Name="CreatedBy" Type="Int64" />
+    <Property Name="CreatedAt" Type="DateTime" Precision="3" />
+    <Property Name="ModifiedBy" Type="Int64" />
+    <Property Name="ModifiedAt" Type="DateTime" Precision="3" />
+    <Property Name="InstanceID" Type="Int32" />
+    <Property Name="IsCountryCode" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+  </EntityType>
+  <EntityType Name="Notification">
+    <Key>
+      <PropertyRef Name="NotificationID" />
+    </Key>
+    <Property Name="NotificationID" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+    <Property Name="ActionType" Type="String" MaxLength="20" FixedLength="false" Unicode="true" />
+    <Property Name="Value" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+    <Property Name="AdditionalContext" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+    <Property Name="Category" Type="String" MaxLength="20" FixedLength="false" Unicode="true" />
+    <Property Name="version" Type="String" MaxLength="20" FixedLength="false" Unicode="true" />
+    <Property Name="Status" Type="String" MaxLength="20" FixedLength="false" Unicode="true" />
+    <Property Name="OrgID" Type="Int32" />
+    <Property Name="OrgAddressID" Type="Int64" />
+    <Property Name="CreatedAt" Type="DateTime" Precision="3" />
+    <Property Name="CreatedBy" Type="Int64" />
+    <Property Name="Template" Type="String" MaxLength="Max" FixedLength="false" Unicode="true" />
+    <Property Name="ContextType" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+    <Property Name="IsAttachment" Type="String" MaxLength="10" FixedLength="false" Unicode="true" />
+    <Property Name="Subject" Type="String" MaxLength="200" FixedLength="false" Unicode="true" />
+    <Property Name="Seq_Num" Type="Int32" />
+    <Property Name="RetryCount" Type="Int32" />
+    <Property Name="Priority" Type="Int32" Nullable="false" />
+    <Property Name="AttachmentName" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+    <Property Name="IdentityID" Type="String" MaxLength="15" FixedLength="false" Unicode="true" />
+    <Property Name="CompletionTime" Type="DateTime" Precision="3" />
+    <Property Name="IsConfidentialTest" Type="String" MaxLength="3" FixedLength="false" Unicode="true" />
+    <Property Name="IsClientBlinding" Type="String" MaxLength="10" FixedLength="false" Unicode="true" />
+    <Property Name="RoundID" Type="Int64" />
+    <Property Name="EmailCC" Type="String" MaxLength="Max" FixedLength="false" Unicode="true" />
+    <Property Name="Content" Type="String" MaxLength="Max" FixedLength="false" Unicode="true" />
+    <Property Name="ReportType" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+    <Property Name="PickedAt" Type="DateTime" Precision="3" />
+    <Property Name="HasRepushed" Type="Boolean" />
+    <Property Name="DelayReason" Type="String" MaxLength="250" FixedLength="false" Unicode="true" />
+    <Property Name="EmailBccTo" Type="String" MaxLength="200" FixedLength="false" Unicode="true" />
+    <Property Name="IsReprinting" Type="Boolean" />
+    <Property Name="ReportLanguage" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="NoofCopies" Type="Int32" />
+  </EntityType>
+  <EntityType Name="Organization">
+    <Key>
+      <PropertyRef Name="OrgID" />
+    </Key>
+    <Property Name="OrgID" Type="Int32" Nullable="false" />
+    <Property Name="Name" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="OrganizationTypeID" Type="Int32" />
+    <Property Name="AddressID" Type="Int32" />
+    <Property Name="Email" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="Remarks" Type="String" MaxLength="200" FixedLength="false" Unicode="true" />
+    <Property Name="LogoPath" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+    <Property Name="CreatedBy" Type="Int64" />
+    <Property Name="CreatedAt" Type="DateTime" Precision="3" />
+    <Property Name="ModifiedBy" Type="Int64" />
+    <Property Name="ModifiedAt" Type="DateTime" Precision="3" />
+    <Property Name="IntegrationName" Type="String" MaxLength="255" FixedLength="false" Unicode="true" />
+    <Property Name="OrgDisplayName" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+    <Property Name="ParentOrgID" Type="Int32" />
+    <Property Name="RootOrgID" Type="Int32" />
+    <Property Name="ReferType" Type="String" MaxLength="20" FixedLength="false" Unicode="true" />
+    <Property Name="ReferTypeID" Type="Int64" />
+    <Property Name="CentreCode" Type="Int64" />
+    <Property Name="TimeDifference" Type="Int32" />
+    <Property Name="TimeZone" Type="String" MaxLength="Max" FixedLength="false" Unicode="true" />
+    <Property Name="Isbaseorg" Type="String" MaxLength="5" FixedLength="false" Unicode="true" />
+    <Property Name="DefaultOrgID" Type="Int64" />
+    <Property Name="isdefaultorg" Type="String" MaxLength="5" FixedLength="false" Unicode="true" />
+    <Property Name="OrgCategoryID" Type="Int32" />
+    <Property Name="HSNSAC" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="ReportLanguage" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+  </EntityType>
+  <EntityType Name="WhatsUpTemplateMaster">
+    <Key>
+      <PropertyRef Name="TemplateMasterNo" />
+    </Key>
+    <Property Name="TemplateMasterNo" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+    <Property Name="TemplateName" Type="String" MaxLength="100" FixedLength="false" Unicode="true" />
+    <Property Name="NoofParameters" Type="Int32" />
+    <Property Name="TemplateContent" Type="String" MaxLength="4000" FixedLength="false" Unicode="true" />
+    <Property Name="ActionTemplateID" Type="Int32" />
+    <Property Name="MessageType" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+  </EntityType>
+  <EntityContainer Name="LISKernelMedia" annotation:LazyLoadingEnabled="true">
+    <EntitySet Name="CommunicationConfigs" EntityType="Self.CommunicationConfig" />
+    <EntitySet Name="Notifications" EntityType="Self.Notification" />
+    <EntitySet Name="Organizations" EntityType="Self.Organization" />
+    <EntitySet Name="WhatsUpTemplateMasters" EntityType="Self.WhatsUpTemplateMaster" />
+  </EntityContainer>
+</Schema>

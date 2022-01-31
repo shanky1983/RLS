@@ -1,0 +1,27 @@
+--Drop proc pInsertUpdateCreditNoteDetails
+CREATE Procedure [dbo].[pInsertUpdateCreditNoteDetails]                  
+@pCreditNoteDet [dbo].[CREDITNOTESDETAILS] READONLY ,
+@returnStatus [BIGINT] OUTPUT,  
+@pCreatedBy   [BIGINT],
+@pOrgID [BIGINT],                                   
+@ContextInfo [UDT_Context] READONLY
+AS                  
+BEGIN                  
+--pInsertAdvancePayment	
+--(SELECT dbo.Fn_getserverdate(@ContextInfo))modified by
+DECLARE @ClientID BIGINT,@Orgid1 INT = 0         
+ DECLARE @ServerDate datetime          
+ SET @ServerDate=dbo.fn_GetServerDate(@ContextInfo)      
+ SET @Orgid1 = (SELECT Orgid From @ContextInfo)        
+set @returnStatus = 0;               
+	
+	Update ARD SET ARD.CreditNote =TMP.CreditNote
+	FROM amountrefunddetails ARD INNER JOIN @pCreditNoteDet TMP ON ARD.FinalBillId = TMP.FinalBillId AND 
+	ARD.BillingDetailsId = TMP.BillingDetailsId AND ARD.Orgid = @Orgid1
+                
+ set @returnStatus = 1;                  
+                  
+END 
+
+
+

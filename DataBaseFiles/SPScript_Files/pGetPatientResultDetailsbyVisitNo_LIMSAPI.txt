@@ -1,0 +1,578 @@
+--pGetPatientResultDetailsbyVisitNo_LIMSAPI 'LIMSAPI','21000399'
+CREATE PROCEDURE pGetPatientResultDetailsbyVisitNo_LIMSAPI(
+	@pOrgCode NVARCHAR(100),
+	@visitnumber NVARCHAR(200)
+	)
+	WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50) 
+
+Create table #TempPatientDetails
+(
+OrderID nvarchar(100),
+PatientID nvarchar(100),
+SalutationCode nvarchar(10),
+FirstName nvarchar(255),
+MiddleName nvarchar(255),
+LastName nvarchar(255),
+Gender nvarchar(100),
+Age nvarchar(100),
+DOB nvarchar(100),
+MobileNumber nvarchar(20),
+EmailID  nvarchar(100),
+URNType nvarchar(255),
+URNNumber nvarchar(255),
+Address nvarchar(1000),
+AddressType nvarchar(100),
+City nvarchar(255),
+StateID nvarchar(255),
+CountryID nvarchar(255),
+ExternalPatientNumber nvarchar(255),
+BookedDate DATETIME,
+CheckinDate DATETIME,
+CheckOutDate DATETIME,
+COPStatus nvarchar(255),
+PatientVisitID bigint,
+ExternalVisitID BIGINT,
+ReferringPhysicianName NVARCHAR(300),
+ReferringPhysicianID BIGINT,
+State NVARCHAR(255),
+Country NVARCHAR(255),
+TimeZone NVARCHAR(300),
+PatientNumber NVARCHAR(200)
+)
+Create table #TempPatientVisitDetails
+( 
+PatientID BIGINT,
+PatientVisitId nvarchar(100),
+ExternalVisitNumber nvarchar(10),
+VisitType nvarchar(255),
+VisitDate DATETIME,
+VATRegisterationNo nvarchar(255),
+ClientID nvarchar(100),
+ClientCode NVARCHAR(100),
+ClientName nvarchar(300),
+ReferingDoctorCode nvarchar(100),
+ReferingDoctorName nvarchar(300),
+ReferingDoctorMobileNumber  nvarchar(100),
+IsNotification nvarchar(1),
+HospitalNameCode nvarchar(255),
+HospitalName nvarchar(1000),
+VisitHistory nvarchar(MAX),
+VisitRemarks nvarchar(MAX),
+RegisterLocation nvarchar(255) ,
+CompanyID NVARCHAR(200),
+TimeZone NVARCHAR(300),	
+BookedDate DATETIME,
+CheckinDate DATETIME,
+CheckOutDate DATETIME,
+Status nvarchar(255),
+)
+Create table #TempVisitOrderDetails
+(
+PatientVisitID bigint,
+ExternalVisitID bigint,
+TestID Nvarchar(100),
+TestCode Nvarchar(100),
+OrderedDate DATETIME,
+TestType Nvarchar(100),
+TestName Nvarchar(250),
+TestValueType Nvarchar(1000),
+TestValue Nvarchar(MAX),
+UOMCode Nvarchar(100),
+MethodName Nvarchar(100),
+ReferenceRange Nvarchar(MAX),
+IsAbnormal Nvarchar(100),
+ResultCapturedAt DATETIME,
+TestStatus Nvarchar(100),
+MedicalRemarks Nvarchar(mAX),
+InterpretationNotes Nvarchar(mAX),
+ProcessingType Nvarchar(100),
+ProcessingLocation Nvarchar(100),
+DeviceID Nvarchar(100),
+LotNumber Nvarchar(100),
+PKGID NVARCHAR(100),
+PKGName Nvarchar(250),
+GroupID NVARCHAR(100),
+GroupName Nvarchar(250),
+SubGroupID NVARCHAR(100),
+SubGroupName NVARCHAR(250),
+GroupCode NVARCHAR(100),
+SubGroupCode NVARCHAR(100),
+AccessionNumber BIGINT,
+ReferringPhysicianName NVARCHAR(300),
+ReferringPhysicianID BIGINT,
+CreatedAt DATETIME,
+UpdatedAt DATETIME,
+StatusID INT,
+DepartmentName NVARCHAR(1000),
+DeltaValue NVARCHAR(MAX),
+UserID BIGINT,
+UserName NVARCHAR(1000),
+SampleName NVARCHAR(1000),
+Nonreportable NVARCHAR(10),
+ConversionRange NVARCHAR(MAX),
+ConversionValue NVARCHAR(MAX),
+ConversionUnit NVARCHAR(100),
+ResCaptureLoc BIGINT,
+ReferralID BIGINT
+)
+
+Create table #TempVisitOrderInvestigation
+(
+PatientVisitID bigint,
+ExternalVisitID bigint,
+TestID Nvarchar(100),
+TestCode Nvarchar(100),
+OrderedDate DATETIME,
+TestType Nvarchar(100),
+TestName Nvarchar(250),
+TestValueType Nvarchar(1000),
+TestValue Nvarchar(MAX),
+UOMCode Nvarchar(100),
+MethodName Nvarchar(100),
+ReferenceRange Nvarchar(MAX),
+IsAbnormal Nvarchar(100),
+ResultCapturedAt DATETIME,
+TestStatus Nvarchar(100),
+MedicalRemarks Nvarchar(mAX),
+InterpretationNotes Nvarchar(mAX),
+ProcessingType Nvarchar(100),
+ProcessingLocation Nvarchar(100),
+DeviceID Nvarchar(100),
+LotNumber Nvarchar(100),
+PKGID NVARCHAR(100),
+PKGName Nvarchar(250),
+GroupID NVARCHAR(100),
+GroupName Nvarchar(250),
+SubGroupID NVARCHAR(100),
+SubGroupName NVARCHAR(250),
+GroupCode NVARCHAR(100),
+SubGroupCode NVARCHAR(100),
+AccessionNumber BIGINT,
+ReferringPhysicianName NVARCHAR(300),
+ReferringPhysicianID BIGINT,
+CreatedAt DATETIME,
+UpdatedAt DATETIME,
+OverAllStatus NVARCHAR(200),
+DepartmentName NVARCHAR(1000),
+DeltaValue NVARCHAR(100),
+UserID BIGINT,
+UserName NVARCHAR(1000),
+SampleName NVARCHAR(1000),
+Nonreportable NVARCHAR(10),
+ConversionRange NVARCHAR(MAX),
+ConversionValue NVARCHAR(MAX),
+ConversionUnit NVARCHAR(100),
+ResCaptureLoc BIGINT,
+ReferralID BIGINT
+)
+
+  IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+	 
+	Declare @PatientvisitID bigint ,@PatientID BIGINT,@AddID BIGINT
+    select @PatientvisitID= PV.PatientVisitID,@PatientID=PV.PatientID,@AddID=PV.OrgAddressID  from Orderedinvestigations MISH 
+	Inner Join Patientvisit PV on PV.PatientVisitID=MISH.Visitid 
+	--INNER JOIN Notifications N (NOLOCK) ON N.Identityid=PV.PatientVisitID AND N.ActionType='PDF' AND N.Status='Completed' AND N.category='Report'	
+	where  PV.OrgID=@pOrgID and MISH.Status in ('Approve') AND (PV.VisitNumber=@visitnumber  OR MISH.LabNo=@visitnumber)
+    
+
+		Insert into #TempPatientDetails ( OrderId,PatientNumber ,SalutationCode,FirstName ,MiddleName ,LastName ,Gender ,
+	Age ,DOB ,MobileNumber,EmailID ,URNType,URNNumber ,Address ,AddressType ,City ,StateID ,CountryID ,ExternalPatientNumber ,PatientVisitID,ExternalVisitID,State,Country
+	,PatientID)
+
+	select PV.VisitNumber, P.PatientNumber,Convert(varchar,P.TITLECode),P.Name,'','',M.DisplayText
+		,P.Age,Convert(varchar,P.DOB,103),CASE WHEN LEN(ISNULL(PA.MobileNumber,''))<3 THEN '' ELSE PA.MobileNumber END,P.EMail,ISNULL(URN.Displaytext,''),
+		P.URNO,PA.Add1,'C',PA.City,CONVERT(NVARCHAR,S.StateID),CONVERT(NVARCHAR,C.CountryID),ISNULL(P.ExternalPatientNumber,''),PV.PatientVisitId,PV.ExternalVisitID	
+		,	S.StateName,C.CountryName,CONVERT(NVARCHAR,P.PatientID)
+		from  PatientVisit PV 
+		Inner Join Patient P on P.PatientID=PV.PatientID and P.OrgID =PV.OrgID
+		Inner Join PatientAddress PA on PA.PatientID=P.PAtientID and PA.AddressType='P'
+		left Join URNOrgMapping URN on URN.URNTypeId=P.URNTypeId and URN.OrgID=P.Orgid and URN.LangCode = 'en-GB'
+		left Join State S on S.StateID=PA.StateID
+		left Join Country C on C.CountryID=PA.CountryID
+		left join Metadata M (NOLOCK) ON M.Domain='Gender' AND M.code=P.Sex
+		where PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID 
+
+   INSERT INTO #TempPatientVisitDetails(PatientID,PatientVisitId, ExternalVisitNumber,VisitType,VisitDate,VATRegisterationNo,ClientID,
+                                        ClientCode,ClientName,ReferingDoctorCode ,ReferingDoctorName,ReferingDoctorMobileNumber,
+										IsNotification,HospitalNameCode,HospitalName,VisitHistory,VisitRemarks,RegisterLocation,TimeZone)
+   select PV.PatientID,PV.PatientVisitId,'',CASE WHEN PV.VisitType=0 THEN 'OP' ELSE 'IP' END,PV.VisitDate,'',CONVERT(NVARCHAR,CM.ClientID),
+         CM.ClientCode,CM.ClientName,RP.PhysicianCode,RP.PhysicianName,AD.Mobile,CASE WHEN ISNULL(P.IsNotify,0)=0 THEN 'N' ELSE 'Y' END,
+		 PV.HospitalID,PV.HospitalName,PH.DetailHistory,PH.Remarks,
+		 OA.LocationCode,ISNULL(OA.TimeZone,'North Asia Standard Time')
+		from  PatientVisit PV  (NOLOCK)
+		Inner Join Patient P (NOLOCK) on P.PatientID=PV.PatientID
+		Inner Join VisitClientMapping VCM (NOLOCK) on VCM.VisitID=PV.PatientVisitID and VCM.OrgID =PV.OrgID
+		Inner Join ClientMaster  CM (NOLOCK) on CM.ClientID=VCM.CLientID --and PV.OrgID=CM.OrgID
+		INNER JOIN Organization O (NOLOCK) ON O.OrgID=PV.OrgID
+		INNER JOIN OrganizationAddress OA (NOLOCK) ON O.OrgID=OA.OrgID AND OA.OrgID=PV.OrgID AND OA.AddressID=PV.OrgAddressID
+		left Join ReferingPhysician RP (NOLOCK) ON RP.ReferingPhysicianID =PV.ReferingPhysicianID AND PV.OrgID=RP.OrgID
+		left Join AddressDetails AD (NOLOCK) on AD.ReferenceID=RP.ReferingPhysicianID AND PV.OrgID=AD.OrgID 
+		 LEFT JOIN PatientHistoryExt PH with (NOLOCK) ON PH.PatientID = PV.PatientID 
+        AND PH.PatientVisitId = PV.PatientVisitId  AND ISNULL(PH.Remarks,'') <> ''
+		where PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID 
+  
+
+  UPDATE PV
+  SET  PV.CompanyID=CAD.Description
+  FROM #TempPatientVisitDetails PV
+  INNER JOIN ClientAttributesDetails CAD (NOLOCK) ON PV.CLientID=CAD.ClientID
+  INNER JOIN ClientAttributes CA (NOLOCK) ON CA.AttributeID=CAD.AttributesID
+  WHERE CA.AttributeCode='COMPID'
+
+  
+  UPDATE P
+  SET P.TimeZone=PT.TimeZone
+  FROM #TempPatientDetails P 
+  INNER JOIN #TempPatientVisitDetails PT   ON P.PatientID=PT.PatientID  
+
+   INSERT INTO #TempVisitOrderInvestigation (PatientvisitID,ExternalVisitID,TestID,TestCode,OrderedDate,TestType,
+	TestName,TestValueType,TestValue,UOMCode ,MethodName ,ReferenceRange ,
+	IsAbnormal,ResultCapturedAt,TestStatus ,MedicalRemarks,
+	InterpretationNotes,ProcessingType,DeviceID,LotNumber,AccessionNumber,
+	ReferringPhysicianName,ReferringPhysicianID,CreatedAt,UpdatedAt,OverAllStatus,DepartmentName,SampleName,NonReportable,
+	ConversionRange,ConversionValue,ConversionUnit,ResCaptureLoc ,ReferralID  )
+
+	SELECT DISTINCT PV.PatientvisitID,PV.ExternalVisitID,OI.ID,IOM.InvestigationCode,PV.CreatedAt,OI.Type,
+	PI.InvestigationName,Case when IOA.ResultValueType='AN' then 'STRING' when IOA.ResultValueType='NU' then 'Numeric' 
+	when IOA.ResultValueType='NTS' then 'Thousand Separator' END
+	,IV.Value,IOM.UOMCode,IM.MEthodNAme,ISNULL(pi.ReferenceRange,'') ReferenceRange,PI.Isabnormal,OI.CreatedAt,PI.Status,PI.MedicalRemarks
+	,IOM.Interpretation Interpretation,Case when IOM.SubCategory='OUT' then 'OUT' else 'IN' END ,IV.DeviceID,'',OI.AccessionNumber,
+		PV.ReferingPhysicianName,PV.ReferingPhysicianID,OI.CreatedAt,MIS.ModifiedAt,OI.Status,IDM.DeptName,ISM.SampleDesc
+		,CASE WHEN ISNULL(IOM.IsNonReportable ,'N')='N' THEN 'No' ELSE 'Yes' END,ISNULL(PI.ConvreferenceRange,''),ISNULL(Iv.ConvValue,''),ISNULL(Iv.ConvUOMCode,'')
+		,OI.ResCaptureLoc,OI.ReferralID
+	 FROM Patientvisit PV (NOLOCK)
+	 INNER JOIN OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	 INNER JOIN PatientInvestigation PI (NOLOCK) on PI.PatientvisitID=PV.PAtientvisitID AND PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=PV.OrgID
+	 INNER JOIN MISORderedInvestigations MIS(NOLOCK) on MIS.AccessionNumber=PI.AccessionNumber
+	 LEFT JOIN InvestigationValues IV(NOLOCK) on IV.PatientvisitID=PV.PAtientvisitID and IV.InvestigationID=PI.InvestigationID and IV.Orgid=PI.OrgID
+	 INNER JOIN InvestigationOrgMapping IOM(NOLOCK) on IOM.InvestigationID=PI.InvestigationID and IOM.ORgID=PI.OrgID
+	 INNER JOIN InvestigationOrgAttributes IOA(NOLOCK) on IOA.InvestigationID=IOM.InvestigationID and IOA.OrgID=IOM.OrgID
+	 LEFT JOIN InvestigationMethod IM(NOLOCK) on IM.MethodID=IOM.MEthodID and IOM.OrgID=IM.OrgID  
+	 LEFT JOIN InvDeptMaster IDM (NOLOCK) ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID
+	 LEFT JOIN InvSampleMaster ISM (NOLOCK) ON ISM.SampleCode=IOM.SampleCode  AND ISM.OrgID=IOM.OrgID
+	 WHERE PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID AND OI.Type ='INV' 
+	       AND ISNULL(OI.Pkgid,0)=0
+	UPDATE  T
+	SET T.TestValueType=CASE WHEN T.DepartmentName='Culture' THEN 'XML' WHEN  T.DepartmentName='Histo' THEN 'HTML' ELSE 'Routine' END
+	FROM #TempVisitOrderInvestigation T
+
+
+	/*UPDATE T
+	SET  T.ProcessingType= CASE WHEN ILM.Type=12 THEN 'OUT' ELSE 'IN' END,
+	     T.ProcessingLocation=OA.Location
+	FROM #TempVisitOrderInvestigation T
+	INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID  AND ILM.ProcessingAddressID=ResCaptureLoc
+	INNER JOIN Organizationaddress OA (NOLOCK) ON OA.OrgID=ILM.OrgID AND OA.AddressID=ILM.LocationID
+	--OA.OrgID=ILM.OrgID AND OA.AddressID=ILM.ProcessingAddressID
+	WHERE ILM.LocationID=@AddID*/
+
+	
+	 
+	
+	INSERT INTO #TempVisitOrderInvestigation (PatientvisitID,ExternalVisitID,TestID,TestCode,OrderedDate,TestType,
+	TestName, TestStatus , ProcessingLocation,DeviceID,LotNumber,AccessionNumber,
+		 ReferringPhysicianName,ReferringPhysicianID,CreatedAt,UpdatedAt,OverAllStatus,ResultCapturedAt,GroupID,ReferenceRange,
+	 ConversionRange,ConversionValue,ConversionUnit,ResCaptureLoc,ReferralID)
+	SELECT DISTINCT PV.PatientvisitID,PV.ExternalVisitID,OI.ID,IOG.TestCode,PV.CreatedAt,OI.Type,
+	OI.Name, OI.Status ,'','','',AccessionNumber,
+		PV.ReferingPhysicianName,PV.ReferingPhysicianID,OI.CreatedAt,OI.ModifiedAt,OI.Status,OI.CreatedAt,OI.ID,'','','','',OI.ResCaptureLoc,OI.ReferralID
+	 FROM Patientvisit PV (NOLOCK)
+	 INNER JOIN MISORderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID 
+	 INNER JOIN InvgroupMaster IG (NOLOCK) ON IG.groupID=OI.ID
+	 INNER JOIN InvOrggroup IOG (NOLOCk) ON IOG.AttGroupID=IG.GroupID AND OI.OrgID=IOG.OrgID
+	-- INNER JOIN OrganizationAddress OA (NOLOCK) ON OA.AddressID=OI.ResCaptureLoc AND OI.OrgID=OA.OrgID
+	 WHERE PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID AND OI.Type ='GRP' 
+	       AND ISNULL(OI.Pkgid,0)=0
+
+	INSERT INTO #TempVisitOrderInvestigation (PatientvisitID,ExternalVisitID,TestID,TestCode,OrderedDate,TestType,
+	TestName, TestStatus , ProcessingLocation,DeviceID,LotNumber,AccessionNumber,
+		 ReferringPhysicianName, ReferringPhysicianID,CreatedAt,UpdatedAt,OverAllStatus,ResultCapturedAt,PkgID,ReferenceRange,
+	 ConversionRange,ConversionValue,ConversionUnit)
+	SELECT DISTINCT PV.PatientvisitID,PV.ExternalVisitID,OI.PKGID,IOG.TestCode,PV.CreatedAt,'PKG',
+	 OI.PKGName, '' ,'','','',0,
+		PV.ReferingPhysicianName,PV.ReferingPhysicianID,OI.CreatedAt,OI.Modifiedat,OI.Status,OI.CreatedAt,OI.PkgID,'','','','' 
+	 FROM Patientvisit PV (NOLOCK)
+	 INNER JOIN MISORderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID 
+	 INNER JOIN InvgroupMaster IG (NOLOCK) ON IG.groupID=OI.PkgID 
+	 INNER JOIN InvOrggroup IOG (NOLOCk) ON IOG.AttGroupID=IG.GroupID AND OI.OrgID=IOG.OrgID
+	 WHERE PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID  
+	       AND ISNULL(OI.Pkgid,0)>0
+   
+    UPDATE T
+	SET  T.ProcessingType=CASE WHEN T.ReferralID>0 THEN 'OUT' ELSE 'IN' END 
+	FROM #TempVisitOrderInvestigation T  
+
+
+	 
+	UPDATE T
+	SET    T.ProcessingLocation=OA.Location
+	FROM #TempVisitOrderInvestigation T    
+	INNER JOIN Organizationaddress OA (NOLOCK) ON  OA.AddressID=T.rescaptureloc 
+	WHERE OA.OrgID=@pOrgID  AND T.ProcessingType='IN'
+	AND T.TestType!='PKG'
+	 
+
+	UPDATE T
+	SET  T.ProcessingLocation=LO.RefOrgName
+	FROM #TempVisitOrderInvestigation T
+	--INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID   
+	INNER JOIN LabReferenceOrg LO (NOLOCK) ON LO.LabRefOrgID=T.ReferralID  AND LO.OrgID=@pOrgID
+	WHERE  T.ProcessingType='OUT'
+	AND T.TestType!='PKG'
+
+	UPDATE T
+	SET T.UserID=U.LoginID,
+	    T.UserName=S.TitleName+U.name,
+		T.ResultCapturedAt=MIS.CompletedAt
+	FROM #TempVisitOrderInvestigation T
+	INNER JOIN MISOrderedinvestigations MIS (NOLOCK) ON T.PatientVisitID=MIS.Visitid AND T.TestID =MIS.ID
+	INNER JOIN Users U (NOLOCK) ON U.LoginID=MIS.ApprovedBy
+	INNER JOIN Salutation S (NOLOCK) ON S.TitleID=U.TitleCode 
+	WHERE T.TestType='INV' AND MIS.Type='INV'
+
+	UPDATE T
+	SET T.UserID=U.LoginID,
+	    T.UserName=S.TitleName+U.name,
+		T.ResultCapturedAt=MIS.CompletedAt
+	FROM #TempVisitOrderInvestigation T
+	INNER JOIN MISOrderedinvestigations MIS (NOLOCK) ON T.PatientVisitID=MIS.Visitid AND T.TestID =MIS.ID
+	INNER JOIN Users U (NOLOCK) ON U.LoginID=MIS.ApprovedBy
+	INNER JOIN Salutation S (NOLOCK) ON S.TitleID=U.TitleCode 
+	WHERE T.TestType='GRP' AND MIS.Type='GRP'
+
+	UPDATE T
+	SET T.UserID=U.LoginID,
+	    T.UserName=S.TitleName+U.name,
+		T.ResultCapturedAt=MIS.CompletedAt
+	FROM #TempVisitOrderInvestigation T
+	INNER JOIN MISOrderedinvestigations MIS (NOLOCK) ON T.PatientVisitID=MIS.Visitid AND T.TestID =MIS.PKGID
+	INNER JOIN Users U (NOLOCK) ON U.LoginID=MIS.ApprovedBy
+	INNER JOIN Salutation S (NOLOCK) ON S.TitleID=U.TitleCode 
+	WHERE T.TestType='PKG'  
+
+
+	INSERT INTO #TempVisitOrderDetails (PatientvisitID,ExternalVisitID,TestID,TestCode,OrderedDate,TestType,
+	TestName,TestValueType,TestValue,UOMCode ,MethodName ,ReferenceRange ,
+	IsAbnormal,ResultCapturedAt,TestStatus ,MedicalRemarks,
+	InterpretationNotes,ProcessingType,ProcessingLocation,DeviceID,LotNumber,PKGID,PKGName,GroupID,GroupName,SubGroupID,SubGroupName,AccessionNumber,
+	 ReferringPhysicianName, ReferringPhysicianID ,CreatedAt ,UpdatedAt,DepartmentName,UserID,UserName,SampleName,NonReportable,
+	 ConversionRange,ConversionValue,ConversionUnit,ResCaptureLoc,ReferralID ) 
+
+	SELECT DISTINCT PV.PatientvisitID,PV.ExternalVisitID,PI.InvestigationID,ISNULL(IOM.Investigationcode,IOM.TestCode), PV.CreatedAt ,'INV',
+	PI.InvestigationName,Case when IOA.ResultValueType='AN' then 'STRING' when IOA.ResultValueType='NU' then 'Numeric' 
+	when IOA.ResultValueType='NTS' then 'Thousand Separator' END
+	,IV.Value,IOM.UOMCode,IM.MEthodNAme,ISNULL(pi.ReferenceRange,'') ReferenceRange,PI.Isabnormal,MIS.completedAt,PI.Status,PI.MedicalRemarks
+	,IOM.Interpretation Interpretation,Case when IOM.SubCategory='OUT' then 'OUT' else 'IN' END ,'',IV.DeviceID,'',
+	CONVERT(NVARCHAR,ISNULL(Oi.PkgId,0)),ISNULL(OI.PkgName,''),
+	 CASE WHEN OI.Type='GRP' AND ISNULL(OI.PKGID,0)=0  THEN ISNULL(OI.ID,0) ELSE 0 END , 
+	CASE WHEN OI.Type='GRP' AND ISNULL(OI.PKGID,0)=0  THEN ISNULL(OI.Name,'') ELSE '' END Name ,
+	 CONVERT(NVARCHAR,CASE WHEN OI.Type='GRP' AND  Oi.ID!=IG.AttGroupID AND ISNULL(OI.PKGID,0)=0 THEN ISNULL(IG.AttGroupID,0)  ELSE 0 END),
+	 CASE WHEN OI.Type='GRP' AND Oi.ID!=IG.AttGroupID AND  ISNULL(OI.PKGID,0)=0 THEN ISNULL(PI.GroupName,'') ELSE '' END,OI.AccessionNumber,
+		PV.ReferingPhysicianName,PV.ReferingPhysicianID ,MIS.CreatedAt,MIS.ModifiedAt,IDm.DeptName ,U.LoginID ,S.TitleName+U.Name,ISM.SampleDesc
+		,CASE WHEN ISNULL(IOM.IsNonReportable ,'N')='N' THEN 'No' ELSE 'Yes' END,ISNULL(PI.ConvreferenceRange,''),ISNULL(Iv.ConvValue,''),ISNULL(Iv.ConvUOMCode,'')
+		,OI.ResCaptureLoc,OI.ReferralID
+	 from Patientvisit PV (NOLOCK)
+	 INNER JOIN OrderedInvestigations OI (NOLOCK) ON PV.PatientVisitId=OI.VisitID
+	 Inner Join PatientInvestigation PI (NOLOCK) on PI.PatientvisitID=PV.PAtientvisitID AND PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=PV.OrgID
+	 Inner Join MISORderedInvestigations MIS(NOLOCK) on MIS.AccessionNumber=PI.AccessionNumber
+	 LEFT JOIN Users U (NOLOCK) ON U.LoginID=MIS.ApprovedBy
+	 left Join InvestigationValues IV(NOLOCK) on IV.PatientvisitID=PV.PAtientvisitID and IV.InvestigationID=PI.InvestigationID and IV.Orgid=PI.OrgID
+	Inner Join InvestigationOrgMapping IOM(NOLOCK) on IOM.InvestigationID=PI.InvestigationID and IOM.ORgID=PI.OrgID
+	Inner Join InvestigationOrgAttributes IOA(NOLOCK) on IOA.InvestigationID=IOM.InvestigationID and IOA.OrgID=IOM.OrgID
+	Left join InvestigationMethod IM(NOLOCK) on IM.MethodID=IOM.MEthodID and IOM.OrgID=IM.OrgID
+	LEFT JOIN invorggroup IG (NOLOCK) ON IG.OrggroupID=PI.groupID AND IG.OrgID=OI.OrgID
+	--LEFT JOIN OrganizationAddress OA (NOLOCK) ON OA.AddressID=OI.ResCaptureLoc
+	LEFT JOIN InvDeptMaster IDM (NOLOCK) ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID
+	 LEFT JOIN Salutation S (NOLOCK) ON S.TitleID=U.TitleCode
+	 LEFT JOIN InvSampleMaster ISM (NOLOCK) ON ISM.SampleCode=IOM.SampleCode  AND ISM.OrgID=IOM.OrgID
+	where PV.PatientVisitId=@PatientvisitID and PV.OrgID=@pOrgID
+ 
+   /* UPDATE T
+	SET  T.ProcessingType= CASE WHEN ILM.Type=12 THEN 'OUT' ELSE 'IN' END 
+	FROM #TempVisitOrderDetails T
+	INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID    
+	 WHERE ILM.LocationID=@AddID AND  ILM.OrgID=@pOrgID 
+
+	UPDATE T
+	SET    T.ProcessingLocation=OA.Location
+	FROM #TempVisitOrderDetails T
+	INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID   
+	INNER JOIN Organizationaddress OA (NOLOCK) ON OA.OrgID=ILM.OrgID AND OA.AddressID=ILM.LocationID 
+	WHERE ILM.LocationID=@AddID AND OA.AddressID!=T.ResCaptureLoc
+
+	UPDATE T
+	SET    T.ProcessingLocation=OA.Location
+	FROM #TempVisitOrderDetails T
+	INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID  
+	INNER JOIN Organizationaddress OA (NOLOCK) ON OA.OrgID=ILM.OrgID  AND OA.AddressID=T.ResCaptureLoc
+	--WHERE ILM.LocationID=@AddID AND OA.AddressID=T.ResCaptureLoc
+
+	  
+
+	UPDATE T
+	SET  T.ProcessingLocation=LO.RefOrgName
+	FROM #TempVisitOrderDetails T
+	INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID
+	INNER JOIN LabReferenceOrg LO (NOLOCK) ON ILM.ProcessingOrgID=LO.LabRefOrgID AND ILM.OrgID=LO.OrgID AND LO.OrgID=@pOrgID
+	WHERE  T.ProcessingType='OUT'*/
+
+	UPDATE T
+	SET  T.ProcessingType=CASE WHEN T.ReferralID>0 THEN 'OUT' ELSE 'IN' END 
+	FROM #TempVisitOrderDetails T  
+
+	 
+	UPDATE T
+	SET    T.ProcessingLocation=OA.Location
+	FROM #TempVisitOrderDetails T    
+	INNER JOIN Organizationaddress OA (NOLOCK) ON  OA.AddressID=T.rescaptureloc 
+	WHERE OA.OrgID=@pOrgID  AND T.ProcessingType='IN'
+	 
+
+	UPDATE T
+	SET  T.ProcessingLocation=LO.RefOrgName
+	FROM #TempVisitOrderDetails T
+	--INNER JOIN InvestigationLocationMapping ILM (NOLOCK) ON T.TestID=ILM.InvestigationID AND ILM.OrgID=@pOrgID   
+	INNER JOIN LabReferenceOrg LO (NOLOCK) ON LO.LabRefOrgID=T.ReferralID  AND LO.OrgID=@pOrgID
+	WHERE  T.ProcessingType='OUT'
+	 
+   
+   UPDATE T
+   SET  T.GroupCode=IG.TestCode
+   FROM #TempVisitOrderDetails T
+   INNER JOIN InvOrggroup IG (NOLOCK)
+   ON T.GroupID=IG.AttGroupID
+
+    UPDATE T
+   SET  T.SubGroupCode=IG.TestCode
+   FROM #TempVisitOrderDetails T
+   INNER JOIN InvOrggroup IG (NOLOCK)
+   ON T.SubGroupID=IG.AttGroupID
+
+   UPDATE T
+   SET T.Testvalue=''
+   FROM #TempVisitOrderDetails T
+   WHERE T.TestStatus!='Approve'
+
+    ALTER TABLE #TempVisitOrderInvestigation ADD StatusID INT 
+   UPDATE T
+	SET  T.StatusID=ORD.Seq
+	FROM #TempVisitOrderDetails T
+	INNER JOIN OrderedInvestigations MIS (NOLOCK)
+	ON T.PatientVisitID=MIS.Visitid  AND T.AccessionNumber=MIS.AccessionNumber  AND MIS.Status!='Paid'
+	INNER JOIN ordtasks ORD ON ORD.Status=MIS.Status   
+	UPDATE  T
+	SET T.TestValueType=CASE WHEN T.DepartmentName='Culture' THEN 'XML' WHEN  T.DepartmentName='Histo' THEN 'HTML' ELSE 'Routine' END
+	FROM #TempVisitOrderDetails T
+							   
+	 
+	DECLARE @Statusid int,@Overallstatus NVARCHAR(1000) ,@Cancelcnt INT,@Testcnt INT
+    
+	SELECT @Cancelcnt=Count(1) FROM OrderedInvestigations(NOLOCK) WHERE VisitID=@PatientVisitID AND Status='Cancel'
+	SELECT @Testcnt=Count(1) FROM OrderedInvestigations(NOLOCK) WHERE VisitID=@PatientVisitID
+
+	SELECT @Statusid=MIN(StatusID) FROM   #TempVisitOrderDetails 
+	WHERE TestStatus NOT IN ('Paid','Rejected','rerun','Recheck','Not given','OutSource','Retest','Cancel','Co-authorize','ResultDeflag',
+	'Reflexwithnewsample','Reflexwithsamesample','ResultDeflags')
+	 
+    IF @Statusid IS NULL
+	BEGIN
+		SELECT @Statusid=MIN(StatusID) FROM   #TempVisitOrderDetails 
+		WHERE TestStatus   IN ('Rejected','rerun','Recheck','Not given','OutSource','Retest','Co-authorize','ResultDeflag',
+		'Reflexwithnewsample','Reflexwithsamesample','ResultDeflags')
+	END
+	SELECT @Overallstatus =Status FROM ordtasks WHERE Seq=@Statusid
+
+	UPDATE T
+	SET T.OverAllStatus=@Overallstatus
+	FROM #TempVisitOrderInvestigation T
+
+	DECLARE @InvValues AS TABLE
+	(
+	  PatientID BIGINT,
+	  VisitID  BIGINT,
+	  TestID BIGINT,
+	  Value NVARCHAR(MAX),
+	  CreatedAt DATETIME
+	)
+
+ 
+
+	INSERT INTO @InvValues (PatientID,VisitID,TestID,Value,CreatedAt)
+	SELECT DISTINCT PV.PatientID,@PatientvisitID,PI.InvestigationID,IV.Value,IV.CreatedAt
+	 FROM 	Patientvisit PV WITH(nolock)    
+    INNER JOIN PatientInvestigation PI WITH(nolock)  
+            ON PI.PatientVisitID = PV.PatientVisitId   
+    INNER JOIN InvestigationValues IV WITH(nolock)  
+            ON IV.InvestigationID = PI.InvestigationID  
+            AND IV.PatientVisitID = PI.PatientVisitID  
+            AND Isnull(pi.statustype, '') = Isnull(iv.statustype, '')  
+            AND IV.UID = PI.UID  
+	 INNER JOIN #TempVisitOrderDetails T ON T.TestID=PI.InvestigationID
+	WHERE PV.PatientID=@PatientID 
+	AND PV.PatientVisitID!=@PatientvisitID  
+	AND PV.OrgID IN (SELECT SharingOrgId  
+                              FROM   TrustedOrgDetails WITH(NOLOCK)  
+                              WHERE  LoggedOrgID = @pOrgID) 
+    IF  (Select Count(1) FROM @InvValues )>0
+	BEGIN
+		UPDATE T
+		SET T.DeltaValue=IV.Value
+		FROM #TempVisitOrderDetails T 
+		INNER JOIN @InvValues IV 
+		ON IV.TestID=T.TestID
+		INNER JOIN (SELECT MAX(CreatedAt) CreatedAt,TestID FROM @InvValues GROUP BY TestID) A
+		ON A.TestID=IV.TestID AND A.CreatedAt=IV.CreatedAt
+	 END
+
+	  IF  (Select Count(1) FROM @InvValues )>0
+	BEGIN
+		UPDATE T
+		SET T.DeltaValue=IV.Value
+		FROM #TempVisitOrderInvestigation T 
+		INNER JOIN @InvValues IV 
+		ON IV.TestID=T.TestID
+		INNER JOIN (SELECT MAX(CreatedAt) CreatedAt,TestID FROM @InvValues GROUP BY TestID) A
+		ON A.TestID=IV.TestID AND A.CreatedAt=IV.CreatedAt AND T.TestType='INV'
+	 END
+
+
+	SELECT * FROM #TempPatientDetails  
+	SELECT * FROM #TempPatientVisitDetails
+	SELECT * FROM #TempVisitOrderInvestigation
+	SELECT * FROM #TempVisitOrderDetails
+	SELECT @pOrgCode OrgCode,@visitnumber VisitNumber 
+	--Update MISH SEt MISH.ProcessStatus='Y' 
+	--from MISOrderedinvestigationhistory MISH 
+	--where MISH.Visitid=@PatientvisitID and MISH.ProcessStatus not in ('Paid')
+
+	DROP TABLE #TempPatientDetails
+	DROP TABLE #TempPatientVisitDetails
+	DROP TABLE #TempVisitOrderDetails
+	DROP TABLE #TempVisitOrderInvestigation
+END
+
+
+
+
+
+
+
+
+
+
+
+
+
+

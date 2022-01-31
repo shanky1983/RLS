@@ -1,0 +1,148 @@
+
+CREATE PROCEDURE [dbo].[GetPatientRegistrationInfo__LIMSAPI](
+	@pOrgCode NVARCHAR(100),
+	@pMobileNumber NVARCHAR(100),
+	
+	@Page INT,
+    @Size INT )
+
+AS
+BEGIN        
+  -----GetPatientRegistrationInfo__LIMSAPI 'LIMSAPI','9790494301',1,100
+ -- exec GetPatientRegistrationInfo__LIMSAPI @pOrgCode=N'LIMSAPI',@pMobileNumber=N'9790981125',@Page=1,@Size=100
+
+	DECLARE @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)       
+
+--	DECLARE @pFdate Datetime, @pTdate Datetime
+
+--	SELECT @pFdate=CONVERt(DATE,@pRegistereddate)
+	--SELECT @pTdate=DATEADD(ss,-1,DATEADD(dd,1,@pFdate))
+
+	DECLARE @MaxRecordCount INT
+	DECLARE @MaxCountReached BIT
+	DECLARE @TotalRecords INT
+
+
+   SELECT @MaxRecordCount=MaximumRecordCount 
+	  FROM APIConfiguration 
+   WHERE SPName='GetPatientRegistrationInfo__LIMSAPI'
+
+   IF @Size > @MaxRecordCount
+	 BEGIN
+		SET @Size = @MaxRecordCount
+	 END
+
+ CREATE TABLE #TempPatientPaging
+ (	SNO INT IDENTITY(1,1),
+	PatientID	bigint ,
+	TITLECode	tinyint,
+	Name NVARCHAR(1000),
+	FirstName NVARCHAR(500), 
+	MiddleName NVARCHAR(500),
+	LastName NVARCHAR(500),
+	Age NVARCHAR(500),
+	SEX NVARCHAR(30),
+	DOB DATETIME,
+	Email NVARCHAR(100),
+	URNTypeID NVARCHAR(30),
+	UrNo NVARCHAR(200),
+	RegistrationDTTM DATETIME,
+	OrgID INT,
+	Status NVARCHAR(10),
+	PatientNumber NVARCHAR(50),
+	CountryID INT,
+	StateID INT,
+	Address NVARCHAR(2000),
+	AddressId BIGINT,
+	MobileNumber NVARCHAR(30),
+	PostalCode NVARCHAR(10),
+	City NVARCHAR(100),
+	PatientType NVARCHAR(100)
+	--AddressID BIGINT
+ )
+
+
+ IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM WITH(NOLOCK)  ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode 
+	END
+
+  SELECT @TotalRecords = COUNT(1) 
+  FROM Patient P  WITH(NOLOCK)
+    INNER JOIN PatientAddress PA ON PA.PatientID=P.PatientID
+  WHERE P.Orgid=@pOrgid and Status='A' 
+       AND (PA.MobileNumber=@pMobileNumber OR @pMobileNumber='')
+   --    AND ((P.CreatedAt >= @pFdate
+   --    AND P.CreatedAt < @pTdate )
+			--OR ( P.ModifiedAt >= @pFdate
+   --    AND P.ModifiedAt < @pTdate )
+			--OR ( PA.CreatedAt >= @pFdate
+   --    AND PA.CreatedAt < @pTdate )
+			--OR ( PA.ModifiedAt >= @pFdate
+   --    AND PA. ModifiedAt < @pTdate ))
+	   AND PA.AddressType='P' 
+     --select @pOrgID                    
+	 --return
+
+	INSERT INTO #TempPatientPaging(
+		  PatientID, Name,        TITLECode,   FirstName,    MiddleName,  LastName,         Age,
+		  SEX,       DOB,         Email,       URNTypeID,    UrNo,        RegistrationDTTM, OrgID,
+		  Status,    CountryID,   StateID,     Address,      AddressId,   MobileNumber,     PostalCode,
+		  City,      PatientType ,PatientNumber)
+	SELECT P.PatientID,   P.Name, P.TITLECode, P.FirstName, P.MiddleName, P.LastName,       P.Age,
+		   P.Sex,         DOB,   Email,       UT.URNType,   P.UrNo,       RegistrationDTTM, P.OrgID,
+		   case Status when 'A' then 'Active' else 'Inactive' end,  PA.CountryID,  PA.StateID ,  
+		   ISNULL(PA.Add1,'')+ISNULL(PA.Add2,'')+ISNULL(PA.Add3,'') as Address,   PA.AddressId,  PA.MobileNumber, PA.PostalCode as PinCode,
+		   PA.City,  p.patientType,P.PatientNumber
+	FROM Patient P WITH(NOLOCK) 
+		INNER JOIN PatientAddress PA ON	PA.PatientID=P.PatientID
+		LEFT JOIN URNTypes UT ON UT.URNTypeId=P.URNTypeId
+	WHERE P.Orgid=@pOrgid and Status='A' 
+		AND (PA.MobileNumber=@pMobileNumber OR @pMobileNumber='')
+		--AND ((P.CreatedAt >= @pFdate
+		--AND P.CreatedAt < @pTdate )
+		--	OR ( P.ModifiedAt >= @pFdate
+		--AND P.ModifiedAt < @pTdate )
+		--	OR ( PA.CreatedAt >= @pFdate
+		--AND PA.CreatedAt < @pTdate )
+		--	OR ( PA.ModifiedAt >= @pFdate
+		--AND PA. ModifiedAt < @pTdate ))
+	AND PA.AddressType='P'
+	ORDER BY PatientId 
+	OFFSET (@Page -1) * @Size ROWS
+	FETCH NEXT @Size ROWS ONLY
+
+
+	SELECT ISNULL(P.PatientID,'') PatientID, ISNULL(SOM.DisplayText,'') as Salutation, ISNULL(P.Name,'') PatientName,
+		   ISNULL(FirstName,'') FirstName ,ISNULL(MiddleName,'') MiddleName,ISNULL(LastName,'') LastName, ISNULL(Age,'') Age,
+			CASE 
+				WHEN P.Sex='M' THEN 'Male'
+				WHEN P.Sex='F' THEN 'Female'
+			ELSE 'Male' END  AS Gender,
+			ISNULL(DOB,'') as DateofBirth, Address, ISNULL(P.City,'') City, ISNULL(S.StateName,'') State, ISNULL(C.CountryName,'') Country,
+			ISNULL(P.PostalCode,'') PostalCode, ISNULL(P.MobileNumber,'') MobileNumber, ISNULL(Email,'') Email, ISNULL(URNTypeID,'') URNType,
+			ISNULL(P.UrNo,'') URNNo, ISNULL(RegistrationDTTM,'') as DateOfRegistration, @pOrgCode AS OrgCode,
+			'Logic Required' as Source, ISNULL(Status,'') Status,  @pOrgID OrgID, @pOrgAddrID LocationID, P.AddressID, p.patientType Type,P.PatientNumber
+	FROM #TempPatientPaging P WITH(NOLOCK) 
+		INNER JOIN SalutationOrgMapping SOM WITH(NOLOCK)  ON P.TITLECode = SOM.TitleID
+			AND P.OrgId=SOM.OrgID
+		INNER JOIN Country C WITH(NOLOCK) ON C.CountryID = P.CountryID        
+		LEFT JOIN State S WITH(NOLOCK) ON S.StateID = P.StateID   
+
+	  ---inner join PatientAddress PA on p.PatientID=PA.PatientID
+
+	   SELECT @TotalRecords as TotalRecords, Cast(CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as Int) as TotalPages,
+	   @MaxRecordCount as AllowableRecordCount
+
+	   DROP TABLE #TempPatientPaging
+END
+
+
+
+
+

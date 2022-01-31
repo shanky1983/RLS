@@ -1,0 +1,431 @@
+--exec pGetTestMasterWithSample_LIMSAPI 'AttuneDemo','PKG','IHT032_9',1,100 
+CREATE PROC pGetTestMasterWithSample_LIMSAPI
+    @pOrgCode NVARCHAR(100),
+	@pType [nvarchar](255),
+	@TestCode NVARCHAR(100),
+	@Page INT,
+    @Size INT
+AS
+BEGIN
+	 DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)       
+
+	 DECLARE @MaxRecordCount INT
+	 DECLARE @MaxCountReached BIT
+	 DECLARE @TotalRecords INT
+
+	 SELECT @MaxRecordCount=MaximumRecordCount 
+	 FROM APIConfiguration 
+	 WHERE SPName='pGetTestMasterWithSample_LIMSAPI'
+
+	 IF @Size > @MaxRecordCount
+	 BEGIN
+		SET @Size = @MaxRecordCount
+		SET @MaxCountReached=1
+	 END
+
+	CREATE TABLE #TempINVPaging
+	(
+	 InvestigationID       BIGINT,     
+     TestCode nvarchar(50),
+	 TestName NVARCHAR(MAX),
+	 Type nvarchar(20),    --(INV,GRP, PKG) ,
+	 OrgId INT,
+	 Gender NVARCHAR(20),
+	 DeptID int,
+	 Samplecode int,
+	 SampleContainerID int,
+	 Status NVARCHAR(50)
+	 
+	)
+
+
+   CREATE TABLE #TempGRPPaging
+	(
+	  AttGroupID BIGINT,
+	 OrgGroupID       BIGINT,     
+     TestCode nvarchar(50),
+	 Type nvarchar(20),    --(INV,GRP, PKG) ,
+	 OrgID INT,
+	 DisplayText NVARCHAR(1000),
+	 Status NVARCHAR(20),
+	 Gender NVARCHAR(20)
+	 
+	)
+
+
+	CREATE TABLE #TempPKGPaging
+	(
+		DisplayText NVARCHAR(1000),
+		AttGroupID BIGINT,
+		OrgGroupID BIGINT,
+		TestCode NVARCHAR(50),
+		Type NVARCHAR(10),
+		OrgID INT,
+		Status NVARCHAR(20),
+		Gender NVARCHAR(20)
+	)
+
+	CREATE TABLE #TestSampleDetails
+	(
+	   PackageID BIGINT,
+	   PackageName NVARCHAR(3000),
+	   TestCode NVARCHAR(3000),
+	   TestID BIGINT,
+	   TestName NVARCHAR(3000),
+	   Type NVARCHAR(100),
+	   SampleID INT,
+	   SampleCode NVARCHAR(1000)  , 
+	   SampleName NVARCHAR(1000),
+	   SampleContainerID  INT,     
+	   ContainerName  nvarchar(255),    
+	   SampleContainerColor nvarchar(100)    
+
+	)
+	CREATE TABLE #Temp_Result
+	(   
+        InvestigationID       BIGINT,     
+		TestCode nvarchar(50), 
+		Testname nvarchar(1000), 
+		Type nvarchar(20),    
+		Gender nvarchar(20), 
+		InvestigationName      nvarchar(100),  
+		INVTestCode     nvarchar(100),  
+		InvInvestigationID bigint,
+		INV_InvestigationName      nvarchar(100),   
+		SampleID INT, 
+		SampleCode NVARCHAR(100)  ,  
+		SampleName   nvarchar(100),    
+		SampleContainerID  INT,     
+		ContainerName  nvarchar(255),    
+		SampleContainerColor nvarchar(100),          
+		Price decimal(18,2),    
+		GRPPrice decimal(18,2),      
+		PKGPrice decimal(18,2),    
+        DepartmentID    INT,    
+		DeparmentName  nvarchar(255),    
+		Status NVARCHAR(10) , 
+		OrgID bigint,
+		InvStatus NVARCHAR(1000)
+)
+ 
+
+	IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+	   BEGIN
+		  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+				 @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+			FROM Integrationtypemaster ITM
+				INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+				INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+			WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+	IF @pType='INV'
+	BEGIN
+		 SELECT @TotalRecords = COUNT(1) 
+		FROM InvestigationOrgMapping IOM  WITH(NOLOCK) 
+		WHERE IOM.OrgID=@pOrgID and IOM.IsActive='Y' 
+		AND (IOM.TestCode=@TestCode OR @TestCode='')
+
+		INSERT INTO #TempINVPaging(InvestigationID,TestCode,TestName,Type,OrgId,Gender,DeptID,Samplecode,SampleContainerID,Status)
+		SELECT InvestigationId,ISNULL(InvestigationCode,TestCode),DisplayText,'INV',OrgId,Gender ,DeptID,Samplecode,SampleContainerID, 
+		 case when ISNULL(IsActive,'Y') = 'Y' then 'Active' else 'Inactive' end as IsActive
+		FROM InvestigationOrgMapping IOM  WITH(NOLOCK) 
+		WHERE IOM.OrgID=@pOrgID AND ISNULL(IOM.IsActive,'Y' )= 'Y'
+		AND (TestCode=@TestCode OR @TestCode='')
+		ORDER BY InvestigationID
+		OFFSET (@Page -1) * @Size ROWS
+		FETCH NEXT @Size ROWS ONLY      
+		
+	 INSERT #Temp_Result(InvestigationID,TestCode, Testname,Type,Gender,InvestigationName,SampleCode,SampleName,
+							SampleContainerID,ContainerName,SampleContainerColor,DepartmentID,DeparmentName,Status,OrgID,
+							INVTestCode,InvInvestigationID,InvStatus)     
+     SELECT DISTINCT  IOM.InvestigationID,TestCode,IOM.TestName,@pType,Gender,IOM.TestName,ISM.SampleCode,ISM.SampleDesc,     
+					  ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor,IOM.DeptID DepartmentID,IDM.DeptName,IOM.Status,IOM.OrgId,
+					  IOM.TestCode,IOM.InvestigationID,IOM.Status
+      FROM   #TempINVPaging IOM (nolock)  
+	  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID  and  IDM.LangCode='en-GB'  AND IDM.OrgId=IOM.OrgID
+      INNER JOIN InvSampleMaster ISM (nolock)     
+            ON IOM.samplecode = ISM.samplecode     
+            AND ISM.OrgId = IOM.OrgId     
+      LEFT JOIN InvestigationSampleContainer ISC (nolock)     
+            ON IOM.SampleContainerID = ISC.SampleContainerID     
+            AND ISC.OrgID = IOM.OrgId     
+	  WHERE  IOM.OrgID = @pOrgID 
+	  
+	  INSERT INTO #TestSampleDetails (PackageID,PackageName,TestCode,TestID,Type,TestName,SampleID,SampleCode,SampleName,
+							SampleContainerID,ContainerName,SampleContainerColor) 
+	  SELECT  DISTINCT  InvestigationID,TestName,TestCode,InvestigationID,'INV',IOM.TestName,ISM.SampleCode,ISM.SampleCode,ISM.SampleDesc,     
+					  ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor 
+      FROM   #TempINVPaging IOM (nolock)  
+	  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID  and  IDM.LangCode='en-GB'  AND IDM.OrgId=IOM.OrgID
+      INNER JOIN InvSampleMaster ISM (nolock)     
+            ON IOM.samplecode = ISM.samplecode     
+            AND ISM.OrgId = IOM.OrgId     
+      LEFT JOIN InvestigationSampleContainer ISC (nolock)     
+            ON IOM.SampleContainerID = ISC.SampleContainerID     
+            AND ISC.OrgID = IOM.OrgId     
+	  WHERE  IOM.OrgID = @pOrgID 
+	  
+	 UPDATE TR set TR.Price=IRC.Rate 
+	from #Temp_Result TR   
+	INNER JOIN InvRateMaster  IRC ON IRC.ID=TR.InvestigationID  AND IRC.Type='INV'
+	INNER JOIN RateMaster R (NOLOCK) ON R.OrgID=TR.OrgID AND R.RateCode='GENERAL'  AND IRC.RateID=R.RateID   
+	 
+	END
+
+	IF @pType='GRP'
+	BEGIN
+			SELECT @TotalRecords = COUNT(1) 
+              FROM   InvOrgGroup IOG WITH (NOLOCK)
+                   LEFT JOIN InvGroupMaster IGM WITH (NOLOCK)
+                          ON IGM.GroupID = IOG.AttGroupID
+            WHERE  IGM.Type = 'GRP'
+                   AND (IOG.TestCode=@TestCode OR @TestCode='')
+                   AND IOG.OrgID = @pOrgID and IGM.Type=@pType
+
+		  	INSERT INTO #TempGRPPaging(AttGroupID,OrgGroupID,TestCode,Type,OrgID,DisplayText,Status,Gender)
+			SELECT IOG.AttGroupID,IOG.OrgGroupID,IOG.TestCode,'GRP',IOG.OrgId,IOG.DisplayText,
+			--case when ISNULL(IOG.Status,'A') = 'A' then 'Active' else 'Inactive' end as Status, 
+			case when ISNULL(IOG.Status,'A') = 'A' then 'Active' when ISNULL(IOG.Status,'Y') = 'Y' then 'Active' else 'Inactive' end Status,
+			IOG.Gender FROM InvOrgGroup IOG  
+			WITH(NOLOCK) WHERE IOG.OrgID=@pOrgID
+			AND (IOG.TestCode=@TestCode OR @TestCode='')
+			 ORDER BY IOG.OrgGroupID
+			  OFFSET (@Page -1) * @Size ROWS
+			  FETCH NEXT @Size ROWS ONLY  
+
+           
+							
+                  INSERT #Temp_Result (InvestigationID,TestCode,Testname,Type,Gender,InvInvestigationID, InvestigationName,INVTestCode,INV_InvestigationName,SampleCode,
+										SampleName,SampleContainerID,ContainerName,SampleContainerColor,DepartmentID,DeparmentName,Status,OrgID,InvStatus) 
+	              
+				  SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'GRP'  AS  TestType ,IOG.Gender,
+								  IGM.InvestigationID,IOG.Displaytext as InvestigationName, IOG.TestCode,IOG.Displaytext , 0 AS  SampleID ,
+								  '' AS SampleName,0,'','' as [SampleContainerColor],    
+                                  0 DepartmentID,'' DeparmentName,CASE WHEN ISNULL(IOG.Status,'A')='A' THEN 'Active' ELSE 'InActive' END,@pOrgid AS[OrgID] ,TG.Status
+				  FROM #TempGRPPaging TG
+				  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON TG.OrgGroupID=IGM.groupID
+				  INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.OrgGroupID=IGM.InvestigationID AND IGM.Parent='Y' AND IGM.Active = 'Y' 
+				  WHERE IOG.OrgID=@pOrgid AND IGM.active='Y'
+				  
+				  UNION
+				  
+				   SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'INV'  AS  TestType ,IOG.Gender,
+								  IOG.InvestigationID,IOG.Displaytext as InvestigationName, IOG.InvestigationCode,IOG.DisplayText, ISM.SampleCode AS  SampleID ,
+								  ISM.SampleDesc AS SampleName,ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor as [SampleContainerColor],    
+                                  IDM.DeptID DepartmentID,IDM.DeptName DeparmentName,CASE WHEN ISNULL(IOG.Display,'N')='Y' THEN 'Active' ELSE 'InActive' END,
+								  @pOrgid AS[OrgID] ,TG.Status
+				  FROM #TempGRPPaging TG
+				  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON TG.OrgGroupID=IGM.groupID
+				  INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON IOG.InvestigationID=IGM.InvestigationID AND IGM.Parent='N' AND IGM.Active = 'Y' 
+				  INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.OrgID=IOG.OrgID AND IDM.DeptID=IOG.DeptID and  IDM.LangCode='en-GB' 
+				  LEFT JOIN  InvSampleMaster ISM (nolock) ON IOG.samplecode = ISM.samplecode AND ISM.OrgId = IOG.OrgId     
+			      LEFT JOIN InvestigationSampleContainer ISC (nolock) ON IOG.SampleContainerID = ISC.SampleContainerID AND ISC.OrgID = IOG.OrgId 
+				  WHERE IOG.OrgID=@pOrgid AND IGM.active='Y'-- AND IOG.Display = 'Y'					  
+
+			    
+
+			UPDATE TR set TR.GRPPrice=IRC.Rate 
+			from #Temp_Result TR 
+			inner join InvGroupMaster IGM ON  IGM.GroupID=TR.InvestigationID
+			inner join InvOrgGroup IOG  ON IOG.AttGroupID=IGM.GroupID  and IOG.Orgid=TR.OrgID
+			INNER JOIN InvRateMaster  IRC ON IRC.ID=IOG.OrgGroupID AND IRC.Type='GRP'
+			INNER JOIN RateMaster R (NOLOCK) ON R.OrgID=TR.OrgID AND R.RateCode='GENERAL'  AND IRC.RateID=R.RateID
+
+			 
+
+			  INSERT INTO #TestSampleDetails (PackageID,PackageName,TestCode,TestID,Type,TestName,SampleID,SampleCode,SampleName,
+							SampleContainerID,ContainerName,SampleContainerColor) 
+			  SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,IGM.InvestigationID,TR.Type,TR.InvestigationName,ISM.SampleCode,ISM.SampleCode,ISM.SampleDesc,     
+							  ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor 
+			  FROM   #TempGRPPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID
+			  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON IGM.GroupID=TR.InvInvestigationID 
+			  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.InvestigationID  AND IOM.OrgID=TGP.OrgID
+			  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID    AND IDM.OrgId=IOM.OrgID
+			  LEFT JOIN InvSampleMaster ISM (nolock) ON IOM.samplecode = ISM.samplecode AND ISM.OrgId = IOM.OrgId     
+			  LEFT JOIN InvestigationSampleContainer ISC (nolock)  ON IOM.SampleContainerID = ISC.SampleContainerID  AND ISC.OrgID = IOM.OrgId     
+			  WHERE  IOM.OrgID = @pOrgID AND TR.Type='GRP' AND IGM.active='Y' --AND IOM.Display = 'Y'
+			  UNION
+			  SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,InvestigationID,TR.Type,TR.InvestigationName,TR.SampleCode,
+			    TR.SampleCode,TR.SampleName,TR.SampleContainerID,TR.ContainerName,TR.SampleContainerColor 
+			  FROM   #TempGRPPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID     
+			  WHERE   TR.Type='INV'
+
+	END
+
+	IF @pType='PKG'
+	BEGIN
+		
+
+		SELECT @TotalRecords = COUNT(1) 
+	    FROM   InvOrgGroup IOG WITH (NOLOCK)
+		LEFT JOIN InvGroupMaster IGM WITH (NOLOCK)  ON IGM.GroupID = IOG.AttGroupID
+		WHERE  IGM.Type = 'PKG'
+		AND (IOG.TestCode=@TestCode OR @TestCode='')
+	    AND IOG.OrgID = @pOrgID
+
+   IF  EXISTS(SELECT 1
+                FROM CodingSchemeOrgMapping
+                WHERE  OrgID = @pOrgID)
+        BEGIN
+          
+		   INSERT INTO #TempPKGPaging(DisplayText,AttGroupID,OrgGroupID,TestCode,Type,OrgID,Status,Gender)
+        SELECT Isnull(IOG.DisplayText, IGM.GroupName) AS DisplayText,
+			IOG.AttGroupID,
+                   IOG.OrgGroupID                         AS OrgGroupID,
+             CM.CodeName                            AS packagecode,
+			 'PKG',
+			 IOG.OrgId,
+			 --case when ISNULL(IOG.Status,'A') = 'A' then 'Active' else 'Inactive' end AS Status, 
+		     case when ISNULL(IOG.Status,'A') = 'A' then 'Active' when ISNULL(IOG.Status,'Y') = 'Y' then 'Active' else 'Inactive' end AS Status,
+		  IOG.GENDER
+            FROM InvOrgGroup IOG WITH (NOLOCK)
+               LEFT JOIN InvGroupMaster IGM WITH (NOLOCK)
+                          ON IGM.GroupID = IOG.AttGroupID
+                   LEFT JOIN CodeMapper CMP WITH (NOLOCK)
+                          ON CMP.IdentifyingID = IOG.OrgGroupID
+                             AND CMP.IdentifyingType = 'PKG'
+                   INNER JOIN CodeMaster CM WITH (NOLOCK)
+                           ON CM.CodeMasterID = CMP.CodeMasterID
+                              AND CM.CodeType = 'PKG'
+                   INNER JOIN CodingSchemeMaster CSM WITH (NOLOCK)
+                           ON CM.CodeSchemeID = CSM.CodeTypeID
+                   INNER JOIN CodingSchemeOrgMapping CSOM WITH (NOLOCK)
+                           ON CSOM.CodeTypeID = CSM.CodeTypeID
+                              AND CSOM.OrgID = IOG.OrgID
+            WHERE  CSOM.IsPrimary = 'Y'
+                   AND IGM.Type = 'PKG'
+                   AND (CM.CodeName=@TestCode OR @TestCode='')
+                   AND IOG.OrgID = @pOrgID
+            ORDER  BY OrgGroupID
+			 OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY    
+
+        END
+      ELSE
+        BEGIN
+  
+           
+		   INSERT INTO #TempPKGPaging(DisplayText,AttGroupID,OrgGroupID,TestCode,Type,OrgID,Status,Gender)
+            SELECT Isnull(IOG.DisplayText, IGM.GroupName) AS DisplayText,
+			IOG.AttGroupID,
+                   IOG.OrgGroupID                         AS OrgGroupID,
+				   IOG.TestCode,
+				   'PKG',
+				   IOG.ORGID,
+                   case when ISNULL(IOG.Status,'Y') = 'Y' then 'Active' else 'Inactive' end AS Status,
+                   IOG.Gender                             AS Gender
+            FROM   InvOrgGroup IOG WITH (NOLOCK)
+                   LEFT JOIN InvGroupMaster IGM WITH (NOLOCK)
+                          ON IGM.GroupID = IOG.AttGroupID
+            WHERE  IGM.Type = 'PKG'
+                   AND (IOG.TestCode=@TestCode OR @TestCode='')
+                   AND IOG.OrgID = @pOrgID
+            ORDER  BY OrgGroupID
+			 OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY      
+        END
+	  
+
+         INSERT #Temp_Result (InvestigationID,TestCode,Testname,Type,Gender,InvInvestigationID, InvestigationName,INVTestCode,INV_InvestigationName,SampleCode,
+										SampleName,SampleContainerID,ContainerName,SampleContainerColor,DepartmentID,DeparmentName,Status,OrgID,InvStatus) 
+	              
+				  SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'GRP'  AS  TestType ,IOG.Gender,
+								  IPM.ID,IOG.Displaytext as InvestigationName, IOG.TestCode,IOG.Displaytext , 0 AS  SampleID ,
+								  '' AS SampleName,0,'','' as [SampleContainerColor],    
+                                  0 DepartmentID,'' DeparmentName,CASE WHEN ISNULL(IOG.Status,'Y')='Y' THEN 'Active' ELSE 'InActive' END,@pOrgid AS[OrgID] ,TG.Status
+				  FROM #TempPKGPaging TG
+				  INNER JOIN InvPackageMapping IPM (NOLOCK) ON TG.OrgGroupID=IPM.PackageID AND IPM.Type='GRP' 
+				  INNER JOIN InvOrgGroup IOG (NOLOCK) ON IOG.OrgGroupID=IPM.ID  AND IPM.Active = 'A' 
+				  WHERE IOG.OrgID=@pOrgid
+				  
+				  UNION
+				  
+				  SELECT DISTINCT TG.AttGroupID AS InvestigationID,TG.TestCode,TG.DisplayText as Testname ,'INV'  AS  TestType ,IOG.Gender,
+								  IOG.InvestigationID,IOG.Displaytext as InvestigationName, IOG.InvestigationCode,IOG.DisplayText, ISM.SampleCode AS  SampleID ,
+								  ISM.SampleDesc AS SampleName,ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor as [SampleContainerColor],    
+                  IDM.DeptID DepartmentID,IDM.DeptName DeparmentName,CASE WHEN ISNULL(IOG.Display,'N')='Y' THEN 'Active' ELSE 'InActive' END,
+				  @pOrgid AS[OrgID] ,TG.Status
+				  FROM #TempPKGPaging TG
+				  INNER JOIN InvPackageMapping IPM (NOLOCK) ON TG.OrgGroupID=IPM.PackageID
+				  INNER JOIN InvestigationOrgMapping IOG (NOLOCK) ON IOG.InvestigationID=IPM.ID AND IPM.Type='INV'  AND IPM.Active = 'A' 
+				  INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.OrgID=IOG.OrgID AND IDM.DeptID=IOG.DeptID and  IDM.LangCode='en-GB' 
+				  LEFT JOIN  InvSampleMaster ISM (nolock) ON IOG.samplecode = ISM.samplecode AND ISM.OrgId = IOG.OrgId     
+			      LEFT JOIN InvestigationSampleContainer ISC (nolock) ON IOG.SampleContainerID = ISC.SampleContainerID AND ISC.OrgID = IOG.OrgId 
+				  WHERE IOG.OrgID=@pOrgid --AND IOG.Display = 'Y'
+												
+		UPDATE TR set TR.PKGPrice=IRC.Rate 
+		from #Temp_Result TR 
+		inner join InvGroupMaster IGM ON  IGM.GroupID=TR.InvestigationID
+		inner join InvOrgGroup IOG  ON IOG.AttGroupID=IGM.GroupID  and IOG.Orgid=TR.OrgID 
+		INNER JOIN InvRateMaster  IRC ON IRC.ID=IOG.OrgGroupID AND IRC.Type='PKG'
+		INNER JOIN RateMaster R (NOLOCK) ON R.OrgID=TR.OrgID AND R.RateCode='GENERAL'  AND IRC.RateID=R.RateID
+
+		 INSERT INTO #TestSampleDetails (PackageID,PackageName,TestCode,TestID,Type,TestName,SampleID,SampleCode,SampleName,
+							SampleContainerID,ContainerName,SampleContainerColor) 
+			  SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,TR.InvInvestigationID,TR.Type,TR.InvestigationName,ISM.SampleCode,
+			  ISM.SampleCode,ISM.SampleDesc, ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor 
+			  FROM   #TempPKGPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID
+			  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON IGM.GroupID=TR.InvInvestigationID 
+			  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGM.InvestigationID  AND IOM.OrgID=TGP.OrgID
+			  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID    AND IDM.OrgId=IOM.OrgID
+			  LEFT JOIN InvSampleMaster ISM (nolock) ON IOM.samplecode = ISM.samplecode AND ISM.OrgId = IOM.OrgId     
+			  LEFT JOIN InvestigationSampleContainer ISC (nolock)  ON IOM.SampleContainerID = ISC.SampleContainerID  AND ISC.OrgID = IOM.OrgId     
+			  WHERE  IOM.OrgID = @pOrgID AND TR.Type='GRP' AND IGM.parent='N' AND IGM.active='Y' --AND IOM.Display = 'Y'
+			  UNION
+			    SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,TR.InvInvestigationID,TR.Type,TR.InvestigationName,
+				ISM.SampleCode,ISM.SampleCode,ISM.SampleDesc, ISC.SampleContainerID,ISC.ContainerName,ISC.ContainerColor 
+			  FROM   #TempPKGPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID
+			  INNER JOIN InvGroupMapMaster IGM (NOLOCK) ON IGM.GroupID=TR.InvInvestigationID 
+			  INNER JOIN INvGroupMapMaster IGG (NOLOCK) ON IGG.GroupID=IGM.InvestigationID 
+			  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=IGG.InvestigationID  AND IOM.OrgID=TGP.OrgID
+			  INNER JOIN InvDeptMaster IDM on IDM.DeptID=IOM.DeptID    AND IDM.OrgId=IOM.OrgID
+			  LEFT JOIN InvSampleMaster ISM (nolock) ON IOM.samplecode = ISM.samplecode AND ISM.OrgId = IOM.OrgId     
+			  LEFT JOIN InvestigationSampleContainer ISC (nolock)  ON IOM.SampleContainerID = ISC.SampleContainerID  AND ISC.OrgID = IOM.OrgId     
+			  WHERE  IOM.OrgID = @pOrgID AND TR.Type='GRP' AND IGM.parent='Y' AND IGM.active='Y' --AND IOM.Display = 'Y'
+			  UNION
+			  SELECT  DISTINCT  TGP.AttGroupID,TGP.DisplayText,TR.InvTestCode,InvestigationID,TR.Type,TR.InvestigationName,TR.SampleCode,
+			  TR.SampleCode,TR.SampleName,TR.SampleContainerID,TR.ContainerName,TR.SampleContainerColor 
+			  FROM   #TempPKGPaging TGP (nolock)  
+			  INNER JOIN #Temp_Result TR ON TGP.AttGroupID=TR.InvestigationID     
+			  WHERE   TR.Type='INV'
+	END
+
+	SELECT DISTINCT
+             InvestigationID As [InvestigationID],    
+			 TestCode InvestigationCode, 
+			 Testname InvestigationName, 
+			 Type          AS [Type], 
+			 ISNULL(Gender,'') As [Gender],
+			 ISNULL(InvestigationName,'') As [TestName], 
+			 ISNULL(InvInvestigationID,'') As TestID,  
+			 ISNULL(INVTestcode,'') As [TestCode],   
+			 --ISNULL(INV_InvestigationName,'') As [INVInvestigationName],  
+             CAST(SampleCode AS INT) As [SampleID],       
+             SampleName,
+			 SampleContainerID As [ContainerID],     
+			 ContainerName,    							
+			 ISNULL([SampleContainerColor],'White') As [SampleContainerColour],    
+			 ISNULL(Price,'0.00') As Price, 
+			  ISNULL(GRPPrice,'0.00') As GRPPrice,
+			   ISNULL(PKGPrice,'0.00') As PKGPrice,
+			 DepartmentID,
+			 DeparmentName As DepartmentName,  
+			 OrgID   As [orgID],
+			 Status  ,
+			 InvStatus
+      FROM   #Temp_Result
+     ORDER BY TestCode
+
+	 SELECT * FROM #TestSampleDetails where ISNULL(SampleID,0)>0
+
+	 SELECT @TotalRecords as TotalRecords, cast(CEILING(CAST(@TotalRecords AS DECIMAL) / @Size) as Int) as TotalPages,
+	 @MaxRecordCount as AllowableRecordCount
+	
+END
+
+

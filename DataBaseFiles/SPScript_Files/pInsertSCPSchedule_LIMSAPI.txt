@@ -1,0 +1,131 @@
+---Created BY Arumugam
+--pGetSampleCollectionPersonList_LIMSAPI '202','test'
+
+--declare @p5 dbo.UT_WorkingTime
+--insert into @p5 values(N'0, 1','11:00:00','11:30:00','01:00:00')
+
+--declare @p6 dbo.UT_Leaveinfo
+--insert into @p6 values('2021-05-04 00:00:00','2021-09-04 00:00:00',N'03/04/2021')
+
+--exec pInsertSCPSchedule_LIMSAPI @pOrgCode=N'LIMSAPI',@pSCPerson=N'testAttuneaaru',@pPinCode=N'600117',@pUserID=1122,@Timeslot=@p5,@Leaveslot=@p6, @pOutResult =''
+--go
+
+
+
+--select * from SCPSchedules
+--select * from SCPSchedulableResource
+--select * from [SCPScheduleResourceMapping]
+--select * from SCPScheduleTemplate
+--select * from [SCPScheduleResourcePinCodeMapping]
+--select * from [SCPScheduleResourceLeaveMapping]
+
+CREATE PROCEDURE [dbo].[pInsertSCPSchedule_LIMSAPI] 
+    @pOrgCode     NVARCHAR(100), 
+	@pSCPerson    NVARCHAR(100),
+    @pPinCode     NVARCHAR(1000),
+	--@pHoliday	  NVARCHAR(100),
+	@pUserID	  BIGINT,
+	@Timeslot	  [dbo].[UT_WorkingTime]  READONLY,
+	@Leaveslot    [dbo].[UT_Leaveinfo] READONLY,
+	@pOutResult   BIGINT OUTPUT
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+
+ DECLARE @pOrgID INT = 0, @pOrgAddrID INT = 0, @ServerdateTime DATETIME, @EnddateTime DATETIME,  @ResourceID BIGINT,  
+           @OrgCode NVARCHAR(100) = null, @LocationCode NVARCHAR(100) = null;
+
+ DECLARE @ScheduleID BIGINT, @ResourceTemplateID BIGINT
+
+	 CREATE TABLE #TempPinCode
+	 (
+		Pincode BIGINT,
+	 )
+
+	INSERT INTO #TempPinCode (Pincode)
+	SELECT item FROM dbo.fnSplit(@pPinCode, '^')  
+
+
+    SET @ServerdateTime = GETDATE();
+    SET @EnddateTime = DATEADD(year, 4, GETDATE())
+
+    IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode)
+    BEGIN
+       SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID
+        FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+    END
+
+
+	SELECT @ResourceID = U.LoginID 
+	FROM Users U
+		INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+		INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+		INNER JOIN LOGIN L ON L.loginID = U.LoginID
+		AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+	WHERE U.OrgID = @pOrgId AND R.RoleName = 'Sample Collection Person'
+	AND L.LoginName = @pSCPerson
+
+	
+
+ IF EXISTS (SELECT 1 FROM SCPSchedulableResource WHERE ResourceID = @ResourceID)
+	BEGIN
+
+		SET @pOutResult = 0
+
+		-- print '0'
+	END
+ ELSE
+	BEGIN
+
+		IF @ResourceID <> 0
+			 BEGIN
+
+			 --	 print '1'
+
+				INSERT INTO SCPSchedules (StartDate,EndDate,Status,ScheduleStatus,Type,CreatedBy,CreatedAt)
+				SELECT @ServerdateTime, @EnddateTime, 'A', 'Pending', 'W', @pUserID, @ServerdateTime
+
+
+				SET @ScheduleID = SCOPE_IDENTITY()
+
+				INSERT INTO SCPSchedulableResource (ResourceID,OrgID,ScheduleTemplateID,OrgAddressID,Status,CreatedBy,CreatedAt)
+				SELECT @ResourceID, @pOrgID, @ScheduleID,@pOrgAddrID, 'A', @pUserID, @ServerdateTime
+
+				SET @ResourceTemplateID = SCOPE_IDENTITY()
+				SET @pOutResult = @ResourceTemplateID
+
+				INSERT INTO  [SCPScheduleResourceMapping] (ScheduleID,ResourceTemplateId, Status,CreatedBy,CreatedAt)
+				SELECT @ScheduleID, @ResourceTemplateID, 'A',  @pUserID, @ServerdateTime
+
+				INSERT INTO SCPScheduleTemplate(ResourceTemplateID, WorkingDays, StartTime, EndTime, SlotDuration, Status, CreatedBy,CreatedAt)
+				SELECT  @ResourceTemplateID , T.WorkingDays, T.StartTime, T.EndTime, T.SlotDuration , 'A', @pUserID, @ServerdateTime 
+				FROM @Timeslot AS T  
+
+
+				INSERT INTO  SCPScheduleResourcePinCodeMapping(ResourceTemplateID,PinCode,Status,CreatedBy,CreatedAt)
+				SELECT @ResourceTemplateID, Pincode, 'A', @pUserID, @ServerdateTime  
+				FROM #TempPinCode
+
+
+				INSERT INTO  SCPScheduleResourceLeaveMapping(ResourceTemplateID, Holidays, StartDate, EndDate, Status, CreatedBy, CreatedAt)
+				SELECT @ResourceTemplateID, Holidays, StartDate, EndDate ,'A', @pUserID, @ServerdateTime  
+				FROM @Leaveslot
+
+			 END
+		 ELSE
+				 BEGIN
+				 --print '2'
+				 SET @pOutResult = -1
+
+				 END
+
+	END
+
+
+
+END
+

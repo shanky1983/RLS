@@ -1,0 +1,28 @@
+CREATE PROCEDURE [dbo].[pUpdateImageServerDetails] 
+(
+@pOrgID BIGINT,
+@pPath nvarchar(1000)
+)
+AS 
+BEGIN
+BEGIN TRY
+ DECLARE @EMsg NVARCHAR(4000),@ELine INT,@Eproc NVARCHAR(128),@ESEVERITY INT,@sptrace VARCHAR(8000)        
+ BEGIN TRANSACTION
+ IF EXISTS ( SELECT TOP 1 1 FROM ImageServerDetails  WHERE OrgID=@pOrgID)
+ BEGIN
+      UPDATE ImageServerDetails SET Path=@pPath WHERE OrgID=@pOrgID
+ END
+ ELSE 
+ BEGIN
+   INSERT INTO ImageServerDetails(OrgID,Path)
+   SELECT @pOrgID,@pPath
+ END 
+ COMMIT TRANSACTION
+END TRY
+BEGIN CATCH
+ ROLLBACK TRANSACTION
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pUpdateImageServerDetails @pOrgID = '+cast(@pOrgID as varchar)+'@Path = '+@pPath
+    EXEC usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;
+END CATCH
+END
+GO

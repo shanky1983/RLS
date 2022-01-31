@@ -1,0 +1,70 @@
+-----pGetScheduleBySCP_LIMSAPI  '','444'
+----SELECT * FROM SCPScheduleTemplate
+----select * from login where loginid = 175096
+--SELECT U.*
+--	FROM Users U
+--		INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+--		INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+--		INNER JOIN LOGIN L ON L.loginID = U.LoginID
+--		AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+--	WHERE R.RoleName = 'Sample Collection Person'
+--	AND U.Name = 'testAttuneaaru'
+
+CREATE PROCEDURE [dbo].[pGetScheduleBySCP_LIMSAPI]
+	@pOrgCode     NVARCHAR(100), 
+	@pSCPerson    NVARCHAR(100)
+	
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+--DECLARE @ScheduleID BIGINT, @ResourceTemplateID BIGINT
+
+ DECLARE @pOrgID INT = 0, @pOrgAddrID INT = 0, @ServerdateTime DATETIME, @EnddateTime DATETIME,  @ResourceID BIGINT,  
+           @OrgCode NVARCHAR(100) = null, @LocationCode NVARCHAR(100) = null;
+
+ DECLARE @ScheduleID BIGINT, @ScheduleTemplateID INT,@ResourceTemplateID BIGINT
+
+    SET @ServerdateTime = GETDATE();
+    SET @EnddateTime = DATEADD(year, 4, GETDATE())
+   
+
+    IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode)
+    BEGIN
+       SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID
+        FROM Integrationtypemaster ITM
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+        WHERE ITM.IntegrationTypeName = @pOrgCode
+    END
+
+
+	SELECT @ResourceID = U.LoginID 
+	FROM Users U
+		INNER JOIN LoginRole LR ON U.LoginID = LR.LoginID
+		INNER JOIN ROLE R ON LR.RoleID = R.RoleID
+		INNER JOIN LOGIN L ON L.loginID = U.LoginID
+		AND (L.STATUS = 'A') AND (LR.STATUS = 'A')
+	WHERE U.OrgID = @pOrgId AND R.RoleName = 'Sample Collection Person'
+	AND L.LoginName = @pSCPerson
+
+
+	--SET @ResourceID = 938734
+
+
+
+	SET @ResourceTemplateID = (SELECT ResourceTemplateID FROM SCPSchedulableResource WHERE ResourceID = @ResourceID )
+
+	--SET @ScheduleTemplateID =2
+	SELECT WorkingDays, StartTime, EndTime, SlotDuration FROM SCPScheduleTemplate WHERE ResourceTemplateID = @ResourceTemplateID
+
+	SELECT   StartDate,  EndDate , Holidays
+	       FROM SCPScheduleResourceLeaveMapping WHERE ResourceTemplateID = @ResourceTemplateID
+
+	SELECT PinCode FROM SCPScheduleResourcePinCodeMapping WHERE ResourceTemplateID = @ResourceTemplateID
+
+	SELECT @ResourceTemplateID  AS ResourceTemplateID
+
+	
+END
+

@@ -1,0 +1,46 @@
+Create procedure pGetOutSourceTestDetails
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+select   PA.Name as PatientName,PA.SEX as Gender,PV.VisitNumber,PV.VisitDate,OI.Name as TestName,OI.Status,OSD.CourierDetails As OutSourceComments,OA.Location as RegistrationLocation,OA1.Location as ProcessingLocation,
+LRO.RefOrgName as OutSourceLocation,
+CM.ClientName,OI.ID,OI.VisitID,OI.PkgID,OI.Type,OI.AccessionNumber,'Null' as IsPKGTest into #temp
+from patientvisit PV with(NOLOCK)
+inner join Patient PA with(NOLOCK) on PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+inner join sampletracker SM on SM.orgid=@pOrgId and SM.InvSampleStatusID=12 and SM.PatientVisitID=PV.PatientVisitId
+inner join PatientInvSampleMapping PIM on PIM.VisitID=SM.PatientVisitID and PIM.SID=SM.SampleID
+inner join orderedInvestigations OI with(NOLOCK) on OI.VisitID=PV.PatientVisitID and OI.OrgID=PV.OrgID and OI.ID=PIM.ID
+inner join VisitClientMapping VCM with(NOLOCK) on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID
+inner join ClientMaster CM with(NOLOCK) on CM.CLientID=VCM.CLientID and CM.OrgID=VCM.OrgID
+inner join OrganizationAddress OA with(NOLOCK) on OA.OrgID=PV.OrgID and OA.AddressID=PV.OrgAddressID
+inner join OrganizationAddress OA1 with(NOLOCK) on OA1.OrgID=OI.OrgID and OA1.AddressID=OI.RescaptureLoc
+left join OutsourcingDetail OSD with(NOLOCK) on OSD.PatientVisitID=PV.PatientVisitID and OSD.OrgID=PV.OrgID and OSD.Accessionnumber=OI.Accessionnumber AND OSD.Absolute=1
+left join LabReferenceORg LRO with(NOLOCK) on LRO.LabRefOrgID=OSD.OutSourcingLocationID and LRO.OrgID=OSD.OrgID
+where PV.OrgID=@pOrgId and PV.Createdat between @pFDate and @pTDate
+order by PV.VisitNumber,PV.VisitDate
+ 
+update T set IsPkgTest=case when OI.PkgID is null then '' else 'PKG' end
+from #Temp T
+inner join OrderedInvestigations OI on OI.AccessionNumber=T.accessionnumber
+
+ select '123' as Empty,T.*,FB.BillNumber,BD.Amount as OutSourceTestAmount,FB.GrossBillValue,FB.NetValue,FB.AmountReceived
+  from #Temp T
+ left join FinalBill FB on FB.VisitID=T.VisitID
+ left join Billingdetails BD on BD.FinalBillID=FB.FinalBillID and FB.OrgID=@pOrgId and BD.FeeID=T.ID --and BD.Feetype=T.Type
+
+ drop table #Temp
+ENd
+

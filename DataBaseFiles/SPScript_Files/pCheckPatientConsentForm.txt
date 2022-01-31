@@ -1,0 +1,36 @@
+CREATE PROC pCheckPatientConsentForm
+(
+  @VisitID BIGINT,
+  @CT NCHAR(1) OUTPUT,
+  @MRI NCHAR(1) OUTPUT,
+  @ContextInfo [UDT_context] Readonly
+)
+AS
+BEGIN
+   
+   DECLARE @OrgID INT
+   SELECT @OrgID=OrgID FROM @ContextInfo
+
+   SELECT @CT = 'Y'  
+   FROM OrderedInvestigations OI (NOLOCK)
+   INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON OI.ID=IOM.InvestigationID AND OI.OrgID=IOM.OrgID AND OI.Type='INV'
+   INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID
+   WHERE OI.VisitID=@VisitID AND OI.OrgID=@OrgID AND OI.Status!='cancel' AND IDM.DeptName='CT'-- in ('CT','MRI')
+   
+    SELECT  
+          @MRI='Y'
+   FROM OrderedInvestigations OI (NOLOCK)
+   INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON OI.ID=IOM.InvestigationID AND OI.OrgID=IOM.OrgID AND OI.Type='INV'
+   INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID
+   WHERE OI.VisitID=@VisitID AND OI.OrgID=@OrgID AND OI.Status!='cancel' AND IDM.DeptName='MRI'
+   IF @MRI is null
+     SET @MRI='N'
+
+	 IF @CT is null
+     SET @CT='N'
+   -- RETURN 0  
+END
+
+
+
+

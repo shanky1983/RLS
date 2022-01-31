@@ -1,0 +1,527 @@
+CREATE PROCEDURE [dbo].[pGetInvesticationForCancellation] 
+ @pExternalVisitID [nvarchar] (255)
+,@pOrgID [int]
+,@FromDate [nvarchar] (20)
+,@toDate [nvarchar] (20)
+,@PatientName [nvarchar] (50)
+,@patientnumber NVARCHAR(50)
+,@pVisitNumber NVARCHAR(50),
+ @Param1 NVARCHAR(50),
+ @Param2 NVARCHAR(50),
+ @Param3 NVARCHAR(50),
+ @ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+SET NOCOUNT ON
+IF @pExternalVisitID = ''
+SET @pExternalVisitID = NULL
+IF @PatientName = ''
+SET @PatientName = NULL
+IF @patientnumber = ''
+SET @patientnumber = NULL
+IF @pVisitNumber = ''
+SET @pVisitNumber = NULL
+IF @FromDate = ''
+SET @FromDate = NULL
+IF @toDate = ''
+SET @toDate = NULL
+
+IF(isnull(@pVisitNumber,'')='' and isnull(@patientnumber,'')<>'')
+begin
+ select @pVisitNumber=patientvisitid from Patient p inner join patientvisit pv on p.patientid=pv.patientid where patientnumber=@patientnumber
+end  
+
+IF(@Param1='Y')
+BEGIN
+IF EXISTS (
+SELECT 1
+FROM PatientVisit(NOLOCK)
+WHERE ExternalVisitID = @pExternalVisitID
+)
+BEGIN
+SELECT P.Name AS PatientName,
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS PatientAge,    
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS Age,    
+ Case When PVD.patientHistoryID >0 then PH.Sex    ELSE  p.Sex  END AS Sex    
+,p.PatientID AS PatientID
+,PVD.ReferingPhysicianName AS ReferingPhysicianName
+,PVD.ReferingPhysicianID AS ReferingPhysicianID
+,PVD.HospitalID AS HospitalID
+,PVD.HospitalName AS HospitalName
+,PVD.PhysicianID AS PhysicianID
+,P.PatientNumber AS PatientNumber
+,ISNULL(PVD.ExternalVisitID, '0') AS ExternalVisitID
+,PVD.PatientVisitId
+,PVD.VisitNumber
+FROM PatientVisit PVD(NOLOCK)
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PVD.PatientID
+ left join Patient_HIST PH (nolock) on PVD.patientHistoryID =ph.Patient_HISTID    
+WHERE PVD.OrgID = @pOrgID
+AND PVD.ExternalVisitID = @pExternalVisitID
+SELECT DISTINCT OI.Name
+,OI.ID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,OI.AccessionNumber
+,OI.CreatedAt
+,OI.Status
+,OI.Type
+,OI.UID
+,PV.VisitNumber --,  
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+INNER JOIN CancelledTestDetails CT ON CT.VisitID=OI.VisitID AND CT.ID=OI.ID
+WHERE PV.OrgID = @pOrgID
+AND ExternalVisitID = @pExternalVisitID
+AND CT.Status='Cancel' And OI.Status<>'Cancel' AND Isnull(OI.PKGID,0)=0
+UNION 
+SELECT DISTINCT OI.PKGNAME
+,OI.PKGID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,0 as AccessionNumber
+,OI.CreatedAt
+,(Case when OI.Status in ('Pending', 'SampleReceived','Completed','Validate','Approve') Then 'Y' Else 'N' End) as Status
+,'PKG' as Type
+,OI.UID
+,PV.VisitNumber --,  
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+INNER JOIN CancelledTestDetails CT ON CT.VisitID=OI.VisitID AND CT.ID=OI.PkgID
+WHERE PV.OrgID = @pOrgID
+AND ExternalVisitID = @pExternalVisitID
+AND CT.Status='Cancel' And OI.Status<>'Cancel' AND OI.PKGID>0
+
+END
+ELSE
+BEGIN
+SELECT P.Name AS PatientName,
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS PatientAge,    
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS Age,    
+ Case When PVD.patientHistoryID >0 then PH.Sex    ELSE  p.Sex  END AS Sex    
+,p.PatientID AS PatientID
+,PVD.ReferingPhysicianName AS ReferingPhysicianName
+,PVD.ReferingPhysicianID AS ReferingPhysicianID
+,PVD.HospitalID AS HospitalID
+,PVD.HospitalName AS HospitalName
+,PVD.PhysicianID AS PhysicianID
+,P.PatientNumber AS PatientNumber
+,cast(ISNULL(PVD.PatientVisitId, 0) AS NVARCHAR(255)) AS ExternalVisitID
+,PVD.PatientVisitId
+,PVD.VisitNumber
+FROM PatientVisit PVD(NOLOCK)
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PVD.PatientID
+left join Patient_HIST PH (nolock) on PVD.patientHistoryID =ph.Patient_HISTID    
+WHERE PVD.OrgID = @pOrgID
+AND PVD.ExternalVisitID = coalesce(@pExternalVisitID, PVD.ExternalVisitID)
+AND PVD.VisitNumber = coalesce(@pVisitNumber, PVD.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name)
+SELECT DISTINCT OI.Name
+,OI.ID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,OI.AccessionNumber
+,OI.CreatedAt
+,OI.Status
+,OI.Type
+,OI.UID
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.LabNo AS LabNo
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+INNER JOIN CancelledTestDetails CT ON CT.VisitID=OI.VisitID AND CT.ID=OI.ID
+WHERE PV.OrgID = @pOrgID
+AND PV.ExternalVisitID = coalesce(@pExternalVisitID, PV.ExternalVisitID)
+AND pv.VisitNumber = coalesce(@pVisitNumber, PV.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name)
+AND CT.Status='Cancel'  And OI.Status<>'Cancel' AND ISNULL(OI.PkgID,0)=0
+UNION 
+SELECT DISTINCT OI.PkgName
+,OI.PkgID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,0 as AccessionNumber
+,OI.CreatedAt
+,(Case when OI.Status in ('Pending', 'SampleReceived','Completed','Validate','Approve') Then 'Y' Else 'N' End) as Status
+,'PKG' as Type
+,OI.UID
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.LabNo AS LabNo
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+INNER JOIN CancelledTestDetails CT ON CT.VisitID=OI.VisitID AND CT.ID=OI.PkgID
+WHERE PV.OrgID = @pOrgID
+AND PV.ExternalVisitID = coalesce(@pExternalVisitID, PV.ExternalVisitID)
+AND pv.VisitNumber = coalesce(@pVisitNumber, PV.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name)
+AND CT.Status='Cancel'  And OI.Status<>'Cancel' AND OI.PkgID>0
+END 
+END
+ELSE
+BEGIN
+IF EXISTS (
+SELECT 1
+FROM PatientVisit(NOLOCK)
+WHERE ExternalVisitID = @pExternalVisitID
+)
+BEGIN
+SELECT P.Name AS PatientName,
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS PatientAge,    
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS Age,    
+ Case When PVD.patientHistoryID >0 then PH.Sex    ELSE  p.Sex  END AS Sex    
+,p.PatientID AS PatientID
+,PVD.ReferingPhysicianName AS ReferingPhysicianName
+,PVD.ReferingPhysicianID AS ReferingPhysicianID
+,PVD.HospitalID AS HospitalID
+,PVD.HospitalName AS HospitalName
+,PVD.PhysicianID AS PhysicianID
+,P.PatientNumber AS PatientNumber
+,ISNULL(PVD.ExternalVisitID, '0') AS ExternalVisitID
+,PVD.PatientVisitId
+,PVD.VisitNumber
+FROM PatientVisit PVD(NOLOCK)
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PVD.PatientID
+ left join Patient_HIST PH (nolock) on PVD.patientHistoryID =ph.Patient_HISTID    
+WHERE PVD.OrgID = @pOrgID
+AND PVD.ExternalVisitID = @pExternalVisitID
+
+SELECT DISTINCT OI.Name
+,OI.ID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,OI.AccessionNumber
+,OI.CreatedAt
+,OI.Status
+,OI.Type
+,OI.UID
+,PV.VisitNumber --,  
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+WHERE PV.OrgID = @pOrgID
+AND ExternalVisitID = @pExternalVisitID AND OI.ID NOT IN (SELECT ID FROM CancelledTestDetails WHERE VISITID=@pVisitNumber AND OrgID=@pOrgID) AND ISNULL(OI.PkgID,0)=0
+AND OI.Status NOT IN (
+--'Paid'
+--,'SampleCollected'
+--,'Not given'
+--'SampleTransferred'
+ 'Retest'
+,'InActive'
+,'Reflexwithsamesample'
+,'PartialyCollected'
+,'Rejected'
+,'Reject'
+,'Reflexwithnewsample'
+)
+UNION
+SELECT DISTINCT OI.PkgName
+,OI.PkgID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,0 as AccessionNumber
+,OI.CreatedAt
+,(Case when OI.Status in ('Pending', 'SampleReceived','Completed','Validate','Approve') Then 'Y' Else 'N' End) as Status
+,'PKG' as Type
+,OI.UID
+,PV.VisitNumber --,  
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID
+WHERE PV.OrgID = @pOrgID
+AND ExternalVisitID = @pExternalVisitID AND OI.PkgID>0 AND OI.PkgID NOT IN (SELECT ID FROM CancelledTestDetails WHERE VISITID=@pVisitNumber AND OrgID=@pOrgID) 
+AND OI.Status NOT IN (
+--'Paid'
+--,'SampleCollected'
+--,'Not given'
+--'SampleTransferred'
+ 'Retest'
+,'InActive'
+,'Reflexwithsamesample'
+,'PartialyCollected'
+,'Rejected'
+,'Reject'
+,'Reflexwithnewsample'
+)
+
+END
+ELSE
+BEGIN
+SELECT P.Name AS PatientName,
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE p.Age  END AS PatientAge,    
+ Case When PVD.patientHistoryID >0 then PH.Age   ELSE  p.Age  END AS Age,    
+ Case When PVD.patientHistoryID >0 then PH.Sex    ELSE  p.Sex  END AS Sex    
+,p.PatientID AS PatientID
+,PVD.ReferingPhysicianName AS ReferingPhysicianName
+,PVD.ReferingPhysicianID AS ReferingPhysicianID
+,PVD.HospitalID AS HospitalID
+,PVD.HospitalName AS HospitalName
+,PVD.PhysicianID AS PhysicianID
+,P.PatientNumber AS PatientNumber
+,cast(ISNULL(PVD.PatientVisitId, 0) AS NVARCHAR(255)) AS ExternalVisitID
+,PVD.PatientVisitId
+,PVD.VisitNumber
+FROM PatientVisit PVD(NOLOCK)
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PVD.PatientID
+left join Patient_HIST PH (nolock) on PVD.patientHistoryID =ph.Patient_HISTID    
+WHERE PVD.OrgID = @pOrgID
+AND PVD.ExternalVisitID = coalesce(@pExternalVisitID, PVD.ExternalVisitID)
+AND PVD.VisitNumber = coalesce(@pVisitNumber, PVD.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name)
+
+SELECT DISTINCT OI.Name
+,OI.ID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,OI.AccessionNumber
+,OI.CreatedAt
+,OI.Status
+,OI.Type
+,OI.UID
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.LabNo AS LabNo
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID 
+WHERE PV.OrgID = @pOrgID
+AND PV.ExternalVisitID = coalesce(@pExternalVisitID, PV.ExternalVisitID)
+AND pv.VisitNumber = coalesce(@pVisitNumber, PV.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name) AND OI.ID NOT IN (SELECT ID FROM CancelledTestDetails WHERE VISITID=@pVisitNumber AND OrgID=@pOrgID) AND isnull(oi.pkgid,0)=0
+AND OI.Status NOT IN (
+'Cancel'
+--,'Paid'
+--,'SampleCollected'
+,'Yet to Transfer'
+--,'Not given'
+--,'SampleTransferred'
+,'Retest'
+,'InActive'
+,'Reflexwithsamesample'
+,'PartialyCollected'
+,'Rejected'
+,'Reject'
+,'Reflexwithnewsample'
+)
+UNION
+SELECT DISTINCT OI.PkgName
+,OI.PkgID
+,ISNULL(OI.ResCaptureLoc, PV.OrgAddressID) AS ResCaptureLoc
+,OI.VisitID
+,0 as AccessionNumber
+,OI.CreatedAt
+,(Case when OI.Status in ('Pending', 'SampleReceived','Completed','Validate','Approve') Then 'Y' Else 'N' End) as Status
+,'PKG' as Type
+,OI.UID
+,(
+SELECT DISTINCT mvc.Code
+FROM (
+SELECT ROW_NUMBER() OVER (
+PARTITION BY InvestigationID
+,InvestigationName ORDER BY InvestigationID
+,modifiedat DESC
+) AS RN
+,InvestigationID
+,InvestigationName
+,Reason
+FROM dbo.InvestigationStatusHistory ish WITH (NOLOCK)
+WHERE PatientvisitID = OI.VisitID
+AND ish.InvestigationID = Oi.ID
+) TT
+,dbo.MetaValue_Common mvc WITH (NOLOCK)
+WHERE TT.RN = 1
+AND tt.Reason = mvc.[Value]
+AND mvc.OrgID = @pOrgID
+) AS PerformingPhysicain
+,OI.LabNo AS LabNo
+,OI.PkgID AS PkgID
+,OI.PkgName AS PkgName
+FROM OrderedInvestigations OI(NOLOCK)
+INNER JOIN PatientVisit PV(NOLOCK) ON PV.PatientVisitId = OI.VisitID
+INNER JOIN Patient P(NOLOCK) ON P.PatientID = PV.PatientID 
+WHERE PV.OrgID = @pOrgID
+AND PV.ExternalVisitID = coalesce(@pExternalVisitID, PV.ExternalVisitID)
+AND pv.VisitNumber = coalesce(@pVisitNumber, PV.VisitNumber)
+AND P.PatientNumber = coalesce(@patientnumber, P.PatientNumber)
+AND P.Name = coalesce(@PatientName, P.Name) AND OI.PkgID NOT IN (SELECT ID FROM CancelledTestDetails WHERE VISITID=@pVisitNumber AND OrgID=@pOrgID) AND OI.PkgID>0
+AND OI.Status NOT IN (
+'Cancel'
+--,'Paid'
+--,'SampleCollected'
+,'Yet to Transfer'
+--,'Not given'
+--,'SampleTransferred'
+,'Retest'
+,'InActive'
+,'Reflexwithsamesample'
+,'PartialyCollected'
+,'Rejected'
+,'Reject'
+,'Reflexwithnewsample'
+)
+
+END
+END
+END
+
+
+

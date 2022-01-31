@@ -1,0 +1,960 @@
+CREATE PROCEDURE [dbo].[pGetIntegrationResultForHealthiAPI_New](@OrgID BIGINT)
+AS
+ BEGIN
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+DECLARE @Results AS TABLE
+(UserId               BIGINT, 
+ OrderId              BIGINT, 
+ MRN                  BIGINT, 
+ Order_no             BIGINT, 
+ PatientName          NVARCHAR(250), 
+ Age                  VARCHAR(30), 
+ Gender               CHAR(1), 
+ PhoneNumber          VARCHAR(15), 
+ EMailID              NVARCHAR(100), 
+ MessageID            BIGINT, 
+ OrgCode              NVARCHAR(5), 
+ ExternalVisitID      VARCHAR(40), 
+ PatientNumber        NVARCHAR(25), 
+ Barcode              NVARCHAR(250), 
+ ExternalBarcodeID    NVARCHAR(250), 
+ LISPatientID         BIGINT, 
+ VisitNumber          NVARCHAR(250), 
+ OrderedTestCode      NVARCHAR(250), 
+ OrderedTestName      NVARCHAR(500), 
+ Group_Code           NVARCHAR(250), 
+ Group_Name           NVARCHAR(250), 
+ TestCode             NVARCHAR(250), 
+ TestName             NVARCHAR(250), 
+ ResultValue          NVARCHAR(MAX), 
+ Units                NVARCHAR(100), 
+ ReferenceRange       NVARCHAR(4000), 
+ IsAbnormal           NCHAR(1), 
+ MedicalRemarks       NVARCHAR(4000), 
+ IsSensitive          NCHAR(1), 
+ GroupResultStatus    NVARCHAR(100), 
+ Status               VARCHAR(100), 
+ Approved_By          NVARCHAR(200), 
+ ReportedOn           DATETIME, 
+ CoAuthorizedBy       NVARCHAR(200), 
+ CoAuthorizedDateTime DATETIME, 
+ ReportHold           CHAR(1), 
+ CollectedBy          NVARCHAR(100), 
+ CreatedDateTime      DATETIME, 
+ NotificationID       BIGINT, 
+ FileName             NVARCHAR(1000), 
+ File_Path            NVARCHAR(1000), 
+ Template             NVARCHAR(500), 
+ ApproverUserName     NVARCHAR(200), 
+ ApproverLoginName    NVARCHAR(200), 
+ ClientCode           NVARCHAR(200), 
+ ClientName           NVARCHAR(200), 
+ Specimen             NVARCHAR(200), 
+ Method               NVARCHAR(500), 
+ CenterCode           NVARCHAR(500), 
+ Collected_At         NVARCHAR(500), 
+ TakenOn              DATETIME, 
+ RefPhysician         NVARCHAR(500), 
+ RefPhysicianCode     INT, 
+ Hospital             NVARCHAR(500), 
+ HospitalCode         INT, 
+ VisitType            CHAR(2), 
+ VisitDate            DATETIME, 
+ Type                 VARCHAR(10)
+);
+DECLARE @visitID BIGINT=0;
+DECLARE @fromdate DATETIME= GETDATE() - 40;
+DECLARE @todate DATETIME= GETDATE() - 10;
+
+--DECLARE @orgID bigint=220;
+DECLARE @pdfRootFolder NVARCHAR(200); 
+     
+SELECT @pdfRootFolder = value
+FROM communicationconfig
+WHERE orgid = @OrgID
+      AND name = 'PdfFolderPath';
+
+SELECT TOP 1 @visitID = N.Identityid
+FROM Notifications N
+WHERE N.OrgID = @OrgID
+      AND N.Status = 'Completed'
+      AND Isnull(N.HasRepushed, 0) = 0
+	  AND N.ActionType='PDF'
+      AND CONVERT(DATE, N.CreatedAt) BETWEEN CONVERT(DATE, @fromdate) AND CONVERT(DATE, @todate)-->Convert(Date,@Getdate)
+--GROUP BY N.Identityid, 
+--         N.CreatedAt
+ORDER BY N.Notificationid ASC;    
+--Select @visitID return 
+DECLARE @Notifications AS TABLE  
+(  
+Visitid BIGINT,  
+ORGID BIGINT,  
+AttachmentName NVARCHAR(500),  
+ActionType NVARCHAR(20),  
+Template NVARCHAR(MAX)  
+)  
+INSERT INTO @Notifications  
+SELECT IdentityID,OrgID,AttachmentName,ActionType,Template  
+FROM Notifications WHERE IdentityID=@visitID --AND OrgID=@OrgID  
+  
+    
+DECLARE @ORDEREDITEMS AS TABLE    
+(VisitID               BIGINT,     
+ ID                    BIGINT,     
+ Type                  NVARCHAR(40),     
+ Name                  NVARCHAR(500),     
+ AccessionNumber       BIGINT,     
+ Status                NVARCHAR(100),     
+ OrderedStatusDateTime DATETIME,     
+ ContentStatusDateTime DATETIME,     
+ pkgid                 BIGINT,     
+ pkgname               VARCHAR(100),     
+ NotificationID        BIGINT,     
+ OrgID                 BIGINT,     
+ FileName              NVARCHAR(1000),     
+ FilePath              NVARCHAR(1000),     
+ Template              NVARCHAR(500),     
+ ApproverUserName      NVARCHAR(200),     
+ ApproverLoginName     NVARCHAR(200),     
+ ApprovedTime          DATETIME,     
+ CollectedBy           NVARCHAR(50),     
+ TakenOn DATETIME    
+);    
+INSERT INTO @ORDEREDITEMS    
+       SELECT oi.visitid,     
+              oi.ID,     
+              oi.Type,     
+              oi.Name,     
+              oi.AccessionNumber,     
+              oi.Status,     
+              oi.CreatedAt AS DD,     
+              oi.CreatedAt,     
+              oi.pkgid,     
+              oi.pkgname,     
+              0,     
+              oi.OrgID,     
+       (    
+           SELECT TOP 1 NN.AttachmentName    
+           FROM @Notifications NN    
+           WHERE-- NN.IdentityID = @visitID    
+                 --AND NN.Orgid = @Orgid    
+                 --AND   
+     Isnull(NN.AttachmentName, '') <> ''    
+       ),     
+              isnull(@pdfRootFolder, '')+    
+       (    
+           SELECT TOP 1 NN.Template    
+           FROM @Notifications NN    
+           WHERE --NN.IdentityID = @visitID    
+                 --AND NN.Orgid = @Orgid    
+                 --AND   
+     Isnull(NN.AttachmentName, '') <> ''    
+                 AND NN.ActionType = 'Pdf'    
+       ) +    
+       (    
+           SELECT TOP 1 NN.AttachmentName    
+           FROM @Notifications NN    
+           WHERE --NN.IdentityID = @visitID    
+                 --AND NN.Orgid = @Orgid    
+                 --AND   
+     Isnull(NN.AttachmentName, '') <> ''    
+                 AND NN.ActionType = 'Pdf'    
+       ),     
+              '',     
+              U.Name AS ApproverUserName,     
+              L.LoginName AS ApproverLoginName,     
+              PI.ApprovedAt AS ApprovedTime,     
+              u1.Name AS CollectedBy,     
+              pv.CreatedAt AS TakenOn    
+       FROM orderedinvestigations oi    
+            INNER JOIN Patientinvestigation PI ON PI.AccessionNumber = OI.AccessionNumber    
+                                                          AND PI.OrgID = OI.OrgID    
+            INNER JOIN PatientVisit Pv ON pv.PatientVisitId = oi.VisitID    
+                                                  AND Pv.OrgID = OI.OrgID    
+            INNER JOIN Login L ON L.Loginid = PI.Approvedby    
+                                  AND L.OrgID = PI.OrgID    
+            INNER JOIN Users U ON U.Loginid = L.Loginid    
+                                  AND L.OrgID = U.OrgID    
+            INNER JOIN Users U1 ON U1.Loginid = pv.CreatedBy    
+                                   AND pv.OrgID = U1.OrgID    
+       WHERE oi.VisitID = @visitID    
+             AND OI.OrgID = @orgID    
+             AND oi.Status = 'Approve'    
+       GROUP BY oi.visitid,     
+                oi.ID,     
+                oi.Type,     
+                oi.Name,     
+                oi.AccessionNumber,     
+                oi.Status,     
+                oi.CreatedAt,     
+                oi.pkgid,     
+                oi.pkgname,     
+                oi.OrgID,    
+                U.Name,     
+                L.LoginName,     
+                PI.ApprovedAt,     
+                u1.Name,     
+                pv.CreatedAt    
+       ORDER BY oi.visitid,     
+                oi.ID,     
+                oi.Type,     
+                oi.Name,     
+                oi.AccessionNumber,     
+                oi.Status,     
+                oi.CreatedAt,     
+                oi.pkgid,     
+                oi.pkgname,   
+                oi.OrgID,     
+                U.Name,     
+                L.LoginName,     
+                PI.ApprovedAt,     
+                u1.Name,     
+                pv.CreatedAt ASC;    
+  --SELECT * FROM @ORDEREDITEMS RETURN    
+    
+DECLARE @TblBookings AS TABLE    
+(PatientVisitid BIGINT,     
+ PatientID      BIGINT,     
+ BookingID      BIGINT,     
+ UserID         BIGINT,     
+ RefPhysicianID BIGINT,     
+ ScheduleID     BIGINT,     
+ PatientName    NVARCHAR(300),     
+ Age            NVARCHAR(40),     
+ SEX            NCHAR(2),     
+ PhoneNumber    NVARCHAR(50),     
+ EMail          NVARCHAR(200),     
+ Orgid          BIGINT    
+);    
+INSERT INTO @TblBookings    
+       SELECT Bo.PatientVisitid,     
+              Bo.BookingID,     
+              Bo.PatientID,     
+              Bo.UserID,     
+              Bo.RefPhysicianID,     
+              Bo.ScheduleID,     
+              Bo.PatientName,     
+              Bo.Age,     
+              Bo.SEX,     
+              Bo.PhoneNumber,     
+              Bo.EMail,     
+              Bo.OrgID    
+       FROM @ORDEREDITEMS ORD    
+   INNER JOIN Bookings Bo ON Ord.VisitID = Bo.PatientVisitID    
+                                              AND ORD.OrgID = Bo.OrgID    
+       WHERE ord.Visitid = @VisitID    
+             AND ord.Orgid = @orgID    
+             AND Bo.BookingStatus <> 'C'    
+       GROUP BY Bo.PatientVisitid,     
+                Bo.BookingID,     
+                Bo.PatientID,     
+                Bo.UserID,     
+                Bo.RefPhysicianID,     
+                Bo.ScheduleID,     
+                Bo.PatientName,     
+                Bo.Age,     
+                Bo.SEX,     
+                Bo.PhoneNumber,     
+                Bo.EMail,     
+                Bo.OrgID    
+       ORDER BY Bo.PatientVisitid,     
+                Bo.BookingID,     
+                Bo.PatientID,     
+                Bo.UserID,     
+                Bo.RefPhysicianID,     
+                Bo.ScheduleID,     
+                Bo.PatientName,     
+                Bo.Age,     
+                Bo.SEX,     
+                Bo.PhoneNumber,     
+                Bo.EMail,     
+                Bo.OrgID;    
+--SELECT * FROM @TblBookings RETURN;    
+DECLARE @temp AS TABLE    
+(Patientvisitid    BIGINT,     
+ Accessionnumber   BIGINT,     
+ SampleID          INT,     
+ InvestigationID   BIGINT,     
+ ReferenceRange    NVARCHAR(4000),     
+ IsAbnormal        NVARCHAR(50),     
+ MedicalRemarks    NVARCHAR(255),     
+ IsSensitive       NCHAR(1),     
+ ApprovedAt        DATETIME,     
+ MethodName        NVARCHAR(255),     
+ InvestigationName NVARCHAR(250),     
+ OrgID             INT,     
+ Status            NVARCHAR(50),     
+ Value             NVARCHAR(MAX),     
+ UOMCode           NVARCHAR(50)    
+);    
+    
+INSERT INTO @temp    
+       SELECT PI.Patientvisitid,     
+              PI.Accessionnumber,     
+              PI.SampleID,     
+              PI.InvestigationID,     
+              PI.ReferenceRange,     
+              PI.IsAbnormal,     
+              PI.MedicalRemarks,     
+              PI.IsSensitive,     
+              PI.ApprovedAt,     
+              PI.MethodName,     
+              PI.InvestigationName,    
+     PI.OrgID,    
+     IV.Status,     
+              IV.Value,     
+              IV.UOMCode    
+       FROM @ORDEREDITEMS ORI    
+         INNER JOIN PatientInvestigation PI ON PI.PatientVisitID=ORI.VisitID AND PI.AccessionNumber=ORI.AccessionNumber AND PI.OrgID=ORI.OrgID    
+            INNER JOIN InvestigationValues IV ON IV.PatientVisitID = PI.PatientVisitID    
+                                                 AND IV.InvestigationID = PI.InvestigationID    
+                                                 AND IV.Status = PI.Status AND IV.Orgid=PI.OrgID    
+       WHERE ORI.VisitID = @visitID    
+             AND ORI.OrgID = @OrgID    
+   GROUP BY PI.Patientvisitid,     
+               PI.Accessionnumber,     
+               PI.SampleID,     
+               PI.InvestigationID,     
+               PI.ReferenceRange,     
+               PI.IsAbnormal,     
+    PI.MedicalRemarks,     
+               PI.IsSensitive,     
+               PI.ApprovedAt,     
+               PI.MethodName,     
+               PI.InvestigationName,    
+      PI.OrgID,    
+      IV.Status,     
+               IV.Value,     
+               IV.UOMCode    
+  ORDER BY PI.Patientvisitid,     
+              PI.Accessionnumber,     
+              PI.SampleID,     
+              PI.InvestigationID,     
+              PI.ReferenceRange,     
+              PI.IsAbnormal,     
+              PI.MedicalRemarks,     
+              PI.IsSensitive,     
+              PI.ApprovedAt,     
+              PI.MethodName,     
+              PI.InvestigationName,    
+     PI.OrgID,    
+     IV.Status,     
+              IV.Value,     
+              IV.UOMCode    
+--SELECT * FROM @TEMP RETURN;    
+    
+INSERT INTO @Results    
+       SELECT B.UserID AS UserId,     
+              B.RefPhysicianID AS OrderId,     
+              B.ScheduleID AS MRN,     
+              B.BookingID AS Order_no,     
+              (CASE    
+                   WHEN Isnull(B.PatientName, '') = ''    
+                   THEN P.Name    
+                   ELSE B.PatientName    
+               END) AS PatientName,     
+              (CASE    
+                   WHEN Isnull(B.Age, '') = ''    
+                   THEN P.Age    
+                   ELSE B.Age    
+               END) AS Age,     
+              (CASE    
+                   WHEN Isnull(B.SEX, '') = ''    
+                   THEN P.SEX    
+                   ELSE B.SEX    
+               END) AS Gender,     
+              (CASE    
+                   WHEN Isnull(B.PhoneNumber, '') = ''    
+                   THEN COALESCE(PA.MobileNumber, PA.LandLineNumber)    
+                   ELSE B.PhoneNumber    
+               END) AS PhoneNumber,     
+              (CASE    
+                   WHEN Isnull(B.EMail, '') = ''    
+                   THEN P.EMail    
+                   ELSE B.EMail    
+               END) AS EMailID,     
+              oi.AccessionNumber AS MessageID,     
+              CAST(PV.OrgID AS VARCHAR(5)) AS OrgCode,     
+              PV.ExternalVisitID AS ExternalVisitID,     
+              P.PatientNumber,     
+              PIS.BarcodeNumber AS Barcode,     
+              PIS.ExternalBarcode AS ExternalBarcodeID,     
+              p.patientid AS LISPatientID,     
+              pv.VisitNumber,     
+              iom.TestCode AS OrderedTestCode,     
+              oi.Name AS OrderedTestName,     
+              '' AS Group_Code,     
+              '' AS Group_Name,     
+              iom.TestCode AS TestCode,     
+              oi.Name AS TestName,     
+              T.Value AS ResultValue,     
+              T.UOMCode AS Units,     
+              T.ReferenceRange AS ReferenceRange,     
+              T.IsAbnormal AS IsAbnormal,     
+              T.MedicalRemarks AS MedicalRemarks,     
+              T.IsSensitive,     
+              oi.status sts,     
+              oi.status AS Status,     
+              oi.ApproverUserName AS Approved_By,     
+              T.ApprovedAt AS ReportedOn,     
+              '',     
+              GETDATE(),     
+              'N',     
+              oi.CollectedBy,     
+              GETDATE() AS CreatedDateTime,     
+      oi.NotificationID,     
+              oi.FileName,     
+              oi.FilePath AS File_Path,     
+              oi.Template,     
+              oi.ApproverUserName,     
+              oi.ApproverLoginName,     
+              CM.ClientCode,     
+              CM.ClientName,     
+              SM.SampleDesc AS Specimen,     
+              T.MethodName AS Method,     
+              OA.Location AS Collected_At,     
+              OAD.Location AS CenterCode,     
+              oi.TakenOn,     
+              PV.ReferingPhysicianName AS RefPhysician,     
+              pv.ReferingPhysicianID AS RefPhysicianCode,     
+              pv.HospitalName AS Hospital,     
+              pv.HospitalID AS HospitalCode,     
+              pv.VisitType,     
+              pv.VisitDate,     
+              Oi.Type    
+       FROM @ORDEREDITEMS oi    
+            INNER JOIN patientvisit pv ON pv.PatientVisitID = oi.VisitID AND PV.OrgID=OI.OrgID    
+            INNER JOIN PatientInvSample PIS ON PIS.PatientVisitID = PV.PatientVisitID    
+                                                       AND PIS.OrgID = PV.OrgID    
+--INNER JOIN MISPatientInvestigation pii ON pii.Accessionnumber = oi.AccessionNumber    
+            --                                                  AND PII.SampleID = PIS.SampleCode    
+            --                                                  AND PII.ContainerID = PIS.SampleContainerID    
+   INNER JOIN @temp T ON T.Patientvisitid = OI.VisitID AND T.Accessionnumber = OI.AccessionNumber    
+                             AND T.SampleID = PIS.SampleCode AND T.OrgID = OI.OrgID    
+           -- INNER JOIN PatientInvestigation pi ON pi.Accessionnumber = PII.AccessionNumber    
+           --                                               AND PI.SampleID = PII.SampleID    
+           -- INNER JOIN investigationvalues iv ON pi.Patientvisitid = iv.PatientVisitID    
+           --                                              AND iv.InvestigationID = pi.InvestigationID    
+            --                                             AND Iv.Status = Pi.Status    
+            INNER JOIN VisitClientMapping VCM ON VCM.Orgid = PV.OrgID     
+                                                 AND VCM.Visitid = PV.PatientVisitID    
+            INNER JOIN ClientMaster CM ON CM.ClientID = VCM.ClientID    
+    AND CM.Orgid = VCM.Orgid    
+            INNER JOIN InvSampleMaster SM ON SM.SampleCode = PIS.SampleCode    
+                                             AND SM.OrgID = PIS.OrgID    
+            INNER JOIN Investigationorgmapping iom ON iom.investigationid = oi.ID    
+                                                              AND iom.OrgID = pv.OrgID    
+            INNER JOIN OrganizationAddress OA ON OA.AddressID = PIS.CollectedLocID    
+                                                 AND OA.OrgID = PIS.OrgID    
+            INNER JOIN OrganizationAddress OAD ON OAD.AddressID = PIS.RecSampleLocID    
+                                                  AND OAD.OrgID = PIS.OrgID     
+            INNER JOIN patient p ON  P.OrgID =PV.OrgID AND p.PatientID = pv.PatientID    
+            INNER JOIN PatientAddress PA ON PA.Patientid = p.patientID    
+                                                    AND PA.AddressType = 'P'    
+            LEFT JOIN @TblBookings B ON B.PatientID = pv.PatientID    
+                                        AND B.OrgID = Pv.OrgID    
+       WHERE oi.type = 'INV'    
+             AND isnull(oi.pkgid, 0) = 0    
+             AND T.Status <> 'Recheck'    
+       UNION ALL    
+       SELECT B.UserID AS UserId,     
+              B.RefPhysicianID AS OrderId,     
+              B.ScheduleID AS MRN,     
+              B.BookingID AS Order_no,     
+              (CASE    
+                   WHEN Isnull(B.PatientName, '') = ''    
+                   THEN P.Name    
+                   ELSE B.PatientName    
+               END) AS PatientName,     
+         (CASE    
+                   WHEN Isnull(B.Age, '') = ''    
+                   THEN P.Age    
+                   ELSE B.Age    
+               END) AS Age,     
+              (CASE    
+                   WHEN Isnull(B.SEX, '') = ''    
+                   THEN P.SEX    
+                   ELSE B.SEX    
+               END) AS Gender,     
+              (CASE    
+                   WHEN Isnull(B.PhoneNumber, '') = ''    
+                   THEN COALESCE(PA.MobileNumber, PA.LandLineNumber)    
+                   ELSE B.PhoneNumber    
+               END) AS PhoneNumber,     
+              (CASE    
+                   WHEN Isnull(B.EMail, '') = ''    
+                   THEN P.EMail    
+                   ELSE B.EMail    
+               END) AS EMailID,     
+              oi.AccessionNumber AS MessageID,     
+              CAST(PV.OrgID AS VARCHAR(5)) AS OrgCode,     
+              PV.ExternalVisitID AS ExternalVisitID,     
+              P.PatientNumber,     
+              PIS.BarcodeNumber AS Barcode,     
+              PIS.ExternalBarcode AS ExternalBarcodeID,     
+              p.patientid AS LISPatientID,     
+              pv.VisitNumber,     
+              iog.TestCode AS OrderedTestCode,     
+              oi.Name AS OrderedTestName,     
+              iog.TestCode AS Group_Code,     
+              oi.Name AS Group_Name,     
+              iom.investigationcode AS TestCode,     
+              T.InvestigationName AS TestName,     
+              T.Value AS ResultValue,     
+              T.UOMCode AS Units,     
+              T.ReferenceRange AS ReferenceRange,     
+              T.IsAbnormal AS IsAbnormal,     
+              T.MedicalRemarks AS MedicalRemarks,     
+              T.IsSensitive,     
+              oi.status sts,     
+              oi.status AS Status,     
+              oi.ApproverUserName AS Approved_By,     
+              T.ApprovedAt AS ReportedOn,     
+              '',     
+              GETDATE(),     
+              'N',     
+              oi.CollectedBy,     
+              GETDATE() AS CreatedDateTime,     
+              oi.NotificationID,     
+              oi.FileName,     
+              oi.FilePath AS File_Path,     
+              oi.Template,     
+              oi.ApproverUserName,     
+              oi.ApproverLoginName,     
+              CM.ClientCode,     
+              CM.ClientName,     
+              SM.SampleDesc AS Specimen,     
+              T.MethodName AS Method,     
+              OA.Location AS Collected_At,     
+              OAD.Location AS CenterCode,     
+              oi.TakenOn,     
+              PV.ReferingPhysicianName AS RefPhysician,     
+          pv.ReferingPhysicianID AS RefPhysicianCode,     
+              pv.HospitalName AS Hospital,     
+              pv.HospitalID AS HospitalCode,     
+              pv.VisitType,     
+              pv.VisitDate,     
+              Oi.Type    
+       FROM @ORDEREDITEMS oi    
+            INNER JOIN patientvisit pv ON pv.PatientVisitID = oi.VisitID AND PV.OrgID=OI.OrgID    
+            INNER JOIN PatientInvSample PIS ON PIS.PatientVisitID = PV.PatientVisitID    
+                                                       AND PIS.OrgID = PV.OrgID    
+            --INNER JOIN MISPatientInvestigation pii ON pii.Accessionnumber = oi.AccessionNumber    
+            --                                                  AND PII.SampleID = PIS.SampleCode    
+            --                                                  AND PII.ContainerID = PIS.SampleContainerID    
+   INNER JOIN @temp T ON T.Patientvisitid = OI.VisitID AND T.Accessionnumber = OI.AccessionNumber    
+                             AND T.SampleID = PIS.SampleCode AND T.OrgID = OI.OrgID    
+            --INNER JOIN PatientInvestigation pi ON pi.Accessionnumber = PII.AccessionNumber    
+            --                                              AND PI.SampleID = PII.SampleID    
+            --INNER JOIN investigationvalues iv ON pi.Patientvisitid = iv.PatientVisitID    
+            --                                             AND iv.InvestigationID = pi.InvestigationID    
+            --                                             AND Iv.Status = PI.Status    
+            INNER JOIN InvOrgGroup iog ON iog.AttGroupID = oi.ID    
+                                                  AND iog.OrgID = OI.OrgID--pv.OrgID    
+            INNER JOIN Investigationorgmapping iom ON iom.investigationid = T.InvestigationID    
+                                                              AND iom.OrgID = T.OrgID---pv.OrgID    
+            INNER JOIN VisitClientMapping VCM ON VCM.Orgid = PV.OrgID     
+             AND VCM.Visitid = PV.PatientVisitID                                                             
+            INNER JOIN ClientMaster CM ON CM.ClientID = VCM.ClientID    
+                                          AND CM.Orgid = VCM.Orgid    
+            INNER JOIN InvSampleMaster SM ON SM.SampleCode = PIS.SampleCode    
+                                             AND SM.OrgID = PIS.OrgID    
+ INNER JOIN OrganizationAddress OA ON OA.AddressID = PIS.CollectedLocID    
+                                                 AND OA.OrgID = PIS.OrgID    
+            INNER JOIN OrganizationAddress OAD ON OAD.AddressID = PIS.RecSampleLocID    
+            AND OAD.OrgID = PIS.OrgID    
+            INNER JOIN patient p ON P.OrgID = PV.OrgID AND p.PatientID = pv.PatientID    
+            INNER JOIN PatientAddress PA ON PA.Patientid = p.patientID    
+                                                    AND PA.AddressType = 'P'    
+            LEFT JOIN @TblBookings B ON B.PatientID = pv.PatientID    
+                                        AND B.OrgID = Pv.OrgID    
+       WHERE oi.type = 'GRP'    
+             AND isnull(oi.pkgid, 0) = 0    
+             AND T.Status <> 'Recheck'    
+       UNION ALL    
+       SELECT B.UserID AS UserId,     
+              B.RefPhysicianID AS OrderId,     
+              B.ScheduleID AS MRN,     
+              B.BookingID AS Order_no,     
+              (CASE    
+                   WHEN Isnull(B.PatientName, '') = ''    
+                   THEN P.Name    
+                   ELSE B.PatientName    
+               END) AS PatientName,     
+              (CASE    
+                   WHEN Isnull(B.Age, '') = ''    
+                   THEN P.Age    
+                   ELSE B.Age    
+               END) AS Age,     
+              (CASE    
+                   WHEN Isnull(B.SEX, '') = ''    
+                   THEN P.SEX    
+                   ELSE B.SEX    
+               END) AS Gender,     
+              (CASE    
+                   WHEN Isnull(B.PhoneNumber, '') = ''    
+                   THEN COALESCE(PA.MobileNumber, PA.LandLineNumber)    
+                   ELSE B.PhoneNumber    
+               END) AS PhoneNumber,     
+      (CASE    
+         WHEN Isnull(B.EMail, '') = ''    
+                   THEN P.EMail    
+                   ELSE B.EMail    
+               END) AS EMailID,     
+              oi.AccessionNumber AS MessageID,     
+              CAST(PV.OrgID AS VARCHAR(5)) AS OrgCode,     
+              PV.ExternalVisitID AS ExternalVisitID,     
+              P.PatientNumber,     
+              PIS.BarcodeNumber AS Barcode,     
+              PIS.ExternalBarcode AS ExternalBarcodeID,     
+              p.patientid AS LISPatientID,     
+              pv.VisitNumber,    
+     ORD.TestCode AS OrderedTestCode,     
+       --(    
+       --    SELECT TestCode    
+       --    FROM InvOrgGroup IG1    
+       --    WHERE IG1.AttGroupID = OI.pkgid    
+       --          AND IG1.orgid = pv.OrgID    
+       --) AS OrderedTestCode,     
+              oi.pkgname AS OrderedTestName,     
+              iog.TestCode AS Group_Code,     
+              oi.Name AS Group_Name,     
+              iom.investigationcode AS TestCode,     
+              T.InvestigationName AS TestName,     
+              T.Value AS ResultValue,     
+              T.UOMCode AS Units,     
+              T.ReferenceRange AS ReferenceRange,     
+              T.IsAbnormal AS IsAbnormal,     
+              T.MedicalRemarks AS MedicalRemarks,     
+              T.IsSensitive,     
+              oi.Status AS sts,     
+              oi.Status AS Status,     
+              oi.ApproverUserName AS Approved_By,     
+              T.ApprovedAt AS ReportedOn,     
+              '',     
+              GETDATE(),     
+              'N',     
+              oi.CollectedBy,     
+              GETDATE() AS CreatedDateTime,     
+              oi.NotificationID,     
+              oi.FileName,     
+              oi.FilePath AS File_Path,     
+              oi.Template,     
+              oi.ApproverUserName,     
+              oi.ApproverLoginName,     
+              CM.ClientCode,     
+              CM.ClientName,     
+              SM.SampleDesc AS Specimen,     
+              T.MethodName AS Method,     
+              OA.Location AS Collected_At,     
+              OAD.Location AS CenterCode,     
+              oi.TakenOn,     
+              PV.ReferingPhysicianName AS RefPhysician,     
+              pv.ReferingPhysicianID AS RefPhysicianCode,     
+              pv.HospitalName AS Hospital,     
+              pv.HospitalID AS HospitalCode,     
+              pv.VisitType,     
+              pv.VisitDate,     
+              Oi.Type    
+       FROM @ORDEREDITEMS oi    
+            INNER JOIN patientvisit pv ON pv.PatientVisitID = oi.VisitID AND PV.OrgID=OI.OrgID    
+            INNER JOIN PatientInvSample PIS ON PIS.PatientVisitID = PV.PatientVisitID    
+                                                       AND PIS.OrgID = PV.OrgID    
+            INNER JOIN InvOrgGroup iog ON iog.AttGroupID = oi.ID    
+                                                  AND iog.OrgID = pv.OrgID    
+            --INNER JOIN MISPatientInvestigation pii ON pii.Accessionnumber = oi.AccessionNumber    
+            --                                                  AND PII.SampleID = PIS.SampleCode    
+            --                                                  AND PII.ContainerID = PIS.SampleContainerID    
+   INNER JOIN @temp T ON T.Patientvisitid = OI.VisitID AND T.Accessionnumber = OI.AccessionNumber    
+                             AND T.SampleID = PIS.SampleCode AND T.OrgID = OI.OrgID    
+            --INNER JOIN PatientInvestigation pi ON pi.Accessionnumber = PII.AccessionNumber    
+            --                                              AND PI.SampleID = PII.SampleID    
+            --INNER JOIN investigationvalues iv ON pi.Patientvisitid = iv.PatientVisitID    
+            --                                             AND pi.InvestigationID = iv.InvestigationID    
+            --                                             AND PI.Status = Iv.Status    
+            INNER JOIN Investigationorgmapping iom ON iom.investigationID = T.investigationid    
+                                                              AND iom.OrgID = T.OrgID---iv.OrgID    
+            INNER JOIN VisitClientMapping VCM ON VCM.Orgid = PV.OrgID     
+   AND VCM.Visitid = PV.PatientVisitID    
+            INNER JOIN ClientMaster CM ON CM.ClientID = VCM.ClientID    
+                                          AND CM.Orgid = VCM.Orgid    
+            INNER JOIN InvSampleMaster SM ON SM.SampleCode = PIS.SampleCode    
+                                             AND SM.OrgID = PIS.OrgID    
+            INNER JOIN OrganizationAddress OA ON OA.AddressID = PIS.CollectedLocID    
+                                                 AND OA.OrgID = PIS.OrgID    
+            INNER JOIN OrganizationAddress OAD ON OAD.AddressID = PIS.RecSampleLocID    
+                                                  AND PIS.OrgID = OAD.OrgID    
+            INNER JOIN patient p ON P.OrgID=PV.OrgID AND p.PatientID = pv.PatientID     
+            INNER JOIN PatientAddress PA ON PA.Patientid = p.patientID    
+                                                    AND PA.AddressType = 'P'    
+            LEFT JOIN @TblBookings B ON B.PatientID = pv.PatientID    
+                                        AND B.OrgID = Pv.OrgID    
+   CROSS APPLY (    
+           SELECT TestCode    
+           FROM InvOrgGroup IG1    
+           WHERE IG1.AttGroupID = OI.pkgid    
+                 AND IG1.orgid = OI.OrgID    
+       ) ORD     
+       WHERE isnull(oi.pkgid, 0) > 0    
+             AND Oi.Type = 'GRP'    
+             AND T.Status <> 'Recheck'    
+       UNION ALL    
+       SELECT B.UserID AS UserId,     
+              B.RefPhysicianID AS OrderId,     
+              B.ScheduleID AS MRN,     
+              B.BookingID AS Order_no,     
+              (CASE    
+                   WHEN Isnull(B.PatientName, '') = ''    
+                   THEN P.Name    
+                   ELSE B.PatientName    
+               END) AS PatientName,     
+              (CASE    
+                   WHEN Isnull(B.Age, '') = ''    
+                   THEN P.Age    
+                   ELSE B.Age    
+               END) AS Age,     
+              (CASE    
+                   WHEN Isnull(B.SEX, '') = ''    
+                   THEN P.SEX    
+                   ELSE B.SEX    
+               END) AS Gender,     
+              (CASE    
+           WHEN Isnull(B.PhoneNumber, '') = ''    
+                   THEN COALESCE(PA.MobileNumber, PA.LandLineNumber)    
+                   ELSE B.PhoneNumber    
+               END) AS PhoneNumber,     
+              (CASE    
+     WHEN Isnull(B.EMail, '') = ''    
+                   THEN P.EMail    
+                   ELSE B.EMail    
+               END) AS EMailID,     
+              oi.AccessionNumber AS MessageID,     
+              CAST(PV.OrgID AS VARCHAR(5)) AS OrgCode,     
+              PV.ExternalVisitID AS ExternalVisitID,     
+              P.PatientNumber,     
+              PIS.BarcodeNumber AS Barcode,     
+              PIS.ExternalBarcode AS ExternalBarcodeID,     
+              p.patientid AS LISPatientID,     
+              pv.VisitNumber,    
+              ORD.TestCode AS OrderedTestCode,         
+       --(    
+       --    SELECT TestCode    
+       --    FROM InvOrgGroup IG1    
+       --    WHERE IG1.AttGroupID = OI.pkgid    
+       --          AND IG1.orgid = pv.OrgID    
+       --) AS OrderedTestCode,     
+              oi.pkgname AS OrderedTestName,          
+              --, iom.TestCode AS Groupcode         
+              --,oi.Name      AS GroupName     
+              '' AS Group_Code,     
+              '' AS Group_Name,     
+              iom.investigationcode AS TestCode,     
+              T.InvestigationName AS TestName,     
+              T.Value AS ResultValue,     
+              T.UOMCode AS Units,     
+              T.ReferenceRange AS ReferenceRange,     
+              T.IsAbnormal AS IsAbnormal,     
+              T.MedicalRemarks AS MedicalRemarks,     
+              T.IsSensitive,     
+              oi.Status AS sts,     
+              oi.Status AS Status,     
+              oi.ApproverUserName AS Approved_By,     
+              T.ApprovedAt AS ReportedOn,     
+              '',     
+              GETDATE(),     
+              'N',     
+              oi.CollectedBy,     
+              GETDATE() AS CreatedDateTime,     
+              oi.NotificationID,     
+              oi.FileName,     
+      oi.FilePath AS File_Path,     
+         oi.Template,     
+    oi.ApproverUserName,     
+              oi.ApproverLoginName,     
+              CM.ClientCode,     
+              CM.ClientName,     
+              SM.SampleDesc AS Specimen,     
+              T.MethodName AS Method,     
+              OA.Location AS Collected_At,     
+              OAD.Location AS CenterCode,     
+              oi.TakenOn,     
+              PV.ReferingPhysicianName AS RefPhysician,     
+              pv.ReferingPhysicianID AS RefPhysicianCode,     
+              pv.HospitalName AS Hospital,     
+              pv.HospitalID AS HospitalCode,     
+              pv.VisitType,     
+              pv.VisitDate,     
+              Oi.Type    
+       FROM @ORDEREDITEMS oi    
+            INNER JOIN patientvisit pv ON pv.PatientVisitID = oi.VisitID AND PV.OrgID=OI.OrgID    
+            INNER JOIN PatientInvSample PIS ON PIS.PatientVisitID = PV.PatientVisitID    
+                                                       AND PIS.OrgID = PV.OrgID    
+            --INNER JOIN MISPatientInvestigation pii ON pii.Accessionnumber = oi.AccessionNumber    
+            --                                                  AND PII.SampleID = PIS.SampleCode    
+            --                                                  AND PII.ContainerID = PIS.SampleContainerID    
+   INNER JOIN @temp T ON T.Patientvisitid = OI.VisitID AND T.Accessionnumber = OI.AccessionNumber    
+                             AND T.SampleID = PIS.SampleCode AND T.OrgID = OI.OrgID    
+            --INNER JOIN PatientInvestigation pi ON pi.Accessionnumber = PII.AccessionNumber    
+            --                                              AND PI.SampleID = PII.SampleID    
+            --INNER JOIN investigationvalues iv ON iv.PatientVisitID = pi.Patientvisitid     
+            --                                             AND iv.InvestigationID = pi.InvestigationID    
+            --                                             AND Iv.Status = PI.Status    
+            INNER JOIN Investigationorgmapping iom ON iom.investigationID = T.investigationid     
+                                                              AND iom.OrgID = T.OrgID---iv.OrgID    
+INNER JOIN VisitClientMapping VCM ON VCM.Orgid = PV.OrgID     
+                                                 AND VCM.Visitid = PV.PatientVisitID    
+            INNER JOIN ClientMaster CM ON CM.ClientID = VCM.ClientID    
+                                          AND CM.Orgid = VCM.Orgid    
+            INNER JOIN InvSampleMaster SM ON SM.SampleCode = PIS.SampleCode    
+                                             AND SM.OrgID = PIS.OrgID     
+            INNER JOIN OrganizationAddress OA ON OA.AddressID = PIS.CollectedLocID    
+                                                 AND OA.OrgID = PIS.OrgID    
+            INNER JOIN OrganizationAddress OAD ON OAD.AddressID = PIS.RecSampleLocID    
+                                                  AND OAD.OrgID = PIS.OrgID     
+            INNER JOIN patient p ON P.OrgID = PV.OrgID AND p.PatientID = pv.PatientID    
+            INNER JOIN PatientAddress PA ON PA.Patientid = p.patientID    
+                                                    AND PA.AddressType = 'P'    
+            LEFT JOIN @TblBookings B ON B.PatientID = pv.PatientID    
+                                        AND B.OrgID = Pv.OrgID    
+   CROSS APPLY (    
+           SELECT TestCode    
+           FROM InvOrgGroup IG1    
+           WHERE IG1.AttGroupID = OI.pkgid    
+                 AND IG1.orgid = OI.OrgID    
+       ) ORD     
+       WHERE isnull(oi.pkgid, 0) > 0    
+             AND OI.Type = 'INV'    
+             AND T.Status <> 'Recheck';    
+    
+UPDATE n SET n.HasRepushed=1     
+FROM Notifications n with(rowlock) -- rowlock added by mohan on 20191204   
+WHERE IdentityID = @visitID --AND n.OrgID = @OrgID;    
+SELECT DISTINCT     
+       UserId,     
+       OrderId,     
+       MRN,     
+       Order_no,     
+       PatientName,     
+       Age,     
+       Gender,     
+       PhoneNumber,     
+       EMailID,     
+       MessageID,     
+       OrgCode,     
+       ExternalVisitID,     
+       PatientNumber,     
+       Barcode,     
+       ExternalBarcodeID,     
+       LISPatientID,     
+       VisitNumber,     
+ OrderedTestCode,     
+       OrderedTestName,     
+       Group_Code,     
+       Group_Name,     
+       TestCode,     
+       TestName,     
+       ResultValue,     
+       Units,     
+       ReferenceRange,     
+       IsAbnormal,     
+       MedicalRemarks,     
+       IsSensitive,     
+       GroupResultStatus,     
+       Status,     
+       Approved_By,     
+       ReportedOn,     
+       CoAuthorizedBy,     
+       CoAuthorizedDateTime,     
+       ReportHold,     
+       CollectedBy,     
+       CreatedDateTime,     
+       NotificationID,     
+       FileName,     
+       File_Path,     
+       Template,     
+       ApproverUserName,     
+       ApproverLoginName,     
+       ClientCode,     
+       ClientName,     
+       Specimen,     
+       Method,     
+       CenterCode,     
+       Collected_At,     
+       TakenOn,     
+       RefPhysician,     
+       RefPhysicianCode,     
+       Hospital,     
+       HospitalCode,     
+       VisitType,     
+       VisitDate,     
+       Type    
+FROM @Results    
+GROUP BY UserId,     
+         OrderId,     
+         MRN,     
+         Order_no,     
+         PatientName,     
+         Age,     
+         Gender,     
+         PhoneNumber,     
+         EMailID,     
+         MessageID,     
+         OrgCode,     
+         ExternalVisitID,     
+         PatientNumber,     
+         Barcode,     
+         ExternalBarcodeID,     
+         LISPatientID,     
+         VisitNumber,     
+         OrderedTestCode,     
+         OrderedTestName,     
+         Group_Code,     
+         Group_Name,     
+         TestCode,     
+         TestName,     
+         ResultValue,     
+         Units,     
+         ReferenceRange,     
+         IsAbnormal,     
+         MedicalRemarks,     
+         IsSensitive,     
+         GroupResultStatus,     
+         Status,     
+         Approved_By,     
+         ReportedOn,     
+         CoAuthorizedBy,     
+         CoAuthorizedDateTime,     
+         ReportHold,     
+         CollectedBy,     
+         CreatedDateTime,     
+         NotificationID,     
+         FileName,     
+         File_Path,     
+         Template,     
+         ApproverUserName,     
+         ApproverLoginName,     
+         ClientCode,     
+         ClientName,     
+         Specimen,     
+         Method,     
+         CenterCode,     
+         Collected_At,     
+         TakenOn,     
+         RefPhysician,     
+         RefPhysicianCode,     
+         Hospital,     
+         HospitalCode,     
+         VisitType,     
+         VisitDate,     
+         Type;    
+END TRY    
+BEGIN CATCH                                     
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pGetIntegrationResultForHealthiAPI_New_Abdul @OrgID = '+CAST(@OrgID AS VARCHAR) +'@OrgID = '+CAST(@OrgID AS VARCHAR)     
+     
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;     
+END CATCH      
+ END;

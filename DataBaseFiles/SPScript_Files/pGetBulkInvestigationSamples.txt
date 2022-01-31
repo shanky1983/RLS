@@ -1,0 +1,383 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pGetBulkInvestigationSamples] @patientNo  nvarchar(50),  
+             @Orgcode      varchar(10),  
+             @locCode   varchar(50),  
+             @userId    varchar(50),  
+                                                  @ContextInfo    [UDT_CONTEXT] READONLY  
+WITH EXECUTE AS OWNER  
+AS  
+  BEGIN  
+  SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED     
+  SET NOCOUNT ON;   
+BEGIN TRY  
+ DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)  
+        
+   Declare @patientvisitid bigint, @RoleID [BIGINT], @gUID [NVARCHAR](255),@plocationID    [INT],@TaskActionID   [INT],@OrgId int  
+      Declare @LanguageCode NVARCHAR(20)  
+  
+      set @LanguageCode = 'en-GB'  
+  
+      DECLARE @TempInvestigationStatus Table  
+        (  
+           Status NVARCHAR(100)  
+        )  
+      DECLARE @TempSampleStatus Table  
+        (  
+           Status NVARCHAR(100)  
+        )  
+      declare @TempInvStatus table  
+        (  
+           ID          INT IDENTITY(1, 1),  
+           status      NVARCHAR(100),  
+           DisplayText NVARCHAR(255)  
+        )  
+  
+  declare @loginid bigint   
+  select top 1 @loginid=loginid from login where loginname= @userId  
+  
+  Declare @OrgId1 int  
+  select top 1 @OrgId1=Orgid from organization where centrecode=@Orgcode  
+  
+  --Declare @PatientId bigint  
+    
+  
+     Create table #tmpPatient  
+  (Patientid bigint)  
+  insert into #tmpPatient  
+  select PatientID from Patient where PatientNumber=@patientNo and Orgid=@OrgId1  
+  
+  
+  Create table #temppatientdetails  
+  (  
+  PatientName varchar(200),  
+  Patientvisitid bigint,  
+  Orgid int,  
+  UID Nvarchar(500),  
+  LocationID int,  
+  Age Nvarchar(50),  
+  PatientNo Nvarchar(100)  
+  )  
+  
+  Declare @addressid bigint  
+  select @addressid=addressid from OrganizationAddress where LocationCode=@locCode  
+  
+  Insert into #temppatientdetails  
+  select distinct P.Name as PatientName,PV.PatientVisitId,PV.OrgID,OI.UID as SecuredCode,OA.AddressId,ISNULL(P.SEX,'')+'/'+ISNULL(P.Age,''),P.PatientNumber from patient P (nolock)  
+   Inner Join #tmpPatient TP on Tp.patientid=P.patientid  
+  Inner join patientvisit PV(nolock) on P.patientid=PV.patientid   
+  Inner join OrderedInvestigations OI (nolock) on PV.patientvisitid=OI.visitid and PV.orgid=OI.orgid and OI.Status='Paid'   
+  Inner join Organization O(nolock) on O.orgid=PV.orgid and O.Orgid=@OrgId1  
+  Inner join OrganizationAddress OA (nolock) on  OA.AddressID=@addressid  
+   
+  
+ drop table #tmpPatient  
+  
+set @TaskActionID=22  
+select top 1 @OrgId=Orgid from #temppatientdetails  
+  
+      IF NOT EXISTS(SELECT 1  
+                    FROM   InvestigationStatus   
+                    WHERE  Orgid = @OrgID)  
+        begin  
+            insert into @TempInvStatus  
+                        (status,DisplayText)  
+            select Invsts.Status,  
+                   ISO.DisplayText  
+            from   InvestigationStatus Invsts   
+                   Inner join InvStatusOrgMapping ISO   
+                           on ISO.status = Invsts.Status  
+                              and isnull(ISO.LangCode, 'en-GB') = @LanguageCode  
+         AND ISO.OrgID = @OrgID  
+            where  Invsts.Orgid is null  
+  
+            Insert into @TempInvStatus  
+                        (Status,DisplayText)  
+            select Status,  
+                   Status  
+            FROm   dbo.fn_getMappedStatus (@TaskActionID, 'SampleStatus', @OrgID)  
+  
+            ------------------Ram Changed Start------------------------  
+            IF( @LanguageCode <> 'en-GB' )  
+              begin  
+                  Update @TempInvStatus  
+                  Set    DisplayText = 'Reject'  
+                  where  Displaytext = 'Rejected'  
+  
+                  update TEM  
+                  set    TEM.DisplayText = ism.Displaytext  
+                  FROM   @TempInvStatus TEM  
+                         INNER JOIN InvStatusOrgMapping ism   
+                                 ON Ism.Status = Tem.DisplayText  
+         AND ism.OrgID = @OrgID  
+                  Where  Tem.Displaytext = 'Reject'  
+                         AND LangCode = @LanguageCode  
+              end  
+        ------------------Ram Changed End------------------------  
+        end  
+      Else  
+        begin  
+            insert into @TempInvStatus  
+                        (status,DisplayText)  
+            select Invsts.Status,  
+                   ISO.DisplayText  
+            from   InvestigationStatus Invsts   
+                   Inner join InvStatusOrgMapping ISO   
+                           on ISO.status = Invsts.Status  
+                              and ISO.LangCode = @LanguageCode  
+         AND ISO.OrgID = @OrgID  
+            where  Invsts.Orgid = @OrgID  
+  
+            Insert into @TempInvStatus  
+  (Status,DisplayText)  
+            select Status,  
+Status  
+            FROm   dbo.fn_getMappedStatus (@TaskActionID, 'SampleStatus', @OrgID)  
+        end  
+  
+      delete @TempInvStatus  
+      where  ID in (select max(ID)  
+                    from   @TempInvStatus  
+                    group  by status  
+                    having COUNT (status) > 1)  
+  
+      Insert into @TempInvestigationStatus  
+                  (Status)  
+      select *  
+      FROm   dbo.fn_getMappedStatus (@TaskActionID, 'InvestigationStatus', @OrgID)  
+  
+   Insert into @TempInvestigationStatus  
+                  (Status)  
+      select *  
+      FROm   dbo.fn_getMappedStatus (@TaskActionID, 'SampleStatus', @OrgID)  
+  
+ create table #tempFinal  
+ (  
+ InvestigationName nvarchar(200),  
+ Type  nvarchar(50),  
+ InvestigationID Bigint,  
+ PatientVisitID bigint,  
+ OrgID int,  
+ Status nvarchar(100),  
+ CreatedAt Datetime,  
+ UID nvarchar(500),  
+ AccessionNumber bigint,  
+ PackageName nvarchar(200),  
+ ReferredType nvarchar(100),  
+ DisplayStatus nvarchar(100),  
+ PackageID int,  
+ ReferralID bigint  
+  )  
+  
+DECLARE PatientDetailsCursor CURSOR FOR  
+SELECT Patientvisitid,Orgid,UID,LocationID  
+FROM   #temppatientdetails  
+OPEN PatientDetailsCursor  
+FETCH NEXT FROM PatientDetailsCursor INTO @patientvisitid,@OrgId,@gUID,@plocationID  
+WHILE @@FETCH_STATUS = 0  
+BEGIN  
+  
+      if( @gUID <> '' )  
+        BEGIN  
+  insert into #tempFinal  
+            SELECT distinct Name                               AS InvestigationName,  
+                   OI.Type,  
+                   ID                                 as InvestigationID,  
+                   VisitID                            as PatientVisitID,  
+                   OI.OrgID,  
+                   OI.Status,  
+                   OI.CreatedAt,  
+                   UID,  
+                   Oi.AccessionNumber,  
+                   PkgName                            as PackageName,  
+                   OI.ReferredType,  
+                   (select distinct isnull(Invsts.DisplayText, oi.Status)  
+                    from   @TempInvStatus InvSts  
+                    where  InvSts.status = OI.Status) as DisplayStatus,  
+                   0                                  as PackageID,  
+       T.TaskID  
+            FROM   OrderedInvestigations OI   
+            inner join Tasks T on  T.PatientVisitId = OI.VisitID       and T.TaskStatusID in (1,5) and T.TaskActionID =22                                                     
+            --inner join @TempInvStatus InvSts on InvSts.Status=OI.Status                                                               
+            WHERE  VisitID = @PatientVisitID  
+                   AND OI.OrgID = @OrgID  
+                   --AND Status NOT IN ('Refered','Completed')                   
+                   AND ( OI.Status IN(Select Status  
+                                      from   @TempInvestigationStatus) )  
+                   --OR OI.Status IN(Select Status from @TempSampleStatus))                         
+                   and UID = @gUID  
+                   and pkgname is null --and  ISNULL(OI.ResCaptureLoc,pv.OrgAddressID) = @plocationID                          
+            union all  
+            SELECT Name                               AS InvestigationName,  
+                   OI.Type,  
+         ID           as InvestigationID,  
+                   VisitID                            as PatientVisitID,  
+        OI.OrgID,  
+                   OI.Status,  
+                   OI.CreatedAt,  
+                   UID,  
+                   OI.AccessionNumber,  
+                   PkgName                            as PackageName,  
+                   OI.ReferredType,  
+                   (select distinct isnull(Invsts.DisplayText, oi.Status)  
+                    from   @TempInvStatus InvSts  
+                    where  InvSts.status = OI.Status) as DisplayStatus,  
+                   0                                  as PackageID,  
+       T.TaskID  
+  
+            FROM   OrderedInvestigations OI   
+   inner join Tasks T on  T.PatientVisitId = OI.VisitID       and T.TaskStatusID in (1,5) and T.TaskActionID =22    
+            --inner join PatientVisit pv on  pv.PatientVisitId = OI.VisitID                 
+            --inner join @TempInvStatus InvSts on InvSts.Status=OI.Status                         
+            WHERE  VisitID = @PatientVisitID  
+                   AND OI.OrgID = @OrgID  
+                   --AND Status NOT IN ('Refered','Completed')                                        
+                   AND ( OI.Status IN(Select Status  
+                                      from   @TempInvestigationStatus) )  
+                   --OR OI.Status IN(Select Status from @TempSampleStatus))                                                               
+                   and UID = @gUID  
+                   and pkgname is not null --and  ISNULL(OI.ResCaptureLoc,pv.OrgAddressID) = @plocationID                          
+            Order  by AccessionNumber asc  
+        END  
+      ELSE  
+        BEGIN  
+  Insert into #tempFinal  
+            SELECT distinct Name                                  AS InvestigationName,  
+                   OI.Type,  
+                   OI.ID                                 as InvestigationID,  
+                   VisitID                               as PatientVisitID,  
+                   OI.OrgID,  
+       OI.Status,  
+                   OI.CreatedAt,  
+                   UID,  
+       OI.AccessionNumber,  
+       '' as PackageName,  
+                   OI.ReferredType,  
+                   isnull(InvSts.DisplayText, OI.Status) as DisplayStatus,  
+                   0                                     as PackageID,  
+       T.TaskID  
+            FROM   OrderedInvestigations OI   
+                   inner join @TempInvStatus InvSts  
+                           on OI.Status = InvSts.Status  
+         inner join Tasks T on  T.PatientVisitId = OI.VisitID       and T.TaskStatusID in (1,5) and T.TaskActionID =22    
+            --inner join PatientVisit pv on  pv.PatientVisitId = OI.VisitID                                                              
+            WHERE  VisitID = @PatientVisitID  
+                   AND OI.OrgID = @OrgID  
+                   --AND Status NOT IN ('Refered','Completed')                                 
+                   AND ( OI.Status IN(Select Status  
+                                      from   @TempInvestigationStatus)  
+                          OR OI.Status IN(Select Status  
+                                          from   @TempSampleStatus) )  
+            --and  ISNULL(OI.ResCaptureLoc,pv.OrgAddressID) = @plocationID                          
+            Order  by InvestigationName asc  
+        END  
+  FETCH NEXT FROM PatientDetailsCursor INTO @patientvisitid,@OrgId,@gUID,@plocationID  
+END  
+CLOSE PatientDetailsCursor  
+DEALLOCATE PatientDetailsCursor  
+  
+  
+select @RoleID=Roleid from role where orgid=@OrgId and RoleName='Phlebotomist'  
+select T.*,@RoleID as CreatedBy,TT.PatientName as Name,TT.Age,TT.PatientNo as PatientNumber,TT.Locationid as ResCaptureLoc,@loginid as LoginID from #tempFinal T  
+Inner join #temppatientdetails TT on T.PatientVisitID=TT.Patientvisitid  
+  
+  
+  
+      SELECT SampleCode,  
+             SampleDesc  
+      FROM   InvSampleMaster   
+      where  OrgID = @OrgID  
+             and Active = 'Y'  
+           and isnull(LangCode, 'en-GB') = @LanguageCode  
+      ORDER  BY SampleDesc  
+  
+      SELECT DeptID,  
+             DeptName  
+      FROM   InvDeptMaster   
+      WHERE  Display = 'Y'  
+             AND OrgID = @OrgID  
+             and isnull(LangCode, 'en-GB') = @LanguageCode  
+  
+      SELECT RoleID,  
+             DeptID  
+      FROM   RoleDeptMap   
+      WHERE  RoleID = @RoleID  
+  
+      SELECT DISTINCT invsMaster.SampleDesc,  
+                      ISNULL(ISC.ContainerName, '--') AS SampleContainerName,  
+                      isMaster.InvSampleStatusDesc,  
+                      --isMaster.InvSampleStatusDesc + ' (' + (SELECT OA.Location FROM OrganizationAddress OA WHERE OA.AddressID=PIS.CollectedLocID) + ')' AS InvSampleStatusDesc,                              
+              dptMaster.DeptName,  
+                      sTracker.CreatedAt,  
+                      CASE PIS.BarcodeNumber  
+                        WHEN '0' THEN '--'  
+                        ELSE PIS.BarcodeNumber  
+                      END                             AS BarcodeNumber,  
+         PIS.SampleID  
+      FROM   SampleTracker sTracker   
+             INNER JOIN PatientInvSample PIS   
+                     ON PIS.SampleID = sTracker.SampleID  
+             INNER JOIN InvSampleStatusmaster isMaster   
+                     ON isMaster.InvSampleStatusID = sTracker.InvSampleStatusID  
+             INNER JOIN InvDeptMaster dptMaster   
+                     ON dptMaster.DeptID = sTracker.DeptID  
+             INNER JOIN InvSampleMaster invsMaster   
+                     ON invsMaster.SampleCode = PIS.SampleCode  
+                        and invsMaster.OrgID = PIs.OrgID  
+             LEFT JOIN InvestigationSampleContainer ISC   
+                    ON ISC.SampleContainerID = PIS.SampleContainerID  
+                       AND ISC.OrgID = PIS.OrgID  
+      WHERE  PIS.PatientVisitID = 0  
+      OPTION(MAXDOP 1)  
+  
+      SELECT DISTINCT DM.DeptID,  
+                      DM.DeptName  
+      FROM   InvDeptSamples IDS   
+             INNER JOIN InvDeptMaster DM   
+                     ON DM.DeptID = IDS.DeptID  
+      WHERE  DM.OrgID = IDS.OrgID  
+             AND IDS.OrgID = @OrgID  
+             AND IDS.PatientVisitID = 0  
+             and isnull(DM.LangCode, 'en-GB') = @LanguageCode  
+  
+      SELECT SampleContainerID,  
+             ContainerName  
+      FROM   InvestigationSampleContainer   
+      where  Active = 'Y'  
+             AND OrgID = @OrgID  
+             and isnull(LangCode, 'en-GB') = @LanguageCode  
+      ORDER  BY ContainerName  
+  
+   drop table #temppatientdetails  
+     
+drop table #tempFinal  
+   END TRY  
+BEGIN CATCH     
+                                
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetInvestigationSamples @PatientVisitID = '+cast(@PatientVisitID as varchar)+'@OrgID = '+cast(@OrgID as varchar)+'@RoleID   = '+ 
+ 
+   
+  
+  
+  
+  
+  
+  
+   
+   
+  
+   
+cast(@RoleID as varchar)  
+    
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH   
+  END  
+  
+  
+  
+  
+  
+                                                   
+  

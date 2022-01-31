@@ -1,0 +1,217 @@
+CREATE Procedure PGetDetailedReportMIS      
+(      
+@Fdate Datetime,      
+@Tdate Datetime,      
+@ClientID Int,      
+@VisitType Int,    
+@ContextInfo [dbo].[UDT_Context] READONLY       
+)      
+As      
+Begin
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+  SET NOCOUNT ON;
+  SET XACT_ABORT ON;  
+Create Table #Temp1  
+(  
+PatientvisitID bigint,  
+PatientID Varchar(50),  
+VisitNo Varchar(50),  
+PatientName varchar(100),  
+Age Varchar(50),  
+Gender varchar(2),  
+VisitType varchar(10),  
+Location varchar(100),  
+RegisteredDate DateTime,  
+Status nvarchar(50),  
+Count1 int,  
+TestDetails nvarchar(max),  
+PrintedBy Nvarchar(100),  
+OrgID int  
+)  
+  
+IF (@ClientID = 0 OR @ClientID = -1)  
+Set @ClientID=NULL  
+  
+Declare @OrgID int  
+select  @OrgID=OrgID from @ContextInfo  
+  
+IF(ISNULL(@ClientID,'')<>'')  
+Begin  
+Insert into #Temp1 (PatientvisitID, PatientID, VisitNo,PatientName,Age ,Gender ,VisitType,Location ,RegisteredDate,OrgID)  
+select Distinct Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name ,P.Age,P.Sex ,  
+Case when Pv.visitType=0 then 'OP' else 'IP' end ,OA.Location, PV.CreatedAt, PV.OrgID  
+from Patient P   
+Inner join Patientvisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.ORgID  
+Inner Join OrganizationAddress OA on OA.ORGID=PV.ORGID and OA.AddressID=Pv.OrgAddressID  
+Inner join Notifications N on N.IdentityID=Pv.PatientVisitId and N.OrgID=Pv.ORgID  
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID  
+where PV.Orgid=@OrgID and PV.Createdat between @Fdate and @Tdate and VCM.ClientID=@ClientID and PV.VisitType=@VisitType  
+Group By Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name, P.Age, P.Sex, Pv.visitType, OA.Location, PV.CreatedAt, PV.OrgID   
+order by PV.Createdat desc  
+End  
+Else  
+Begin  
+Insert into #Temp1 (PatientvisitID, PatientID, VisitNo,PatientName,Age ,Gender ,VisitType,Location ,RegisteredDate,OrgID)  
+select Distinct Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name ,P.Age,P.Sex ,  
+Case when Pv.visitType=0 then 'OP' else 'IP' end ,OA.Location, PV.CreatedAt, PV.OrgID  
+from Patient P   
+Inner join Patientvisit PV on PV.PatientID=P.PatientID and PV.OrgID=P.ORgID  
+Inner Join OrganizationAddress OA on OA.ORGID=PV.ORGID and OA.AddressID=Pv.OrgAddressID  
+Inner join Notifications N on N.IdentityID=Pv.PatientVisitId and N.OrgID=Pv.ORgID  
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID  
+where PV.Orgid=@OrgID and PV.Createdat between @Fdate and @Tdate and PV.VisitType=@VisitType-- and PV.PatientVisitID in (33268)  
+Group By Pv.PatientvisitID, P.PatientNumber, Pv.VisitNumber ,P.Name, P.Age, P.Sex, Pv.visitType, OA.Location, PV.CreatedAt, PV.OrgID   
+order by PV.Createdat desc  
+End  
+  
+Create table #Maxlist (NotificationID Bigint,IdentityID Bigint,OrgID Int,Actiontype nvarchar(50))      
+Insert into #Maxlist (NotificationID,IdentityID,OrgID,Actiontype)      
+select Max(N.Notificationid) as Notificationid,N.Identityid,N.OrgID,N.Actiontype from Notifications N       
+Inner join #Temp1 T on T.PatientVisitID=N.Identityid and T.OrgID=N.OrgID      
+where T.PatientVisitID=N.Identityid and N.Actiontype='ROUNDBPDF'       
+group by N.identityid,N.OrgID,N.Actiontype  
+  
+  
+If Exists (Select Count(1) from Notifications N   
+inner join #Temp1 T on T.PatientVisitID=N.Identityid and T.orgID=N.OrgID where N.ActionType='ROUNDBPRINT' and N.OrgID=@OrgID)  
+Begin  
+Create Table #temp2 (Sno int Identity(1,1),NotificationID Bigint,IdentityID Bigint,Createdat datetime,Actiontype Nvarchar(50),  
+OrgID Int,PrintedBy Nvarchar(100),Type nvarchar(50))  
+Insert Into #temp2 (NotificationID,IdentityID,Createdat,Actiontype,OrgID,PrintedBy)  
+select Distinct N.NotificationID,N.IdentityID,N.Createdat,N.Actiontype,N.OrgID,U.Name  
+from #Maxlist MI   
+inner join Notifications N on N.Identityid=MI.Identityid and N.OrgID=MI.OrgID  
+left join Users U on U.loginID=N.Createdby and U.OrgID=N.OrgID  
+where N.Actiontype in ('ROUNDBPRINT') and N.NotificationID<=MI.NotificationID and N.OrgID=@OrgID  
+order by N.NotificationID  
+  
+Select Distinct IdentityID,min(Createdat) as Mindate,OrgID into #temp2t from #temp2 group by IdentityID,OrgID  
+  
+update T2 set T2.Type='Printed' from #temp2 T2   
+inner join #temp2t T2t on T2t.IdentityID=T2.IdentityID and T2t.Mindate=T2.Createdat and T2t.OrgID=T2.OrgID  
+  
+Drop table #temp2t  
+  
+Update #temp2 set Type='Reprited' where isnull(Type,'')=''  
+  
+  
+Create Table #temp3 (Sno int Identity(1,1),NotificationID Bigint,IdentityID Bigint,Createdat datetime,Actiontype Nvarchar(50),  
+OrgID Int,PrintedBy Nvarchar(100),Type nvarchar(50))  
+Insert Into #temp3 (NotificationID,IdentityID,Createdat,Actiontype,OrgID,PrintedBy)  
+select Distinct N.NotificationID,N.IdentityID,N.Createdat,N.Actiontype,N.OrgID,U.Name   
+from #Maxlist MI   
+inner join Notifications N on N.Identityid=MI.Identityid and N.OrgID=MI.OrgID  
+left join Users U on U.loginID=N.Createdby and U.OrgID=N.OrgID  
+where N.Actiontype in ('ROUNDBPRINT') and N.NotificationID>=MI.NotificationID and N.OrgID=@OrgID  
+order by N.NotificationID  
+  
+Select Distinct IdentityID,min(Createdat) as Mindate,OrgID into #temp3t from #temp3 group by IdentityID,OrgID  
+  
+  
+update T3 set T3.Type='Printed' from #temp3 T3   
+inner join #temp3t T3t on T3t.IdentityID=T3.IdentityID and T3t.Mindate=T3.Createdat and T3t.OrgID=T3.OrgID  
+Drop table #temp3t  
+  
+Update #temp3 set Type='Reprinted' where isnull(Type,'')=''  
+  
+End  
+  
+  
+Create Table #Temp4 (IdentityID Bigint,NotificationID Bigint,ActionType Nvarchar(50),AccessionNumber varchar(Max),OrgID Int,Type nvarchar(10),  
+Count Int,PrintedBy Nvarchar(100),PrintedLocation nvarchar(100),PrintedDateTime DateTime)  
+  
+If ((Select Count(1) from #temp2)>=1)  
+Begin  
+Insert Into #Temp4 (IdentityID,NotificationID,ActionType,AccessionNumber,OrgID,Type,Count,PrintedBy,PrintedLocation,PrintedDateTime)  
+SELECT Distinct  
+N.IdentityID,N.NotificationID,N.ActionType,  
+Replace(CAST(N.AdditionalContext as XML).value('(/ContextInfo/AccessionNumber)[1]', 'varchar(max)'),' ','') as AccessionNumber, N.OrgID,  
+T.Type,1 as Count,T.PrintedBy,OA.Location,N.Createdat   
+FROM Notifications N   
+Inner join #temp2 T on T.IdentityID=N.IdentityID and T.NotificationID=N.NotificationID and T.OrgID=N.OrgID and T.Actiontype='ROUNDBPRINT'   
+inner join OrganizationAddress OA on OA.AddressID=N.OrgAddressID and OA.OrgID=N.OrgID  
+order by NotificationID  
+End  
+If ((Select Count(1) from #temp3)>=1)  
+Begin  
+Insert Into #Temp4 (IdentityID,NotificationID,ActionType,AccessionNumber,OrgID,Type,Count,PrintedBy,PrintedLocation,PrintedDateTime)  
+SELECT Distinct  
+N.IdentityID,N.NotificationID,N.ActionType,  
+Replace(CAST(N.AdditionalContext as XML).value('(/ContextInfo/AccessionNumber)[1]', 'varchar(max)'),' ','') as AccessionNumber, N.OrgID,  
+T.Type,1 as Count ,T.PrintedBy,OA.Location,N.Createdat   
+FROM Notifications N   
+inner join #temp3 T on T.IdentityID=N.IdentityID and T.NotificationID=N.NotificationID and T.OrgID=N.OrgID and T.Actiontype='ROUNDBPRINT'   
+inner join OrganizationAddress OA on OA.AddressID=N.OrgAddressID and OA.OrgID=N.OrgID  
+order by NotificationID  
+End  
+  
+  
+Create table #temp6 (IdentityID Bigint,NotificationID Bigint,ActionType Nvarchar(50),AccessionNumber Bigint,OrgID Int,TestCode nvarchar (500),  
+Type nvarchar(10),Count Int,PrintedBy Nvarchar(100),PrintedLocation nvarchar(100),PrintedDateTime DateTime)  
+Insert Into #temp6 (IdentityID,NotificationID,ActionType,AccessionNumber,OrgID,Type,Count,PrintedBy,PrintedLocation,PrintedDateTime)  
+ SELECT A.[IdentityID],A.[NotificationID],A.[ActionType],  
+     Split.a.value('.', 'Bigint') AS AccessionNumber,A.[OrgID],A.[Type],A.[Count],A.[PrintedBy],A.[PrintedLocation],A.[PrintedDateTime]   
+ FROM  (SELECT [IdentityID], [NotificationID], [ActionType],  
+         CAST ('<M>' + REPLACE([AccessionNumber], ',', '</M><M>') + '</M>' AS XML) AS String, OrgID ,Type,Count,PrintedBy,PrintedLocation,PrintedDateTime    
+     FROM  #temp4) AS A CROSS APPLY String.nodes ('/M') AS Split(a);  
+  
+Update T6 set T6.TestCode=IOG.TestCode from #Temp6 T6   
+inner join OrderedInvestigations OI on OI.AccessionNumber=T6.AccessionNumber and OI.VisitID=T6.IdentityID and OI.OrgID=T6.OrgID and OI.Type='GRP'  
+inner join InvOrggroup IOG On IOG.AttgroupID=OI.ID and IOG.OrgID=OI.OrgID  
+Update T6 set T6.TestCode=IOG.TestCode from #Temp6 T6   
+inner join OrderedInvestigations OI on OI.AccessionNumber=T6.AccessionNumber and OI.VisitID=T6.IdentityID and OI.OrgID=T6.OrgID and OI.Type='INV'  
+inner join InvestigationOrgMapping IOG On IOG.InvestigationID=OI.ID and IOG.OrgID=OI.OrgID  
+  
+  
+SELECT IdentityID,NotificationID,ActionType,Type,Count,PrintedBy,OrgID,PrintedLocation,PrintedDateTime, TestCode =   
+    STUFF((SELECT ', ' + TestCode  
+           FROM #Temp6 b   
+           WHERE b.IdentityID = a.IdentityID and B.NotificationID=A.NotificationID  
+          FOR XML PATH('')), 1, 2, '') into #Temp7  
+FROM #Temp6 a  
+GROUP BY IdentityID,NotificationID,ActionType,Type,Count,PrintedBy,OrgID,PrintedLocation,PrintedDateTime order by IdentityID,NotificationID  
+  
+Select Distinct ROW_NUMBER() OVER(ORDER BY PatientvisitID ASC) as 'SNo',T1.PatientID,T1.VisitNo as 'VisitNumber',T1.PatientName as 'PatientName',  
+T1.Age,T1.Gender,T1.VisitType as 'VisitType',T1.Location,Convert(varchar,T1.RegisteredDate,120) as 'RegisteredDate',T7.Type as Status,T7.Count,  
+T7.TestCode as 'TestDetails',T7.PrintedBy,T7.PrintedLocation as 'PrintedLocation',Convert(varchar,T7.PrintedDateTime,120) as 'PrintedDateandTime'  
+Into #tempFinal from #Temp1 T1   
+inner join #temp7 T7 on T7.IdentityID=T1.PatientVisitid and T7.OrgID=T1.OrgID  
+where T7.IdentityID=T1.PatientVisitid and T7.OrgID=T1.OrgID Order by T1.PatientID
+  
+select * from #tempFinal
+
+Create table #findDup (TotalNumberofReportPrinted varchar(50),TotalNumberofReportRePrinted varchar(50),DuplicateReportPrint varchar(50))
+Declare @Printed int
+Declare @RePrinted int
+Declare @Dup varchar(50)
+Select @Printed = Count(Status) from #tempFinal where status='Printed'
+
+Select @RePrinted = Convert(Varchar,Count(Status)) from #tempFinal where status='RePrinted'
+
+SET @Dup = '%' + Convert(Varchar,(@RePrinted*100/@Printed))
+
+insert into #findDup (TotalNumberofReportPrinted,TotalNumberofReportRePrinted,DuplicateReportPrint) 
+select Convert(Varchar,@Printed),Convert(Varchar,@RePrinted),@Dup
+
+SELECT '' as SNo,'' as PatientID, '' as VisitNumber,'' as PatientName,'' as Age,'' as Gender,'' as VisitType,'' as Location,'' as RegisteredDate,
+'' as Status,'' as Count,'' as TestDetails,'' as PrintedBy,Details as 'PrintedLocation', Count as 'PrintedDateandTime'
+FROM   
+   (SELECT [TotalNumberofReportPrinted] as [Total Number of Report Printed], [TotalNumberofReportRePrinted] as [Total Number of Report RePrinted], [DuplicateReportPrint] as [%Duplicate Report Print]
+   FROM #findDup) p  
+UNPIVOT  
+   (Count FOR Details IN   
+      ([Total Number of Report Printed], [Total Number of Report RePrinted], [%Duplicate Report Print])  
+)AS unpvt;
+    
+Drop table #Temp1  
+Drop table #Maxlist  
+Drop table #temp2  
+Drop table #temp3       
+Drop table #temp4  
+Drop table #temp6  
+Drop table #temp7 
+Drop table #tempFinal
+Drop table #findDup 
+End  
+  
+  

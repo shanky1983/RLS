@@ -1,0 +1,36 @@
+CREATE procedure pSaveSensitiveTestPatientRemarks(
+@iVisitID bigint,
+@iPatientID bigint, 
+@iTaskID bigint, 
+@patienthistory Nvarchar(500), 
+@remarks Nvarchar(500),
+@ContextInfo [UDT_Context] READONLY 
+
+)
+As
+BEGIN
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED     
+   SET NOCOUNT ON;  
+   SET XACT_ABORT ON;   
+BEGIN TRY  
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000) 
+	   Declare @OrgID bigint; 
+	   Declare @UserID bigint
+	   Select @OrgID=orgid,@UserID=LoginID from @ContextInfo
+
+	   IF(@iVisitID>0 and @iPatientID>0 and @iTaskID>0)
+	   BEGIN
+	   Insert Into SensitiveTestRemarks(PatientVisitID,PatientID,TaskID,OrgID,PatientHistory,Remarks,CreatedAt,CreatedBy)
+	   Select @iVisitID,@iPatientID,@iTaskID,@OrgID,Ltrim(Rtrim(@patienthistory)),Ltrim(Rtrim(@remarks)),Getdate(),@UserID
+	   END 
+
+END TRY  
+BEGIN CATCH                                   
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),
+	@sptrace ='pSaveSensitiveTestPatientRemarks @iVisitID = '+CAST(@iVisitID AS VARCHAR) 
+	+'@iPatientID = '+CAST(@iPatientID AS VARCHAR)+'@iTaskID = '+CAST(@iTaskID AS VARCHAR) +'@patienthistory = '+@patienthistory
+	+'@remarks = '+ @remarks 
+    
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH
+END

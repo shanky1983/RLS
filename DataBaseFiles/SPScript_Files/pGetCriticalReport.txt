@@ -1,0 +1,165 @@
+      
+create Procedure pGetCriticalReport                  
+(                  
+@Fdate Datetime,                        
+@Tdate Datetime,                        
+@ClientID int,                        
+@VisitType Int,                      
+@ContextInfo [dbo].[UDT_Context] READONLY                         
+)                        
+As                        
+Begin                        
+                  
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                     
+  SET NOCOUNT ON;                  
+  SET XACT_ABORT ON;                  
+  IF (@ClientID = 0 OR @ClientID = -1)            
+Set @ClientID=NULL            
+                    
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+  Declare @OrgID int                  
+              
+  select @OrgID=OrgID from @ContextInfo                  
+   create table #Tempfinal (SlNo int,PatientID nvarchar(500),VisitNumber nvarchar (50),Name nvarchar(200),Age nvarchar(40),Gender nchar(4),VisitType nvarchar (10),          
+Location nvarchar (500),RegisteredDate varchar(100),GroupName nvarchar (200),TestDetails nvarchar (500),Status nvarchar (200),              
+Resultvalues nvarchar(200),ApprovedBY nvarchar(100),ApprovedDatetime varchar(200),PhysicianName nvarchar (100),MobileNumber nvarchar(100),CriticalDateTime nvarchar(20),OPIPNumber nvarchar(100))                
+                
+            
+if(@Datediff <= 31)         
+BEGIN      
+if(@VisitType = -1)                
+Begin                
+                
+insert into #TempFinal                      
+Select Distinct ROW_NUMBER() OVER(ORDER BY VisitNumber ASC) as 'SLNo', PV.ExternalVisitId,PV.VisitNumber,P.Name,P.Age,P.Sex as Gender,                        
+Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,OA.Location,(Convert(Varchar,(PV.Createdat),103)+' '+ Convert(Varchar,(PV.Createdat),8))  as 'RegisteredDate', PI.GroupName,PI.Investigationname as Testdetails,      
+Case when PI.Status in('Approve','PartiallyApproved')     
+then 'Approve' else PI.Status END 'Status', IV.Value, U.Name as UserName,                        
+(Convert(varchar,(PI.ApprovedAt),103) +' ' +Convert(varchar,(PI.ApprovedAt),8))as 'AppovedDateTime',isnull(PV.ReferingPhysicianName,'') as 'PhysicianName',isnull(AD.Mobile,'') as 'MobileNumber' ,    
+(Convert(varchar,(Ntf.CompletionTime),103) +' ' +Convert(varchar,(Ntf.CompletionTime),8)) as 'CriticalDateTime',PV.Previouslabnumber     
+from Patientvisit PV                        
+inner join Patient P on P.PatientID=PV.PatientID and P.Orgid=PV.Orgid                       
+inner join OrganizationAddress OA on PV.Orgaddressid=OA.Addressid     
+and OA.Orgid=PV.Orgid      
+--and oa.addresstype='P'    
+    
+--inner join Patientinvsample PIS on PIS.Patientvisitid=PV.Patientvisitid and PIS.orgid=OA.orgid                        
+inner join PatientInvestigation PI on PI.PatientVisitID=PV.Patientvisitid --and  PIS.SampleCode = PI.SampleID     
+and PI.orgid=PV.orgid             
+inner join investigationvalues IV on IV.patientvisitid=PI.Patientvisitid and  PI.investigationid=IV.investigationid       and IV.Status in ('Approve','PartiallyApproved')                
+inner join users U on U.Loginid=PI.ApprovedBy and U.orgid=PI.orgid          
+Inner Join ReferingPhysician RF on RF.ReferingPhysicianID=PV.ReferingPhysicianID     and RF.OrgID=PV.OrgID    
+Inner Join AddressDetails AD on AD.REferenceID=RF.ReferingPhysicianID and AD.OrgID=RF.OrgID and ReferenceType='RefPhy'    
+left join Notifications Ntf on Ntf.identityid=PI.patientvisitid   and Ntf.ActionTYpe='Sms' and Ntf.Status='Completed'  and Ntf.ContextType in('CV')            
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID                                  
+Inner join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID                                   
+where PV.Orgid=@OrgID and PV.Createdat between @Fdate and @Tdate and PI.status in('Approve','PartiallyApproved')         
+and PV.LabVisitType in (0,1)  and PI.IsAbnormal='P'             
+---and pv.visitnumber='20IP0024363'    
+  
+End              
+ELSE            
+BEGIN            
+insert into #TempFinal             
+Select Distinct ROW_NUMBER() OVER(ORDER BY VisitNumber ASC) as 'SLNo', PV.ExternalVisitId,PV.VisitNumber,P.Name,P.Age,P.Sex as Gender,                        
+Case when PV.LabVisitType=1 then 'IP' else 'OP' END as VisitType,OA.Location,(Convert(Varchar,(PV.Createdat),103)+' '+ Convert(Varchar,(PV.Createdat),8))  as 'RegisteredDate', PI.GroupName,PI.Investigationname as Testdetails,  Case when PI.Status in('App
+rove','PartiallyApproved') then 'Approve' else PI.Status END 'Status', IV.Value, U.Name as UserName,                        
+(Convert(varchar,(PI.ApprovedAt),103) +' ' +Convert(varchar,(PI.ApprovedAt),8))as 'AppovedDateTime',isnull(PV.ReferingPhysicianName,'') as 'PhysicianName',isnull(AD.Mobile,'') as 'MobileNumber' ,Ntf.CompletionTime as 'CriticalDateTime',    
+PV.Previouslabnumber from Patientvisit PV                        
+inner join Patient P on P.PatientID=PV.PatientID and P.Orgid=PV.Orgid                       
+inner join OrganizationAddress OA on PV.Orgaddressid=OA.Addressid and OA.Orgid=PV.Orgid       
+--and oa.addresstype='P'                     
+--inner join Patientinvsample PIS on PIS.Patientvisitid=PV.Patientvisitid and PIS.orgid=OA.orgid                        
+inner join PatientInvestigation PI on PI.PatientVisitID=PV.Patientvisitid     
+--and  PIS.SampleCode = PI.SampleID     
+and PI.orgid=PV.orgid             
+inner join investigationvalues IV on IV.patientvisitid=PI.Patientvisitid and  PI.investigationid=IV.investigationid  and IV.Status in ('Approve','PartiallyApproved')                    
+inner join users U on U.Loginid=PI.ApprovedBy and U.orgid=PI.orgid             
+    
+Inner Join ReferingPhysician RF on RF.ReferingPhysicianID=PV.ReferingPhysicianID     and RF.OrgID=PV.OrgID    
+Inner Join AddressDetails AD on AD.REferenceID=RF.ReferingPhysicianID and AD.OrgID=RF.OrgID and ReferenceType='RefPhy'           
+left join Notifications Ntf on Ntf.identityid=PI.patientvisitid   and Ntf.ActionTYpe='Sms' and Ntf.Status='Completed' and Ntf.ContextType in('CV')               
+Inner Join VisitClientMapping VCM on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID                                  
+Inner join ClientMaster CM on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID                                   
+where PV.Orgid=@OrgID and PV.Createdat between @Fdate and @Tdate and PI.status in('Approve','PartiallyApproved')     and PV.LabVisitType=@VisitType  and PI.IsAbnormal='P'             
+END                    
+                
+               
+                        
+Declare @TotalTestCount Decimal(18,2)                            
+Declare @TotalCriticalCount Decimal(18,2)                            
+Declare @Percentage Decimal(18,2)                         
+                         
+ SELECT distinct PV.PatientVisitID,Count(OI.ID) as Count1 into #Totalcount                            
+FROM PatientVisit PV                               
+Inner join OrderedInvestigations OI on OI.VisitID=PV.PatientVisitID and OI.Orgid=PV.OrgID                              
+where PV.OrgID=@OrgID --and OI.Status in ('Approve','PartiallyApproved')     
+and PV.Createdat between @Fdate and @Tdate                          
+group by PV.PatientVisitID ;    
+  
+WITH cte AS (    
+    SELECT     
+       PatientID,VisitNumber,OPIPNUMBER,Name, Age,     
+Gender, VisitType, Location,RegisteredDate, GroupName, TestDetails  ,                   
+Resultvalues,ApprovedBy,ApprovedDateTime,PhysicianName,MobileNumber,    
+        ROW_NUMBER() OVER (    
+            PARTITION BY     
+              PatientID,VisitNumber,OPIPNUMBER,Name, Age,     
+Gender, VisitType, Location,RegisteredDate, GroupName, TestDetails  ,                   
+Resultvalues,ApprovedBy,ApprovedDateTime,PhysicianName,MobileNumber    
+            ORDER BY                    PatientID,VisitNumber,OPIPNUMBER,Name, Age,     
+Gender, VisitType, Location,RegisteredDate, GroupName, TestDetails  ,              
+Resultvalues,ApprovedBy,ApprovedDateTime,PhysicianName,MobileNumber    
+        ) row_num    
+     FROM     
+        #TempFinal    
+)    
+DELETE FROM cte    
+WHERE row_num > 1;           
+              
+select @TotalTestCount=Sum(Count1) from #Totalcount                          
+select @TotalCriticalCount=Count(Status) from #TempFinal                        
+select @Percentage=Convert(varchar,((@TotalCriticalCount * 100)/@TotalTestCount))                        
+                        
+Create table #Criticaltemp (TotalTestCount nvarchar(50),TotalCriticalCount Nvarchar(50),CriticalPercentage Nvarchar(50))                            
+insert into #Criticaltemp (TotalTestCount,TotalCriticalCount,CriticalPercentage)                            
+select Convert(Varchar,Convert(int,@TotalTestCount)),Convert(Varchar,Convert(int,@TotalCriticalCount)),Convert(Varchar,@Percentage)        
+                  
+       
+Select Distinct ROW_NUMBER() OVER(ORDER BY VisitNumber ASC) as 'SLNo', PatientID,VisitNumber,OPIPNUMBER as 'OP/IP Number',Name as 'Patient Name', Age,     
+Gender, VisitType, Location,RegisteredDate, GroupName, TestDetails  ,                   
+Resultvalues,ApprovedBy,ApprovedDateTime,PhysicianName,MobileNumber,CriticalDateTime as 'Critical SMS Sent Time' from #TempFinal a                             
+                 
+If ((select Count(1) from #TempFinal)>=1)                        
+Begin       
+--SELECT  '' as PatientID,Details as VisitNumber,Count as 'Patient Name','' as Age,'' as Gender,'' as VisitType,'' as Location,                      
+--'' as RegisteredDate,'' as GroupName,'' as TestDetails,'' as Status,'' as Resultvalues,'' as ApprovedBy,'' as ApprovedDateTime,'' as PhysicianName,            
+--Details as MobileNumber,Count as 'Critical SMS Sent Time'                       
+                       
+         SELECT  '' as slno,'' as PatientID,'' as VisitNumber,'' as 'OP/IP Number', '' as 'Patient Name','' as Age,'' as Gender,'' as VisitType,'' as Location,                      
+'' as RegisteredDate,'' as GroupName,'' as TestDetails,'' as Resultvalues,'' as ApprovedBy,'' as ApprovedDateTime,'' as PhysicianName,                       
+Details as MobileNumber,Count as 'Critical SMS Sent Time'                       
+FROM                                 
+   (SELECT [TotalTestCount] as [Total Number Of Test Approved], TotalCriticalCount as [NO Of Critical result Approval], [CriticalPercentage] as [%Critical report]                              
+   FROM #Criticaltemp) p                                
+UNPIVOT                                
+   (Count FOR Details IN                                 
+      ([Total Number Of Test Approved], [NO Of Critical result Approval], [%Critical report])                                
+)AS unpvt;                              
+End              
+            
+--    SELECT 41 as SLNo, '925' as PatientID,'rdgfghgc' as VisitNumber,'cghjc' as 'Patient Name','20' as Age,'M' as Sex,'OP' as VisitType,'tdcv' as Location,                      
+--convert(varchar,getdate()) as RegisteredDate,'sdf' as GroupName,'df' as TestDetails,'sdf' as Resultvalues,'sdf' as ApprovedBy,convert(varchar,getdate()) as ApprovedDateTime,'dsf' as PhysicianName,                       
+--'hgjd' as MobileNumber,convert(varchar,getdate()) as 'CriticalDateTime'                        
+                                 
+                         
+Drop table #TempFinal                              
+Drop table #Totalcount                          
+Drop table #Criticaltemp                        
+End       
+End       
+    
+    
+    
+    

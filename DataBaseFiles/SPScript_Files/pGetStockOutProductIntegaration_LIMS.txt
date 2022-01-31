@@ -1,0 +1,120 @@
+CREATE PROCEDURE pGetStockOutProductIntegaration_LIMS 
+(
+  @OrgCode Nvarchar(100)
+)
+AS
+BEGIN
+
+DECLARE  @Orgid int
+
+SELECT @Orgid= AttuneOrgID FROM VendorOrgMapping WHERE IntegrationTypeCode=@OrgCode
+
+CREATE TABLE #SOF (
+    OrgCode NVARCHAR(50),
+	OrgLocationCode NVARCHAR(50),
+	OrgLocation NVARCHAR(255),
+	InventoryLocationName NVARCHAR(255),
+	InventoryLocationCode NVARCHAR(50),	
+	ProductCode	NVARCHAR(50),
+	ProductID BIGINT,
+	ProductName NVARCHAR(1000),
+	CategoryID int,
+	OpeningBalance int,
+	StockInhandQty int,
+	StockOutQty int,
+	StockOutType NVARCHAR(255),
+	BatchNo NVARCHAR(255),
+	ExpiryDate DATETIME,
+	LeastSellingUnit NVARCHAR(50),
+	Quantity int,
+	ReceivedUniqueNumber BIGINT,	
+	LocationID int,
+	CreatedAt datetime
+	--StockOutFlowID BIGINT,
+	--RowID int
+)
+
+Create Table #SOMTbl (
+StockOutMappingDetailsID bigint,ReceivedUniqueNumber bigint,ProductID bigint,LocationID int
+)
+
+INSERT INTO #SOF
+SELECT @OrgCode,
+       OA.LocationCode as OrgLocationCode,OA.Location as OrgLocation,L.LocationName as InventoryLocationName,
+       L.LocationCode InventoryLocationCode, P.ProductCode,SOFD.ProductID,ProductName,P.CategoryID,
+	    0.00 OpeningBalance,
+		0.00 as StockInhandQty,
+	   --(SUM(SH.TotalStockReceived)-SUM(SH.TotalStockIssued+SH.TotalStockReturn+ISNULL(SH.TotalStockDamage,0)+ISNULL(SH.TotalLocationIssued,0)+ISNULL(SH.SubstoreReturnqty,0))) as StockInhandQty,	  
+       0.00  StockOutQty,
+       SFT.StockOutFlowType as StockOutType,SH.BatchNo,SH.ExpiryDate,SH.SellingUnit as LeastSellingUnit,
+       SUM(SOFD.Quantity) as Quantity ,SOFD.ReceivedUniqueNumber,SH.LocationID,
+	   MIN(SOFD.Createdat) 
+FROM StockOutFlowDetails SOFD
+	INNER JOIN StockOutFlow  SOF ON SOF.StockOutFlowID=SOFD.StockOutFlowID
+	INNER JOIN StockInHand SH ON SOFD.ReceivedUniqueNumber =SH.ReceivedUniqueNumber AND SOFD.ProductID =SH.ProductID  
+								 AND SOFD.LocationID=SH.LocationID
+    INNER JOIN Products P ON P.ProductID=SOFD.ProductID AND P.Orgid=SOFD.OrgID
+	INNER JOIN StockOutFlowTypes SFT ON SFT.StockOutFlowTypeId=SOF.StockOutFlowTypeID
+	INNER JOIN Organization O ON O.orgid= @Orgid
+	INNER JOIN OrganizationAddress OA ON OA.AddressID=SOF.OrgAddressID
+	INNER JOIN Locations L ON L.LocationID=SH.LocationID AND OA.OrgID=L.OrgID
+WHERE SOFD.Orgid=@Orgid 
+AND Convert(date,StockOutFlowDate)= Convert(Date,'20200808') -- ServerDate
+AND SOF.Status='Approved'
+GROUP BY  
+	OA.LocationCode ,OA.Location ,L.LocationName ,
+	L.LocationCode , P.ProductCode,SOFD.ProductID,ProductName,
+	SFT.StockOutFlowType ,SH.BatchNo,SH.ExpiryDate,SH.SellingUnit ,
+	SOFD.ReceivedUniqueNumber,SH.LocationID,P.CategoryID
+
+
+Update S Set StockInhandQty =((SH1.TotalStockReceived)-(SH1.TotalStockIssued+SH1.TotalStockReturn+ISNULL(SH1.TotalStockDamage,0)+ISNULL(SH1.TotalLocationIssued,0)+ISNULL(SH1.SubstoreReturnqty,0)))
+ From #SOF S
+INNER JOIN StockInHand SH1 ON SH1.ReceivedUniqueNumber=S.ReceivedUniqueNumber AND SH1.LocationID=S.LocationID AND SH1.ProductID=S.ProductID
+
+Update S set OpeningBalance =OB,StockOutQty= SOQ FROM #SOF S
+Cross Apply (
+SELECT 
+ (StockInhandQty + SUM(Quantity))  OB,StockInhandQty,SUM(ISNULL(Quantity,0.00)) SOQ, 
+ ProductID,ReceivedUniqueNumber,LocationID
+FROM #SOF S1 Where S.ProductID=S1.ProductID AND S.ReceivedUniqueNumber=S1.ReceivedUniqueNumber AND S.LocationID=S1.LocationID
+Group by ProductID,ReceivedUniqueNumber,LocationID,
+OpeningBalance,StockInhandQty,StockOutQty
+) A
+
+ INSERT INTO  SynStockOutMappingDetails_LIMS (ReceivedUniqueNumber ,ProductID,OrgID ,LocationID,StockoutFlowDate,Status ,CreatedBy,CreatedAt)
+ 	OUTPUT INSERTED.StockOutMappingDetailsID,INSERTED.ReceivedUniqueNumber,INSERTED.ProductID,INSERTED.LocationID INTO #SOMTbl
+SELECT Distinct	
+    ReceivedUniqueNumber ,ProductID ,@Orgid ,LocationID,Convert(date,Getdate()-1),'Pending',-1,Getdate()
+
+FROM #SOF
+
+
+
+SELECT OrgCode,OrgLocationCode,
+	OrgLocation,
+	InventoryLocationName,
+	InventoryLocationCode,	
+	ProductCode,
+	S.ProductID ,
+	ProductName,
+	S.CategoryID,
+	OpeningBalance,
+	StockInhandQty,
+	StockOutQty,
+	StockOutType,
+	BatchNo,
+	ExpiryDate,
+	LeastSellingUnit,
+	Quantity ,
+	S.ReceivedUniqueNumber ,	
+	S.LocationID ,
+	S1.StockOutMappingDetailsID,
+	S.CreatedAt
+ FROM #SOF S
+ INNER JOIN #SOMTbl S1 ON S.ReceivedUniqueNumber=S1.ReceivedUniqueNumber AND S.ProductID=S1.ProductID AND S.LocationID=S1.LocationID
+
+Drop Table #SOF
+Drop Table #SOMTbl
+END
+GO

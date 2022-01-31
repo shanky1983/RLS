@@ -1,0 +1,615 @@
+CREATE PROCEDURE [dbo].[pSaveOutSourcingPDFFilesDetails]
+(
+@pVisitNumber VARCHAR(15),
+@pTestCode VARCHAR(15),
+@pOrgCode VARCHAR(10),
+@pFilePath VARCHAR(300),
+@pActionType VARCHAR(30),
+@pReturnStatus [INT] OUTPUT,
+@ContextInfo [UDT_Context] READONLY  
+)
+AS
+BEGIN
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE 
+SET NOCOUNT ON; 
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+ SET @pReturnStatus=-1;  
+
+ DECLARE @VisitID BIGINT=0,@PatientID BIGINT;
+ DECLARE @TestID BIGINT=0;
+ DECLARE @AccessionNumber BIGINT=0;
+ DECLARE @OrgID INT=0,@OrgAddressID INT;
+
+ SELECT @OrgID = OrgID FROM Organization WITH(NOLOCK) WHERE CentreCode=@pOrgCode;
+
+ SELECT @VisitID= PatientVisitID,@PatientID=PatientID,@OrgAddressID=OrgAddressID FROM PatientVisit WITH(NOLOCK) WHERE  VisitNumber=@pVisitNumber AND OrgID=@OrgID;
+
+ SELECT @AccessionNumber= OI.AccessionNumber FROM InvestigationOrgMapping IOM WITH(NOLOCK) 
+ INNER JOIN  OrderedInvestigations OI  WITH(NOLOCK) ON OI.OrgID=IOM.OrgID AND OI.ID=IOM.InvestigationID 
+ WHERE  OI.Type='INV' AND OI.VisitID=@VisitID AND IOM.TestCode=@pTestCode AND OI.Status NOT IN ('Cancel')
+
+ IF(ISNULL(@AccessionNumber,0)=0)
+ BEGIN
+   
+	 SELECT @AccessionNumber= OI.AccessionNumber FROM InvOrgGroup IOG WITH(NOLOCK) 
+	 INNER JOIN  OrderedInvestigations OI  WITH(NOLOCK) ON OI.OrgID=IOG.OrgID AND OI.ID=IOG.AttGroupID 
+	 WHERE  OI.Type='GRP' AND OI.VisitID=@VisitID AND IOG.TestCode=@pTestCode  AND OI.Status NOT IN ('Cancel');
+
+ END
+ --if accessionnumber or visit idis null then return 1
+ IF(ISNULL(@AccessionNumber,0)!=0 AND ISNULL(@VisitID,0)!=0)
+ BEGIN
+
+ --
+ --Outsource File Manager Insert
+ IF NOT EXISTS (SELECT 1 FROM OutSourcesFilesManager WHERE PatientID= @PatientID AND VisitID = @VisitID AND AccessionNumber = @AccessionNumber AND OrgID = @OrgID and ActionType=@pActionType)
+ BEGIN
+	 INSERT INTO OutSourcesFilesManager(FilePath,PatientID,VisitID,AccessionNumber,OrgID,Createdat,ActionType)
+	 SELECT @pFilePath,@PatientID,@VisitID,@AccessionNumber,@OrgID,GETDATE(),@pActionType;
+ END
+ ELSE
+ BEGIN
+  --already have record for the orgid insert into history table
+	INSERT INTO OutSourcesFilesManager_History(OutSourceFileID,FilePath,PatientID,VisitID,AccessionNumber,OrgID,CreatedBy,CreatedAt,HistoryOn,ActionType)
+	SELECT OutSourceFileID,FilePath,PatientID,VisitID,AccessionNumber,OrgID,
+	CASE WHEN ISNULL(ModifiedBy,0) <> 0 THEN ModifiedBy ELSE CreatedBy END,
+	CASE WHEN ISNULL(ModifiedAt,'') <> '' THEN ModifiedAt ELSE CreatedAt END,
+	GETDATE() , ActionType FROM OutSourcesFilesManager 
+	WHERE PatientID= @PatientID AND VisitID = @VisitID AND AccessionNumber = @AccessionNumber AND OrgID = @OrgID
+
+	UPDATE OUTFM SET OUTFM.FilePath=@pFilePath,OUTFM.ModifiedAt=GETDATE() FROM OutSourcesFilesManager OUTFM 
+	WHERE OUTFM.PatientID= @PatientID AND OUTFM.VisitID = @VisitID AND OUTFM.AccessionNumber = @AccessionNumber AND OUTFM.OrgID = @OrgID and OUTFM.ActionType=@pActionType
+ END
+ --
+
+ UPDATE OrderedInvestigations SET Status='Approve' WHERE VisitID=@VisitID AND AccessionNumber=@AccessionNumber;
+
+ UPDATE PatientInvestigation SET  Status='Approve',ApprovedAt=GETDATE(),ApprovedBy=171814 WHERE PatientVisitID=@VisitID AND AccessionNumber=@AccessionNumber;
+
+ DECLARE @VISITCNT INT,@APPROVEDCNT INT;
+ DECLARE @ReportType VARCHAR(10); 
+  SET @VISITCNT = (SELECT COUNT(1)    
+                                         FROM   OrderedInvestigations OI WITH (NOLOCK)    
+                                                INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                        ON OI.VisitID = PV.PatientVisitID   
+														WHERE  VisitID=@VisitID
+                                                           )  
+   SET @APPROVEDCNT = (SELECT COUNT(1)    
+                                            FROM   OrderedInvestigations OI    
+                                                   INNER JOIN PatientVisit PV WITH(NOLOCK)    
+                                                           on OI.VisitID = PV.PatientVisitID    
+             WHERE VisitID=@VisitID AND STATUS IN ( 'Approve', 'Cancel', 'Rejected')
+											 ) 
+
+ IF(@VISITCNT=@APPROVEDCNT)
+ BEGIN
+   SET @ReportType='Final' 
+ END
+ ELSE
+ BEGIN
+    SET @ReportType='Interim' 
+ END
+ declare @p9 dbo.UDT_Context
+insert into @p9 values(202,N'RLS',N'',355,6614,N'Doctor',0,171814,NULL,N'',355,106,N'',NULL,NULL,1,75,11,N'en-GB',452,N'uvs0urulk2vqhsvzchrxqn2e',NULL,NULL,NULL)
+
+ If(@pActionType = 'Pdf')
+ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM PatientVisit PV (NOLOCK) 
+                                INNER JOIN NOTIFICATIONS N (NOLOCK) ON N.IdentityID = PV.PatientVisitID 
+                         WHERE  PV.PatientVisitID = @VisitID and actionType in ('pdf')) 
+                          BEGIN 
+
+
+CREATE TABLE #PerformingNextAction 
+                                ( 
+                                   ContextType       Nvarchar(10), 
+                                   Description        Nvarchar(max), 
+                                   ActionType        Nvarchar(50), 
+                                   Attributes        Nvarchar(max), 
+                                   MailFrom          Nvarchar(max), 
+                                   MailTo            Nvarchar(max), 
+                                   CCTo              Nvarchar(max), 
+                        BccTo Nvarchar(max), 
+                                   Subject           Nvarchar(max), 
+                                   Name              nvarchar(255), 
+                                   PhoneNo           Nvarchar(50), 
+                                   RedirectURL       Nvarchar(max), 
+                                   PatientNumber     Nvarchar(max), 
+                                   MsgedDate         Nvarchar(50), 
+                                   OrgName           Nvarchar(max), 
+                                   LocationName      Nvarchar(max), 
+                                   ClientStatus      Nvarchar(max), 
+                                   BlockFrom         Nvarchar(max), 
+                                   BlockTo           Nvarchar(max), 
+                                   RefDoctorName     Nvarchar(max), 
+                                   PublishedDate     Nvarchar(max), 
+                                   InvsNValues       Nvarchar(max), 
+                                   AccessionNumber   Nvarchar(max), 
+                                   ClientName        Nvarchar(max), 
+                                   PatientDueStatus  Nvarchar(max), 
+                                   IsAttachment      char(1), 
+                                   Password          Nvarchar(max), 
+                                   AdditionalContext Nvarchar(max), 
+                                   Priority          Nvarchar(max), 
+                                   ApplicationUrl    Nvarchar(max), 
+                                    VisitNumber       Nvarchar(max), 
+                                   AttachmentName    Nvarchar(max), 
+                                   ClientCode        Nvarchar(max), 
+                                   SampleName        Nvarchar(max), 
+                                   TestName          Nvarchar(max), 
+                                   RejectedDate      Nvarchar(max), 
+                                   ReCollectedDate   Nvarchar(max), 
+                                   BarcodeNumber     Nvarchar(max), 
+                                   Reason            Nvarchar(max), 
+                                   IsClientblinding  Nvarchar(max),
+								   BillType NVARCHAR(10),
+								   ReportLanguage NVARCHAR(10),
+                                   NoofCopies INT ,
+								   ClientID BIGINT
+                                ) 
+
+                              insert into #PerformingNextAction 
+                              Exec pPerformingNextAction 
+                                @PageID=474, 
+                                @ButtonName=N'btnSaveToDispatch', 
+                     @RoleID=6614, 
+                            @PatientID=@PATIENTID, 
+                                @OrgID=@ORGID, 
+                                @PatientVisitID=@VISITID, 
+                                @pSampleID=0, 
+                                @pIds=N'', 
+                                @ContextInfo=@p9 
+
+                              declare @p1 dbo.ActionDetails 
+
+                              Insert into @p1 
+                                          (ActionType, 
+                                            Value, 
+                                           AdditionalContext, 
+                                           Category, 
+                                         version, 
+                                           Status, 
+                                           OrgID, 
+                                           OrgAddressID, 
+                    CreatedAt, 
+                                           CreatedBy, 
+                                           Template, 
+                                           ContextType, 
+                                           IsAttachment, 
+                                           Subject, 
+                                           AttachmentName, 
+    IsClientBlinding, 
+                    CCTo, 
+                           BccTo, 
+                                           ReportType, 
+             IsManualReport) 
+                              Select ActionType, 
+                                     CASE 
+                                       WHEN Actiontype = 'Email' THEN MailTo 
+                                       Else '' 
+                                     END 
+                                     AS 
+                                     Value 
+                                     , 
+              '<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>' 
+              + Convert(varchar, @VISITID) 
+              + 
+              '</VisitID><AccessionNumber>'+Convert(varchar, @AccessionNumber)+'</AccessionNumber></ContextInfo>' as 
+                         AdditionalContext, 
+                         'Report' 
+                         as 
+                         Category, 
+                         '' 
+                         as 
+                         Version, 
+                         '' 
+                         as 
+                         Status, 
+                         @ORGID 
+                         as 
+                         OrgID 
+                         , 
+                         @ORGADDRESSID 
+              as OrgAddressID, 
+                         '01/01/0001 00:00:00' as CreatedAt, 
+                         6700 
+                   as 
+                         CreatedBy, 
+                         Description 
+                         as 
+     Template, 
+ ContextType, 
+                      IsAttachment, 
+                        Subject,
+        
+		                    AttachmentName,
+                         NULL 
+      as 
+                         IsClientBlinding, 
+                  NULL 
+                         as 
+           CCTo, 
+                         NULL 
+                         as 
+                         BccTo 
+                         , 
+                         @ReportType,
+                         0 
+                         as 
+                         IsManualReport 
+                  FROM   #PerformingNextAction 
+                  where  ContextType = 'CP' AND ActionType in ('Pdf')
+
+                  exec pInsertNotificationsLis_OutSourcePDFMerge 
+                    @ACTIONDETAIL=@p1, 
+                    @CONTEXTINFO=@p9 
+
+
+
+         Drop table #PerformingNextAction 
+
+END
+ELSE
+BEGIN
+    DECLARE @SeqNum INT
+    DECLARE @maxSeqNum INT
+    SELECT Top 1 @SeqNum=ISNULL(Max(SEQ_NUM), 0) + 1 FROM Notifications (NOLOCK)
+    SELECT Top 1 @maxSeqNum=MAX(Seq_Num) FROM Notifications (NOLOCK) WHERE IdentityID = @VisitID
+UPDATE N SET STATUS = 'DIFFERED' FROM   NOTIFICATIONS N (NOLOCK) WHERE  IdentityID = @VisitID AND ActionType in ('PDF')
+    UPDATE N SET STATUS = 'DIFFERED' FROM   ReportSnapShot N (NOLOCK) WHERE  VisitID =   @VISITID AND Type in ('PDF')
+
+		
+DECLARE @AdditionalContext NVARCHAR(Max);      
+DECLARE @ano NVARCHAR(max)  
+SELECT @AdditionalContext =(SELECT AdditionalContext FROM NOTIFICATIONS WITH(NOLOCK)
+                                    WHERE  IdentityID = @VisitID and Seq_Num=@maxSeqNum AND ActionType in ('PDF'))
+DECLARE @xml XML;  
+SET @xml=@AdditionalContext
+set @ano=  @xml.value('(/ContextInfo/AccessionNumber)[1]', 'varchar(max)')
+SET @ano='<AccessionNumber>'+@ano+'</AccessionNumber>'
+
+DECLARE  @ApproveAccessionNumber NVARCHAR(Max);  
+SELECT @ApproveAccessionNumber = (SELECT Stuff((SELECT DISTINCT ', ' + CONVERT(NVARCHAR, Accessionnumber) FROM
+Orderedinvestigations OI WHERE Visitid=@VisitID  AND Status='Approve'
+FOR XML PATH('')), 1, 1, ''))
+SET @ApproveAccessionNumber='<AccessionNumber>'+@ApproveAccessionNumber+'</AccessionNumber>'
+SELECT @AdditionalContext = REPLACE(@AdditionalContext,@ano,@ApproveAccessionNumber)
+
+
+	INSERT INTO NOTIFICATIONS 
+                                                (ActionType, 
+                                                 Value, 
+                                                 AdditionalContext, 
+                                                 Category, 
+                                                 version, 
+                                                 Status, 
+                                                 OrgID, 
+                                                 OrgAddressID, 
+                                                 CreatedAt, 
+                                                 CreatedBy, 
+                                                 Template, 
+                                                 ContextType, 
+                                                 IsAttachment, 
+                                                 Subject, 
+                                                 Seq_Num, 
+                RetryCount, 
+                                           Priority, 
+                                                 AttachmentName, 
+                                                 IdentityID, 
+                                                 CompletionTime, 
+                                                 IsConfidentialTest, 
+                                                 IsClientBlinding, 
+                                                 RoundID, 
+                                                 EmailCC, 
+                                                 Content, 
+                                                 EmailBccTo, 
+                                                 PickedAt, 
+                                                 HasRepushed, 
+                                                 DelayReason, 
+                                                 ReportType) 
+                                    SELECT ActionType, 
+                                           Value, 
+                                           --AdditionalContext, 
+										   @AdditionalContext,
+                                           Category, 
+                                           version, 
+                                           ''        AS Status, 
+                                           OrgID, 
+                                           OrgAddressID, 
+                                           getdate() as CreatedAt, 
+      CreatedBy, 
+            Template, 
+ ContextType, 
+                     IsAttachment, 
+Subject,
+                                           @SeqNum AS Seq_Num, 
+                                           0         AS RetryCount, 
+                                           Priority, 
+                                           AttachmentName,
+              IdentityID, 
+                                           CompletionTime, 
+                                           IsConfidentialTest, 
+                                           IsClientBlinding, 
+                                           RoundID, 
+                                           EmailCC, 
+                                           Content, 
+                                           EmailBccTo, 
+                                           PickedAt, 
+                                           HasRepushed, 
+                                           DelayReason,
+										   @ReportType 
+                                    FROM   NOTIFICATIONS WITH(NOLOCK)
+                                    WHERE  IdentityID = @VisitID and Seq_Num=@maxSeqNum AND ActionType in ('PDF')
+
+END
+    SET @pReturnStatus=0; 
+ END
+
+ 
+ If(@pActionType = 'ROUNDBPDF') 
+ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM PatientVisit PV (NOLOCK) 
+                                INNER JOIN NOTIFICATIONS N (NOLOCK) ON N.IdentityID = PV.PatientVisitID 
+                         WHERE  PV.PatientVisitID = @VisitID and actionType in ('ROUNDBPDF')) 
+                          BEGIN 
+
+
+CREATE TABLE #PerformingNextActionRoundPDF
+                                ( 
+                                   ContextType       Nvarchar(10), 
+                                   Description        Nvarchar(max), 
+                                   ActionType        Nvarchar(50), 
+                                   Attributes        Nvarchar(max), 
+                                   MailFrom          Nvarchar(max), 
+                                   MailTo            Nvarchar(max), 
+                                   CCTo              Nvarchar(max), 
+                        BccTo Nvarchar(max), 
+                                   Subject           Nvarchar(max), 
+                                   Name              nvarchar(255), 
+                                   PhoneNo           Nvarchar(50), 
+                                   RedirectURL       Nvarchar(max), 
+                                   PatientNumber     Nvarchar(max), 
+                                   MsgedDate         Nvarchar(50), 
+                                   OrgName           Nvarchar(max), 
+                                   LocationName      Nvarchar(max), 
+                                   ClientStatus      Nvarchar(max), 
+                                   BlockFrom         Nvarchar(max), 
+                                   BlockTo           Nvarchar(max), 
+                                   RefDoctorName     Nvarchar(max), 
+                                   PublishedDate     Nvarchar(max), 
+                                   InvsNValues       Nvarchar(max), 
+                                   AccessionNumber   Nvarchar(max), 
+                                   ClientName        Nvarchar(max), 
+                                   PatientDueStatus  Nvarchar(max), 
+                                   IsAttachment      char(1), 
+                                   Password          Nvarchar(max), 
+                                   AdditionalContext Nvarchar(max), 
+                                   Priority          Nvarchar(max), 
+                                   ApplicationUrl    Nvarchar(max), 
+                                    VisitNumber       Nvarchar(max), 
+                                   AttachmentName    Nvarchar(max), 
+                                   ClientCode        Nvarchar(max), 
+                                   SampleName        Nvarchar(max), 
+                                   TestName          Nvarchar(max), 
+                                   RejectedDate      Nvarchar(max), 
+                                   ReCollectedDate   Nvarchar(max), 
+                BarcodeNumber     Nvarchar(max), 
+                                   Reason     Nvarchar(max), 
+                                   IsClientblinding  Nvarchar(max),
+								   BillType NVARCHAR(10),
+								   ReportLanguage NVARCHAR(10),
+                                   NoofCopies INT , 
+								  ClientID BIGINT
+                                ) 
+
+                              insert into #PerformingNextActionRoundPDF 
+                              Exec pPerformingNextAction 
+                                @PageID=474, 
+                                @ButtonName=N'btnSaveToDispatch', 
+                     @RoleID=6614, 
+                        @PatientID=@PATIENTID, 
+                                @OrgID=@ORGID, 
+                                @PatientVisitID=@VISITID, 
+                                @pSampleID=0, 
+                                @pIds=N'', 
+                                @ContextInfo=@p9 
+
+                              declare @p3 dbo.ActionDetails 
+
+                              Insert into @p3
+                                          (ActionType, 
+                                            Value, 
+                                           AdditionalContext, 
+                                           Category, 
+                                         version, 
+                                           Status, 
+                                           OrgID, 
+                                           OrgAddressID, 
+                    CreatedAt, 
+                                           CreatedBy, 
+                                           Template, 
+                                           ContextType, 
+                                           IsAttachment, 
+                                           Subject, 
+                                           AttachmentName, 
+    IsClientBlinding, 
+                    CCTo, 
+                           BccTo, 
+                                           ReportType, 
+             IsManualReport) 
+                              Select ActionType, 
+                                     CASE 
+                                       WHEN Actiontype = 'Email' THEN MailTo 
+                                       Else '' 
+                                     END 
+                                     AS 
+                                     Value 
+                                     , 
+              '<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>' 
+              + Convert(varchar, @VISITID) 
+              + 
+              '</VisitID><AccessionNumber>'+Convert(varchar, @AccessionNumber)+'</AccessionNumber></ContextInfo>' as 
+                         AdditionalContext, 
+                         'Report' 
+                         as 
+                         Category, 
+                         '' 
+                         as 
+                         Version, 
+                         '' 
+                         as 
+                         Status, 
+                         @ORGID 
+                         as 
+                         OrgID 
+                         , 
+                         @ORGADDRESSID 
+              as OrgAddressID, 
+                         '01/01/0001 00:00:00' as CreatedAt, 
+                         6700 
+                   as 
+                         CreatedBy, 
+                         Description 
+                         as 
+     Template, 
+ ContextType, 
+                      IsAttachment, 
+                        Subject,
+        
+		                    AttachmentName,
+                         NULL 
+      as 
+                         IsClientBlinding, 
+                  NULL 
+                         as 
+           CCTo, 
+                         NULL 
+                         as 
+                         BccTo 
+                         , 
+                         @ReportType,
+                         0 
+        as 
+                         IsManualReport 
+                  FROM   #PerformingNextActionRoundPDF 
+  where  ContextType = 'CP' AND ActionType in ('ROUNDBPDF')
+
+         
+                  exec pInsertNotificationsLis_OutSourcePDFMerge 
+                    @ACTIONDETAIL=@p3, 
+                    @CONTEXTINFO=@p9 
+
+
+
+         Drop table #PerformingNextActionRoundPDF 
+
+END
+ELSE
+BEGIN
+    DECLARE @RoundSeqNum INT
+    DECLARE @RoundmaxSeqNum INT
+    SELECT Top 1 @RoundSeqNum=ISNULL(Max(SEQ_NUM), 0) + 1 FROM Notifications (NOLOCK)
+    SELECT Top 1 @RoundmaxSeqNum=MAX(Seq_Num) FROM Notifications (NOLOCK) WHERE IdentityID = @VisitID
+UPDATE N SET STATUS = 'DIFFERED' FROM   NOTIFICATIONS N (NOLOCK) WHERE  IdentityID = @VisitID AND ActionType in ('ROUNDBPDF')
+    UPDATE N SET STATUS = 'DIFFERED' FROM   ReportSnapShot N (NOLOCK) WHERE  VisitID =   @VISITID AND Type in ('ROUNDBPDF')
+
+		
+DECLARE @AdditionalRoundContext NVARCHAR(Max);      
+DECLARE @accno NVARCHAR(max)  
+SELECT @AdditionalRoundContext =(SELECT AdditionalContext FROM NOTIFICATIONS WITH(NOLOCK)
+                                    WHERE  IdentityID = @VisitID and Seq_Num=@RoundmaxSeqNum AND ActionType in ('ROUNDBPDF'))
+DECLARE @axml XML;  
+SET @xml=@AdditionalRoundContext
+set @accno=  @xml.value('(/ContextInfo/AccessionNumber)[1]', 'varchar(max)')
+SET @accno='<AccessionNumber>'+@accno+'</AccessionNumber>'
+
+DECLARE  @RoundApproveAccessionNumber NVARCHAR(Max);  
+SELECT @RoundApproveAccessionNumber = (SELECT Stuff((SELECT DISTINCT ', ' + CONVERT(NVARCHAR, Accessionnumber) FROM
+Orderedinvestigations OI WHERE Visitid=@VisitID  AND Status='Approve'
+FOR XML PATH('')), 1, 1, ''))
+SET @ApproveAccessionNumber='<AccessionNumber>'+@RoundApproveAccessionNumber+'</AccessionNumber>'
+SELECT @AdditionalRoundContext = REPLACE(@AdditionalRoundContext,@accno,@RoundApproveAccessionNumber)
+
+
+	INSERT INTO NOTIFICATIONS 
+                                                (ActionType, 
+                                                 Value, 
+                                                 AdditionalContext, 
+                                                 Category, 
+                                                 version, 
+                                                 Status, 
+                                                 OrgID, 
+                                                 OrgAddressID, 
+                                                 CreatedAt, 
+                                                 CreatedBy, 
+                                                 Template, 
+                                                 ContextType, 
+                                                 IsAttachment, 
+                                                 Subject, 
+                                                 Seq_Num, 
+                RetryCount, 
+                                           Priority, 
+                                                 AttachmentName, 
+                                                 IdentityID, 
+                                                 CompletionTime, 
+                                                 IsConfidentialTest, 
+                                                 IsClientBlinding, 
+                                                 RoundID, 
+                                                 EmailCC, 
+                                                 Content, 
+                                                 EmailBccTo, 
+                                                 PickedAt, 
+                                                 HasRepushed, 
+                                                 DelayReason, 
+                                                 ReportType) 
+                                    SELECT ActionType, 
+                                           Value, 
+                                           --AdditionalContext, 
+										   @AdditionalRoundContext,
+                           Category, 
+                                           version, 
+          ''        AS Status, 
+                                         OrgID, 
+                                           OrgAddressID, 
+                                           getdate() as CreatedAt, 
+      CreatedBy, 
+            Template, 
+ ContextType, 
+                     IsAttachment, 
+Subject,
+                                           @RoundSeqNum AS Seq_Num, 
+                                           0         AS RetryCount, 
+                                           Priority, 
+                                           AttachmentName,
+              IdentityID, 
+                                         CompletionTime, 
+                                           IsConfidentialTest, 
+                                           IsClientBlinding, 
+                                           RoundID, 
+                                           EmailCC, 
+                                           Content, 
+                                           EmailBccTo, 
+                                           PickedAt, 
+                                           HasRepushed, 
+                                           DelayReason,
+										   @ReportType 
+                                    FROM   NOTIFICATIONS WITH(NOLOCK)
+                                    WHERE  IdentityID = @VisitID and Seq_Num=@RoundmaxSeqNum AND ActionType in ('ROUNDBPDF')
+
+END
+    SET @pReturnStatus=0; 
+ END
+ END
+ ELSE
+ BEGIN
+ 	SET @pReturnStatus= 1  -- Test not in Data base ;
+ END 
+    END TRY
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pSaveOutSourcingPDFFilesDetails @pVisitNumber = '+cast(@pVisitNumber as varchar)+'@pTestCode = '+@pTestCode
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+ END 

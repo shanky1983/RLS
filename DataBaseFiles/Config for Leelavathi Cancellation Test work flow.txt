@@ -1,0 +1,195 @@
+Declare @ORGID BIGINT=220
+Declare @MetaDataID BIGINT
+IF NOT EXISTS (SELECT 1 FROM MetaDataOrgMapping MDM     
+   INNER JOIN MetaData MD  ON MDM.MetadataID= MD.MetaDataID WHERE MD.Domain='TestCancellation' and MD.DisplayText='Cancel')
+BEGIN
+SELECT 1
+INSERT INTO MetaData(Domain,Code,DisplayText,LangCode,ParentID)
+SELECT 'TestCancellation','Cancel','Cancel','en-GB',0 
+Select @MetaDataID = MetaDataID from MetaData MD where MD.Domain='TestCancellation' and MD.DisplayText='Cancel'
+END
+
+IF NOT EXISTS (SELECT 1 FROM MetaDataOrgMapping MDM     
+   INNER JOIN MetaData MD  ON MDM.MetadataID= MD.MetaDataID WHERE MD.Domain='TestCancellation' and MD.DisplayText='Cancel')
+ BEGIN
+ SELECT 2
+ INSERT INTO MetaDataOrgMapping (MetadataID,OrgID,LangCode,DisplayText)
+ SELECT @MetaDataID,@ORGID,'en-GB','Cancel' 
+ END
+
+-----------------------------------
+
+Insert Into TaskActions(TaskActionID,ActionName,RedirectURL,DisplayTextTemplate,OrgID,Category,RoleID,ModuleID,IsShareable,LanguageCode)
+Select max(TaskActionID)+1,'TestCancellation','~\Lab\TestCancellation.aspx','Test Cancellation for {PatientName}({PatientNumber})(VisitNumber:{VisitNumber})',0,'TestCancellation',0,1,'Y','en-GB' from TaskActions
+
+-----------------Insert Into TaskActionOrgMapping  ---------------
+ Select * from TaskActions where   TaskActionID=99 and ActionName='TestCancellation'
+ Select * from Role where OrgID=220 and RoleName='Administrator'
+Insert Into TaskActionOrgMapping (TaskActionID,RoleID,OrgID)      
+Select 99,7253,220 
+---------------------------------
+Insert Into TaskActionMapping (OrgID,VisitPurposeID,OtherID,TaskActionID)      
+Select 220,3,7253,99  
+----------------------------
+
+Declare @ORGID BIGINT=220
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='IsTestCancellation')
+BEGIN
+--SELECT 1
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'IsTestCancellation','This Is IsTest Cancellation Task?','N'	 FROM ConfigKeyMaster 
+END
+
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE ConfigKey='IsTestCancellation')
+ BEGIN
+ --SELECT 2
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='IsTestCancellation'
+ END
+-------------------------------
+	
+	insert into LoginRole (RoleID,
+LoginID,
+StartDTTM,
+EndDTTM,
+Status,
+CreatedBy,
+CreatedAt,
+ModifiedBy,
+ModifiedAt,
+IsDefault)
+select 8047,
+LoginID,
+StartDTTM,
+EndDTTM,
+Status,
+CreatedBy,
+CreatedAt,
+ModifiedBy,
+ModifiedAt,
+IsDefault from LoginRole where RoleID=8044
+
+---------------------------
+SELECT DISTINCT PM.MappingID      
+ ,PM.ContextType      
+ FROM PageContextActionMapping PM      
+ INNER JOIN PageContext PN ON Pm.PageContextID = PN.PageContextID      
+ WHERE PN.PageID = 747      
+ AND PN.ButtonName = 'btnSubmit'      
+ AND PM.RoleID = 8047
+  
+Select * from PageContextActionMapping where roleid=8047 and pagecontextid=76 and templateid in (14,25,21)
+Select * from pagecontext where buttonname='btnSubmit' and pageid=747   
+Select * from  actionmanagertype where actiontypeid in (9,17,1)
+Select * from actiontemplate where templateid in (14,25,21)
+
+Insert Into pagecontext(PageID,ButtonName,ButtionValue)
+Select 747,'btnSubmit','Save'
+
+Insert into PageContextActionMapping(PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment)
+Select	76,	8047,	1,	14,	'CP',	'Report', 'Y' union
+Select	76,	8047,	17,	25,	'CP',	'Report', 'Y' union
+Select	76,	8047,	9,	21,	'P',	'Report', 'Y' union
+Select	76,	8047,	17,	25,	'P',	'Report', 'Y' 
+ ===================
+
+--------------
+Page mapping
+-----------------
+--Page Mapping
+
+DECLARE @pageID INT
+
+DECLARE @OrgID INT
+
+SELECT @OrgID=220
+
+---page insertion
+
+IF Not Exists(SELECT 1 FROM Pages WHERE PageName='TestCancellation')
+
+BEGIN
+
+INSERT INTO Pages(PageID,PageName,PageURL,CreatedAt,CreatedBy)
+
+SELECT MAX(PageID)+1,'TestCancellation','/Lab/TestCancellation.aspx',GETDATE(),369400 FROM Pages
+
+END
+
+--
+
+SELECT top 1 @pageID=pageID FROM Pages WHERE PageName='TestCancellation'
+
+--
+
+IF Not Exists (SELECT 1 FROM Menumaster WHERE DisplayText='Test Cancellation' and OrgID=@OrgId and PageID=@pageID)
+
+BEGIN
+
+INSERT INTO  Menumaster(DisplayText,CreatedAt,CreatedBy,Parentid,PageID,OrgID,LanguageCode,MenuID)
+
+SELECT 'Test Cancellation',GETDATE(),369400,0,@pageID,@OrgID,'en-GB',MAX(MenuID)+1 FROM Menumaster
+
+END
+
+--
+
+DECLARE @MenuID INT
+
+--
+
+SELECT top 1 @MenuID=MenuID FROM Menumaster WHERE DisplayText='Test Cancellation'and PageID=@pageID and OrgId=@OrgID
+
+--
+
+DECLARE @RoleID INT
+
+SELECT @RoleID=RoleID FROM Role WHERE OrgID=@OrgID and RoleName='Doctor' -- Lab tech, Sr.Lab tech, Admin, Credit Cont... roles
+
+IF Not Exists(SELECT 1 FROM RoleMenu WHERE RoleID=@RoleID and MenuID=@MenuID)
+
+BEGIN
+
+INSERT INTO RoleMenu(MenuID,RoleID,CreatedAt,CreatedBy,IsMapped)
+
+SELECT @MenuID,@RoleID,GETDATE(),369400,'Y'
+
+end
+
+--------------------
+
+--------------------
+USE [Liskernel]
+GO
+ 
+CREATE Table CancelledTestDetails (CancellationID int identity(1,1),
+	[Name] [nvarchar](255) NULL,
+	[ID] [bigint]  NULL,
+	[VisitID] [bigint] NOT NULL,
+	[CreatedBy] [bigint] NULL,
+	[ModifiedBy] [bigint] NULL,
+	[Status] [nvarchar](50) NULL,
+	[Type] [nvarchar](50) NULL,
+	[OrgID] [int] NULL,
+	[StudyInstanceUId] [nvarchar](150) NULL,
+	[ComplaintId] [int] NULL,
+	[ReferedToOrgID] [int] NULL,
+	[ReferedToLocation] [int] NULL,
+	[InvestigationsType] [nvarchar](max) NULL,
+	[ReferralID] [bigint] NULL,
+	[UID] [nvarchar](255) NULL,
+	[ReferenceType] [nchar](1) NULL,
+	[RefPhyName] [nvarchar](255) NULL,
+	[RefPhysicianID] [bigint] NULL,
+	[SequenceNo] [int] NULL,
+	[ReportDateTime] [datetime] NULL,
+	[TatDateTime] [datetime] NULL,
+	[IsStat] [nchar](1) NULL,
+	[SampleID] [nvarchar](50) NULL,
+	[TestSequenceOrder] [int] NULL
+)
+GO
+
+
+---------------------------------

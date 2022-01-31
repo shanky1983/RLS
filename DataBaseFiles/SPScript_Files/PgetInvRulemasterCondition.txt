@@ -1,0 +1,95 @@
+CREATE proc PgetInvRulemasterCondition
+@RuleTypeId int,
+@InvestigationID bigint,
+@pOrgID INT,
+@InvType varchar(50),
+@ContextInfo [UDT_Context] READONLY  
+AS
+Begin
+if(@RuleTypeId=0)
+set @RuleTypeId =null
+Create table #temp
+(
+RuleMasterId int,
+RuleTypeID int,
+InvestigationName nvarchar(200),
+InvestigationID bigint,
+InvType nvarchar(100),
+RemarksId int,
+Code nvarchar(200),
+ComponentName nvarchar(200),
+PostTriggerFunction  nvarchar(200),
+Condition nvarchar(max)
+)
+if(@InvestigationID!=0)
+Begin
+insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType, PAG.RemarksId,M.DisplayText as Code,Isnull(PAG.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,PAG.PatientCondition from InvRuleMaster IR(nolock)
+		 Inner Join PatientAgeGenderRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 where  IR.RuleTypeID=isnull(@RuleTypeId,IR.RuleTypeId) and IR.IsActive=1 and IR.InvestigationID=@InvestigationID and IR.InvType=@InvType
+		 order by PatientAgeGenderRuleId
+		   
+		  insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,TR.remarksID as RemarksId,M.DisplayText as Code,isnull(TR.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,TR.RuleCondition from InvRuleMaster IR(nolock)
+		 Inner join TestResultsRule TR (nolock) on IR.RuleMasterId=TR.RuleMasterId and TR.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 where  IR.RuleTypeID=isnull(@RuleTypeId,IR.RuleTypeId) and IR.IsActive=1 and IR.InvestigationID=@InvestigationID and IR.InvType=@InvType
+		 order by TestResultsRuleId
+		 
+		 insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		 select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,ME.remarksID as RemarksId,M.DisplayText as Code,isnull(ME.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,ME.ErrorCondition from InvRuleMaster IR(nolock)
+		 Inner join MachineErrorRule ME(nolock) on  ME.RuleMasterId = IR.RuleMasterId and  ME.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		  where  IR.RuleTypeID=isnull(@RuleTypeId,IR.RuleTypeId) and IR.IsActive=1 and IR.InvestigationID=@InvestigationID and IR.InvType=@InvType
+		 order by MachineErrorRuleId
+
+		Select distinct RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,
+		STUFF((SELECT Distinct ',' +  ComponentName FROM #temp TTT where  T.RuleMasterId=TTT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  ComponentName,PostTriggerFunction,STUFF(
+                 (SELECT ',' + Condition FROM #temp TT where T.RuleMasterId=TT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  Condition from #temp T
+		 group by RuleMasterId,RuleTypeID,Remarksid,InvestigationID,InvestigationName,InvType,RemarksId,Code,ComponentName,PostTriggerFunction
+		
+		 drop table #temp
+ End
+ else
+ Begin
+		 insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType, PAG.RemarksId,M.DisplayText as Code,Isnull(PAG.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,PAG.PatientCondition from InvRuleMaster IR(nolock)
+		 Inner Join PatientAgeGenderRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		where  IR.IsActive=1 and IR.RuleTypeId=isnull(@RuleTypeId,IR.RuleTypeId)
+		 order by PatientAgeGenderRuleId
+		   
+		  insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,TR.remarksID as RemarksId,M.DisplayText as Code,isnull(TR.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,TR.RuleCondition from InvRuleMaster IR(nolock)
+		 Inner join TestResultsRule TR (nolock) on IR.RuleMasterId=TR.RuleMasterId and TR.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 where  IR.IsActive=1 and IR.RuleTypeId=isnull(@RuleTypeId,IR.RuleTypeId)
+		 order by TestResultsRuleId
+		 
+		 insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		 select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,ME.remarksID as RemarksId,M.DisplayText as Code,isnull(ME.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,ME.ErrorCondition from InvRuleMaster IR(nolock)
+		 Inner join MachineErrorRule ME(nolock) on  ME.RuleMasterId = IR.RuleMasterId and  ME.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 where  IR.IsActive=1 and IR.RuleTypeId=isnull(@RuleTypeId,IR.RuleTypeId)
+		 order by MachineErrorRuleId
+
+		Select distinct RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,
+		STUFF((SELECT Distinct ',' +  ComponentName FROM #temp TTT where  T.RuleMasterId=TTT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  ComponentName,PostTriggerFunction,STUFF(
+                 (SELECT ',' + Condition FROM #temp TT where  T.RuleMasterId=TT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  Condition from #temp T
+		 group by RuleMasterId,RuleTypeID,Remarksid,InvestigationID,InvestigationName,InvType,RemarksId,Code,ComponentName,PostTriggerFunction
+		
+		 drop table #temp
+ End
+End
+

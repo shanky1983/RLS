@@ -1,0 +1,21 @@
+
+
+create Procedure [dbo].[pgetapprovedsmartreport]
+@OrgId INT,
+@PatientVisitId BIGINT 
+AS
+BEGIN
+	SELECT   NT.NotificationID,
+			NT.OrgID, 
+			OrgAddressID,
+			NT.Template, 
+			  NT.Category,
+			   NT.Seq_Num,
+			NT.AttachmentName, 
+			NT.IdentityID,
+			CASE WHEN UPPER(STATUS) = 'SUCCESS' THEN '1'
+				ELSE '0' END AS  Value
+	FROM Notifications NT 
+	WHERE NT.IdentityID = @PatientVisitId AND NT.OrgID = @OrgId
+	AND UPPER(NT.ActionType) = 'SMARTREPORT' AND UPPER(STATUS) = 'SUCCESS'
+END 

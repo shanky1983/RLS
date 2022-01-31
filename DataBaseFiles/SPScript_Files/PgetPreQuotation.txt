@@ -1,0 +1,31 @@
+CREATE procedure PgetPreQuotation
+@OrgID int,
+@Searchtext varchar(100),
+@ContaxtInfo UDT_CONTEXT READONLY
+
+As
+Begin
+
+declare @POrgID int
+set @POrgID=(select OrgId from @ContaxtInfo)
+--declare @Searchtext varchar(100)='Complete Hemogram'
+
+select IOM.DisplayText as Name, IOM.TestCode+ '~INV~' + Convert(varchar,IOm.InvestigationID) as Precision 
+from InvestigationOrgMapping IOM  
+where IOM.OrgID =@POrgID and IOM.DisplayText like '%'+@searchtext+'%' and IOM.IsActive='Y'
+
+union
+
+select IOG.DisplayText as Name, IOG.TestCode+ '~GRP~' + Convert(varchar,IOG.OrgGroupID) as Precision 
+from InvOrgGroup IOG
+inner join InvGroupMaster IGM on IGM.GroupID=IOG.AttGroupID 
+where IOG.OrgID =@POrgID and IOG.DisplayText like '%'+@searchtext+'%' and IOG.IsNonOrderable<>'Y' AND IGM.Type='GRP'
+
+union
+
+select IOG.DisplayText as Name, IOG.TestCode+'~PKG~' + Convert(varchar,IOG.OrgGroupID) as Precision
+from InvOrgGroup IOG 
+inner join CodeMapper CM on CM.IdentifyingID=iog.OrgGroupID AND CM.IdentifyingType='PKG'
+INNER JOIN CodeMaster CDM ON CDM.CodeMasterID=CM.CodeMasterID AND CDM.CodeType='PKG'
+where IOG.OrgID =@POrgID and IOG.DisplayText like '%'+@searchtext+'%'
+END

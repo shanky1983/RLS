@@ -1,0 +1,56 @@
+CREATE PROCEDURE pInsertPatientInBound_LIMSAPI
+(
+    @pOrgCode NVARCHAR(100),
+    @pType NVARCHAR(150),
+	@pPatientInBound [dbo].[PatientRegistrationInfo] READONLY
+)
+
+AS
+BEGIN   
+  IF @pType = 'NewPatientRegistration'
+     BEGIN
+	   IF( NOT EXISTS(SELECT 1 FROM ERPPatientInBound P WITH(NOLOCK)      
+								INNER JOIN @pPatientInBound PB ON P.PatientID = PB.PatientID AND P.OrgID = PB.OrgID ))      
+			BEGIN      
+				INSERT INTO ERPPatientInBound      
+							(PatientID, Name,        Gender,       DateofBirth,  
+							 Age,       Salutation,  MobileNumber, EMail,      [Address],  City,       
+							 [State],   Country,    PostalCode,    URNType,    URNNo,      DateOfRegistration, 
+							 OrgID,     LocationID, [Source],      [Status],   ClientID,   CreatedBy,    
+							 CreatedAt, IsProcessed )
+
+				SELECT       PB.PatientID, PB.PatientName, PB.Gender,     CASE YEAR(PB.DateofBirth) WHEN 9999 THEN NULL ELSE PB.DateofBirth END, 
+				             PB.Age,       PB.Salutation, PB.MobileNumber, PB.EMail,     PB.[Address],  PB.City,       
+							 PB.[State],   PB.Country,    PB.PostalCode,   PB.URNType,   PB.URNNo,      CASE YEAR(PB.DateOfRegistration) WHEN 9999 THEN NULL ELSE PB.DateOfRegistration END, 
+							 PB.OrgID,     PB.LocationID,  PB.[Source],     PB.[Status],  PB.ClientID,   PB.CreatedBy,  
+							 CASE YEAR(PB.CreatedAt) WHEN 9999 THEN NULL ELSE PB.CreatedAt END,  'N'   
+				FROM @pPatientInBound PB      
+		   END
+		ELSE 
+		   BEGIN
+		        
+				--INSERT INTO ERPPatientInBound_Hist
+				--			 (PatientID, Name,     Gender,        DateofBirth,   Age,    Salutation,           MobileNumber, EMail,       [Address],       
+				--			 [State],   Country,   PostalCode,    URNType,       URNNo,  DateOfRegistration,   City,         LocationID,  [Source], 
+				--			 [Status],  ClientID,  IsProcessed)
+				--Select ERP.PatientID, ERP.Name,    ERP.Gender,     ERP.DateofBirth, ERP.Age,   ERP.Salutation,         ERP.MobileNumber, ERP.EMail, ERP.[Address],       
+				--			ERP.[State],   ERP.Country, ERP.PostalCode, ERP.URNType,     ERP.URNNo, ERP.DateOfRegistration, ERP.City,     ERP.LocationID,  ERP.[Source], 
+				--			ERP.[Status], ERP.ClientID, ERP.IsProcessed
+				--From ERPPatientInBound ERP
+				--INNER JOIN  @pPatientInBound PIB ON ERP.PatientID = PIB.PatientID AND ERP.OrgID = PIB.OrgID
+
+				UPDATE ERP SET  ERP.Name = PB.PatientName, 
+								  ERP.Gender= PB.Gender,               ERP.Age = PB.Age,      			ERP.Salutation = PB.Salutation,  
+								  ERP.MobileNumber = PB.MobileNumber,  ERP.EMail = PB.EMail,  			ERP.[Address] = PB.[Address],  
+								  ERP.City = PB.City,   			   ERP.[State] = PB.[State],  		ERP.Country = PB.Country,   
+								  ERP.PostalCode = PB.PostalCode,	   ERP.URNType = PB.URNType,    	ERP.URNNo = PB.URNNo,
+								  ERP.[Status] = PB.[Status],      	   ERP.ClientID = PB.ClientID,      ERP.ModifiedBy =PB.ModifiedBy, 					 
+								  ERP.ISProcessed = 'N', 
+								  ERP.DateofBirth = CASE YEAR(PB.DateofBirth) WHEN 9999 THEN NULL ELSE PB.DateofBirth END,
+								  ERP.DateOfRegistration = CASE YEAR(PB.DateOfRegistration) WHEN 9999 THEN NULL ELSE PB.DateOfRegistration END,
+								  ERP.ModifiedAt = CASE YEAR(PB.CreatedAt) WHEN 9999 THEN NULL ELSE PB.CreatedAt END
+				  FROM ERPPatientInBound ERP
+				  INNER JOIN @pPatientInBound PB ON PB.PatientID = ERP.PatientID AND PB.OrgID = ERP.OrgID
+		   END
+	 END
+END

@@ -1,0 +1,267 @@
+
+CREATE PROCEDURE [dbo].[pGetDumpEntireWithoutCancelForBDM] @Fromdate DATETIME = NULL
+,@Todate DATETIME = NULL
+,@pOrgID INT
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+AS
+BEGIN
+SET QUOTED_IDENTIFIER ON
+Declare @CodeSchemeid int
+set @CodeSchemeid=(select Codetypeid from codingschemeorgmapping where orgid=@pOrgID and isprimary='Y')
+
+
+---exec pGetDumpEntireWithoutCancel @Fromdate='01-06-2018 00:00:00',@Todate='30-06-2018 23:00:00',@pOrgID=159
+
+
+SELECT * into #tempClientAccess
+FROM (
+SELECT DISTINCT 1 AS zxc
+,og.NAME AS OrgName
+,og.Orgid AS OrgCode
+,oa.LocationCode
+,pv.VisitDate AS RegisteredDate
+,pv.VisitNumber
+,fb.BillNumber
+,pt.NAME AS PatientName
+,pt.PatientNumber
+,cm.ClientName
+,cm.ClientCode
+,CASE cm.IsCash
+WHEN 'Y'
+THEN 'CashClient'
+WHEN 'N'
+THEN 'CreditClient'
+END AS ClientType ---15588
+,pv.ReferingPhysicianName
+,oa.Location
+--,cp.IdentifyingId
+,com.CodeName AS Tcode
+,bd.FeeDescription AS TestName
+,bd.ActualAmount AS MRP
+,bd.Amount AS NetAmount
+,oi.STATUS
+,bd.FeeType AS Type
+,DM.DeptName AS DepartmentName
+,Case When ad.ContactType Like '%BDM%' THEN ad.Name  ELSE '' END  AS BDM
+,Case When ad.ContactType Like '%ASM%' THEN ad.Name  ELSE '' END  AS ASM
+,Case When ad.ContactType Like '%RSM%' THEN ad.Name  ELSE '' END  AS RSM
+--,Bd.discountAmount
+,RP.PhysicianCode
+,CASE WHEN RPC.Category='----select-----' THEN '' ELSE RPC.Category END AS 'Category'
+,C.CategoryName  AS 'RefFeecategory'
+,ERM.Name
+FROM patientvisit pv WITH (NOLOCK)
+INNER JOIN patient pt WITH (NOLOCK) ON pt.PatientId = pv.PatientId
+AND pt.Orgid = pv.Orgid
+INNER JOIN OrganizationAddress oa ON oa.OrgID = pv.OrgID
+AND oa.AddressID = pv.OrgAddressID
+INNER JOIN VisitClientMapping vcm WITH (NOLOCK) ON vcm.VisitID = pv.PatientVisitId
+AND vcm.OrgID = pv.OrgID
+INNER JOIN clientmaster cm WITH (NOLOCK) ON cm.ClientId = vcm.ClientId
+AND cm.Orgid = pv.OrgID
+
+
+INNER JOIN AddressDetails ad (NOLOCK) ON cm.ClientId = ad.ReferenceID
+AND cm.Orgid = ad.OrgID
+
+INNER JOIN FinalBill fb WITH (NOLOCK) ON fb.VisitID = pv.PatientVisitId
+AND fb.OrgId = pv.Orgid --and IsCreditBill='Y'
+INNER JOIN BillingDetails bd WITH (NOLOCK) ON bd.FinalBillId = fb.FinalBillId
+AND bd.OrgID = pv.OrgID --and FeeId>0
+INNER JOIN orderedinvestigations oi WITH (NOLOCK) ON oi.VisitId = pv.PatientVisitId
+AND oi.Orgid = pv.Orgid AND OI.ID = BD.FeeId
+LEFT JOIN MISOrderedDept D ON D.Accessionnumber=oi.Accessionnumber 
+LEFT JOIN InvDeptMaster DM ON DM.DeptID=D.DeptID and DM.Orgid=OI.Orgid
+INNER JOIN codemapper cp WITH (NOLOCK) ON cp.IdentifyingID = oi.Id
+INNER JOIN codemaster com WITH (NOLOCK) ON com.CodemasterID = cp.CodemasterId
+AND CP.identifyingtype = com.CodeType
+INNER JOIN Organization og WITH (NOLOCK) ON og.Orgid = pv.Orgid
+LEFT JOIN ReferingPhysician RP WITH (NOLOCK) ON RP.ReferingPhysicianID=PV.ReferingPhysicianID AND RP.OrgID=PV.OrgID
+LEFT JOIN ReferingPhyCategoryMapping RPC WITH (NOLOCK) ON RP.ReferingPhysicianID=RPC.ReferingPhysicianID
+LEFT JOIN Category C WITH (NOLOCK) ON RP.RefFeeCategoryid=C.CategoryID
+LEFT JOIN EmployeeRegMaster ERM WITH (NOLOCK) ON ERM.EmpID=RP.ContactPersonID AND ERM.OrgID=RP.ContactPersonID
+WHERE pv.Orgid = @pOrgID
+AND Convert(DATE, pv.VisitDate) BETWEEN Convert(DATE, @FromDate)
+AND CONVERT(DATE, @Todate)
+AND OI.PkgName IS NULL
+AND OI.STATUS <> 'Cancel' AND   OI.STATUS <> 'Retest'
+AND OI.Type = 'INV'
+AND Com.CodeType = 'Investigations'
+AND com.Codeschemeid = @CodeSchemeid  AND Isnull(VCM.IsActive, 'Y') != 'N' 
+--) a--and com.codename <>'BC003'
+UNION ALL
+SELECT DISTINCT 1 AS zxc
+,og.NAME AS OrgName
+,og.Orgid AS OrgCode
+,oa.LocationCode
+,pv.VisitDate AS RegisteredDate
+,pv.VisitNumber
+,fb.BillNumber
+,pt.NAME AS PatientName
+,pt.PatientNumber
+,cm.ClientName
+,cm.ClientCode
+,CASE cm.IsCash
+WHEN 'Y'
+THEN 'CashClient'
+WHEN 'N'
+THEN 'CreditClient'
+END AS ClientType
+,pv.ReferingPhysicianName
+,oa.Location
+--,cp.IdentifyingId
+,com.CodeName AS Tcode
+,bd.FeeDescription AS TestName
+--,oi.Type
+,bd.ActualAmount AS MRP
+,bd.Amount AS NetAmount
+,oi.STATUS --,Bd.discountAmount
+,bd.FeeType AS Type
+,DM.DeptName AS DepartmentName
+,Case When ad.ContactType Like '%BDM%' THEN ad.Name  ELSE '' END  AS BDM
+,Case When ad.ContactType Like '%ASM%' THEN ad.Name  ELSE '' END  AS ASM
+,Case When ad.ContactType Like '%RSM%' THEN ad.Name  ELSE '' END  AS RSM
+,RP.PhysicianCode
+,CASE WHEN RPC.Category='----select-----' THEN '' ELSE RPC.Category END AS 'Category'
+,C.CategoryName  AS 'RefFeecategory'
+,ERM.Name
+FROM patientvisit pv WITH (NOLOCK)
+INNER JOIN patient pt WITH (NOLOCK) ON pt.PatientId = pv.PatientId
+AND pt.Orgid = pv.Orgid
+INNER JOIN OrganizationAddress oa ON oa.OrgID = pv.OrgID
+AND oa.AddressID = pv.OrgAddressID
+INNER JOIN VisitClientMapping vcm WITH (NOLOCK) ON vcm.VisitID = pv.PatientVisitId
+AND vcm.OrgID = pv.OrgID
+INNER JOIN clientmaster cm WITH (NOLOCK) ON cm.ClientId = vcm.ClientId
+AND cm.Orgid = pv.OrgID
+
+INNER JOIN AddressDetails ad (NOLOCK) ON cm.ClientId = ad.ReferenceID
+AND cm.Orgid = ad.OrgID
+
+INNER JOIN FinalBill fb WITH (NOLOCK) ON fb.VisitID = pv.PatientVisitId
+AND fb.OrgId = pv.OrgID --and IsCreditBill='Y'
+INNER JOIN BillingDetails bd WITH (NOLOCK) ON bd.FinalBillId = fb.FinalBillId
+AND bd.OrgID = pv.OrgID --and FeeId>0
+INNER JOIN orderedinvestigations oi WITH (NOLOCK) ON oi.VisitId = pv.PatientVisitId
+AND oi.Orgid = pv.OrgID AND OI.ID = BD.FeeId
+LEFT JOIN MISOrderedDept D ON D.Accessionnumber=oi.Accessionnumber 
+LEFT JOIN InvDeptMaster DM ON DM.DeptID=D.DeptID and DM.Orgid=OI.Orgid
+INNER JOIN InvOrgGroup iog WITH (NOLOCK) ON iog.AttGroupId = oi.ID
+AND iog.OrgID = pv.OrgID
+INNER JOIN codemapper cp WITH (NOLOCK) ON cp.IdentifyingID = iog.OrggroupId
+INNER JOIN codemaster com WITH (NOLOCK) ON com.CodemasterID = cp.CodemasterId
+AND CP.identifyingtype = com.CodeType
+INNER JOIN Organization og WITH (NOLOCK) ON og.OrgID = pv.OrgID
+LEFT JOIN ReferingPhysician RP WITH (NOLOCK) ON RP.ReferingPhysicianID=PV.ReferingPhysicianID AND RP.OrgID=PV.OrgID
+LEFT JOIN ReferingPhyCategoryMapping RPC WITH (NOLOCK) ON RP.ReferingPhysicianID=RPC.ReferingPhysicianID
+LEFT JOIN Category C WITH (NOLOCK) ON RP.RefFeeCategoryid=C.CategoryID
+LEFT JOIN EmployeeRegMaster ERM WITH (NOLOCK) ON ERM.EmpID=RP.ContactPersonID AND ERM.OrgID=RP.ContactPersonID
+WHERE pv.OrgID = @pOrgID
+AND Convert(DATE, pv.VisitDate) BETWEEN Convert(DATE, @FromDate)
+AND CONVERT(DATE, @Todate)
+AND OI.PkgName IS NULL
+AND OI.STATUS <> 'Cancel' AND   OI.STATUS <> 'Retest'
+AND OI.Type = 'Grp'
+AND Com.CodeType = 'Grp'
+AND com.Codeschemeid = @CodeSchemeid  AND Isnull(VCM.IsActive, 'Y') != 'N' 
+UNION ALL
+--select * into #TmpS from  (
+SELECT DISTINCT 1 AS zxc
+,og.NAME AS OrgName
+,og.OrgID AS OrgCode
+,oa.LocationCode
+,pv.VisitDate AS RegisteredDate
+,pv.VisitNumber
+,fb.BillNumber
+,pt.NAME AS PatientName
+,pt.PatientNumber
+,cm.ClientName
+,cm.ClientCode
+,CASE cm.IsCash
+WHEN 'Y'
+THEN 'CashClient'
+WHEN 'N'
+THEN 'CreditClient'
+END AS ClientType
+,pv.ReferingPhysicianName
+,oa.Location
+--,cp.IdentifyingId
+,com.CodeName AS Tcode
+,bd.FeeDescription AS TestName
+,bd.ActualAmount AS MRP
+,bd.Amount AS NetAmount
+,'' as Status --oi.STATUS
+--,BD.discountAmount
+,bd.FeeType AS Type,
+
+(STUFF((SELECT ', ' + CAST(DM.DeptName AS VARCHAR(10)) [text()]
+         FROM orderedinvestigations O LEFT JOIN MISOrderedDept D ON D.Accessionnumber=o.Accessionnumber 
+		 LEFT JOIN InvDeptMaster DM ON DM.DeptID=D.DeptID and DM.Orgid=O.Orgid 
+		 where O.Visitid=3013866 and O.OrgID=232
+		 Group by DM.DeptName
+         FOR XML PATH(''), TYPE) .value('.','NVARCHAR(MAX)'),1,2,' ')) AS DepartmentName
+		  
+,Case When ad.ContactType Like '%BDM%' THEN ad.Name  ELSE '' END  AS BDM
+,Case When ad.ContactType Like '%ASM%' THEN ad.Name  ELSE '' END  AS ASM
+,Case When ad.ContactType Like '%RSM%' THEN ad.Name  ELSE '' END  AS RSM
+,RP.PhysicianCode
+,CASE WHEN RPC.Category='----select-----' THEN '' ELSE RPC.Category END AS 'Category'
+,C.CategoryName  AS 'RefFeecategory'
+,ERM.Name
+FROM patientvisit pv WITH (NOLOCK)
+INNER JOIN patient pt WITH (NOLOCK) ON pt.PatientId = pv.PatientId
+AND pt.OrgID = pv.OrgID
+INNER JOIN OrganizationAddress oa ON oa.OrgID = pv.OrgID
+AND oa.AddressID = pv.OrgAddressID
+INNER JOIN VisitClientMapping vcm WITH (NOLOCK) ON vcm.VisitID = pv.PatientVisitId
+AND vcm.OrgID = pv.OrgID
+INNER JOIN clientmaster cm WITH (NOLOCK) ON cm.ClientId = vcm.ClientId
+AND cm.Orgid = pv.OrgID
+
+INNER JOIN AddressDetails ad (NOLOCK) ON cm.ClientId = ad.ReferenceID
+AND cm.Orgid = ad.OrgID
+
+INNER JOIN FinalBill fb WITH (NOLOCK) ON fb.VisitID = pv.PatientVisitId
+AND fb.OrgId = pv.OrgID --and IsCreditBill='Y'
+INNER JOIN BillingDetails bd WITH (NOLOCK) ON bd.FinalBillId = fb.FinalBillId
+AND bd.OrgID = pv.OrgID --and FeeId>0
+INNER JOIN orderedinvestigations oi WITH (NOLOCK) ON oi.VisitId = pv.PatientVisitId
+AND oi.Orgid = pv.OrgID AND OI.PkgID = BD.FeeId
+INNER JOIN invorggroup iog WITH (NOLOCK) ON iog.AttgroupId = OI.PkgID
+AND iog.OrgID = pv.OrgID
+INNER JOIN codemapper cp WITH (NOLOCK) ON cp.IdentifyingID = iog.OrgGroupID
+INNER JOIN codemaster com WITH (NOLOCK) ON com.CodemasterID = cp.CodemasterId
+AND CP.identifyingtype = com.CodeType
+INNER JOIN Organization og WITH (NOLOCK) ON og.OrgID = pv.OrgID
+LEFT JOIN ReferingPhysician RP WITH (NOLOCK) ON RP.ReferingPhysicianID=PV.ReferingPhysicianID AND RP.OrgID=PV.OrgID
+LEFT JOIN ReferingPhyCategoryMapping RPC WITH (NOLOCK) ON RP.ReferingPhysicianID=RPC.ReferingPhysicianID
+LEFT JOIN Category C WITH (NOLOCK) ON RP.RefFeeCategoryid=C.CategoryID
+LEFT JOIN EmployeeRegMaster ERM WITH (NOLOCK) ON ERM.EmpID=RP.ContactPersonID AND ERM.OrgID=RP.ContactPersonID
+WHERE pv.OrgID = @pOrgID
+AND Convert(DATE, pv.VisitDate) BETWEEN Convert(DATE, @FromDate)
+AND CONVERT(DATE, @Todate)
+AND OI.PkgName IS NOT NULL
+AND OI.STATUS <> 'Cancel' AND   OI.STATUS <> 'Retest'
+AND Com.CodeType = 'PKG'
+AND com.Codeschemeid = @CodeSchemeid  AND Isnull(VCM.IsActive, 'Y') != 'N' 
+) t
+
+Select Distinct OrgName,OrgCode,LocationCode,RegisteredDate,VisitNumber,BillNumber,PatientName,PatientNumber,ClientName,ClientCode,ClientType,ReferingPhysicianName,
+Location,Tcode,TestName,MRP,NetAmount,Status,Type,DepartmentName,
+
+max(BDM) over ( partition by VisitNumber,clientcode,testname) as BDM,
+max(ASM) over ( partition by VisitNumber,clientcode,testname) as ASM,
+max(RSM) over ( partition by VisitNumber,clientcode,testname) as RSM 
+,PhysicianCode,Category,RefFeecategory,Name AS 'Sales Executive - Name' from #tempClientAccess
+
+Drop table #tempClientAccess
+--ORDER BY RegisteredDate
+END
+
+
+
+

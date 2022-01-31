@@ -1,0 +1,1666 @@
+                 
+CREATE Proc [dbo].[pInsertbulkRegistrationDetails_afterbulkupload] 
+as                
+  Begin                
+      Set Nocount ON                
+
+	 Declare  @PPatientDetail  table
+	 (
+	 [BulkRegistrationID] [bigint],
+    [ID] [int] NULL,
+	[OrgName] [nvarchar](60) NULL,
+	[SlNo] [int] NULL,
+	[PDate] [datetime] NULL,
+	[SDate] [datetime] NULL,
+	[SCollectedBy] [nvarchar](500) NULL,
+	[PatID] [nvarchar](200) NULL,
+	[Title] [nvarchar](200) NULL,
+	[Name] [nvarchar](1000) NULL,
+	[Age] [nvarchar](5) NULL,
+	[AgeType] [nvarchar](20) NULL,
+	[Sex] [nvarchar](20) NULL,
+	[Location] [nvarchar](1000) NULL,
+	[Doctor] [nvarchar](1000) NULL,
+	[RefHospital] [nvarchar](1000) NULL,
+	[Priority] [nvarchar](200) NULL,
+	[DispatchMode] [nvarchar](200) NULL,
+	[TESTSREQUESTED] [nvarchar](max) NULL,
+	[CHARGED] [decimal](19, 2) NULL,
+	[AmountPaid] [decimal](19, 2) NULL,
+	[AmountDisocunt] [decimal](19, 2) NULL,
+	[DisocuntReason] [nvarchar](max) NULL,
+	[DiscountAuthorisedBy] [nvarchar](500) NULL,
+	[History] [varchar](max) NULL,
+	[Remarks] [varchar](max) NULL,
+	[MobileNo] [nvarchar](40) NULL,
+	[CreatedBy] [nvarchar](500) NULL,
+	[ClientCode] [nvarchar](200) NULL,
+	[EmailID] [nvarchar](200) NULL,
+	[ErrorStatus] [bit] NOT NULL,
+	[ErrorDesc] [nvarchar](4000) NULL,
+	[ValidateData] [nvarchar](400) NULL,
+	[ClientID] [bigint] NULL,
+	[LOCATIONID] [bigint] NULL,
+	[TitleID] [bigint] NULL,
+	[DoctorID] [bigint] NULL,
+	[RefHospitalID] [bigint] NULL,
+	[TESTCODE] [nvarchar](max) NULL,
+	[SCollectedByID] [bigint] NULL,
+	[PriorityID] [int] NULL,
+	[IsClientPatient] [varchar](6) NULL,
+	[CreatedbyId] [bigint] NULL,
+	[RateId] [bigint] NULL,
+	[TestType] [varchar](30) NULL,
+	[FeeId] [varchar](15) NULL,
+	[IsDiscountable] [varchar](3) NULL,
+	[DueAmount] [decimal](18, 2) NULL,
+	[OrgId] [int] NULL,
+	[DiscountAuthorisedByID] [bigint] NULL,
+	[HasHealthCoupon] [varchar](3) NULL,
+	[MyCardActiveDays] [nvarchar](30) NULL,
+	[IsCreditBill] [varchar](15) NULL,
+	[CampId] [int] NULL,
+	[PatientNumber] [nvarchar](60) NULL,
+	[DOB] [datetime] NULL,
+	[HealthHubID] [varchar](100) NULL,
+	[EmployeeID] [varchar](100) NULL,
+	[SourceType] [varchar](250) NULL,
+	[BookingID] [varchar](100) NULL,
+	[ExternalRefNo] [varchar](100) NULL,
+	[SampleNumber] [varchar](250) NULL
+	 )           
+       Declare @ContextInfo    [UDT_Context]     
+	  
+	   Insert Into @PPatientDetail (BulkRegistrationID,ID,OrgName,SlNo,PDate,	
+	  SDate,SCollectedBy,PatID,Title,	
+	  Name,	Age,AgeType,Sex,Location,Doctor,
+	  RefHospital,Priority,DispatchMode,TESTSREQUESTED,
+	  CHARGED,	AmountPaid,	AmountDisocunt,	DisocuntReason,
+	  	DiscountAuthorisedBy,	History	,Remarks,
+		MobileNo	,CreatedBy	,ClientCode,
+		EmailID,	ErrorStatus,ErrorDesc,	ValidateData,	
+		ClientID,	
+		LOCATIONID,	TitleID	,DoctorID,	RefHospitalID,	TESTCODE,	
+		SCollectedByID,	PriorityID,	IsClientPatient,	CreatedbyId	,
+		RateId	,TestType,	FeeId,	IsDiscountable,	DueAmount	,OrgId,
+			DiscountAuthorisedByID,	HasHealthCoupon,	MyCardActiveDays,
+				IsCreditBill,	CampId,	PatientNumber,	DOB,	
+				HealthHubID,	EmployeeID,	SourceType,	BookingID,	ExternalRefNo,	
+				SampleNumber)
+				select top 50 BulkRegistrationID,ID,OrgName,SlNo,PDate,	
+	  SDate,SCollectedBy,row_number()over(order by BulkRegistrationID asc),Title,	
+	  Name,	Age,AgeType,Sex,Location,Doctor,
+	  RefHospital,Priority,DispatchMode,TESTSREQUESTED,
+	  CHARGED,	AmountPaid,	AmountDisocunt,	DisocuntReason,
+	  	DiscountAuthorisedBy,	History	,Remarks,
+		MobileNo	,CreatedBy	,ClientCode,
+		EmailID,	ErrorStatus,ErrorDesc,	ValidateData,	
+		ClientID,	
+		LOCATIONID,	TitleID	,DoctorID,	RefHospitalID,	TESTCODE,	
+		SCollectedByID,	PriorityID,	IsClientPatient,	CreatedbyId	,
+		RateId	,TestType,	FeeId,	IsDiscountable,	DueAmount	,OrgId,
+			DiscountAuthorisedByID,	HasHealthCoupon,	MyCardActiveDays,
+				IsCreditBill,	CampId,	PatientNumber,	DOB,	
+				HealthHubID,	EmployeeID,	SourceType,	BookingID,ExternalRefNo,	
+				SampleNumber from CovidBulkRegistrationDetails where IsProcess=0 
+				order by BulkRegistrationID asc
+
+				
+	             
+      DECLARE @tblActionList TABLE                
+        (                
+           ContextType       NVARCHAR(100) DEFAULT(''),                
+           Description       NVARCHAR(max) DEFAULT(''),                
+           ActionType        NVARCHAR(248) DEFAULT(''),                
+           Attributes        NVARCHAR(1000) DEFAULT(''),                
+           MailFrom          NVARCHAR(248) DEFAULT(''),                
+           MailTo            NVARCHAR(1000) DEFAULT(''),                
+           CCTo              NVARCHAR(248) DEFAULT(''),                
+           BccTo             NVARCHAR(248) DEFAULT(''),                
+           Subject           NVARCHAR(1000) DEFAULT(''),                
+           Name              NVARCHAR(248) DEFAULT(''),                
+           PhoneNo           NVARCHAR(248) DEFAULT(''),                
+           RedirectURL       NVARCHAR(510) DEFAULT(''),                
+           PatientNumber     NVARCHAR(248) DEFAULT(''),                
+           MsgedDate         NVARCHAR(248) DEFAULT(''),                
+           OrgName           NVARCHAR(248) DEFAULT(''),                
+           LocationName      NVARCHAR(248) DEFAULT(''),                
+           ClientStatus      NVARCHAR(100) DEFAULT(''),                
+           BlockFrom         NVARCHAR(100) DEFAULT(''),                
+           BlockTo           NVARCHAR(100) DEFAULT(''),                
+           RefDoctorName     NVARCHAR(100) DEFAULT(''),                
+           PublishedDate     NVARCHAR(100) DEFAULT(''),                
+           InvsNValues       NVARCHAR(max) DEFAULT(''),                
+           AccessionNumber   NVARCHAR(max) DEFAULT(''),                
+           ClientName        NVARCHAR(248) DEFAULT(''),                
+           PatientDueStatus  NVARCHAR(100) DEFAULT(''),                
+           IsAttachment      NVARCHAR(100) DEFAULT(''),                
+           Password          NVARCHAR(510) DEFAULT(''),                
+           AdditionalContext NVARCHAR(510) DEFAULT(''),                
+           Priority          INT DEFAULT(1),                
+           ApplicationUrl    NVARCHAR(max) DEFAULT(''),                
+           VisitNumber       NVARCHAR(100) DEFAULT(''),                
+           AttachmentName    NVARCHAR(1000) DEFAULT(''),                
+           ClientCode        NVARCHAR(40) DEFAULT(''),                
+           SampleName        NVARCHAR(200) DEFAULT(''),                
+           TestName          NVARCHAR(4000) DEFAULT(''),                
+           RejectedDate      DATETIME DEFAULT(''),                
+           ReCollectedDate   DATETIME,                
+           BarcodeNumber     NVARCHAR(510),                
+           Reason            NVARCHAR(2000),                
+           IsClientblinding  NVARCHAR(40)                
+        )                
+      --Declare @ConRoleID BIGINT                
+                
+      --select @ConRoleID = RoleID                
+      --from   @ContextInfo                
+                            
+      Declare @Loop    int = 1,                
+              @l_Count int = 0                
+      Declare @L_orgid    int,                
+              @L_TestType NVARCHAR(40),                
+              @L_Testid   int,                
+              @L_TestName NVARCHAR(4000),                
+              @L_TestCode NVARCHAR(2000),                
+              @L_Client   int = 0,                
+              @L_IS2Ped   NVARCHAR(40) = 'N'                
+      Declare @L_RateId          bigint = 0,                
+              @L_RateAmount      decimal(18, 2),         
+              @L_RateRemark      NVARCHAR(200),                
+              @L_TotalRateAmount decimal(18, 2),   
+   @L_MobileNo        NVARCHAR(40)  
+      Declare @L_BaseCurrencyid int,                
+              @L_OrgAddressid   bigint,                
+             @L_PatientName    NVARCHAR(200),                
+              @L_Sex            NVARCHAR(2),                
+              @L_Age            NVARCHAR(10),                
+              @L_AgeType        NVARCHAR(30),                
+              @L_Externalno     NVARCHAR(40),                
+              @L_Physician      NVARCHAR(200)                
+      Declare @L_DOB                 date,                
+              @L_ReferingPhysicianID int,                
+              @L_Uid                 NVARCHAR(510),                
+          @L_RedirectURL         NVARCHAR(2000),                
+              @L_TaskDesc            NVARCHAR(2000),                
+              @L_PickDate            date,                
+              @L_RegisterDate        datetime,                
+              @L_PickupDateTime      datetime                
+      Declare @L_Patientid      bigint,                
+              @L_PatientVisitid Bigint,                
+              @L_FinalBillid    Bigint,                
+              @L_Labno          NVARCHAR(60),                
+              @L_Taskid         bigint,                
+              @L_ReturnStatus   int                
+      Declare @L_TestLoop        int = 1,                
+              @L_TestingCount    int = 0,                
+              @L_CreatedBy       bigint,                
+              @L_TestErrorStatus bit = 0                
+      Declare @IsClientPatient  NVARCHAR(6),                
+              @IsCreditBill     NVARCHAR(30),                
+              @HasHealthCoupon  NVARCHAR(30),                
+              @MyCardActiveDays NVARCHAR(30)                
+      Declare @L_DueAmount Decimal(18, 2)        
+                
+                
+      --declare @p7 dbo.UDT_Context                
+      ----insert into @p7 values(68,N'KENYA',N'',68,2347,N'LabReception',0,2695,NULL,N'',68,0,N'',NULL,NULL,1,75,31,N'en-GB',0,NULL,NULL,NULL)                                                          
+      --declare @p8 dbo.UDT_Context                
+      ----insert into @p8 values(68,N'KENYA',N'',68,2347,N'LabReception',0,2695,NULL,N'',68,0,N'',NULL,NULL,1,75,31,N'en-GB',0,NULL,NULL,NULL)                                                          
+      Declare @Tbl_PatientDetail as table                
+        (                
+                          
+           Visitid     bigint,                
+           FinalBillid bigint,                
+           Labno       NVARCHAR(60)                
+        )                
+      Declare @Tbl_TestingDetail as table                
+        (                
+           ID       int,                
+           Sno      int,                
+           TestName NVARCHAR(1000),                
+           TestCode NVARCHAR(1000)                
+        )                
+      declare @pTaxDetail dbo.UDTaxBillDetails                
+      declare @pBillingTable dbo.UDTPatientDueChart                
+      declare @pAmountReceivedDetail dbo.UDTAmountReceivedDetails                
+      declare @pOrderInvestigation dbo.OrderedInvestigation                
+      declare @pDispatchMode dbo.UDTDisPatchMode                
+     -- declare @p81 dbo.UDT_Context                
+      declare @pVisitClientMapping dbo.VisitClientMapping                
+      declare @p70 dbo.ControlMappingDetails                
+      declare @p72 int                
+      Declare @L_ActualAmount decimal(18, 2)                
+      DECLARE @L_TotalPaidAmount decimal(18, 2)                
+      Declare @pDiscount decimal(18, 2)                
+      Declare @L_Discount decimal(18, 2)                
+      Declare @L_DiscountReason NVARCHAR(MAX)                
+      Declare @L_DiscountApprovedBy BIGINT            
+ Declare @L_TITLECode INT                
+      Declare @L_EMail NVARCHAR(MAX)                
+      DECLARE @L_ReferingPhysicianName NVARCHAR(1000)                
+      DECLARE @L_ReferedHospitalID BIGINT                
+      DECLARE @L_ReferedHospitalName NVARCHAR(1000)                
+      DECLARE @L_PriorityID INT                
+      DECLARE @L_DispatchMode NVARCHAR(MAX)                
+DECLARE @L_PatientHistory NVARCHAR(MAX)                
+      DECLARE @L_RegistrationRemarks NVARCHAR(MAX)                
+      DECLARE @L_TotalRateAmountEX decimal(18, 2)                
+      DECLARE @L_TotalPaidAmountEX decimal(18, 2)                
+      DECLARE @L_ClientCode NVARCHAR(400)                
+      DECLARE @L_TotalGrossAmount decimal(18, 2)                
+      DECLARE @L_TotalCount BIGINT=0                
+      DECLARE @L_RoleID BIGINT=-1                
+      DECLARE @L_OnBehalfofLocationID BIGINT=NULL                
+      DECLARE @L_pvisitID BIGINT=-1                
+      DECLARE @L_pIsstat NVARCHAR(20)                
+      DECLARE @L_VisitNumber NVARCHAR(1000)                
+      DECLARE @L_IsVariablePay as NVARCHAR(6)                
+      Declare @L_AmountReceived decimal(18, 2)                
+      Declare @L_TotalAmountReceived decimal(18, 2)                
+      Declare @L_PatientNumber NVARCHAR(60)                
+      Declare @L_SampleCollectedByID BIGINT                
+      Declare @L_IsDiscountable char(4)                
+   Declare @L_HealthHubID NVARCHAR(100)                
+   Declare @L_EmployeeID NVARCHAR(100)                
+   Declare @L_SourceType NVARCHAR(250)             
+   Declare @L_BookingID NVARCHAR(100)                
+   Declare @L_ExternalRefNo NVARCHAR(100)                
+   Declare @L_SampleNumber NVARCHAR(250)                
+      --/*UPDATE ERROR LOG*/                                    
+      --DELETE CD from CampDetailError CD                                    
+      --INNER JOIN BulkRegistrationDetail BD ON BD.UniqueID=CD.patID                                    
+      --where ISNULL(BD.PatientID,-1) <>-1 --and IsProcessed='Y'                                    
+      --INSERT INTO CampDetailError                                    
+      --SELECT * FROM CampDetail  where Patid in                                     
+      --(SELECT PatID FROM                                     
+      --(                                    
+      --SELECT PatID,ErrorDesc FROM CampDetail                                      
+      --EXCEPT                                    
+      --SELECT  PatID,ErrorDesc FROM CampDetail                                     
+      --)T)                                    
+      --/*Code End*/                           
+      --Truncate table CampDetail                
+                
+      Declare @CampDetailList as Table                
+        (    
+		[BulkRegistrationID] [int] Not Null,            
+           [ID]                     [int] NULL,                
+           [Orgid]                  [int] NULL,                
+           [SlNo]                   [int] NULL,                
+           [PDate]                  [datetime] NULL,                
+           [SDate]                  [datetime] NULL,                
+           [SCollectedBy]           [NVARCHAR](500) NULl,                
+           [PatID]                  [NVARCHAR](200) NULL,                
+           [Title]                  [NVARCHAR](200) NULL,                
+           [NAME]                   [NVARCHAR](510) NULL,        
+           DOB                      datetime,                
+           [AGE]                    [NVARCHAR](10) NULL,                
+           [AgeType]                [NVARCHAR](30) NULL,                
+           [SEX]                    [NVARCHAR](20) NULL,                
+           [LOCATION]               [NVARCHAR](500) NULL,                
+           [Doctor]      [NVARCHAR](500) NULL,                
+           [RefHospital]            [NVARCHAR](500) NULL,                
+           [Priority]               [NVARCHAR](100) NULL,                
+           [DispatchMode]           [NVARCHAR](MAX) NULL,                
+           [TESTSREQUESTED]         [NVARCHAR](MAX) NULL,                
+           [CHARGED]                [decimal](19, 2) NULL,             
+           [AmountPaid]             [decimal](19, 2) NULL,                
+           [AmountDisocunt]         [decimal](19, 2) NULL,                
+           [DisocuntReason]         [NVARCHAR](MAX) NULL,                
+           [DiscountAuthorisedBy]   [NVARCHAR](500) NULL,                
+           [History]                [NVARCHAR](MAX) NULL,                
+           [Remarks] [NVARCHAR](MAX) NULL,                
+           [MobileNo]               [NVARCHAR](40) NULL,                
+           [CreatedBy]              [NVARCHAR](60) NULL,                
+           [ClientCode]             [NVARCHAR](200) NULL,                
+           [EmailID]                [NVARCHAR](200) NULL,                
+     PatientNumber            NVARCHAR(60),                
+           [ErrorStatus]            [bit] NOT NULL,                
+   [ErrorDesc]              [NVARCHAR](4000) NULL,                
+           [ClientID]               [bigint] NULL,                
+           [LOCATIONID]             [bigint] NULL,                
+           [TitleID]                [bigint] NULL,                
+           [DoctorID]               [bigint] NULL,                
+           [RefHospitalID]          [bigint] NULL,                
+           [TESTCODE]               [NVARCHAR](MAX) NULL,                
+           [SCollectedByID]         [bigint] NULL,                
+           [PriorityID]             [INT] NULL,                
+           [IsClientPatient]        [NVARCHAR](6) NULL,                
+           [CreatedbyId]            [bigint] NULL,                
+           [RateId]                 [bigint] NULL,                
+           [TestType]               [NVARCHAR](30) NULL,                
+           [FeeId]                  [NVARCHAR](30) NULL,                
+           [CampId]                 [int] IDENTITY(1, 1) NOT NULL,                
+           [IsDiscountable]         [NVARCHAR](6) NULL,                
+           [DueAmount]              [decimal](18, 2) NULL,                
+           [OrgName]                [NVARCHAR](60) NULL,                
+           [DiscountAuthorisedByID] [bigint] NULL,                
+           HasHealthCoupon          NVARCHAR (6) NULL,                
+           MyCardActiveDays         NVARCHAR(30) NULL,                
+           IsCreditBill             NVARCHAR(30) NULL,                
+     HealthHubID              NVARCHAR(100) NULL,                
+     EmployeeID               NVARCHAR(100) NULL,                
+     SourceType               NVARCHAR(250) NULL,            
+  BookingID                NVARCHAR(100) NULL,                
+     ExternalRefNo            NVARCHAR(100) NULL,                
+     SampleNumber             NVARCHAR(250) NULL                
+        )                
+   DECLARE @TotalSlNo BIGINT                
+                
+      SELECT @TotalSlNo = ISNULL((SELECT COUNT(1)                
+                                  FROM   BulkRegistrationDetail), 0)                
+                  
+      INSERT INTO @CampDetailList                
+                  (BulkREgistrationID,ID,                
+             Orgid,                
+                   SlNo,                
+                   PDate,                
+                   SDate,                
+                   SCollectedBy,                
+                   PatID,                
+                   Title,                
+                   NAME,                
+                   DOB,               
+ AGE,                
+                   AgeType,                
+                   SEX,                
+                   LOCATION,                
+                   Doctor,                
+                   RefHospital,                
+                   Priority,                
+                   DispatchMode,                
+                   TESTSREQUESTED,                
+                   CHARGED,                
+                   AmountPaid,                
+                   AmountDisocunt,                
+                   DisocuntReason,                
+                   DiscountAuthorisedBy,                
+                   History,                
+     Remarks,                
+                   MobileNo,                
+                   CreatedBy,                
+                   ClientCode,                
+                   EmailID,                
+       PatientNumber,                
+                   ErrorStatus,                
+                   ErrorDesc,                
+                   ClientID,                
+                   LOCATIONID,                
+                   TitleID,                
+                   DoctorID,                
+                   RefHospitalID,                
+       TESTCODE,                
+                   SCollectedByID,                
+                   PriorityID,                
+                   IsClientPatient,                
+                   CreatedbyId,                
+                   RateId,                
+                   TestType,                
+                   FeeId,                
+                   IsDiscountable,                
+                   DueAmount,                
+                   OrgName,                
+                   DiscountAuthorisedByID,                
+                   HasHealthCoupon,                
+                   MyCardActiveDays,                
+                IsCreditBill,                
+       HealthHubID,                
+       EmployeeID,                
+       SourceType,            
+    BookingID,            
+    ExternalRefNo,            
+    SampleNumber)                
+      select BulkRegistrationID ,ID,                
+             Orgid,                
+             SlNo,                
+             PDate,                
+             SDate,                
+             SCollectedBy,                
+             PatID,                
+             Title,                
+             NAME,                
+             DOB,                
+             AGE,                
+             AgeType,                
+             SEX,                
+             LOCATION,                
+             Doctor,                
+             RefHospital,                
+             Priority,                
+             DispatchMode,                
+             TESTSREQUESTED,                
+             CHARGED,                
+             AmountPaid,                
+             AmountDisocunt,                
+             DisocuntReason,                
+             DiscountAuthorisedBy,                
+             History,                
+             Remarks,                
+             MobileNo,                
+             CreatedBy,                
+             ClientCode,                
+             EmailID,                
+    PatientNumber,                
+             ErrorStatus,                
+             ErrorDesc,                
+             ClientID,                
+             LOCATIONID,                
+     TitleID,                
+             DoctorID,                
+             RefHospitalID,                
+             TESTCODE,                
+             SCollectedByID,                
+             PriorityID,                
+             IsClientPatient,                
+             CreatedbyId,                
+             RateId,               
+         TestType,                
+             FeeId,                
+             IsDiscountable,                
+             DueAmount,                
+             OrgName,                
+             DiscountAuthorisedByID,                
+             HasHealthCoupon,                
+             MyCardActiveDays,        
+             IsCreditBill,                
+    HealthHubID,                
+    EmployeeID,                
+    SourceType,            
+ BookingID,            
+ ExternalRefNo,            
+ SampleNumber                
+      from   @PPatientDetail                
+      order  by ID                
+                
+                    
+                
+      --DECLARE @TempTestCode AS TABLE(ID INT,TestCode NVARCHAR(500))                                                
+      --DECLARE @CCount int,@CLoop int =1                                                
+      --SELECT @CCount=COUNT(1) FROM @CampDetailList                                                 
+    --  Insert CampDetail                
+    --         (ID,                
+    --       Orgid,                
+    --          SlNo,                
+    --          PDate,                
+    --          SDate,                
+    --          SCollectedBy,                
+    --          PatID,                
+    --          Title,                
+    --          NAME,                
+    --          AGE,                
+    --          AgeType,                
+    --          SEX,                
+    --          LOCATION,                
+    --          Doctor,                
+    --          RefHospital,                
+    --          Priority,                
+    --          DispatchMode,                
+    --          TESTSREQUESTED,                
+    --          CHARGED,                
+    --          AmountPaid,                
+    --          AmountDisocunt,       
+    --          DisocuntReason,                
+    --          DiscountAuthorisedBy,                
+    --          History,                
+    --          Remarks,                
+    --          MobileNo,                
+    --          CreatedBy,                
+    --          ClientCode,                
+    --          EmailID,                
+    -- PatientNumber,                
+    --          ErrorStatus,                
+    --          ErrorDesc,                
+    --          ClientID,                
+    --          LOCATIONID,                
+    --          TitleID,                
+    --          DoctorID,                
+    --          RefHospitalID,                
+    --          TESTCODE,                
+    --          SCollectedByID,                
+    --          PriorityID,                
+    --          IsClientPatient,                
+    --          CreatedbyId,                
+    --        RateId,                
+    --          TestType,                
+    --          FeeId,                
+    --     IsDiscountable,                
+    --          DueAmount,                
+    --          OrgName,                
+    --          DiscountAuthorisedByID,                
+    --          HasHealthCoupon,                
+    --          MyCardActiveDays,                
+    --          IsCreditBill)                
+    --  Select Id,                
+    --         Orgid,                
+    --         SlNo,                
+    --         PDate,                
+    --         SDate,                
+    --         SCollectedBy,                
+    --         DENSE_RANK()                
+    --           OVER(                
+    --             ORDER BY PatID ASC ) AS PatID,                
+    --         Title,                
+    --         NAME,                
+    --         AGE,                
+    --         AgeType,                
+    --         SEX,                
+    --         LOCATION,                
+    --         Doctor,                
+   --         RefHospital,                
+    --         Priority,                
+    --         DispatchMode,                
+    --         TESTSREQUESTED,                
+    --         CHARGED,                
+    --         AmountPaid,                
+    --         AmountDisocunt,                
+    --         DisocuntReason,                
+    --         DiscountAuthorisedBy,                
+    --         History,                
+    --         Remarks,                
+    --         MobileNo,               
+    --         CreatedBy,                
+    --         ClientCode,                
+    --         EmailID,                
+    --PatientNumber,                
+    --         ErrorStatus,                
+    --         ErrorDesc,                
+    --         ClientID,                
+    --         LOCATIONID,                
+    --         TitleID,                
+    --         DoctorID,                
+    --         RefHospitalID,                
+    --         TESTCODE,                
+    --         SCollectedByID,                
+    --         PriorityID,                
+    --         IsClientPatient,                
+    --  CreatedbyId,                
+    --         RateId,                
+    --         TestType,                
+    --         FeeId,                
+    --         IsDiscountable,                
+    --         DueAmount,                
+    --         OrgName,                
+    --         DiscountAuthorisedByID,                
+    --         HasHealthCoupon,                
+    --         MyCardActiveDays,                
+    --         IsCreditBill                
+    --  From   @CampDetailList                
+                
+      SELECT @l_Count = (SELECT Max(Cast(ID AS INT))                
+                         from   @CampDetailList)                
+                
+                     
+      While @Loop <= @l_Count                
+        Begin       
+		         
+				 Declare @OrgID int, @OrgAddressID int ,@RoleID int, @BulkRegistrationID bigint
+
+				 set @BulkRegistrationID = (select BulkRegistrationID from @CampDetailList where PatID=@Loop)
+
+				 set @OrgID = (select Orgid from @CampDetailList where  PatID=@Loop)
+				 
+				 set @OrgAddressID = (select LOCATIONID from @CampDetailList where  PatID=@Loop)
+
+				 set @RoleID= (Select RoleID from Role where OrgId=@OrgID and RoleName='LabReception')
+                          
+declare @p9 dbo.UDT_Context
+insert into @p9 values(@OrgID,N'RLS',N'',@OrgAddressID,@RoleID,N'LabReception',0,171814,NULL,N'',@OrgAddressID,106,N'',NULL,NULL,1,75,11,N'en-GB',452,N'uvs0urulk2vqhsvzchrxqn2e',NULL,NULL,NULL)
+
+DECLARE @DateNow DATETIME =dbo.Fn_getserverdate(@ContextInfo)    
+                
+            -----------Patient Level Variable Initilaize Start here ---------------                                     
+            Select @L_orgid = Null,                
+                   @L_Client = 0,                
+                   @L_IS2Ped = 'N',                
+                   @L_PickDate = Null,                
+                   @L_RegisterDate = Null,                
+                   @L_ReferingPhysicianID = null,                
+                   @L_DOB = null,                
+                   @L_SampleCollectedByID = -1                
+                
+            Select @L_PatientName = null,                
+                   @L_Sex = null,                
+                   @L_Age = null,                
+                   @L_AgeType = NULL,                
+                   @L_Externalno = null,                
+                   @L_Physician = null,                
+                   @L_OrgAddressid = null,                
+             @L_PatientNumber = null                
+                
+            Select @L_Patientid = null,                
+                   @L_PatientVisitid = null,                
+           @L_FinalBillid = null,           
+                   @L_Labno = null,                
+                   @L_BaseCurrencyid = null,                
+                   @L_VisitNumber = null                
+                
+            Select @L_Taskid = null,                
+                   @L_RedirectURL = Null,                
+                   @L_TaskDesc = null,                
+                   @L_ReturnStatus = null,                
+          @L_TotalRateAmount = 0,                
+                   @L_Uid = Null,                
+                   @L_TotalPaidAmount = 0                
+                
+            Select @L_CreatedBy = null,                
+                   @L_MobileNo = null                
+                
+            SELECT @L_Discount = 0.00,                
+                   @L_DiscountReason = null,                
+                   @L_DiscountApprovedBy = 0,                
+                   @L_TITLECode = null,                
+                   @L_OrgAddressID = null,                
+                   @L_EMail = null                
+                
+            SELECT @L_ReferingPhysicianName = null,                
+              @L_ReferedHospitalID = 0,                
+                   @L_ReferedHospitalName = null,                
+                   @L_PriorityID = 1,                
+                   @L_DispatchMode = null                
+              
+            SELECT @L_PatientHistory = '',                
+                   @L_RegistrationRemarks = '',                
+                   @L_ClientCode = null                
+                
+            SELECT @L_TotalRateAmountEX = 0,                
+                   @L_TotalPaidAmountEX = 0,                
+                   @L_DueAmount = 0,                
+                   @L_RoleID = -1,                
+                   @L_OnBehalfofLocationID = NULL,                
+                   @L_pvisitID = -1                
+                
+           SELECT @L_HealthHubID = '',                
+            @L_EmployeeID = '',                
+      @L_SourceType = ''            
+            
+   SELECT @L_BookingID = '',                
+             @L_ExternalRefNo = '',                
+    @L_SampleNumber = ''                
+                
+            -----------Patient Level Variable Initilaize end here ---------------                                                          
+            Select Distinct @L_orgid = Orgid,                
+                            @L_TestName = TESTSREQUESTED,                
+                            @L_TestCode = TESTCODE,                
+                            @L_PatientName = NAME,                
+                            @L_Sex = SUBSTRING(SEX, 1, 1),                
+                            @L_Age = AGE,                
+                            @L_DOB = DOB,                
+                            @L_AgeType = AgeType,                
+                            @L_Externalno = PatID,                
+                            @L_Physician = Doctor,                
+                            --@L_RegisterDate = convert(NVARCHAR, PDate, 103),                
+       @L_RegisterDate = PDate,                
+                            @L_CreatedBy = CreatedbyId,                
+                            @L_MobileNo = Mobileno,                
+                            @L_Client = Clientid,                
+                            --@L_PickDate = convert(NVARCHAR, SDate, 103),                
+       @L_PickDate = SDate,                
+                            @L_PickupDateTime = SDate,                
+                            @L_Discount = AmountDisocunt,                
+                            @L_DiscountReason = DisocuntReason,                
+                            @L_DiscountApprovedBy = ISNULL(DiscountAuthorisedByID, 0),                
+               @L_TITLECode = TitleID,              
+                            @L_OrgAddressID = LOCATIONID,                
+                            @L_EMail = EmailID,                
+                            @L_ReferingPhysicianID = DoctorID,                
+                            @L_ReferingPhysicianName = Doctor,                
+  @L_PriorityID = ISNULL(PriorityID, 1),                
+                            @L_DispatchMode = DispatchMode,                
+                            @L_PatientHistory = History,                
+                            @L_RegistrationRemarks = Remarks,                
+                            @L_TotalPaidAmountEX = AmountPaid,                
+                            @L_TotalRateAmountEX = CHARGED,                
+                            @L_ClientCode = ClientCode,                
+                            @l_dueamount = Case                
+                                             WHEN IsCreditBill = 'Y' THEN 0.0                
+                                         ELSE DueAmount                
+                                           END,                
+                            @IsClientPatient = IsClientPatient,                
+                            @IsCreditBill = IsCreditBill,                
+                            @HasHealthCoupon = HasHealthCoupon,                
+                            @MyCardActiveDays = MyCardActiveDays,                
+                            @L_PatientNumber = PatientNumber,                
+                            @L_SampleCollectedByID = SCollectedByID,                
+                
+       @L_HealthHubID = HealthHubID,                
+       @L_EmployeeID = EmployeeID,                
+       @L_SourceType = SourceType ,            
+            
+    @L_BookingID = BookingID,                
+       @L_ExternalRefNo = ExternalRefNo,                
+       @L_SampleNumber = SampleNumber                
+            From   @CampDetailList                
+            Where  PatID = @Loop                
+                
+            --UPDATE BulkRegistrationDetail SET IsProcessed='Y' where UniqueID=@L_Externalno                        
+            if @L_PatientNumber = '--'                
+              Begin                
+                  select @L_Patientid = -1                
+              End                
+            Else                
+              Begin                
+                  select @L_Patientid = patientid                
+                  from   Patient (nolock)                
+                  Where  OrgID = @L_orgid                
+                         and PatientNumber = @L_PatientNumber                
+              --and ExternalPatientNumber = @L_Externalno     
+              End                
+                
+            IF ( ISNUMERIC(@L_AGE) = 1                
+                  OR ISNUMERIC(@L_AGE) = 0 )                
+              Begin                
+                  Begin Try                
+                      Begin Tran                
+                
+                      --Delete from @Tbl_PatientDetail                
+                
+                      Delete from @pTaxDetail                
+                
+                      Delete from @pBillingTable                
+                
+                      Delete from @pAmountReceivedDetail                
+                
+                      Delete from @pOrderInvestigation                
+                
+                      Delete from @pDispatchMode                
+                
+                     -- Delete from @p81                
+                
+                      Delete from @pVisitClientMapping                
+                
+                      INSERT INTO @pDispatchMode                
+                                  (DispatchType)                
+                      SELECT Distinct item                
+   from   fnSplit(@L_DispatchMode, ',')                
+                
+                      UPDATE DM                
+                      SET    DM.DispatchValue = AMT.ActionTypeID                
+                      FROM   @pDispatchMode DM                
+                             INNER JOIN ActionManagerType AMT                
+                                     ON LTRIM(RTRIM(AMT.ActionType)) = LTRIM(RTRIM(DM.DispatchType))                
+                
+                      update DM                
+                      set    DM.DispatchType = 'M'                
+                      from   @pDispatchMode DM                
+                      where  DM.DispatchType in( 'Email', 'SMS' )                
+                
+                      Declare @configKeyID int                
+                      Declare @ConfigValue NVARCHAR(50)                
+                
+                      select @configKeyID = ConfigKeyID                
+                      from   ConfigKeyMaster WITH(NOLOCK)                
+                      where  ConfigKey = 'TAT'                
+                
+                      select @ConfigValue = ConfigValue                
+                      from   ConfigOrgMaster WITH(NOLOCK)                
+                      where  ConfigKeyID = @configKeyID                
+                             and OrgID = @L_orgid                
+                
+                      --Select @L_OrgAddressid = AddressID from OrganizationAddress (nolock) Where OrganizationID = @L_orgid                                                     
+                      --Select @L_OrgAddressid = OrgAddressID From @ContextInfo                                                  
+                      Select @L_BaseCurrencyid = CurrencyID                
+                      From   CurrencyOrgMapping (NOLOCK)                
+                      where  OrgID = @L_orgid                
+                             and IsBaseCurrency = 'Y'                
+                
+                      Select @L_Uid = NEWID()                
+                
+                      Select @L_RateId = 0,                
+                             @L_RateAmount = 0,                
+                             @L_RateRemark = '',                
+                             @L_TestLoop = 1,                
+                             @L_TestingCount = 0,                
+                             @L_AmountReceived = 0,                
+                             @L_TotalAmountReceived = 0                
+                
+                      Select @L_TestType = Null,                
+                             @L_Testid = null,                
+                             @L_TestName = Null,                
+                             @L_TestCode = null,                
+                             @L_TestErrorStatus = 0                
+                
+                      Select @L_ActualAmount = 0                
+                
+                      Select @L_TestLoop = MIN(CampId)                
+                      From   @CampDetailList                
+                      Where  PatID = @Loop                
+                
+                      Select @L_TestingCount = MAX(CampId)                
+                      From   @CampDetailList                
+                      Where  PatID = @Loop                
+                
+                      --Select @L_TestLoop,                
+                      --       @L_TestingCount                
+                
+                      if( @L_TestLoop > 0                
+                          AND @L_TestingCount > 0 )                
+                        BEGIN                
+                            /*Investigation Detail start here */                
+                            While @L_TestLoop <= @L_TestingCount     
+  Begin                
+             Select @L_TestName = TESTSREQUESTED,                
+                                         @L_TestCode = TestCode,                
+                                         @L_Testid = FeeId,                
+                                         @L_TestType = TestType,                
+                                         @L_RateId = RateId,                
+                                         @L_RateRemark = CHARGED,                
+                                         @L_ActualAmount = CHARGED,                
+                                 @L_RateAmount = case                
+                                                           when @L_RateAmount = 0 Then AmountPaid                
+                                                           Else 0                
+                                                         END,                
+                                         @L_AmountReceived = AmountPaid,                
+                                         @L_IsDiscountable = IsDiscountable                
+              from   @CampDetailList                
+                                  Where  CampId = @L_TestLoop                
+                
+                    --Select @L_RateAmount = cast(@L_RateRemark as decimal(18, 2))                
+                                  Select @L_TotalPaidAmount = ( @L_TotalPaidAmount + @L_RateAmount )                
+                
+                                  Select @L_RateAmount = cast(@L_RateRemark as decimal(18, 2))                
+                
+                                  Select @L_TotalRateAmount = ( @L_TotalRateAmount + @L_RateAmount )                
+                
+                    select @L_TotalAmountReceived = @L_AmountReceived --( @L_TotalAmountReceived + @L_AmountReceived )                
+                                  --select @L_TotalAmountReceived=@L_TotalAmountReceived/@L_TestLoop                
+                                  ----Config Based TAT report created by prem-------------                         
+              DECLARE @TATDATE NVARCHAR(20)                
+                                  DECLARE @ReportDeliveryDATE NVARCHAR(25)                
+                
+                                  IF ISNULL(@ConfigValue, 'N') = 'Y'                
+                                    BEGIN                
+                                        EXEC dbo.pGetTATReportDetails                
+                                          @L_orgid,                
+                                          @L_Testid,                
+                                          @L_TestType,                
+                                          @L_TestCode,                
+                                          @L_Client,                
+                                          'Y',                
+                                          @L_PickDate,                
+                                          @ContextInfo,                
+                                          @TATDATE OUTPUT,                
+                                          @ReportDeliveryDATE output                
+                                    END               
+                                  ELSE                
+                                    BEGIN                
+   SELECT @TATDATE = NULL                
+                                    END                
+                
+                                  ---------------END--------------------------------------------                           
+                                  Select @L_IsVariablePay = (Select ISNULL(IsVariable, 'N')                
+                                                             from   GeneralBillingMaster (nolock)                
+                                                             where  GenBillID = @L_Testid)                
+                
+                                  If ( @L_IsVariablePay = 'Y' )                
+                                    BEGIN                
+                                        Select @L_RateAmount = AmountPaid,                
+   @L_ActualAmount = AmountPaid,                
+                                               @L_TotalRateAmount = CHARGED,                
+                                               @L_TotalPaidAmount = AmountPaid                
+                                        from   @CampDetailList                 
+                                        where  SlNo = @L_TestLoop                
+                                    END                
+                
+                                  insert into @pBillingTable                
+                                              (FeeType,                
+                                               FeeID,                
+                                               [Description],                
+                                               Comments,                
+                                               FromDate,                
+                                               ToDate,                
+                                       [Status],                
+                                               unit,                
+                                               Amount,                
+                                               DetailsID,                
+                                               PackageID,                
+                                               SpecialityID,                
+                                               UserID,                
+                                               DiscountAmount,                
+                                               IsReimbursable,                
+                                               IsTaxable,                
+                                               ServiceCode,                
+   DiscountPercent,                
+         DiscOrEnhanceType,                
+                                               Remarks,                
+                                               ReimbursableAmount,                
+                                               NonReimbursableAmount,                
+                                               ActualAmount,                
+                                               RateID,                
+               IsDiscountable,                
+                                               IsSTAT,                
+                                               IsOutSource,                
+                                               IsNABL,                
+                                               TatDate)                
+                                  Select @L_TestType,                
+                                         @L_Testid,                
+                                         Case                
+                                           WHEN @L_TestType = 'Gen' THEN @L_TestCode                
+                                           else @L_TestName                
+                                         END,                
+                                         N'',                
+                                         @DateNow,                
+                   @DateNow,                
+                                         'Paid',                
+                                         1,                
+                                         @L_RateAmount,                
+                                         0,                
+                                         0,                
+                                         0,                
+                                         0,                
+           0,                
+        'N',                
+                                         'Y',                
+                                         '',                
+                                         0,             
+            '',                
+                                         '',                
+                                         0,                
+                     0,                
+                                         @L_ActualAmount,                
+                                         @L_RateId,                
+                                         @L_IsDiscountable,                
+                                         'N',                
+                                         'N',                
+                                         'N',                
+                                         @TATDATE                
+                
+                                  IF( @L_TestType <> 'GEN' )                
+                                    BEGIN                
+                                        insert into @pOrderInvestigation                
+            (Name,                
+                                                     ID,                
+                                                     VisitID,                
+                                                     CreatedBy,                
+                                                     ModifiedBy,                
+                                                     Status,                
+                                                     Type,                
+                                                     OrgID,                
+                                                     StudyInstanceUId,                
+                                                     ComplaintId,                
+                                              ReferedToOrgID,                
+                                                     ReferedToLocation,                
+                                                     InvestigationsType,                
+                                                     ReferralID,                
+                                                     UID,                
+                               ReferenceType,                
+                                                     RefPhyName,                
+                                                     RefPhysicianID)                
+                                        values      (@L_TestName,                
+                                                     @L_Testid,                
+                                                     -1,                
+                                                     0,                
+                                                     0,                
+            N'Ordered',                
+               @L_TestType,                
+                                         @L_orgid,                
+                                                     N'1.2.840.113619.0388898357.1920028046',                
+                                                     0,                
+                                                     0,                
+                                                     0,                
+                                                     N'',                
+                                                     0,                
+                                                     @L_Uid,                
+                             N'',                
+                                                     N'',                
+                                                     0)                
+                                    END                
+                
+          Select @L_TestLoop = @L_TestLoop + 1                
+                              End              
+                
+                            select @L_TotalAmountReceived = @L_TotalAmountReceived --/ @L_TestingCount                
+      --Select '@pOrderInvestigation',                
+                            --       *                
+                            --from   @pOrderInvestigation                
+                
+                            --Select '@pBillingTable',                
+                            --       *                
+                            --from   @pBillingTable                
+                
+                            /*Investigation Detail End here */                
+                            IF @IsCreditBill != 'Y'                
+                              Begin                
+                                  insert into @pAmountReceivedDetail                
+                 ([AmtReceived],                
+                                               [TypeID],                
+                                   [ChequeorCardNumber],                
+                                               [BankNameorCardType],                
+                                               [Remarks],                
+                                               [ServiceCharge],                
+                                               [BaseCurrencyID],                
+         [PaidCurrencyID],                
+                                               [OtherCurrencyAmount],                
+                                               [EMIOpted],                
+                                               [EMIROI],                
+                                               [EMITenor],                
+                                               [EMIValue],                
+                                               [ReferenceID],                
+                                               [ReferenceType],                
+                                               [Units])                
+                                  Select @L_TotalAmountReceived,                
+                                         1,                
+                                         N'0',                
+                                         N'',                
+                                         cast(@L_TotalRateAmount as NVARCHAR),                
+                                         0,                
+                                         @L_BaseCurrencyid,                
+                                         @L_BaseCurrencyid,                
+                                         @L_TotalAmountReceived,                
+                                         N'N',                
+                                         0,                
+                                         0,                
+                                         0,                                               null,                
+                                         N'0',                
+                                         Null                
+    END                
+                
+                            insert into @pVisitClientMapping                
+                                        (VisitClientMappingID,          
+                                         VisitID,                
+                                         ClientID,                
+                                         FinalBillID,                
+                                         RateID,                
+                                         OrgID,                
+                                         PreAuthAmount)                
+                            values      (0,                
+             0,                
+                                    @L_client,                
+                 0, 
+                                         @L_RateId,                
+                                 @L_Orgid,                
+                                         0)                
+                
+                            IF( isnumeric(@L_Age) = 0 )                
+                              Begin                
+                                  DECLARE @dob datetime                
+                                  Declare @AgeYearsDecimal decimal                
+                
+                                  SET @dob=@L_DOB                
+                
+                                  SELECT @AgeYearsDecimal = DATEDIFF(hour, @dob, @DateNow) / 8766.0                
+                
+                                  set @L_Age=@AgeYearsDecimal                
+                              END                
+                
+                            IF( @L_DOB = '1900-01-01 00:00:00.000' )                
+                              Begin                
+                                  Select @L_DOB = DATEADD(YY, -1 * cast(@L_Age as int), cast(@DateNow as date))                
+                              END                
+                
+                            /***** UPDATE TotalRate Amount & Total Paid Amount Part******/                
+                            SET @L_TotalGrossAmount=@L_TotalRateAmount                
+                
+                            IF( @L_TotalPaidAmountEX > 0 )                
+                              BEGIN             
+                                  IF( @L_ClientCode <> 'GENERAL' )                
+                                    Select @L_TotalPaidAmount = @L_TotalPaidAmountEX                
+                              END                
+        ELSE                
+                              BEGIN                
+                                  Select @L_TotalPaidAmount = @L_TotalPaidAmount--  -@L_Discount                                     
+                              END                
+                
+                            IF( @L_TotalRateAmountEX > 0 )             
+                              BEGIN                
+                                  IF( @L_ClientCode <> 'GENERAL' )                
+                                    Select @L_TotalRateAmount = @L_TotalRateAmountEX                
+                              END                
+                            ELSE                
+                              BEGIN                
+                                  Select @L_TotalRateAmount = @L_TotalRateAmount - @L_Discount                
+                              END                
+                
+                            If ( @L_IsVariablePay <> 'Y' )                
+                              BEGIN                
+                                  UPDATE @pAmountReceivedDetail                
+                                  SET    AmtReceived = @L_TotalPaidAmount,                
+                                         Remarks = @L_TotalPaidAmount,                
+                                         OtherCurrencyAmount = @L_TotalPaidAmount                
+                              END                
+                
+                        /***** UPDATE Part END ******/                
+                            --Select @l_DueAmount = (@L_TotalRateAmount - @L_TotalPaidAmount)                                                 
+                        /************ Patient Registration Part**************/                
+                            --select 'suresh1'                                  
+                            Select @L_Labno = '',                
+                                   @L_FinalBillid = -1,                
+            @L_PatientVisitid = -1                
+                
+                      Declare @L_RegDateTime Datetime,    
+                                    @L_NetAmount   decimal(18, 2)                
+                
+       select @L_NetAmount=@L_TotalGrossAmount-@L_Discount                
+                            select @L_RegDateTime = PDate   
+                            from   @CampDetailList                
+                
+                            exec pInsertPatientBilling_CovidCamp                
+         @pPatientID=@L_Patientid output,                
+                              @pOrgID=@L_orgid,                
+                              @pOrgAddressID=@L_OrgAddressid,                
+                              @pCreatedBy=@L_CreatedBy,                
+                              @Name=@L_PatientName,                
+                              @TITLECode=@L_TITLECode,                
+                              @SEX=@L_Sex,                
+                              @Age=@L_Age,                
+                              @PatientNumber=N'0',                
+                              @pAddress1=N'',                
+         @pAddress2=N'',                
+         @pAddress3=N'',                
+            @pCity=N'',                
+                              @pPhoneNo=N'',                
+         @pMobileNo=@L_MobileNo,                
+                              @pMartialStatus=N'S',                
+                              @pDOB=@L_DOB,                
+                              @pAgeValue=@L_Age,                
+                              @pAgeUnits=N'Y',                
+                              @pCompressedName=@L_PatientName,                
+                              @pNationality=N'',                
+                              @pStateID=NULL,                
+                              @pCountryID=NULL,                
+                              @pPinCode=N'',                
+                              @SmartcardNo=N'0',                
+                              @EMail=@L_EMail,                
+                              @IsNotifyType=0,                
+                              @pURNo=N'',                
+                              @pURNof=0,                
+                         @pURNType=0,                
+           @pPatientHistory=@L_PatientHistory,                
+                              @pPatientType=N'P',                
+                              @pPatientStatus=N'NR',                
+                              @pVisitPurposeID=3,                
+                              @pSecuredCode=N'ed73acf6-2aad-4377-97cd-a1508846c1e3',                
+                              @PriorityID=@L_PriorityID,                
+                              @pIsExternalPatient=0,                
+                              @pWardNo=N'',                
+                              @pEpisodeID=0,                
+                              @pEpisodeVisitID=0,                
+                              @PatientVisitID=0,                
+                              @pReferredPhysicianID=@L_ReferingPhysicianID,                
+                              @ReferingPhysicianName=@L_ReferingPhysicianName,                
+                              @pReferedHospitalID=@L_ReferedHospitalID,                
+                              @pReferingHospitalName=@L_ReferedHospitalName,                
+                              @pReferedSpecialityID=-1,                
+                              @SpecialtyID=0,                
+                              @ReferralType= N'',                
+                              @pGrossValue=@L_TotalGrossAmount,                
+                              @pDiscount=@L_Discount,                
+                              @pDiscountReason=@L_DiscountReason,                
+                              @pDiscountApprovedBy=@L_DiscountApprovedBy,                
+                              @pTax=0.00,        
+                              @pServiceCharge=0,                
+                              @pRoundOff=0.00,   
+                              @pNetValue=@L_NetAmount,                
+ @pDue=@l_dueamount,                
+                              @pTaxTable=@pTaxDetail,                
+                              @pBillingTable=@pBillingTable,                
+                         @pIsCreditBill=@IsCreditBill,                
+                              @AmtReceivedDetails=@pAmountReceivedDetail,                
+                              @pOrderedInvTable=@pOrderInvestigation,                
+                            @paymentstatus=N'Paid',                
+                              @pUID=N'c4f77d47-8096-4619-80ca-f06f63ceb5fc',                
+                              @pEpisodeTrackID=0,                
+                              @pSiteID=0,                
+                              @pVisitSampleStatus=N'',                
+                              @pSamplePickupDate=@L_PickupDateTime,                
+                              @pConsignmentNo=N'',                
+                              @pControlMappingDetails=@p70,                
+                              @pRegistrationRemarks=@L_RegistrationRemarks,                
+                              @pReturnStatus=@p72 output,                
+                              @pExternalPatientNumber=@L_Externalno,                
+         @pDespatchMode=@pDispatchMode,                
+                              @pTATDate=@L_PickDate,                
+                              @pEDCess=0,                
+                              @pSHEDCess=0,                
+                              @pIsEditMode=N'N',                
+                              @pVisitTypeID=0,                
+                              @pPatientStausID=0,                
+                              @HasHealthCoupon=@HasHealthCoupon,                
+                              @MembershipCardMappingID=0,                
+         @MemebershipcardType=N'MYCARD',                
+         @MyCardActiveDays=@MyCardActiveDays,                
+               @HealthCardType=N'HEALTHCOUPON',                
+         @OTP=N'0',                
+                              @ContextInfo=@ContextInfo,                
+                              @VisitClientMapping=@pVisitClientMapping,                
+                              @RoleID = @L_RoleID output,                
+                              @OnBehalfofLocationID =@L_OnBehalfofLocationID,                
+                              @pvisitID=@L_PatientVisitid output,                
+                              @PFinalbillid = @L_FinalBillid output,                
+             @pLabNo = @L_Labno output,                
+                              @pSampleCollectedByID=@L_SampleCollectedByID,                
+       @pHealthHuID = @L_HealthHubID,                
+       @pEmployeeID = @L_EmployeeID,                
+       @pSourceType = @L_SourceType,            
+       @pBookingID = @L_BookingID,                
+       @pExternalRefNo = @L_ExternalRefNo,                
+       @pSampleNumber = @L_SampleNumber                
+                
+                            SELECT @L_TotalPaidAmount = 0                
+                
+                            SELECT @L_IsVariablePay = 'N'                
+                
+                            INSERT INTO @Tbl_PatientDetail                
+                                        (Visitid,                
+                                         FinalBillid,                
+                                         Labno)                
+                            SELECT @L_PatientVisitid,                
+                                   @L_FinalBillid,                
+                                   @L_Labno        
+								   
+								
+									
+									 
+									   if (@L_Patientid > 0 and @L_PatientVisitid >0 )
+									   BEGIN
+									   Update CBR  set PatientID =@L_Patientid, IsProcess=1,PatientVisitID=@L_PatientVisitid , ErrorstatusDetail='Visit Generated Successfully' from
+								     CovidBulkRegistrationDetails CBR  
+								     Inner Join @CampDetailList  CDL ON CDL.BulkRegistrationID=CBR.BulkRegistrationID  
+									 where CBR.BulkRegistrationID=@BulkRegistrationID 
+
+
+									   END
+									   ELSE 
+									   BEGIN
+									   Update CBR  set ErrorstatusDetail = 'PatientID and VisitID not Generated' from
+								     CovidBulkRegistrationDetails CBR  
+								     Inner Join @CampDetailList  CDL ON CDL.BulkRegistrationID=CBR.BulkRegistrationID  
+									 where CBR.BulkRegistrationID=@BulkRegistrationID 
+									   END
+                
+                          --  declare @p9 dbo.UDT_Context                
+                
+                            --insert into @p9                
+                            --values      (67,      
+                            --             N'Metropolis Vidyavihar',                
+                            --             N'',                
+                            --             104,                
+                            --             1856,                
+                            --             N'LabReception',                
+                            --         0,                
+                            --             3366,                
+                            --             NULL,                
+                            --             N'',                
+                            --             104,                
+                            --    -1,                
+                            --             N'',                
+                            --             NULL,                
+                            --             NULL,                
+                            --             1,                
+                            --             75,                
+                            --             11,                
+                            --             N'en-GB',                
+                            --             460,                
+                            --             N'w30sqkqcvd2gigfmwfadybbi',                
+                            --             NULL,                
+                            --             N'92')                
+                
+                            delete from @tblActionList                
+                
+                            Declare @L_PageID BIGINT                
+                
+                            select @L_PageID = pageid                
+                            from   pages                
+                            where  pageurl = '/Inventory/PatientBulkRegistration.aspx'                
+                
+                            --INSERT INTO @tblActionList                
+                            --EXEC pPerformingNextAction                
+                            --  @PageID=@L_PageID,                
+                            --  @ButtonName=N'BtnSheet',                
+                            --  @RoleID=@ConRoleID,         
+                            --  @PatientID=@L_Patientid,                
+                            --  @OrgID=@L_orgid,                
+                            --  @PatientVisitID=@L_PatientVisitid,                
+                            --  @pSampleID=0,                
+                            --  @pIds=''                
+                
+                            Declare @OrgAddID bigint                
+                
+     select @OrgAddID = pv.orgaddressid                
+                            from   patientvisit pv with (nolock)                
+                            where  PatientVisitId = @L_PatientVisitid                
+                
+                            DECLARE @ActionDetail [ActionDetails]                
+ 
+                            delete from @ActionDetail                
+                
+                            Declare @ContextType NVARCHAR(3)                
+                
+                            If( @IsClientPatient = 'Y' )                
+      BEGIN                
+                              set @ContextType='CP'                
+                END                
+                   ELSE                
+                              BEGIN                
+                         set @ContextType='P'                
+           END                
+                
+               --             INSERT into @ActionDetail                
+               --(ActionType,                
+               --                          Value,                
+               --                      AdditionalContext,                
+               --             Category,                
+               --                          version,                
+               --                          Status,                
+               --                          OrgID,                
+               --                          OrgAddressID,                
+               --                          CreatedAt,                
+               --                          CreatedBy,                
+               --                          Template,                
+               --                          ContextType,                
+               --                          IsAttachment,                
+             --                          Subject,                
+               --                          AttachmentName)                
+               --             SELECT ActionType,                
+               --                    CASE                
+               --                      WHEN ActionType = 'EMAIL' THEN MailTo                
+               --             WHEN ActionType = 'SMS' THEN PhoneNo                
+               --                      ELSE ''                
+               --                    END,                
+               --                    '<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>'                
+               --                    + CONVERT(NVARCHAR, @L_PatientVisitid)                
+               --                    + '</VisitID><FinallBillID>'                
+               --                    + CONVERT(NVARCHAR, @L_FinalBillid)                
+               --                    + '</FinallBillID><BillNumber>0</BillNumber><AccessionNumber>0</AccessionNumber></ContextInfo>',                
+               --                    AdditionalContext,                
+               --                    '',                
+               --                    '',                
+               --                    @L_orgid,                
+               --                    @OrgAddID,                
+               --                    @DateNow,                
+               --                    '',             
+               --                    Description,                
+               --                    ContextType,                
+               --                    IsAttachment,              
+               --                    Subject,                
+               --                    REPLACE(REPLACE(REPLACE(AttachmentName, '{VisitNumber}', VisitNumber), '{Name}', Name), '{ClientCode}', ClientCode) AS AttachmentName                
+               --             FROM   @tblActionList                
+               --             WHERE  ContextType = @ContextType                
+               --                     Or ContextType = 'Paid'                
+                
+               --             EXEC pInsertNotifications                
+               --               @ActionDetail,                
+               --               @ContextInfo                
+              
+                      exec pGetTaskDispTextAndURL          
+                       
+                             --@pTaskActionID=22,          
+        @pTaskActionID=0,   -- No Need tasks table entry             
+  @pTaskDescription=@L_TaskDesc output,                
+                              @pRedirectURL=@L_RedirectURL output,                
+                              @ContextInfo = @ContextInfo                
+                
+                            select @L_VisitNumber = VisitNumber                
+                            from   PatientVisit                
+                            where  PatientVisitId = @L_PatientVisitid                
+                
+       select @L_PatientNumber=Patientnumber from patient where patientid= @L_Patientid                
+                
+              Select @L_TaskDesc = REPLACE(@L_TaskDesc, '{PatientName}', @L_PatientName)                
+                
+                            Select @L_TaskDesc = REPLACE(@L_TaskDesc, '{PatientNumber}', @L_PatientNumber)                
+                
+                            Select @L_TaskDesc = REPLACE(@L_TaskDesc, '{ExternalVisitID}', @L_PatientVisitid)                
+                
+                            Select @L_RedirectURL = REPLACE(@L_RedirectURL, '{PatientID}', @L_Patientid)                
+                
+                            Select @L_RedirectURL = REPLACE(@L_RedirectURL, '{PatientVisitID}', @L_PatientVisitid)                
+                
+                            Select @L_RedirectURL = REPLACE(@L_RedirectURL, '{UID}', @L_Uid)                
+                
+                            Select @L_RedirectURL = REPLACE(@L_RedirectURL, '{taskactionid}', 22)                
+                
+          Select @L_TaskDesc = REPLACE(@L_TaskDesc, '{VisitNumber}', @L_VisitNumber)                
+                
+                            exec pInsertTaskAllowDuplicate                
+                              @pTaskActionID=0,                
+                              @pTaskDescription=@L_TaskDesc,                
+                              @pRedirectURL=@L_RedirectURL,                
+                              @pPatientID=@L_Patientid,                
+                              @pAssignedTo=0,  -- No Need tasks table entry                 
+                              @pOrgID=@L_orgid,                
+                              @pParentID=0,                
+                              @pPatientVisitID=@L_PatientVisitid,                
+                              @pHighlightColor=N'',         
+                              @pCreatedBy=@L_CreatedBy,                
+                              @pSpecialityID=0,                
+                              @pReferenceID=@L_Labno,                
+                              @pType=N'',                
+                              @pTaskID=@L_Taskid output,                
+                              @pIsstat =@L_pIsstat,                
+                              @ContextInfo=@ContextInfo                
+                
+                            exec PUpdateOrderedInvestigation                
+                              @pPatientVisitID=@L_PatientVisitid,                
+                              @PLabno=@L_Labno,                
+                              @orgId=@L_orgid,                
+                              @pTaskID=@L_Taskid,                
+                              @pbillNo='',                
+                              @pReturnStatus=@L_ReturnStatus output,                
+                              @ContextInfo=@ContextInfo                
+                
+                            UPDATE BulkRegistrationDetail                
+                            SET    PatientID = @L_Patientid                
+                            where  UniqueID = @L_Externalno                
+                
+       SET @L_TotalCount=@L_TotalCount + 1                
+                
+                        /***********   UPDATE REG DATE ******/                
+         --  select @L_RegisterDateS        
+                            UPDATE Patient                
+                            SET    RegistrationDTTM = @L_RegisterDate,--@L_RegDateTime,                
+                                   CreatedAt = @L_RegisterDate                
+                            where  PatientID = @L_Patientid                
+                
+                            UPDATE PatientAddress                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  PatientID = @L_Patientid                
+                
+                            UPDATE PatientVisit                
+                            SET    CreatedAt = @L_RegisterDate,--@L_RegDateTime,--@L_RegisterDateS,                
+                                   VisitDate = @L_RegisterDate                
+                            where  PatientID = @L_Patientid                
+                
+                            UPDATE PatientDisPatchDetails                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  PatientID = @L_Patientid                
+                
+                            UPDATE PatientDisPatchDetails                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  PatientID = @L_Patientid                
+                
+                            UPDATE CheckAttributeDetails                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  VisitID = @L_PatientVisitid                
+                
+                            UPDATE VisitClientMapping                
+                            SET   CreatedAt = @L_RegisterDate,--@L_RegDateTime,                
+                                   ModifiedAt = @L_RegDateTime                
+      where  VisitID = @L_PatientVisitid                
+                
+                            UPDATE FinalBill                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  VisitID = @L_PatientVisitid                
+                
+                            UPDATE BillingDetails                
+                            SET    CreatedAt = @L_RegisterDate,--@L_RegDateTime,                
+                                   BilledDate = @L_RegisterDate--@L_RegDateTime                
+                            where  FinalBillID = @L_FinalBillid                
+                
+                            UPDATE AmountReceivedDetails                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  FinalBillID = @L_FinalBillid                
+                
+                          UPDATE PatientDueDetails                
+      SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  VisitID = @L_PatientVisitid              
+                
+                           UPDATE PatientHistoryExt                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  PatientID = -@L_Patientid                
+                
+                            UPDATE OrderedInvestigations                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  VisitID = @L_PatientVisitid        
+             
+        UPDATE PatientInvestigation                
+      SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  PatientVisitID = @L_PatientVisitid          
+             
+         UPDATE PatientInvSample                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime   
+           , CollectedDateTime = @L_PickupDateTime--@L_RegDateTime              
+                            where  PatientVisitID = @L_PatientVisitid      
+             
+        UPDATE PatientInvSampleMapping                
+                            SET    CreatedAt = @L_RegisterDate--@L_RegDateTime                
+                            where  VisitID = @L_PatientVisitid        
+             
+        UPDATE SampleTracker                
+     SET    CreatedAt = @L_RegisterDate,
+								   CreatedBy = @L_SampleCollectedByID--@L_RegDateTime                
+                            where  PatientVisitID = @L_PatientVisitid            
+                
+                     --       UPDATE Tasks                
+                     --       SET    TaskDate = @L_RegDateTime                
+                     --where  PatientID = @L_Patientid                
+                        END                
+                
+                  /***********  Code End ***************/                
+        --Select @L_TestLoop = @L_TestLoop + 1                
+                      --       End                
+                      Commit tran                
+                  End Try                
+                
+                  Begin Catch                
+                      RollBack tran                
+                
+                      Select ERROR_LINE(),                
+                             ERROR_MESSAGE (),                
+                             'pInsertbulkRegistrationDetails_afterbulkupload',                
+                             @DateNow                
+                
+                      Update @CampDetailList                
+                      Set    errorStatus = 1,                
+                             ErrorDesc = ERROR_MESSAGE ()                
+                      Where  ID = @Loop                
+                
+              Insert ErrorLog                
+                             (ErrorLine,                
+                              ErrorDesc,                
+                              ObjectName,                
+                              CreatedAt)                
+                      Select ERROR_LINE(),                
+                             ERROR_MESSAGE (),                
+                    'pInsertbulkRegistrationDetails_afterbulkupload',                
+                             @DateNow                
+                  End Catch                
+              End                
+            Else                
+              Begin                
+                  Update @CampDetailList                
+                  Set    ErrorStatus = 1,                
+                         ErrorDesc = ' Invalid Age data '                
+                  Where  ID = @Loop -- Invalid Age                                                          
+              End                
+                
+            Select @Loop = @Loop + 1                
+        End                
+                
+      /*Update TestInDetail Column in [BulkRegistrationDetail] with BillingDetail table Item Count against Particular Patient */                
+      UPDATE [dbo].[BulkRegistrationDetail]                
+      SET    TestInDetail = 0                
+      Where  TestInDetail is NULL;                
+                
+      UPDATE [dbo].[BulkRegistrationDetail]                
+      SET    TestInDetail = TestInDetail1                
+      FROM   [dbo].[BulkRegistrationDetail],                
+             (SELECT MetroPatID,                
+                     COUNT(*) as TestInDetail1                
+   FROM   (SELECT DISTINCT P.RegistrationDTTM      As RegDate,                
+                                      P.PatientID             AS AttunePatID,                
+                 P.ExternalPatientNumber As MetroPatID,                
+                                      P.Name                
+                      --,IM.TestCode                                    
+                      FROM   dbo.BillingDetails BD                
+                             INNER JOIN dbo.InvestigationMaster IM                
+                                     ON BD.FeeId = IM.InvestigationID                
+                             INNER JOIN dbo.FinalBill FB                
+                                     ON FB.FinalBillID = BD.FinalBillID                
+     INNER JOIN dbo.Patient P                
+                                     ON P.PatientID = FB.PatientID                
+                      where  FeeType = 'INV'                
+                      UNION ALL                
+                      SELECT DISTINCT P.RegistrationDTTM      As RegDate,                
+                                      P.PatientID             AS AttunePatID,                
+                                      P.ExternalPatientNumber As MetroPatID,                
+                                      P.Name                
+                      --,IM.TestCode                                    
+                      FROM   dbo.BillingDetails BD                
+ INNER JOIN dbo.InvGroupMaster IM                
+                                     ON BD.FeeId = IM.GroupID                
+                    INNER JOIN dbo.FinalBill FB                
+                                     ON FB.FinalBillID = BD.FinalBillID                
+                             INNER JOIN dbo.Patient P                
+                                     ON P.PatientID = FB.PatientID                
+                      where  FeeType <> 'INV') Details                
+              GROUP  BY MetroPatID) as b                
+      WHERE  UniqueID = MetroPatID                
+             AND TestInDetail = 0;                
+                
+      /*Code End*/                
+      Delete from @CampDetailList                
+      Where  Errorstatus = 0                
+                
+      /*UPDATE ERROR LOG*/                
+      DELETE CD                
+      from   CampDetailError CD                
+             INNER JOIN BulkRegistrationDetail BD                
+                     ON BD.UniqueID = CD.patID                
+      where  ISNULL(BD.PatientID, -1) <> -1 --and IsProcessed='Y'                                    
+                
+      --INSERT INTO CampDetailError                                    
+      --SELECT C.*                
+      --FROM   CampDetail C                
+      --       INNER JOIN (SELECT PatID,                
+      --                          ErrorDesc                
+      --                   FROM   CampDetail                
+      --                   EXCEPT                
+      --                   SELECT PatID,                
+      --                          ErrorDesc                
+      --                   FROM   CampDetailError)T                
+      --               ON T.ErrorDesc = C.ErrorDesc                
+      --                  AND T.PatID = C.PatID                
+  /*Code End*/                
+      --SELECT CONVERT(NVARCHAR(10), @L_TotalCount)                
+      --          + ' Patient has been Inserted'                
+    --  set @returnstatus= @L_TotalCount                
+                
+      SELECT PV.VisitNumber,       
+             P.PatientNumber,                
+             P.Name,                
+             FB.BillNumber,                
+             OA.Location,                
+             substring((SELECT BD.FeeDescription + ', '                
+                        FROM   BillingDetails BD WITH(NOLOCK)                
+                        WHERE  Bd.FinalBillID = FB.FinalBillID                
+                        FOR XML PATH('')), 1, len((SELECT BD.FeeDescription + ', '                
+                                                   FROM   BillingDetails BD WITH(NOLOCK)                
+                                                   WHERE  Bd.FinalBillID = FB.FinalBillID                
+                                                   FOR XML PATH(''))) - 1) AS TestDetails                
+      FROM   @Tbl_PatientDetail TT                
+             INNER JOIN PatientVisit PV WITH(NOLOCK)                
+                     ON PV.PatientVisitID = TT.Visitid                
+         INNER JOIN Patient P WITH(NOLOCK)                
+                     ON PV.PatientID = P.PatientID                
+             INNER JOIN FinalBill FB WITH(NOLOCK)                
+                     ON TT.FinalBillID = FB.FinalBillID                
+             INNER JOIN OrganizationAddress OA WITH(NOLOCK)                
+                     ON OA.AddressID = PV.OrgAddressID                
+                
+                
+   delete @Tbl_PatientDetail                
+   delete @CampDetailList                
+                
+                
+                      
+  End 

@@ -1,0 +1,170 @@
+CREATE PROCEDURE [dbo].[PgetpatientbillamountreportdetailsWithLanguage] (@pVisitID   [BIGINT],            
+                                                     @pBillID    [BIGINT],            
+                                                     @pOrgID     [BIGINT],            
+                                                     @IsFullBill NVARCHAR(1)
+													 ,@LanguageCode nvarchar(20)
+													 )            
+AS            
+  BEGIN            
+      DECLARE @OLDpBillID BIGINT            
+            
+      SELECT TOP 1 @OLDpBillID = FinalBillID            
+      FROM   FinalBill WITH (NOLOCK)            
+      WHERE  RefFinalBillID = @pBillID            
+            
+      DECLARE @DUEPAIDAMT DECIMAL(18, 2) = 0            
+      DECLARE @DueDisCountAmount DECIMAL(18, 2) = 0            
+      DECLARE @MinorCurrencyDisplayText nvarchar(255)=''            
+            
+      IF ISNULL(@IsFullBill,'Y') = 'Y'           
+        BEGIN            
+            DECLARE @PatientID BIGINT            
+            DECLARE @RefundedAmount DECIMAL(18, 2) = 0            
+            
+            SELECT @PatientID = PatientID            
+            FROM   PatientVisit WITH(NOLOCK)            
+            WHERE  PatientVisitId = @pVisitID            
+            
+            SELECT @RefundedAmount = Isnull(RefundedAmount, 0)            
+            FROM   PatientDueDetails WITH(NOLOCK)            
+            WHERE  PatientID = @PatientID            
+            
+            SELECT @DUEPAIDAMT = (Sum(Isnull(PaidAmount, 0)) )- Isnull(@RefundedAmount, 0)            
+            FROM   DuePaidDetail WITH(NOLOCK)            
+            WHERE  DueBillNo = @pBillID            
+            
+    SELECT @DueDisCountAmount = Sum(Isnull(DiscountAmt, 0))            
+            FROM   DuePaidDetail WITH(NOLOCK)            
+            WHERE  DueBillNo = @pBillID            
+        END            
+               
+     DECLARE @BillType nvarchar(20)=''           
+     SELECT @BillType=Case when CA.AttributesID=32 then 'ACTUALAMOUNT' else 'Amount' end        
+     FROM   VisitCLientMapping VCM WITH(NOLOCK)           
+             INNER JOIN CLIENTMASTER CM WITH(NOLOCK) ON           
+      CM.ClientID = VCM.ClientID   
+	  INNER JOIN ClientAttributesDetails CA  ON CA.ClientID=CM.ClientID and CA.Orgid=CM.Orgid        
+      WHERE VCM.FinalBillid=@pBillID     
+	        
+    IF(ISNULL(@BillType,'')='') SET @BillType='Amount'           
+              
+    IF(@BillType='Amount' or @BillType='MRPBill')          
+    BEGIN          
+      SELECT FB.GrossBillValue,            
+             CONVERT(DECIMAL(18, 2), ( CASE            
+                                         WHEN FB.TaxPercent > 0 THEN ( ( Isnull(FB.GrossBillValue, 0) * Isnull(FB.TaxPercent, 0) ) / 100 )            
+                                         ELSE            
+                                           CASE            
+                                             WHEN Isnull(FB.TaxAmount, 0.00) > 0 THEN Isnull(FB.TaxAmount, 0)            
+                                             ELSE 0            
+                                           END            
+                                       END ))                      AS ServiceTax,            
+             Isnull(FB.EDCess, 0)                                  AS EDCess,            
+             Isnull(FB.SHEDCess, 0)                                AS SHEDCess,            
+             ISNULL(FB.AmountReceived, 0)          
+             + Isnull(@DUEPAIDAMT, 0)                              
+			 AS AmountReceived,            
+             CASE WHEN  ISNULL(@DUEPAIDAMT,0)>0 THEN  0 ELSE ISNULL(FB.Due,0) END          AS Due,            
+             ( CASE            
+                 WHEN Isnull(@OLDpBillID, 0) = 0 THEN (SELECT CASE Max(TatDateTime)            
+                                                                WHEN '17530101' THEN '19900101'    
+                                                                ELSE Max(TatDateTime)            
+                                                              END AS TatDateTime            
+                                                       FROM   BillingDetails WITH (NOLOCK)            
+                                                       WHERE  FinalBillID = @pBillID)            
+                 ELSE (SELECT CASE Max(TatDateTime)            
+                                WHEN '17530101' THEN '19900101'            
+                                ELSE Max(TatDateTime)            
+                              END AS TatDateTime            
+          FROM   BillingDetails WITH (NOLOCK)            
+                       WHERE  FinalBillID = @OLDpBillID)            
+               END )                                   AS TatDateTime,            
+             FB.RedeemValue                                        AS RedemValue,            
+ (FB.DiscountAmount       +   ISNULL(@DueDisCountAmount,0))                            AS DiscountAmount,            
+             Case when @LanguageCode='vi-VN' then  (SELECT dbo.NumbertToWordsVietnam(Isnull(FB.AmountReceived, 0)            
+                                        + Isnull(@DUEPAIDAMT, 0)))
+										Else (SELECT dbo.Numberttowords(Isnull(FB.AmountReceived, 0)            
+                                        + Isnull(@DUEPAIDAMT, 0))) END AS AmtInWRDS,            
+             (SELECT Substring((SELECT ', '            
+                                       + Cast(PMCM.MembershipCardNo AS nvarchar)            
+                                FROM   PatientRedemDetails PRD(NOLOCK)            
+                                       INNER JOIN PatientMembershipCardMapping PMCM (NOLOCK)            
+                                               ON PRD.MembershipCardMappingID = PMCM.MembershipCardMappingID            
+                                WHERE  PRD.Finalbillid = @pBillID            
+                                FOR XML PATH('')), 2, 10000))      AS Card_No  ,@BillType As BillType,    
+                                    
+     Case when @LanguageCode='vi-VN' then (SELECT dbo.NumbertToWordsVietnam(Isnull(FB.Due, 0) - Isnull(@DUEPAIDAMT, 0)    - Isnull(@DueDisCountAmount, 0)))
+	 Else (SELECT dbo.Numberttowords(Isnull(FB.Due, 0) - Isnull(@DUEPAIDAMT, 0)    - Isnull(@DueDisCountAmount, 0))) END          
+	 AS DueInwards,
+	 (SELECT top 1 cast(ISNULL(DiscountPercent,0) as integer) FROM   BillingDetails WITH (NOLOCK) WHERE  FinalBillID = @pBillID) AS DiscountPercent      
+      FROM   FINALBILL FB WITH(NOLOCK)             
+      WHERE  FB.FinalBillID = @pBillID            
+             AND FB.VisitID = @pVisitID            
+             AND FB.OrgID = @pOrgID            
+ END           
+          
+ IF(@BillType='ACTUALAMOUNT')          
+    BEGIN          
+    DECLARE @BillingDetailsGrossAmount DECIMAL (18,2)           
+    SELECT @BillingDetailsGrossAmount=SUM(ActualAmount) FROM BILLINGDETAILS BD WITH(NOLOCK)           
+               
+    WHERE BD.FinalBillID=@pBillID          
+              
+      SELECT @BillingDetailsGrossAmount AS GrossBillValue,            
+             CONVERT(DECIMAL(18, 2), ( CASE            
+                                         WHEN FB.TaxPercent > 0 THEN ( ( Isnull(@BillingDetailsGrossAmount, 0) * Isnull(FB.TaxPercent, 0) ) / 100 )            
+                                         ELSE            
+                                           CASE            
+                                             WHEN Isnull(FB.TaxAmount, 0.00) > 0 THEN Isnull(FB.TaxAmount, 0)            
+                                             ELSE 0            
+                                           END            
+                                       END ))                      AS ServiceTax,            
+             Isnull(FB.EDCess, 0)                                  AS EDCess,         
+             Isnull(FB.SHEDCess, 0)                                AS SHEDCess,            
+             Isnull(FB.AmountReceived, 0)            
+             + Isnull(@DUEPAIDAMT, 0)                              AS AmountReceived,            
+             Isnull(FB.Due, 0) - Isnull(@DUEPAIDAMT, 0)    - Isnull(@DueDisCountAmount, 0)           AS Due,            
+             ( CASE            
+                 WHEN Isnull(@OLDpBillID, 0) = 0 THEN (SELECT CASE Max(TatDateTime)            
+                                                                WHEN '17530101' THEN '19900101'            
+                                                                ELSE Max(TatDateTime)            
+                                                              END AS TatDateTime            
+                                                       FROM   BillingDetails WITH (NOLOCK)            
+       WHERE  FinalBillID = @pBillID)            
+                 ELSE (SELECT CASE Max(TatDateTime)            
+                                WHEN '17530101' THEN '19900101'            
+                                ELSE Max(TatDateTime)            
+                          END AS TatDateTime            
+                       FROM   BillingDetails WITH (NOLOCK)            
+                       WHERE  FinalBillID = @OLDpBillID)            
+               END )                                               AS TatDateTime,            
+             FB.RedeemValue                                        AS RedemValue,            
+             (FB.DiscountAmount  + @DueDisCountAmount)            AS DiscountAmount,            
+            Case when @LanguageCode='vi-VN' then (SELECT dbo.NumbertToWordsVietnam(Isnull(FB.AmountReceived, 0)            
+                                        + Isnull(@DUEPAIDAMT, 0)))
+Else (SELECT dbo.Numberttowords(Isnull(FB.AmountReceived, 0)            
+                                        + Isnull(@DUEPAIDAMT, 0))) END										
+										 AS AmtInWRDS,            
+             (SELECT Substring((SELECT ', '            
+                                       + Cast(PMCM.MembershipCardNo AS nvarchar)            
+                                FROM   PatientRedemDetails PRD(NOLOCK)            
+                                       INNER JOIN PatientMembershipCardMapping PMCM (NOLOCK)            
+                                               ON PRD.MembershipCardMappingID = PMCM.MembershipCardMappingID            
+                                WHERE  PRD.Finalbillid = @pBillID            
+                                FOR XML PATH('')), 2, 10000))      AS Card_No    ,@BillType As BillType ,    
+                                   
+                                    
+     Case when @LanguageCode='vi-VN' then (SELECT dbo.NumbertToWordsVietnam(Isnull(FB.Due, 0) - Isnull(@DUEPAIDAMT, 0)    - Isnull(@DueDisCountAmount, 0)))
+	 Else (SELECT dbo.Numberttowords(Isnull(FB.Due, 0) - Isnull(@DUEPAIDAMT, 0)    - Isnull(@DueDisCountAmount, 0)))END
+	 AS DueInwards,
+	 (SELECT top 1 cast(ISNULL(DiscountPercent,0) as integer) FROM   BillingDetails WITH (NOLOCK) WHERE  FinalBillID = @pBillID) AS DiscountPercent      
+      FROM   FINALBILL FB WITH(NOLOCK)             
+      WHERE  FB.FinalBillID = @pBillID            
+             AND FB.VisitID = @pVisitID            
+             AND FB.OrgID = @pOrgID            
+ END            
+ END
+
+
+
+

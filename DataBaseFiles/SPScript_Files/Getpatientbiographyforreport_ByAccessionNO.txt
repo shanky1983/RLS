@@ -1,0 +1,1938 @@
+CREATE procedure [dbo].[Getpatientbiographyforreport_ByAccessionNO] (--pre      
+      
+ @pVisitID bigint      
+      
+ ,@OrgID int      
+      
+ ,@InvestigationID VARCHAR(max)      
+      
+ )      
+      
+as      
+      
+begin      
+      
+      
+      
+DECLARE @tblResultSelectID TABLE (accessionno BIGINT)      
+      
+      
+      
+ INSERT INTO @tblResultSelectID (accessionno)      
+      
+ SELECT DISTINCT item      
+      
+ FROM Fnsplit(@InvestigationID, ',')      
+      
+      
+      
+ /**Added by mohan for collected on**/      
+      
+ declare @HistoryID bigint      
+      
+ declare @refAccessionNumber bigint      
+      
+ declare @ParentVisitID bigint      
+      
+ declare @referVisitID bigint      
+      
+ declare @reportVisitID bigint      
+      
+ declare @ApprovedDate datetime      
+      
+ declare @pReferVisitID bigint      
+      
+  ,@ParentOrgID int      
+      
+      
+      
+ select @pReferVisitID = ReferVisitID      
+      
+ from PatientVisit(nolock)      
+      
+ where PatientVisitId = @pVisitID      
+      
+      
+      
+ -------added by Thillai kapil      
+      
+ declare @configkey varchar(10)      
+      
+      
+      
+ select @configkey = configkey      
+      
+ from ConfigKeyMaster a      
+      
+ inner join ConfigOrgMaster b on b.ConfigKeyID = a.ConfigKeyID      
+      
+  and OrgID = @OrgID      
+      
+  and ConfigKey = 'HL7CollectedDateFormat'      
+      
+      
+      
+ ----- end      
+      
+ --select @configkey      
+      
+ select @ParentOrgID = OrgID      
+      
+ from PatientVisit(nolock)      
+      
+ where PatientVisitID = @pReferVisitID      
+      
+      
+      
+ declare @pClientName varchar(100)      
+      
+  ,@pClientAddress nvarchar(2000)      
+      
+  ,@pZoneAddress varchar(100)      
+      
+  ,@pPostalCode varchar(100)      
+      
+  ,@RefPhyName varchar(255)      
+      
+  ,@pClientID bigint      
+      
+  ,@pGClientID bigint      
+      
+      
+      
+ select @pClientName = ClientName      
+      
+  ,@pClientAddress = Isnull(CA.Address1, '')      
+      
+  ,@pZoneAddress = Isnull(' Zone: ' + Isnull(ll.Code, ll.Locality_Value), '')      
+      
+  ,@pPostalCode = CA.PostalCode      
+      
+  ,@pClientID = CM.ClientID      
+      
+ from ClientMaster CM      
+      
+ inner join VisitClientMapping VCM(nolock) on CM.OrgID = VCM.OrgID      
+      
+  and CM.ClientID = VCM.ClientID      
+      
+  and VCM.RefFinalBillID is null      
+      
+ left join AddressDetails CA(nolock) on CA.ReferenceID = VCM.ClientID      
+      
+  and Isnull(CA.Address1, '') <> ''      
+      
+  and CA.IsCommunication = 'Y'      
+      
+ left join Localities ll(nolock) on ll.Locality_ID = CM.ZonalID      
+      
+  and ll.Type = 'Zone'      
+      
+ where VCM.VisitID = @pReferVisitID      
+      
+  and VCM.OrgID = @ParentOrgID      
+      
+      
+      
+ select @pGClientID = ClientID      
+      
+ from ClientMaster(nolock)      
+      
+ where OrgID = @ParentOrgID      
+      
+  and ClientCode = 'GENERAL'      
+      
+      
+      
+ if (@pClientID = @pGClientID)      
+      
+ begin      
+      
+  set @pClientName = (      
+      
+    select Location      
+      
+    from PatientVisit PV with (nolock)      
+      
+    inner join OrganizationAddress OA with (nolock) on OA.AddressID = PV.OrgAddressID      
+      
+    where PV.PatientVisitId = @pReferVisitID      
+      
+    )      
+      
+  set @pClientAddress = ''      
+      
+ end      
+      
+      
+      
+ select @RefPhyName = ReferingPhysicianName      
+      
+ from PatientVisit(nolock)      
+      
+ where OrgID = @ParentOrgID      
+      
+  and PatientVisitId = @pReferVisitID      
+      
+      
+      
+ select @refAccessionNumber = ReferredAccessionNo      
+      
+ from OrderedInvestigations(nolock)      
+      
+ where VisitID in (@pVisitID)      
+      
+  and ReferredAccessionNo is not null      
+      
+      
+      
+ declare @TempDemography as table (      
+      
+  PatientName varchar(255)      
+      
+  ,VisitDate datetime      
+      
+  ,SEX varchar(20)      
+      
+  ,VisitNo varchar(256)      
+      
+  ,ExternalVisitID varchar(255)      
+      
+  ,PatientVisitId bigint      
+      
+  ,VisitType varchar(20)      
+      
+  ,Age varchar(20)      
+      
+  ,ReferingPhysicianName varchar(100)      
+      
+  ,PatientID varchar(30)      
+      
+  ,ConstultantName varchar(255)      
+      
+  ,CollectedOn datetime     
+      
+  ,ReportedOn datetime      
+      
+  ,PrintedOn datetime      
+      
+  ,ContactNo varchar(50)      
+      
+  ,ClientName varchar(255)      
+      
+  ,DetailHistory varchar(MAX)      
+      
+  ,HospitalName varchar(255)      
+      
+  ,Patient_HISTID bigint      
+      
+  ,ExternalPatientNumber varchar(30)      
+      
+  ,DOB datetime      
+      
+  ,ApprovedAt datetime      
+      
+  ,name varchar(255)      
+      
+  ,PatientNumber varchar(30)      
+      
+  ,Address nvarchar(2000)      
+      
+  ,ZoneAddress varchar(100)      
+      
+  ,PostalCode varchar(100)      
+      
+  ,PatientAddress varchar(255)      
+      
+  ,PatientPostalcode varchar(100)      
+      
+  ,attrubuteCode varchar(50)      
+,ClientCode NVARCHAR(50)  
+  ,ExternalvisitType char(10)      
+      
+  ,Receivedon datetime ,
+  VisitTypeNo  nvarchar(100),
+  Location varchar(100),
+  RequestNo nvarchar(100) ,    
+  IntegrationClientName  varchar(256)      
+  ,EMail nvarchar(100)  
+      
+  )      
+      
+      
+      
+ if (      
+      
+   @refAccessionNumber > 0      
+      
+   and @refAccessionNumber is not null      
+      
+   )      
+      
+ begin      
+      
+  select @ParentVisitID = VisitID      
+      
+  from OrderedInvestigations with (nolock)      
+      
+  where AccessionNumber = @refAccessionNumber      
+      
+ end      
+      
+ else      
+      
+ begin      
+      
+  set @ParentVisitID = @pVisitID      
+      
+  set @referVisitID = @pVisitID      
+      
+ end      
+      
+      
+      
+ select @referVisitID = PatientVisitId      
+      
+ from PatientVisit with (nolock)      
+      
+ where ReferVisitID = @pVisitID      
+      
+      
+      
+ if (      
+      
+   @referVisitID > 0      
+      
+   and @referVisitID is not null      
+      
+   )      
+      
+ begin      
+      
+  set @reportVisitID = @referVisitID      
+      
+ end      
+      
+ else      
+      
+ begin      
+      
+  set @reportVisitID = @pVisitID      
+      
+ end      
+      
+      
+      
+ --print 'out'                                                                                       
+      
+ print @reportVisitID      
+      
+      
+      
+ select @HistoryID = Patient_HISTID      
+      
+ from OrderedInvestigations with (nolock)      
+      
+ where VisitId = @pVisitID      
+      
+  and OrgID = @OrgID      
+      
+  and Patient_HISTID is not null      
+      
+      
+      
+ declare @ClientIDSt bigint      
+      
+ declare @ClientCode nvarchar(100)      
+      
+      
+      
+ if (      
+      
+   @refAccessionNumber > 0      
+      
+   and @refAccessionNumber is not null      
+      
+   )      
+      
+ begin      
+      
+  select @ClientCode = CM.ClientCode      
+      
+   ,@ClientIDSt = VCM.ClientID      
+      
+  from VisitClientMapping VCM with (nolock)      
+      
+  inner join ClientMaster CM with (nolock) on CM.ClientID = VCM.ClientID      
+      
+   and CM.OrgID = VCM.OrgID      
+      
+  where VisitID = @ParentVisitID      
+      
+   and VCM.IsActive is null      
+      
+ end      
+      
+ else      
+      
+ begin      
+      
+  select @ClientCode = CM.ClientCode      
+      
+   ,@ClientIDSt = VCM.ClientID      
+      
+  from VisitClientMapping VCM with (nolock)      
+      
+  inner join ClientMaster CM with (nolock) on CM.ClientID = VCM.ClientID      
+      
+   and CM.OrgID = VCM.OrgID      
+      
+  where VisitID = @pVisitID      
+      
+   and CM.OrgID = @OrgID      
+      
+   and VCM.IsActive is null      
+      
+ end      
+      
+      
+      
+ create table #Clientstationary (      
+      
+  AttributeID bigint      
+      
+  ,Clientid bigint      
+      
+  ,attributetype varchar(50)      
+      
+  ,CADAttributeID bigint      
+      
+  ,attrubuteCode varchar(50)      
+      
+  )      
+      
+      
+      
+ insert into #Clientstationary (      
+      
+  AttributeID      
+      
+  ,Clientid      
+      
+  ,attributetype      
+      
+  ,CADAttributeID      
+      
+  ,attrubuteCode      
+      
+  )      
+      
+ select CA.AttributeID      
+      
+  ,CAD.ClientID      
+      
+  ,CA.AttributesType      
+      
+  ,CAD.AttributesID      
+      
+  ,CA.AttributeCode      
+      
+ from ClientAttributes CA(nolock)      
+      
+ inner join ClientAttributesDetails CAD(nolock) on CA.AttributeID = CAD.AttributesID      
+      
+ where CAD.OrgID = @OrgID      
+      
+  and CA.AttributesType = 'Notify'      
+      
+  and CA.AttributeID = 22      
+      
+  and CAD.ClientID = @ClientIDSt      
+      
+      
+      
+ --and isnull(CAD.value  ,'Y')='Y'                 
+      
+ --insert INTO  #Clientstationary(AttributeID,Clientid,attributetype,CADAttributeID,attrubuteCode)       
+      
+ --select 22,@ClientIDSt,'Notify',22,'ISTrust'               
+      
+ if (@ClientCode = 'GENERAL')      
+      
+ begin      
+      
+  insert into @TempDemography      
+      
+  select distinct --s.TitleName + ' ' +      
+      
+   p.name as PatientName      
+      
+   ,(      
+      
+    select VisitDate      
+      
+    from PatientVisit with (nolock)      
+      
+    where PatientVisitId = @ParentVisitID      
+      
+    ) as VisitDate      
+      
+   ,case       
+      
+    when Isnull(OI.Patient_HISTID, 0) = 0      
+      
+     then (      
+      
+       case       
+      
+        when Isnull(p.UnknownFlag, 0) = 0      
+      
+         or Isnull(p.UnknownFlag, 0) = 1      
+      
+         then (      
+      
+           case Upper(p.SEX)      
+      
+            when 'M'      
+      
+             then 'Male'      
+      
+            when 'F'      
+      
+             then 'Female'      
+      
+            when 'V'      
+      
+             then 'Vet'      
+      
+            when 'N'      
+      
+             then 'NA'      
+      
+            else ''      
+      
+            end      
+      
+           )      
+      
+        else ''      
+      
+        end      
+      
+       )      
+      
+    else (      
+      
+      select case Upper(p.SEX)      
+      
+        when 'M'      
+      
+         then 'Male'      
+      
+        when 'F'      
+      
+         then 'Female'      
+      
+        when 'V'      
+      
+         then 'Vet'      
+      
+        when 'N'      
+      
+         then 'NA'      
+      
+        else ''      
+      
+        end      
+      
+      from Patient_HIST PHIS(nolock)      
+      
+      where PHIS.Patient_HISTID = @HistoryID      
+      
+       and PHIS.OrgID = @OrgID      
+      
+      )      
+      
+    end as SEX      
+      
+   ,(      
+      
+    select VisitNumber      
+      
+    from PatientVisit(nolock)      
+      
+    where PatientVisitId = @ParentVisitID      
+      
+    ) as VisitNo      
+      
+   ,pv.ExternalVisitID      
+      
+   ,pv.PatientVisitId      
+      
+   ,case pv.VisitType      
+      
+    when 0      
+      
+     then 'OP'      
+      
+    when 1      
+      
+     then 'IP'      
+      
+    end as VisitType      
+      
+   ,      
+      
+   --CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2        
+      
+   --THEN (CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'                                                     
+      
+   --ELSE P.Age end) ELSE '' END AS Age ,                                                         
+      
+   Isnull(P.Age, '') as Age      
+      
+   ,      
+      
+   --ISNULL(P.Age,'')+'/' AS Age,               
+      
+   --ISNULL((pv.ReferingPhysicianName),'') AS ReferingPhysicianName,                 
+      
+   case       
+      
+    when 'Dr.' + Isnull((pv.ReferingPhysicianName), '') = 'Dr.'      
+      
+     then ''      
+      
+    else Isnull((pv.ReferingPhysicianName), '')              
+      
+    end as ReferingPhysicianName      
+      
+   ,p.patientnumber as PatientID      
+      
+   ,case pv.VisitType      
+      
+    when 1      
+      
+     then (      
+      
+       select top 1 'Constultant Name : ' + SL.TitleName + phy.PhysicianName      
+      
+       from PrimaryConsultant IAD with (nolock)      
+      
+       inner join Physician phy with (nolock) on phy.PhysicianID = IAD.PrimaryConsultantID      
+      
+       inner join Salutation SL with (nolock) on SL.TitleID = phy.TitleCode      
+      
+       where IAD.VisitID = @pVisitID      
+      
+       )      
+      
+    end as ConstultantName      
+      
+   ,      
+      
+   --                                (Select ISNULL(case      
+      
+   --  when Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime)as time)) = 0 Then convert(varchar, Min(CollectedDateTime), 103)      
+      
+   --else convert(varchar, Min( CollectedDateTime ), 103)      
+      
+   -- + ' '  + convert(varchar, Cast(Min( CollectedDateTime) as time), 0) end,       
+      
+   -------added by Thillai kapil      
+      
+   (      
+      
+    select Isnull(case       
+      
+       when Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime) as time)) = 0      
+      
+        then CONVERT(varchar, Min(CollectedDateTime), 103)      
+      
+       else case       
+      
+         when @configkey = 'HL7Collect'      
+      
+          then CONVERT(varchar, Min(CollectedDateTime), 103) + ' ' + Substring(CONVERT(varchar, Min(CollectedDateTime), 108), 0, 6)      
+      
+         else CONVERT(varchar, Min(CollectedDateTime), 103) + ' ' + CONVERT(varchar, Cast(Min(CollectedDateTime) as time), 0)      
+      
+         end      
+      
+       end,      
+      
+      ------end----------      
+      
+      CONVERT(varchar, Min(ModifiedAt), 103) + ' ' + CONVERT(varchar, Cast(Min(ModifiedAt) as time), 0))      
+      
+    from PatientInvSample with (nolock)      
+      
+    where PatientVisitID = @ParentVisitID      
+      
+    ) as CollectedOn      
+      
+   ,      
+      
+   --(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,                                                   
+      
+   (      
+      
+    select Max(ApprovedAt)      
+      
+    from PatientInvestigation(nolock)      
+      
+    where PatientVisitID = @reportVisitID      
+      
+    ) as ReportedOn      
+      
+   ,CONVERT(varchar, dbo.Fn_getserverdatewithoutcontext(@OrgID, 0), 100) as PrintedOn      
+      
+   ,case       
+      
+    when Isnull(PA.LandLineNumber, '') <> ''      
+      
+     and PA.LandLineNumber <> '0'      
+      
+     then PA.LandLineNumber      
+      
+    else case       
+      
+      when Isnull(PA.MobileNumber, '') <> ''      
+      
+       and PA.MobileNumber <> '0'      
+      
+       then PA.MobileNumber      
+      
+      else ''      
+      
+      end      
+      
+    end as ContactNo      
+      
+   ,(      
+      
+    select Location      
+      
+    from PatientVisit pv1 with (nolock)      
+      
+    inner join OrganizationAddress OA1 with (nolock) on OA1.AddressID = pv1.OrgAddressID      
+      
+    where PatientVisitId = @ParentVisitID      
+      
+    ) as ClientName      
+      
+   ,Isnull(PH.DetailHistory, '') as DetailHistory      
+      
+   ,Isnull((pv.HospitalName), '') as HospitalName      
+      
+   ,OI.Patient_HISTID      
+      
+   ,p.ExternalPatientNumber      
+      
+,(      
+      
+    select CONVERT(varchar, P.DOB, 103)      
+      
+    ) as DOB      
+      
+   ,(      
+      
+    select Max(ApprovedAt)      
+      
+    from PatientInvestigation      
+      
+    where PatientVisitID = @pVisitID      
+      
+    ) as ApprovedAt      
+      
+   ,p.name as name      
+      
+   ,p.PatientNumber + ' ' + case       
+      
+    when Isnull('(' + Isnull(p.ExternalPatientNumber, '') + ')', '') = '()'      
+      
+     then ''      
+      
+    else '(' + Isnull(p.ExternalPatientNumber, '') + ')'      
+      
+    end as PatientNumber      
+      
+   ,      
+      
+   --p.PatientNumber +'('+ p.ExternalPatientNumber+')'          
+      
+   --as PatientNumber,         
+      
+   '' as Address      
+      
+   ,'' as ZoneAddress      
+      
+   ,'' as PostalCode      
+      
+   ,      
+      
+   --CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                            
+      
+   PA.Add1 + ' ' + PA.Add2 + ' ' + PA.City as PatientAddress      
+      
+   ,PA.PostalCode as PatientPostalcode      
+      
+   ,'ISTrust' as attrubuteCode      
+,@ClientCode AS ClientCode  
+   ,case pv.ExternalVisitType      
+      
+    when 0      
+      
+     then 'IP'      
+      
+    when 1      
+      
+     then 'OP'      
+      
+    else 'EHC'      
+      
+    end as ExternalVisitType      
+      
+   ,(Select CONVERT(varchar, min(CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(min(CreatedAt) as time), 0)             
+      
+    from SampleTracker ST with (nolock)      
+      
+    where ST.PatientVisitID = @ParentVisitID and  ST.InvSampleStatusID=3     
+      
+    ) as receivedon   ,
+ Pv.PreviousLabNumber as VisitTypeNo,        
+ case pv.LabVisitType              
+      
+    when 0      
+      
+     then       
+   case when CM.ClientCode='GFHC15'      
+           then 'Health Checkup Dispatch'      
+        when CM.ClientCode='GFHR16'      
+           then 'HRD Dispatch'      
+        when CM.ClientCode='GFCD17'      
+           then 'Central Dispatch'      
+        when CM.ClientCode='GFVS15'      
+           then 'VISA Dispatch'
+        when CM.ClientCode='GFHS19'      
+           then 'Home Service'
+		   ELSE
+		    OA.Location     
+   End      
+    when 1      
+      
+     then Pv.WardNo      
+              
+    end as Location,   PV.ExternalVisitID as RequestNo ,PV.ClientName as IntegrationClientName   , ISNULL(P.EMail,'')  
+  from PatientVisit pv with (nolock)        
+      
+  Inner Join VisitClientMapping VCM  with (nolock) on VCM.VisitID=PV.PatientVisitId  and VCM.OrgID = PV.OrgID          
+      
+  Inner join ClientMaster CM with (nolock) on CM.ClientID=VCM.ClientID and CM.OrgID = VCM.OrgID       
+              
+  inner join Patient p with (nolock) on p.PatientID = pv.PatientID      
+      
+  inner join Salutation s with (nolock) on s.TitleID = p.TITLECode      
+      
+  inner join PatientAddress PA with (nolock) on PA.PatientID = P.PatientID      
+      
+  inner join OrganizationAddress OA with (nolock) on OA.AddressID = PV.OrgAddressID      
+      
+  left join PatientHistoryExt PH(nolock) on PH.PatientID = p.PatientID      
+      
+   and PH.PatientVisitId = pv.PatientVisitId      
+      
+   and PH.OrgID = pv.OrgID      
+      
+  left join OrderedInvestigations OI with (nolock) on OI.VisitID = pv.PatientVisitId      
+      
+   and OI.OrgID = PV.OrgID      
+      
+  where pv.PatientVisitId = @pVisitID      
+      
+   and pv.OrgID = @OrgID      
+      
+  order by OI.Patient_HISTID desc      
+      
+      
+      
+  if (      
+      
+    @pReferVisitID is not null      
+      
+    and @pReferVisitID <> ''      
+      
+    )      
+      
+  begin      
+      
+   update TM      
+      
+   set TM.ClientName = Isnull(@pClientName, TM.ClientName)      
+      
+    ,TM.Address = Isnull(@pClientAddress, TM.Address)      
+      
+    ,TM.ZoneAddress = Isnull(@pZoneAddress, TM.ZoneAddress)      
+      
+    ,TM.PostalCode = Isnull(@pPostalCode, TM.PostalCode)      
+      
+    ,TM.ReferingPhysicianName = Isnull(@RefPhyName, TM.ReferingPhysicianName)      
+      
+   from @TempDemography TM      
+      
+  end      
+      
+      
+      
+  --if exists (select 1 from  @TempDemography where  ReferingPhysicianName<>'')      
+      
+  --begin      
+      
+  --     update TM set TM.ReferingPhysicianName='Dr.' + RIGHT(TM.ReferingPhysicianName, charindex('^', REVERSE(Tm.ReferingPhysicianName))) from @TempDemography TM      
+      
+  -- update @TempDemography set ReferingPhysicianName=REPLACE(ReferingPhysicianName,'^','')      
+      
+  -- end   
+      
+  update @TempDemography      
+      
+  set Age = Replace(Age, Substring(Age, Charindex('.', Age), (Charindex(' ', Age) - Charindex('.', Age))), '')      
+      
+  where Age like '%.%'      
+      
+  declare @RECEIVEDDATE datetime      
+      
+  declare @COLLECTEDDATETIME datetime      
+      
+  declare @ApprovedDATETIME datetime      
+      
+      
+      
+  set @RECEIVEDDATE = (      
+      
+    select Max(CreatedAt)      
+      
+    from SampleTracker      
+      
+    where PatientVisitID = @pVisitID      
+      
+     and InvSampleStatusID = 3     
+      
+    )      
+      
+      
+      
+   IF((SELECT COUNT(1) FROM @tblResultSelectID)=1)      
+      
+   BEGIN       
+      
+    SET @RECEIVEDDATE = (SELECT CONVERT(varchar, Max(ST.CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(Max(ST.CreatedAt) as time), 0) FROM SampleTracker ST       
+      
+     INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID       
+      
+     inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+     inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+     WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 3     
+      
+    )       
+      
+    SET @ApprovedDATETIME =(select Max(ApprovedAt)      
+      
+    from PatientInvestigation PINV (nolock)       
+      
+    inner join @tblResultSelectID T on PINV.AccessionNumber=T.accessionno      
+      
+    where PatientVisitID = @reportVisitID)      
+      
+      
+      
+    update @TempDemography set ReportedOn=convert(varchar, @ApprovedDATETIME, 103) + ' ' +       
+      
+        case       
+      
+        when DATEPART(HH, @ApprovedDATETIME) < 10      
+      
+        then '0' + convert(varchar, DATEPART(HH, @ApprovedDATETIME))      
+      
+        else convert(varchar, DATEPART(HH, @ApprovedDATETIME))      
+      
+        end + ':' + case       
+      
+        when DATEPART(MINUTE, @ApprovedDATETIME) < 10      
+      
+        then '0' + convert(varchar, DATEPART(MINUTE, @ApprovedDATETIME))      
+      
+        else convert(varchar, DATEPART(MINUTE, @ApprovedDATETIME))      
+      
+        end      
+      
+      
+      
+    SET @COLLECTEDDATETIME = (SELECT MAX(PIS.CollectedDateTime)        
+      
+    FROM SampleTracker ST       
+      
+        INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID      
+      
+        inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+        inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+        inner join PatientInvSample PIS on PISM.VisitID=PIS.PatientVisitID and pis.SampleID=st.SampleID --and pis.SampleID=PISM.SampleID      
+      
+        WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 1      
+      
+        and ST.CollectedIn = 106)      
+      
+    --update @TempDemography set CollectedOn=convert(varchar, @COLLECTEDDATETIME, 103) + ' ' +       
+      
+    --    case       
+      
+    --    when DATEPART(HH, @COLLECTEDDATETIME) < 10      
+      
+    --    then '0' + convert(varchar, DATEPART(HH, @COLLECTEDDATETIME))      
+      
+    --    else convert(varchar, DATEPART(HH, @COLLECTEDDATETIME))      
+      
+    --    end + ':' + case       
+      
+    --    when DATEPART(MINUTE, @COLLECTEDDATETIME) < 10      
+      
+    --    then '0' + convert(varchar, DATEPART(MINUTE, @COLLECTEDDATETIME))      
+      
+    --    else convert(varchar, DATEPART(MINUTE, @COLLECTEDDATETIME))      
+      
+    --    end      
+      
+   END      
+      
+   ELse IF((SELECT COUNT(1) FROM @tblResultSelectID)>1)      
+      
+   BEGIN      
+      
+    IF EXISTS(SELECT 'x' FROM @tblResultSelectID T       
+      
+  INNER JOIN OrderedInvestigations OI (nolock) ON T.accessionno=OI.AccessionNumber      
+      
+    AND OI.VisitID=@pVisitID and OI.OrgID=@OrgID and ISNULL(PkgID,0) <>0)      
+      
+    BEGIN      
+      
+     SET @RECEIVEDDATE = (SELECT CONVERT(varchar, Max(ST.CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(Max(ST.CreatedAt) as time), 0) FROM SampleTracker ST       
+      
+      INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID       
+      
+      inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+      inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+      WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 3 )       
+      
+     SET @ApprovedDATETIME =(select Max(ApprovedAt)      
+      
+      from PatientInvestigation PINV (nolock)       
+      
+      inner join @tblResultSelectID T on PINV.AccessionNumber=T.accessionno      
+      
+      where PatientVisitID = @reportVisitID)      
+      
+     update @TempDemography set ReportedOn=convert(varchar, @ApprovedDATETIME, 103) + ' ' +       
+      
+        case       
+      
+        when DATEPART(HH, @ApprovedDATETIME) < 10      
+      
+        then '0' + convert(varchar, DATEPART(HH, @ApprovedDATETIME))      
+      
+        else convert(varchar, DATEPART(HH, @ApprovedDATETIME))      
+      
+        end + ':' + case       
+      
+        when DATEPART(MINUTE, @ApprovedDATETIME) < 10      
+      
+        then '0' + convert(varchar, DATEPART(MINUTE, @ApprovedDATETIME))      
+      
+        else convert(varchar, DATEPART(MINUTE, @ApprovedDATETIME))      
+      
+        end      
+      
+     SET @COLLECTEDDATETIME = (SELECT MIN(PIS.CollectedDateTime)        
+      
+        FROM SampleTracker ST       
+      
+        INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID      
+      
+        inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+        inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+        inner join PatientInvSample PIS on PISM.VisitID=PIS.PatientVisitID and pis.SampleID=st.SampleID --and pis.SampleID=PISM.SampleID      
+      
+        WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 1      
+      
+        and ST.CollectedIn = 106)      
+      
+     --update @TempDemography set CollectedOn=convert(varchar, @COLLECTEDDATETIME, 103) + ' ' +       
+      
+     --   case       
+      
+     --   when DATEPART(HH, @COLLECTEDDATETIME) < 10      
+      
+     --   then '0' + convert(varchar, DATEPART(HH, @COLLECTEDDATETIME))      
+      
+     --   else convert(varchar, DATEPART(HH, @COLLECTEDDATETIME))      
+      
+     --   end + ':' + case       
+      
+     --   when DATEPART(MINUTE, @COLLECTEDDATETIME) < 10      
+      
+     --   then '0' + convert(varchar, DATEPART(MINUTE, @COLLECTEDDATETIME))      
+      
+     --   else convert(varchar, DATEPART(MINUTE, @COLLECTEDDATETIME))      
+      
+     --   end      
+      
+    END      
+      
+    END      
+      
+         
+      
+  --UPDATE  @TempDemography set Receivedon =   convert(varchar, @RECEIVEDON, 103)+' '+DATEPART(HH,@RECEIVEDON)+':'+ DATEPART(MM,@RECEIVEDON)      
+      
+  --update @TempDemography      
+      
+  --set Receivedon = convert(varchar, @RECEIVEDDATE, 23) + ' ' + case       
+      
+  --  when DATEPART(HH, @RECEIVEDDATE) < 10      
+      
+  --   then '0' + convert(varchar, DATEPART(HH, @RECEIVEDDATE))      
+      
+  --  else convert(varchar, DATEPART(HH, @RECEIVEDDATE))      
+      
+  --  end + ':' + case       
+      
+  --  when DATEPART(MINUTE, @RECEIVEDDATE) < 10      
+      
+  --   then '0' + convert(varchar, DATEPART(MINUTE, @RECEIVEDDATE)) 
+      
+  --  else convert(varchar, DATEPART(MINUTE, @RECEIVEDDATE))      
+      
+  --  end      
+      
+      
+  select top 1 dbo.[Udf_titlecase](PatientName) as PatientName      
+      
+   ,VisitDate      
+      
+   ,SEX      
+      
+   ,VisitNo      
+      
+   ,ExternalVisitID      
+      
+   ,PatientVisitId      
+      
+   ,VisitType      
+      
+   ,age      
+      
+   ,dbo.[Udf_titlecase](ReferingPhysicianName) as ReferingPhysicianName      
+      
+   ,PatientID      
+      
+   ,ConstultantName      
+      
+   ,CollectedOn      
+      
+   ,Receivedon      
+      
+   ,ReportedOn      
+      
+   ,ApprovedAt      
+      
+   ,PrintedOn      
+      
+   ,ContactNo      
+      
+   ,ClientName      
+      
+   ,DetailHistory      
+      
+   ,HospitalName      
+      
+   ,Patient_HISTID      
+      
+   ,ExternalPatientNumber      
+      
+   ,DOB      
+      
+   ,name      
+      
+   ,PatientNumber      
+      
+   ,Address      
+      
+   ,ZoneAddress      
+      
+   ,PostalCode      
+      
+   ,PatientAddress      
+      
+   ,PatientPostalcode      
+      
+   ,attrubuteCode      
+,ClientCode  
+   ,ExternalVisitType, VisitTypeNo, Location, RequestNo  ,IntegrationClientName  ,EMail                  
+      
+  from @TempDemography      
+      
+order by Patient_HISTID desc      
+      
+ end      
+      
+ else      
+      
+ begin      
+      
+  --select 'a'       
+      
+  insert into @TempDemography      
+      
+  select distinct --s.TitleName + ' ' +       
+      
+   p.name as PatientName      
+      
+   ,(      
+      
+    select VisitDate      
+      
+    from PatientVisit with (nolock)      
+      
+    where PatientVisitId = @ParentVisitID      
+      
+    ) as VisitDate      
+      
+   ,case       
+      
+    when Isnull(OI.Patient_HISTID, 0) = 0      
+      
+     then (      
+      
+       case       
+      
+        when Isnull(p.UnknownFlag, 0) = 0      
+      
+         or Isnull(p.UnknownFlag, 0) = 1      
+      
+         then (      
+      
+           case Upper(p.SEX)      
+      
+            when 'M'      
+      
+             then 'Male'      
+      
+            when 'F'      
+      
+             then 'Female'      
+      
+            when 'V'      
+      
+             then 'Vet'      
+      
+            when 'N'      
+      
+             then 'NA'      
+      
+            else ''      
+      
+            end      
+      
+           )      
+      
+        else ''      
+      
+        end      
+      
+       )      
+      
+    else (      
+      
+      select case Upper(p.SEX)      
+      
+        when 'M'      
+      
+         then 'Male'      
+      
+        when 'F'      
+      
+         then 'Female'      
+      
+        when 'V'      
+      
+       then 'Vet'      
+      
+        when 'N'      
+      
+         then 'NA'      
+      
+        else ''      
+      
+        end      
+      
+      from Patient_HIST PHIS(nolock)      
+      
+      where PHIS.Patient_HISTID = @HistoryID      
+      
+       and PHIS.orgid = @OrgID      
+      
+      )      
+      
+    end as SEX      
+      
+  ,(      
+      
+    select VisitNumber      
+      
+    from PatientVisit(nolock)      
+      
+    where PatientVisitId = @ParentVisitID      
+      
+    ) as VisitNo      
+      
+   ,pv.ExternalVisitID      
+      
+   ,pv.PatientVisitId      
+      
+   ,case pv.VisitType      
+      
+    when 0      
+      
+     then 'OP'      
+      
+    when 1      
+      
+     then 'IP'      
+      
+    end as VisitType      
+      
+   ,      
+      
+   --CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2 THEN        
+      
+   --(CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'                                         
+      
+   --ELSE P.Age end) ELSE '' END AS Age ,                                                         
+      
+Isnull(P.Age, '') as Age      
+      
+   ,      
+      
+   --ISNULL(P.Age,'')+'/' AS Age,                                      
+      
+   --ISNULL((pv.ReferingPhysicianName),'') AS ReferingPhysicianName,              
+      
+   case       
+      
+    when 'Dr.' + Isnull((pv.ReferingPhysicianName), '') = 'Dr.'      
+ 
+     then ''      
+      
+    else Isnull((pv.ReferingPhysicianName), '')             
+      
+    end as ReferingPhysicianName      
+      
+   ,p.patientnumber as PatientID      
+      
+   ,case pv.VisitType      
+      
+    when 1      
+      
+     then (      
+      
+       select top 1 'Constultant Name : ' + SL.TitleName + phy.PhysicianName      
+      
+       from PrimaryConsultant IAD with (nolock)      
+      
+       inner join Physician phy with (nolock) on phy.PhysicianID = IAD.PrimaryConsultantID      
+      
+       inner join Salutation SL with (nolock) on SL.TitleID = phy.TitleCode      
+      
+       where IAD.VisitID = @pVisitID      
+      
+       )      
+      
+    end as ConstultantName      
+      
+   ,      
+      
+   ------------Added  by Thillai kapil  T---------------------      
+      
+   --                               (Select ISNULL(case      
+      
+   --when Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime)as time)) = 0 Then convert(varchar, Min(CollectedDateTime), 103)      
+      
+   --else convert(varchar, Min( CollectedDateTime ), 103)      
+      
+   -- + ' '  + convert(varchar, Cast(Min( CollectedDateTime) as time), 0 )end,       
+      
+   -------added by Thillai kapil      
+      
+   (      
+      
+    select Isnull(case       
+      
+       when Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime) as time)) = 0      
+      
+        then CONVERT(varchar, Min(CollectedDateTime), 103)      
+      
+       else case       
+      
+         when @configkey = 'HL7Collect'      
+      
+          then CONVERT(varchar, Min(CollectedDateTime), 103) + ' ' + Substring(CONVERT(varchar, Min(CollectedDateTime), 108), 0, 6)      
+      
+         else CONVERT(varchar, Min(CollectedDateTime), 103) + ' ' + CONVERT(varchar, Cast(Min(CollectedDateTime) as time), 0)      
+      
+         end      
+      
+       end,      
+      
+      ------------END----------------      
+      
+      CONVERT(varchar, Min(ModifiedAt), 103) + ' ' + CONVERT(varchar, Cast(Min(ModifiedAt) as time), 0))      
+      
+    from PatientInvSample with (nolock)      
+      
+    where PatientVisitID = @ParentVisitID      
+      
+    ) as CollectedOn      
+      
+   ,      
+      
+   --(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,                    
+      
+   (      
+      
+    select Max(ApprovedAt)      
+      
+    from PatientInvestigation(nolock)      
+      
+    where PatientVisitID = @reportVisitID      
+      
+    ) as ReportedOn      
+      
+   ,CONVERT(varchar, dbo.Fn_getserverdatewithoutcontext(@OrgID, 0), 100) as PrintedOn      
+         ,case       
+      
+    when Isnull(PA.LandLineNumber, '') <> ''      
+      
+     and PA.LandLineNumber <> '0'      
+      
+     then PA.LandLineNumber      
+      
+    else case       
+      
+      when Isnull(PA.MobileNumber, '') <> ''      
+      
+       and PA.MobileNumber <> '0'      
+      
+       then PA.MobileNumber      
+      
+      else ''      
+      
+      end      
+      
+    end as ContactNo      
+      
+   ,CM.ClientName      
+      
+   ,Isnull(PH.DetailHistory, '') as DetailHistory      
+      
+   ,Isnull((pv.HospitalName), '') as HospitalName      
+      
+   ,OI.Patient_HISTID      
+      
+   ,p.ExternalPatientNumber      
+      
+   ,(      
+      
+    select CONVERT(varchar, P.DOB, 103)      
+      
+    ) as DOB      
+      
+   ,(      
+      
+    select Max(ApprovedAt)      
+      
+    from PatientInvestigation  
+      
+    where PatientVisitID = @pVisitID      
+      
+    ) as ApprovedAt      
+      
+   ,p.name as name      
+      
+   ,      
+      
+   --p.PatientNumber as PatientNumber,       
+      
+   p.PatientNumber + ' ' + case       
+      
+    when Isnull('(' + Isnull(p.ExternalPatientNumber, '') + ')', '') = '()'      
+      
+     then ''      
+      
+    else '(' + Isnull(p.ExternalPatientNumber, '') + ')'      
+      
+    end as PatientNumber      
+      
+   ,CA.Address1 as Address      
+      
+   ,' Zone: ' + Isnull(ll.Code, ll.Locality_Value) as ZoneAddress      
+      
+   ,CA.PostalCode as PostalCode      
+      
+   ,      
+      
+   --CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                          
+      
+   PA.add1 + ' ' + PA.Add2 + ' ' + PA.City as PatientAddress      
+      
+   ,      
+      
+   --'' as PatientAddress,                               
+      
+   PA.PostalCode as PatientPostalcode      
+      
+   ,Isnull(CAD.attrubuteCode, 'ISTrust') as attrubuteCode      
+,@ClientCode AS ClientCode  
+   ,case pv.ExternalVisitType      
+      
+    when 0      
+      
+     then 'IP'      
+      
+    when 1      
+      
+     then 'OP'      
+      
+    else 'EHC'      
+      
+    end as ExternalVisitType      
+      
+   ,(Select CONVERT(varchar, min(CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(min(CreatedAt) as time), 0)             
+      
+    from SampleTracker ST with (nolock)      
+      
+    where ST.PatientVisitID = @ParentVisitID and  ST.InvSampleStatusID=3     
+      
+    ) as receivedon ,
+
+ Pv.PreviousLabNumber as VisitTypeNo,        
+ case pv.LabVisitType              
+      
+    when 0      
+      
+     then       
+   case when CM.ClientCode='GFHC15'      
+           then 'Health Checkup Dispatch'      
+        when CM.ClientCode='GFHR16'      
+           then 'HRD Dispatch'      
+        when CM.ClientCode='GFCD17'      
+           then 'Central Dispatch'      
+     when CM.ClientCode='GFVS15'      
+           then 'VISA Dispatch'
+     when CM.ClientCode='GFHS19'      
+           then 'Home Service'      
+   End           
+              
+    when 1      
+      
+     then Pv.WardNo      
+      
+    end as Location,   pv.ExternalVisitID as RequestNo ,PV.ClientName as IntegrationClientName  ,ISNULL(P.EMail,'')          
+      
+  from PatientVisit pv with (nolock)      
+      
+  inner join Patient p with (nolock) on p.PatientID = pv.PatientID      
+      
+  inner join Salutation s with (nolock) on s.TitleID = p.TITLECode      
+      
+  inner join PatientAddress PA with (nolock) on PA.PatientID = P.PatientID      
+      
+  left join VisitClientMapping VCM(nolock) on VCM.VisitID = PV.PatientVisitId      
+      
+   and VCM.OrgID = PV.OrgID      
+      
+  left join ClientMaster CM(nolock) on CM.ClientID = VCM.ClientID      
+      
+   and CM.OrgID = VCM.OrgID      
+      
+  left join #Clientstationary CAD(nolock) on CAD.ClientID = VCM.ClientID      
+      
+  left join AddressDetails CA(nolock) on CA.ReferenceID = VCM.ClientID      
+      
+   and Isnull(CA.Address1, '') <> ''      
+      
+   and CA.IsCommunication = 'Y'      
+      
+  left join Localities ll(nolock) on ll.Locality_ID = CM.ZonalID      
+      
+   and ll.Type = 'Zone'      
+      
+  left join PatientHistoryExt PH(nolock) on PH.PatientID = p.PatientID      
+      
+   and PH.PatientVisitId = pv.PatientVisitId      
+      
+   and PH.OrgID = pv.OrgID      
+      
+  left join OrderedInvestigations OI with (nolock) on OI.VisitID = pv.PatientVisitId      
+      
+   and OI.OrgID = PV.OrgID      
+      
+  where pv.PatientVisitId = @pVisitID      
+      
+   and pv.OrgID = @OrgID      
+      
+   and Isnull(ISactive, 'Y') = 'Y'      
+      
+  order by OI.Patient_HISTID desc      
+      
+      
+      
+  if (      
+      
+    @pReferVisitID is not null      
+      
+    and @pReferVisitID <> ''      
+      
+    )      
+      
+  begin      
+      
+   update TM      
+      
+   set TM.ClientName = Isnull(@pClientName, TM.ClientName)   
+      
+    ,TM.Address = Isnull(@pClientAddress, TM.Address)      
+      
+    ,TM.ZoneAddress = Isnull(@pZoneAddress, TM.ZoneAddress)      
+      
+    ,TM.PostalCode = Isnull(@pPostalCode, TM.PostalCode)      
+      
+    ,TM.ReferingPhysicianName = Isnull(@RefPhyName, TM.ReferingPhysicianName)      
+      
+   from @TempDemography TM      
+      
+  end  
+      
+      
+      
+  --  if exists (select 1 from  @TempDemography where  ReferingPhysicianName<>'')      
+      
+  --begin      
+      
+  --     update TM set TM.ReferingPhysicianName='Dr.' + RIGHT(TM.ReferingPhysicianName, charindex('^', REVERSE(Tm.ReferingPhysicianName))) from @TempDemography TM      
+      
+  -- update @TempDemography set ReferingPhysicianName=REPLACE(ReferingPhysicianName,'^','')      
+      
+  -- end      
+      
+  update @TempDemography      
+      
+  set Age = Replace(Age, Substring(Age, Charindex('.', Age), (Charindex(' ', Age) - Charindex('.', Age))), '')      
+      
+  where Age like '%.%'      
+      
+      
+      
+  declare @RECEIVEDON datetime      
+      
+  declare @COLLECTEDDATE datetime      
+      
+      
+        
+      
+    select @RECEIVEDON =  CONVERT(varchar, min(CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(min(CreatedAt) as time), 0)          
+      
+    from SampleTracker      
+      
+    where PatientVisitID = @pVisitID      
+      
+     and InvSampleStatusID = 3      
+      
+       
+      
+      
+      
+   IF((SELECT COUNT(1) FROM @tblResultSelectID)=1)      
+      
+   BEGIN       
+      
+    SET @RECEIVEDON = (SELECT  CONVERT(varchar, min(ST.CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(min(ST.CreatedAt) as time), 0) FROM SampleTracker ST               
+      
+     INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID       
+      
+     inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+     inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+     WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 3      
+      
+    )       
+      
+    SET @ApprovedDATE =(select Max(ApprovedAt)      
+      
+    from PatientInvestigation PINV (nolock)       
+      
+    inner join @tblResultSelectID T on PINV.AccessionNumber=T.accessionno      
+      
+    where PatientVisitID = @reportVisitID)      
+      
+      
+      
+    update @TempDemography set ReportedOn=convert(varchar, @ApprovedDATE, 103) + ' ' +       
+      
+        case       
+      
+        when DATEPART(HH, @ApprovedDATE) < 10      
+      
+        then '0' + convert(varchar, DATEPART(HH, @ApprovedDATE))      
+      
+        else convert(varchar, DATEPART(HH, @ApprovedDATE))      
+      
+        end + ':' + case       
+      
+        when DATEPART(MINUTE, @ApprovedDATE) < 10      
+      
+        then '0' + convert(varchar, DATEPART(MINUTE, @ApprovedDATE))      
+      
+        else convert(varchar, DATEPART(MINUTE, @ApprovedDATE))      
+      
+        end      
+      
+      
+      
+    SET @COLLECTEDDATE = (SELECT MAX(PIS.CollectedDateTime)        
+      
+        FROM SampleTracker ST       
+      
+        INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID      
+      
+        inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+        inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+        inner join PatientInvSample PIS on PISM.VisitID=PIS.PatientVisitID and pis.SampleID=st.SampleID --and pis.SampleID=PISM.SampleID      
+      
+        WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 1      
+      
+        and ST.CollectedIn = 106)      
+      
+    --update @TempDemography set CollectedOn=convert(varchar, @COLLECTEDDATE, 103) + ' ' +       
+      
+    --    case       
+      
+    --    when DATEPART(HH, @COLLECTEDDATE) < 10      
+      
+    --    then '0' + convert(varchar, DATEPART(HH, @COLLECTEDDATE))      
+      
+    --    else convert(varchar, DATEPART(HH, @COLLECTEDDATE))      
+      
+    --    end + ':' + case       
+      
+    --    when DATEPART(MINUTE, @COLLECTEDDATE) < 10  
+      
+    --    then '0' + convert(varchar, DATEPART(MINUTE, @COLLECTEDDATE))      
+      
+    --    else convert(varchar, DATEPART(MINUTE, @COLLECTEDDATE))      
+      
+    --    end      
+      
+   END      
+      
+   ELse IF((SELECT COUNT(1) FROM @tblResultSelectID)>1)      
+      
+   BEGIN      
+      
+    IF EXISTS(SELECT 'x' FROM @tblResultSelectID T       
+      
+    INNER JOIN OrderedInvestigations OI (nolock) ON T.accessionno=OI.AccessionNumber      
+      
+ AND OI.VisitID=@pVisitID and OI.OrgID=@OrgID and ISNULL(PkgID,0) <>0)      
+      
+    BEGIN      
+      
+     SET @RECEIVEDON = (SELECT  CONVERT(varchar, min(ST.CreatedAt), 103) + ' ' + CONVERT(varchar, Cast(min(ST.CreatedAt) as time), 0) FROM SampleTracker ST               
+      
+     INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID       
+      
+     inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+     inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+     WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 3      
+      
+    )       
+      
+    SET @ApprovedDATE =(select Max(ApprovedAt)      
+      
+    from PatientInvestigation PINV (nolock)       
+      
+    inner join @tblResultSelectID T on PINV.AccessionNumber=T.accessionno      
+      
+    where PatientVisitID = @reportVisitID)      
+      
+      
+      
+    update @TempDemography set ReportedOn=convert(varchar, @ApprovedDATE, 103) + ' ' +       
+      
+        case       
+      
+        when DATEPART(HH, @ApprovedDATE) < 10      
+      
+        then '0' + convert(varchar, DATEPART(HH, @ApprovedDATE))      
+      
+        else convert(varchar, DATEPART(HH, @ApprovedDATE))      
+      
+        end + ':' + case       
+      
+        when DATEPART(MINUTE, @ApprovedDATE) < 10      
+      
+        then '0' + convert(varchar, DATEPART(MINUTE, @ApprovedDATE))      
+      
+        else convert(varchar, DATEPART(MINUTE, @ApprovedDATE))      
+      
+        end      
+      
+      
+      
+    SET @COLLECTEDDATE = (SELECT MAX(PIS.CollectedDateTime)        
+      
+        FROM SampleTracker ST       
+      
+        INNER JOIN OrderedInvestigations OI on ST.PatientVisitID=OI.VisitID and ST.OrgID=OI.OrgID      
+      
+        inner join @tblResultSelectID T on OI.AccessionNumber=T.accessionno      
+      
+        inner join PatientInvSampleMapping PISM on ST.PatientVisitID=PISM.VisitID and PISM.OrgID=ST.OrgID and ST.SampleID=PISM.SID and OI.ID=PISM.ID      
+      
+        inner join PatientInvSample PIS on PISM.VisitID=PIS.PatientVisitID and pis.SampleID=st.SampleID --and pis.SampleID=PISM.SampleID      
+      
+        WHERE ST.PatientVisitID=@pVisitID and ST.InvSampleStatusID = 1      
+      
+        and ST.CollectedIn = 106)      
+      
+    --update @TempDemography set CollectedOn=convert(varchar, @COLLECTEDDATE, 103) + ' ' +       
+      
+    --    case       
+      
+    --    when DATEPART(HH, @COLLECTEDDATE) < 10      
+      
+    --    then '0' + convert(varchar, DATEPART(HH, @COLLECTEDDATE))      
+      
+    --    else convert(varchar, DATEPART(HH, @COLLECTEDDATE))      
+      
+    --    end + ':' + case       
+      
+    --    when DATEPART(MINUTE, @COLLECTEDDATE) < 10      
+      
+    --    then '0' + convert(varchar, DATEPART(MINUTE, @COLLECTEDDATE))      
+      
+    --    else convert(varchar, DATEPART(MINUTE, @COLLECTEDDATE))      
+      
+    --    end      
+      
+    END      
+      
+   END      
+      
+  --UPDATE  @TempDemography set Receivedon =   convert(varchar, @RECEIVEDON, 103)+' '+DATEPART(HH,@RECEIVEDON)+':'+ DATEPART(MM,@RECEIVEDON)      
+    Declare @sampleReceiveddate datetime  
+  
+  select @sampleReceiveddate=min(createdat) from @TempDemography T          
+  Inner join SampleTracker ST on T.patientvisitId=ST.PatientVisitID   
+  where ST.InvSampleStatusID=3  
+  
+  
+  select top 1 dbo.[Udf_titlecase](PatientName) as PatientName      
+      
+   ,VisitDate      
+      
+   ,SEX      
+      
+   ,VisitNo      
+      
+   ,ExternalVisitID      
+      
+   ,PatientVisitId      
+      
+   ,VisitType      
+      
+   ,age      
+      
+   ,dbo.[Udf_titlecase](ReferingPhysicianName) as ReferingPhysicianName      
+      
+   ,PatientID      
+      
+   ,ConstultantName      
+      
+   ,CollectedOn      
+      
+   ,Receivedon    
+     
+   ,ReportedOn      
+      
+   ,ApprovedAt      
+      
+   ,PrintedOn      
+      
+   ,ContactNo      
+      
+   ,ClientName      
+      
+   ,DetailHistory      
+      
+   ,HospitalName      
+      
+   ,Patient_HISTID      
+      
+   ,ExternalPatientNumber      
+      
+   ,DOB      
+     
+   ,name      
+      
+   ,PatientNumber      
+      
+   ,Address      
+      
+   ,ZoneAddress      
+      
+   ,PostalCode      
+      
+   ,PatientAddress      
+      
+   ,PatientPostalcode      
+      
+   ,attrubuteCode      
+,ClientCode  
+   ,ExternalVisitType , VisitTypeNo, Location, RequestNo  , IntegrationClientName ,EMail            
+      
+  from @TempDemography      
+      
+  order by Patient_HISTID desc      
+      
+ end      
+      
+end      
+      
+      
+      
+      
+      
+      

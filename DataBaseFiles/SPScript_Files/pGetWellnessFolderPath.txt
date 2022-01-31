@@ -1,0 +1,40 @@
+-- =============================================          
+-- Author:  Pushparaj          
+-- Create date: 25th July 2018          
+-- Description: procedure to get wellness folder path to store the pdf files          
+-- =============================================          
+CREATE PROCEDURE pGetWellnessFolderPath          
+ -- Add the parameters for the stored procedure here       
+ @Category AS VARCHAR(50),         
+ @WellnessActivityID AS VARCHAR(100),       
+ @OrgID AS INT,         
+ @PdfSavePath as VARCHAR(MAX) OUTPUT          
+AS          
+BEGIN          
+ -- SET NOCOUNT ON added to prevent extra result sets from          
+ -- interfering with SELECT statements.          
+ SET NOCOUNT ON;          
+          
+ DECLARE @VisitID AS INT          
+ DECLARE @MAINAPTH AS VARCHAR(MAX)          
+ DECLARE @SUBPATH AS VARCHAR(MAX)          
+       
+ IF (@Category = 'Patient')      
+ BEGIN      
+   -- Main path . ex : D:\Liskernel\PDF_Folder\ANDERSONLAB_PDF_FILES          
+   SELECT @MAINAPTH = Value FROM CommunicationConfig WHERE OrgID=@OrgID and Name='WellnessPdfFolderPath'          
+          
+   -- Sub Path . ex : \WELLNESSREPORT\          
+   SELECT @VisitID=PatientVisitID FROM visittemplate WHERE BatchId=@WellnessActivityID          
+   SELECT @SUBPATH=Template+'\\'+AttachmentName FROM Notifications WHERE ActionType='WellnessPdf' and IdentityID=@VisitID          
+          
+   PRINT CONCAT(@MAINAPTH,@SUBPATH)          
+   SELECT @PdfSavePath = CONCAT(@MAINAPTH,@SUBPATH)          
+ END      
+ ELSE      
+      
+ BEGIN      
+  SELECT @PdfSavePath=Value FROM CommunicationConfig WHERE OrgID=@OrgID and Name='WellnessPdfFolderPath'      
+  --SELECT @PdfSavePath='D:\Liskernel\PDF_Folder\ANDERSONLAB_PDF_FILES\WELLNESSREPORT\'      
+ END      
+END 

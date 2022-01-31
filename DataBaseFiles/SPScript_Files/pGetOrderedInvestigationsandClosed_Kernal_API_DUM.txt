@@ -1,0 +1,182 @@
+
+CREATE PROCEDURE [dbo].[pGetOrderedInvestigationsandClosed_Kernal_API_DUM] (@pVisitID BIGINT,
+                                                             @OrgID    INT,
+																	 @IsServiceRequest VARCHAR(10))
+AS
+  Begin
+  IF ISNULL(@IsServiceRequest,'')='' SET @IsServiceRequest = 'N'
+      DECLARE @TempTblForWithinRange TABLE
+        (
+           [ID]              BIGINT,
+           [Name]            VARCHAR(MAX) NULL,
+           [Status]          VARCHAR(255) NULL,
+           [CreatedAt]       DATETIME,
+           [Type]            VARCHAR(50),
+           [AccessionNumber] BIGINT,
+           [IsAbnormal]      VARCHAR(50)
+        )
+      DECLARE @tblAffectedVisitsForSummary TABLE
+        (
+           VisitID BIGINT,
+           OrgID   BIGINT
+        )
+      DECLARE @tblAffectedVisits TABLE
+        (
+           visitid BIGINT,
+           orgid   BIGINT
+        )
+
+      INSERT @tblAffectedVisitsForSummary
+             (VisitID,OrgID)
+      SELECT PV2.patientvisitID,
+             PV2.OrgID
+      FROM   PatientVisit PV1 (NOLOCK)
+             INNER JOIN patientvisit PV2(NOLOCK)
+                     ON PV2.refervisitid = PV1.patientvisitID
+      WHERE  PV1.refervisitid = @pVisitID
+
+      INSERT INTO @tblAffectedVisits
+      SELECT @pVisitID,
+             @OrgID
+      UNION
+      SELECT patientvisitid,
+             OrgID
+      FROM   patientvisit PV1 WITH(NOLOCK)
+      WHERE  refervisitid = @pVisitID
+      UNION
+      SELECT DISTINCT VisitID,
+                      OrgID
+      FROM   @tblAffectedVisitsForSummary
+
+      INSERT @TempTblForWithinRange
+      SELECT DISTINCT OI.ID,
+                      OI.Name,
+                      OI.Status,
+                      OI.CreatedAt,
+                      oi.Type,
+                      oi.accessionnumber,
+                      PI.isAbnormal
+      FROM   @tblAffectedVisits T2
+			 INNER JOIN OrderedInvestigations (nolocK) OI
+			 ON OI.VisitID = T2.VisitID
+             INNER JOIN Patientinvestigation (nolock) PI
+                     on OI.accessionNumber = PI.accessionNumber
+             INNER JOIN Investigationvalues (nolock) IV
+                     on IV.Investigationid = PI.Investigationid
+                        and PI.patientvisitid = IV.patientvisitid
+                        and PI.UID = IV.UID
+             INNER JOIN InvOrgGroup IOG (NOLOck)
+                     ON IOG.AttGroupid = OI.PkgID
+                        AND IOG.OrgID = OI.OrgID
+      WHERE  OI.Status Not IN( 'Paid', 'Reject', 'Cancel', 'Recheck',
+                               'RejectClose', 'Rejected', 'InActive', 'ForceClose',
+                               'Retest', 'SampleReceived' )
+             --and isnull(PI.isAbnormal,'N')='N' 
+          --   AND ISNULL(IOG.IsSummaryReport, '') = 'Y'
+             AND OI.Type = 'GRP'
+             AND ISNULL(OI.PkgID, 0) > 0
+      UNION ALL
+      SELECT DISTINCT OI.ID,
+                      OI.Name,
+                      OI.Status,
+                      OI.CreatedAt,
+                      oi.Type,
+                      oi.accessionnumber,
+                      PI.isAbnormal
+      FROM   @tblAffectedVisits T2
+			 INNER JOIN OrderedInvestigations (nolocK) OI
+			 ON OI.VisitID = T2.VisitID
+             INNER JOIN Patientinvestigation (nolock) PI
+                     on OI.accessionNumber = PI.accessionNumber
+             INNER JOIN Investigationvalues (nolock) IV
+                     on IV.Investigationid = PI.Investigationid
+                        and PI.patientvisitid = IV.patientvisitid
+                        and PI.UID = IV.UID
+             INNER JOIN InvestigationOrgMapping IOM (NOLOck)
+                     ON IOM.Investigationid = OI.ID
+                        AND IOM.OrgID = OI.OrgID
+             INNER JOIN InvOrgGroup IOG (NOLOCK)
+                     ON IOG.AttgroupID = OI.PkgID
+                        AND IOG.OrgID = OI.OrgID
+      WHERE  OI.Status Not IN( 'Paid', 'Reject', 'Cancel', 'Recheck',
+                               'RejectClose', 'Rejected', 'InActive', 'ForceClose',
+                               'Retest', 'SampleReceived' )
+      --       AND ISNULL(IOG.IsSummaryReport, '') = 'Y'
+             AND OI.Type = 'INV'
+             AND ISNULL(OI.PkgID, 0) > 0
+      UNION ALL
+      SELECT DISTINCT OI.ID,
+                      OI.Name,
+                      OI.Status,
+                      OI.CreatedAt,
+                      oi.Type,
+                      oi.accessionnumber,
+                      PI.isAbnormal
+      FROM   @tblAffectedVisits T2
+			 INNER JOIN OrderedInvestigations (nolocK) OI
+			 ON OI.VisitID = T2.VisitID
+             INNER JOIN Patientinvestigation (nolock) PI
+                     on OI.accessionNumber = PI.accessionNumber
+             INNER JOIN Investigationvalues (nolock) IV
+                     on IV.Investigationid = PI.Investigationid
+                        and PI.patientvisitid = IV.patientvisitid
+                        and PI.UID = IV.UID
+             INNER JOIN InvOrgGroup IOG (NOLOck)
+                     ON IOG.AttGroupid = OI.ID
+                        AND IOG.OrgID = OI.OrgID
+      WHERE  OI.Status Not IN( 'Paid', 'Reject', 'Cancel', 'Recheck',
+                               'RejectClose', 'Rejected', 'InActive', 'ForceClose',
+                               'Retest', 'SampleReceived' )
+             --and isnull(PI.isAbnormal,'N')='N'
+           --  AND ISNULL(IOG.IsSummaryReport, '') = 'Y'
+             AND OI.Type = 'GRP'
+             AND ISNULL(OI.PkgID, 0) = 0
+      UNION ALL
+      SELECT DISTINCT OI.ID,
+                      OI.Name,
+                      OI.Status,
+                      OI.CreatedAt,
+                      oi.Type,
+                      oi.accessionnumber,
+                      PI.isAbnormal
+      FROM   @tblAffectedVisits T2
+			 INNER JOIN OrderedInvestigations (nolocK) OI
+			 ON OI.VisitID = T2.VisitID
+             INNER JOIN Patientinvestigation (nolock) PI
+                     on OI.accessionNumber = PI.accessionNumber
+             INNER JOIN Investigationvalues (nolock) IV
+                     on IV.Investigationid = PI.Investigationid
+                        and PI.patientvisitid = IV.patientvisitid
+                        and PI.UID = IV.UID
+             INNER JOIN InvestigationOrgMapping IOM(NOLOCK)
+                     ON OI.ID = IOM.InvestigationID
+                        AND IOM.OrgID = OI.OrgID
+      WHERE  OI.Status Not IN( 'Paid', 'Reject', 'Cancel', 'Recheck',
+                               'RejectClose', 'Rejected', 'InActive', 'ForceClose',
+                               'Retest', 'SampleReceived' )
+             --and isnull(PI.isAbnormal,'N')='N' 
+         --    AND ISNULL(IOM.IsSummary, '') = 'Y'
+             AND OI.Type = 'INV'
+             AND ISNULL(OI.PkgID, 0) = 0
+
+			 select * from @TempTblForWithinRange
+			 RETURN
+       IF( @IsServiceRequest = 'Y' )
+           BEGIN
+               DELETE Tbl
+               FROM   @TempTblForWithinRange Tbl
+               WHERE  Status NOT IN ( 'Approve', 'PartiallyApproved' )
+           END
+
+      SELECT DISTINCT SS.ID,
+                      SS.Name,
+                      SS.Status,
+                      SS.CreatedAt,
+                      SS.accessionnumber
+      FROM   @TempTblForWithinRange SS
+      WHERE  SS.accessionnumber NOT IN(SELECT DISTINCT accessionnumber
+                                       FROM   @TempTblForWithinRange T
+                                       WHERE  isnull(isAbnormal, 'N') IN ( 'P', 'A', 'L' ))
+  END
+
+

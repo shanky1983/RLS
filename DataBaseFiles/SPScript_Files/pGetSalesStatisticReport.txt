@@ -1,0 +1,135 @@
+--exec pGetClientStatisticReport_Serum  @fromdate='01-11-2018',@todate='10-11-2018',@orgid=242
+CREATE PROC [dbo].[pGetSalesStatisticReport] (
+	@Fromdate DATETIME
+	,@Todate DATETIME
+	,@Orgid INT
+	,@Pparamtype VARCHAR(100) = NULL
+	,@Pparamvalue VARCHAR(100) = NULL
+	,@pExcelReportId [INT] = NULL
+	,@pExcelReportName VARCHAR(255) = NULL
+	,@pToExecute VARCHAR(10) = NULL
+	)
+AS
+BEGIN
+SET NOCOUNT ON    
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED  
+	DECLARE @fdate DATEtime
+		,@tdate DATEtime
+
+	SELECT @fdate = @fromdate
+		,@tdate = @Todate+' 23:59:59' 
+
+	DECLARE @tblTemp AS TABLE (
+		ID INT,
+		VisitID BIGINT,
+		FinalBillID BIGINT,
+		BillDate datetime 
+		,ClientName NVARCHAR(255)
+		,Clientcode NVARCHAR(255)
+		,ClientAddress Varchar(255)
+		,SampleCount BIGINT
+		,VisitCount BIGINT
+		,GrossAmount DECIMAL(18, 2),
+		CancelAmount DECIMAL(18, 2),
+		netvalue DECIMAL(18, 2)
+		,SalesPerson nvarchar(255)
+		,ClientID bigint
+		,Locality_ID bigint
+        ,Locality_Value nvarchar(150)
+		)
+
+	  DECLARE @tblTemp1 AS TABLE (
+			    VisitID BIGINT,
+				FinalBillID BIGINT,
+				ClientName NVARCHAR(255)
+				,Clientcode NVARCHAR(255),		
+				CancelAmount DECIMAL(18, 2)
+		)
+
+	INSERT INTO @tblTemp (
+		     VisitID
+			 ,FinalBillID
+			,BillDate
+			,ClientName
+			,Clientcode
+			,ClientAddress
+			,SampleCount
+			,VisitCount
+			,GrossAmount
+			,CancelAmount
+			,ClientID
+			,Locality_ID
+	    )
+	SELECT
+	PV.PatientVisitid,
+	FB.FinalBillID,
+	FB.createdAT, 
+		CM.ClientName
+		,CM.Clientcode
+		,AD.Address1
+		,'' SampleCount
+		,1 AS VisitCount
+		,SUM(FB.netvalue) AS NetValue,
+		SUM(Isnull(FB.AmountRefund,0))  CancelAmount ,CM.ClientID,CM.ZonalID
+	FROM PatientVisit PV with(NOLOCK)
+	INNER JOIN visitclientmapping VCM with(NOLOCK) ON PV.orgid = VCM.Orgid  and PV.Patientvisitid = vcm.visitid
+		and ISNULL(VCM.IsActive,'Y')!='N'
+	INNER JOIN finalbill FB with(NOLOCK) ON   VCM.orgid = FB.Orgid AND PV.Patientvisitid = FB.VisitID and VCM.finalbillid = Fb.finalbillid
+		
+	INNER JOIN Clientmaster CM with(NOLOCK) ON VCM.clientid = CM.clientid
+		AND VCM.orgid = cm.Orgid
+	INNER JOIN AddressDetails AD WITH (NOLOCK) ON  AD.ReferenceID=CM.ClientID AND AD.OrgID=CM.OrgID  AND AddressTypeID=1
+	INNER JOIN Organization O WITH(NOLOCK) ON O.orgid = PV.orgid 
+	WHERE PV.createdAT BETWEEN @fdate
+			AND @tdate
+		AND PV.orgid = @Orgid  
+	GROUP BY PV.PatientVisitid,FB.FinalBillID,O.NAME
+		,O.orgid
+		,CM.ClientName,CM.ClientID,CM.Clientcode,CM.ZonalID,AD.Address1,FB.createdAT 
+ --update T set CancelAmount=SUM(Isnull(ARD.CancelAmount,0))   from @tblTemp  T
+ --inner join AmountRefundDetails ARD with(NOLOCK) ON  T.finalbillid=ARD.finalbillid and ARD.OrgID=@Orgid
+ --insert into @tblTemp1 (VisitID,FinalBillID,CancelAmount)
+ --Select T.VisitID,T.FinalBillID, SUM(Isnull(ARD.CancelAmount,0))  CancelAmount  from @tblTemp  T
+ --inner join AmountRefundDetails ARD with(NOLOCK) ON ARD.OrgID=@Orgid and  T.finalbillid=ARD.finalbillid  
+ --group by T.VisitID,T.FinalBillID
+
+ --  update T set CancelAmount= ARD.CancelAmount   from @tblTemp  T
+ --inner join @tblTemp1 ARD  ON  T.finalbillid=ARD.finalbillid and T.VisitID=ARD.VisitID  
+
+ Update t SET t.SalesPerson=STUFF((SELECT ',' + Erm.Name 
+              from 
+				AddressDetails ad  
+				Inner Join EmployeeRegMaster ERM  on ERM.EmpID = ad.EmpID and ERM.Orgid=ad.OrgID 
+				Inner Join EmployerDeptMaster EDM  on EDM.EmpDeptID=ERM.DeptID and EDM.OrgID=ERM.OrgID and EDM.EmpDeptName='ACCOUNT HOLDER' 
+				where  ad.ReferenceID=CM.ClientID and ad.orgid=CM.OrgID and ad.ContactType='ACCHOLDER' 
+
+              FOR XML PATH (''))
+             , 1, 1, '')
+  From @tblTemp t
+  Inner Join ClientMaster CM ON CM.ClientID=t.ClientID and CM.Orgid=@Orgid
+
+    Update T set T.Locality_Value=LO.Locality_Value from @tblTemp T
+  Inner Join  Localities LO WITH(NOLOCK) on LO.Locality_ID=T.Locality_ID
+
+select * from (
+	SELECT 1 as Empty,
+	
+	'Sale For '+Upper(substring(CONVERT(varchar(13), BillDate,107),1,3))Months,
+Upper(substring(CONVERT(varchar(13), BillDate,107),9,5))Year
+		,ClientName
+		,ClientCode, 
+		SalesPerson,
+		Locality_Value,
+		Sum(GrossAmount) - SUM(CancelAmount) as 'Net Amount'
+	FROM @tblTemp T 
+	GROUP BY ClientName,Clientcode,SalesPerson,Locality_Value,ClientAddress,Upper(substring(CONVERT(varchar(13),BillDate,107),1,3)), Upper(substring(CONVERT(varchar(13),BillDate,107),9,5)) 
+
+)TT 
+Pivot
+(
+sum([Net Amount]) for Months in 
+([Sale For JAN],[Sale For FEB],[Sale For MAR],[Sale For APR],[Sale For MAY],[Sale For JUN],[Sale For JUL],[Sale For AUG],[Sale For SEP],[Sale For OCT],[Sale For NOV],[Sale For DEC])
+) As t 
+
+ SET NOCOUNT OFF 
+END

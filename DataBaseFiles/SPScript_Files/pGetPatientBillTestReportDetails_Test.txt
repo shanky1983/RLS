@@ -1,0 +1,480 @@
+
+CREATE PROCEDURE [dbo].[pGetPatientBillTestReportDetails_Test] (@pVisitID     [BIGINT],          
+                                               @pBillID      [BIGINT],          
+                                               @pOrgID       [BIGINT])          
+AS          
+  BEGIN       
+  DECLARE @BillType nvarchar(20)=''         
+  SELECT @BillType= Case when CA.AttributesID=32 THEN 'ACTUALAMOUNT' ELSE CM.BillType end        
+   FROM   VisitCLientMapping VCM         
+             INNER JOIN CLIENTMASTER CM  ON         
+      CM.ClientID = VCM.ClientID   
+	  INNER JOIN ClientAttributesDetails CA  ON CA.ClientID=CM.ClientID and CA.Orgid=CM.Orgid      
+      WHERE VCM.FinalBillid=@pBillID         
+            
+        
+     DECLARE @CancelledBillingDetails table (FinalBillID BIGINT,BillingID BIGINT, Status nvarchar(50))      
+           
+     INSERT into @CancelledBillingDetails      
+     SELECT AR.FInalbillID,AR.BillingDetailsID,'Cancelled'  from AmountRefunddetails AR where AR.FInalbillID =@pBillID AND RefundType='CANCELLED'    
+    DECLARE @IsFranchisee bIT    
+ Select @IsFranchisee  =Isnull(IsFranchisee,0) From PatientVisit WITH(NOLOCK) Where PatientVisitID=@pVisitID    
+          
+    declare @PKGContentconfig nvarchar (max)
+
+SET @PKGContentconfig =
+(SELECT ConfigValue FROM ConfigOrgMaster WHERE  ConfigKeyID = (SELECT ConfigKeyID
+FROM   ConfigKeyMaster
+WHERE  ConfigKey = 'PKGContentsInBillPrint')
+AND OrgID = @pOrgID)       
+        
+ IF(ISNULL(@BillType,'')='') SET @BillType='Amount'   
+         
+       
+  IF(@BillType='Amount' OR @BillType='MRPBill')        
+  BEGIN 
+ 
+  If (@PKGContentconfig ='Y')
+Begin 
+      
+  IF (Isnull(@IsFranchisee,0)=1)    
+  BEGIN    
+  SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                
+             ( CASE                
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+                 ELSE BD.TatDateTime                
+               END )         AS ReportDate,                
+             BDF.Amount AS AMOUNT  ,BD.FeeId,BD.FeeType,FB.VisitID into #TempF       
+      FROM   FINALBILL FB WITH(NOLOCK)                
+             INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+                     ON FB.FinalBillID = BD.FinalBillID      
+   INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID    
+             LEFT join @CancelledBillingDetails CB             
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID            
+      WHERE  FB.FinalBillID = @pBillID                
+             AND FB.VisitID = @pVisitID                
+             AND FB.OrgID = @pOrgID             
+    ORDER BY BD.BillingDetailsID      
+  
+ IF EXISTS (select 1 from #TempF where FeeType='PKG')       
+BEGIN    
+    
+   DECLARE @MinIdF BIGINT      
+   DECLARE @MaxIDF BIGINT      
+      
+   DECLARE  @PackagetempF TABLE (Attgroupid INT,TYPE nvarchar(50),ID int identity (1,1))      
+   Insert into @PackagetempF        
+   select FeeID,FeeType from #TempF where FeeType='PKG'        
+   set @MinIdF=(select Min(ID) from @PackagetempF)      
+   set @MaxIDF=(select Max(ID) from @PackagetempF)      
+   while @MinIDF<=@MaxIDF      
+   BEGIN      
+         
+      
+   declare @FeeIDF bigint=''      
+   select @FeeIDF=Attgroupid  from @PackagetempF where ID=@MinIDF        
+       
+   update #TempF set FeeDescription='<b>'+FeeDescription+'</b>' where FeeID=@FeeIDF and VisitID=@pVisitID     
+       
+   declare @FeeDescriptionF nvarchar(max)=''      
+   set @FeeDescriptionF=  stuff( (SELECT '~' + Name          
+   from OrderedInvestigations with(NOLOCK) where OrgID= @pOrgID and VisitID=@pVisitID and PkgID=@FeeIDF        
+    FOR XML PATH('')),1,1,'')      
+          
+  update #TempF set FeeDescription=FeeDescription+'~'+@FeeDescriptionF+'~' where FeeID=@FeeIDF and VisitID=@pVisitID      
+  update #TempF set FeeDescription= Replace(FeeDescription,'~','<br>') where FeeID=@FeeIDF and VisitID=@pVisitID      
+      
+  set @MinIdF=@MinIdF+1      
+      
+      
+        END        
+      
+  Select FeeDescription,ReportDate,AMOUNT    from #TempF        
+  Drop table #TempF      
+         
+END    
+ELSE      
+ BEGIN           
+  IF(@IsFranchisee=1)    
+  Begin    
+         
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                
+             ( CASE            
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+                 ELSE BD.TatDateTime                
+               END )         AS ReportDate,                
+             BDF.Amount AS AMOUNT            
+      FROM   FINALBILL FB WITH(NOLOCK)                
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+                     ON FB.FinalBillID = BD.FinalBillID      
+  INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID        
+             LEFT join @CancelledBillingDetails CB             
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID            
+      WHERE  FB.FinalBillID = @pBillID                
+             AND FB.VisitID = @pVisitID                
+             AND FB.OrgID = @pOrgID             
+    ORDER BY BD.BillingDetailsID      
+  END    
+  ELSE    
+  BEGIN    
+       
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                
+             ( CASE            
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+                 ELSE BD.TatDateTime                
+               END )         AS ReportDate,                
+             BD.Amount AS AMOUNT            
+      FROM   FINALBILL FB WITH(NOLOCK)                
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+                     ON FB.FinalBillID = BD.FinalBillID                
+             LEFT join @CancelledBillingDetails CB             
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID            
+      WHERE  FB.FinalBillID = @pBillID                
+             AND FB.VisitID = @pVisitID                
+             AND FB.OrgID = @pOrgID             
+    ORDER BY BD.BillingDetailsID            
+   END    
+    END        
+  END    
+  END      
+  ELSE      
+  BEGIN    
+ SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                  
+             ( CASE                  
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                  
+                 ELSE BD.TatDateTime                  
+               END )         AS ReportDate,                  
+             BD.Amount AS AMOUNT  ,BD.FeeId,BD.FeeType,FB.VisitID into #Temp         
+      FROM   FINALBILL FB WITH(NOLOCK)                  
+             INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                  
+                     ON FB.FinalBillID = BD.FinalBillID                  
+             LEFT join @CancelledBillingDetails CB      
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID              
+      WHERE  FB.FinalBillID = @pBillID                  
+             AND FB.VisitID = @pVisitID                  
+             AND FB.OrgID = @pOrgID               
+    ORDER BY BD.BillingDetailsID    
+   
+ IF EXISTS (select 1 from #Temp where FeeType='PKG')        
+ BEGIN         
+         
+   DECLARE @MinId BIGINT        
+   DECLARE @MaxID BIGINT        
+        
+   DECLARE  @Packagetemp TABLE (Attgroupid INT,TYPE nvarchar(50),ID int identity (1,1))        
+   Insert into @Packagetemp        
+   select FeeID,FeeType from #Temp where FeeType='PKG'          
+   set @MinId=(select Min(ID) from @Packagetemp)        
+   set @MaxID=(select Max(ID) from @Packagetemp)        
+   while @MinID<=@MaxID        
+   BEGIN        
+           
+        
+   declare @FeeID bigint=''        
+   select @FeeID=Attgroupid  from @Packagetemp where ID=@MinID          
+         
+   update #temp set FeeDescription='<b>'+FeeDescription+'</b>' where FeeID=@FeeID and VisitID=@pVisitID        
+         
+   declare @FeeDescription nvarchar(max)=''        
+   set @FeeDescription=  stuff( (SELECT '~' + Name            
+   from OrderedInvestigations with(NOLOCK) where OrgID= @pOrgID and VisitID=@pVisitID and PkgID=@FeeID          
+    FOR XML PATH('')),1,1,'')        
+            
+  update #temp set FeeDescription=FeeDescription+'~'+@FeeDescription+'~' where FeeID=@FeeID and VisitID=@pVisitID        
+  update #temp set FeeDescription= Replace(FeeDescription,'~','<br>') where FeeID=@FeeID and VisitID=@pVisitID        
+        
+  set @MinId=@MinId+1        
+        
+        
+        END          
+        
+  Select FeeDescription,ReportDate,AMOUNT    from #temp          
+  Drop table #temp        
+           
+        
+        
+END        
+         
+ ELSE  
+ BEGIn  
+   IF(@IsFranchisee=1)      
+  Begin      
+           
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                  
+             ( CASE              
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                  
+                 ELSE BD.TatDateTime                  
+               END )         AS ReportDate,                  
+             BDF.Amount AS AMOUNT              
+      FROM   FINALBILL FB WITH(NOLOCK)                  
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                  
+                     ON FB.FinalBillID = BD.FinalBillID        
+  INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID               
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                  
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID          
+             LEFT join @CancelledBillingDetails CB               
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID              
+      WHERE  FB.FinalBillID = @pBillID                  
+             AND FB.VisitID = @pVisitID                  
+             AND FB.OrgID = @pOrgID               
+    ORDER BY BD.BillingDetailsID        
+  END      
+  ELSE      
+  BEGIN      
+         
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                  
+             ( CASE              
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                  
+                 ELSE BD.TatDateTime                  
+               END )         AS ReportDate,                  
+             BD.Amount AS AMOUNT              
+      FROM   FINALBILL FB WITH(NOLOCK)                  
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)         
+                  ON FB.FinalBillID = BD.FinalBillID                  
+             LEFT join @CancelledBillingDetails CB               
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID              
+      WHERE  FB.FinalBillID = @pBillID                  
+             AND FB.VisitID = @pVisitID                  
+             AND FB.OrgID = @pOrgID               
+    ORDER BY BD.BillingDetailsID              
+   END     
+   END  
+    
+      
+      
+      
+        
+           
+   END             
+  END        
+ ELSE IF(@BillType='ACTUALAMOUNT')              
+  BEGIN         
+      
+  If (@PKGContentconfig = 'Y')      
+Begin       
+       
+ IF (@IsFranchisee=1)    
+ BEGIN    
+    
+SELECT BD.FeeDescription,                
+     ( CASE                
+      WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+      ELSE BD.TatDateTime                
+       END )         AS ReportDate,                
+     BDF.ActualAmount AS AMOUNT  ,BD.FeeID,BD.FeeType,FB.VisitID into #Temp1F              
+    FROM   FINALBILL FB WITH(NOLOCK)                
+     INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+       ON FB.FinalBillID = BD.FinalBillID        
+     INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID    
+    WHERE  FB.FinalBillID = @pBillID                
+     AND FB.VisitID = @pVisitID                
+     AND FB.OrgID = @pOrgID                 
+  ORDER BY BD.BillingDetailsID      
+    
+  if EXISTS (select 1 from #Temp1F where FeeType='PKG')        
+Begin         
+declare @MinId1F bigint        
+ declare @MaxID1F bigint        
+        
+ declare  @Packagetemp1F table (Attgroupid int,Type nvarchar(50),ID int identity (1,1))        
+ Insert into @Packagetemp1F        
+ select FeeID,FeeType from #Temp1F where FeeType='PKG'          
+ set @MinId1F=(select Min(ID) from @Packagetemp1F)        
+ set @MaxID1F=(select Max(ID) from @Packagetemp1F)        
+ while @MinID1F<=@MaxID1F        
+ begin        
+        
+ declare @FeeID1F bigint=''        
+ select @FeeID1F=Attgroupid  from @Packagetemp1F where ID=@MinID1F          
+ select @FeeID1F        
+ update #temp1F set FeeDescription='<b>'+FeeDescription+'</b>' where FeeID=@FeeID1F and VisitID=@pVisitID        
+         
+ declare @FeeDescription1F nvarchar(max)=''        
+ set @FeeDescription1F=  stuff( (SELECT '~' + Name            
+ from OrderedInvestigations with(NOLOCK) where OrgID= @pOrgID and VisitID=@pVisitID and PkgID=@FeeID1F          
+  FOR XML PATH('')),1,1,'')        
+            
+update #temp1F set FeeDescription=FeeDescription+'~'+@FeeDescription1F where FeeID=@FeeID1F and VisitID=@pVisitID        
+        
+set @MinId1F=@MinId1F+1        
+        
+         
+ END          
+         
+Select FeeDescription,ReportDate,AMOUNT    from #temp1F          
+Drop Table #Temp1F        
+End        
+          
+ END    
+ ELSE     
+ BEGIN    
+SELECT BD.FeeDescription,          
+     ( CASE          
+      WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''          
+      ELSE BD.TatDateTime          
+       END )         AS ReportDate,          
+     BD.ActualAmount AS AMOUNT  ,BD.FeeID,BD.FeeType,FB.VisitID into #Temp1        
+    FROM   FINALBILL FB WITH(NOLOCK)          
+     INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)          
+       ON FB.FinalBillID = BD.FinalBillID          
+    WHERE  FB.FinalBillID = @pBillID          
+     AND FB.VisitID = @pVisitID          
+     AND FB.OrgID = @pOrgID           
+  ORDER BY BD.BillingDetailsID     
+	if EXISTS (select 1 from #Temp1 where FeeType='PKG')
+Begin 
+declare @MinId1 bigint
+ declare @MaxID1 bigint
+
+ declare  @Packagetemp1 table (Attgroupid int,Type nvarchar(50),ID int identity (1,1))
+ Insert into @Packagetemp
+ select FeeID,FeeType from #Temp1 where FeeType='PKG'  
+ set @MinId1=(select Min(ID) from @Packagetemp1)
+ set @MaxID1=(select Max(ID) from @Packagetemp1)
+ while @MinID1<=@MaxID1
+ begin
+
+ declare @FeeID1 bigint=''
+ select @FeeID1=Attgroupid  from @Packagetemp1 where ID=@MinID1  
+ select @FeeID1
+ update #temp1 set FeeDescription='<b>'+FeeDescription+'</b>' where FeeID=@FeeID1 and VisitID=@pVisitID
+ 
+ declare @FeeDescription1 nvarchar(max)=''
+ set @FeeDescription1=  stuff( (SELECT '~' + Name    
+ from OrderedInvestigations with(NOLOCK) where OrgID= @pOrgID and VisitID=@pVisitID and PkgID=@FeeID1  
+  FOR XML PATH('')),1,1,'')
+    
+update #temp1 set FeeDescription=FeeDescription+'~'+@FeeDescription1 where FeeID=@FeeID1 and VisitID=@pVisitID
+
+set @MinId1=@MinId1+1
+
+ 
+ END  
+ 
+Select FeeDescription,ReportDate,AMOUNT    from #temp1  
+Drop Table #Temp1
+End
+        
+Else        
+BEGIN           
+   IF(@IsFranchisee=1)    
+   BEGIN    
+    
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                
+             ( CASE                
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+                 ELSE BD.TatDateTime                
+               END )         AS ReportDate,                
+             BDF.ActualAmount AS AMOUNT            
+      FROM   FINALBILL FB WITH(NOLOCK)                
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+                     ON FB.FinalBillID = BD.FinalBillID      
+   INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID        
+             LEFT join @CancelledBillingDetails CB             
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID            
+      WHERE  FB.FinalBillID = @pBillID                
+             AND FB.VisitID = @pVisitID                
+             AND FB.OrgID = @pOrgID             
+    ORDER BY BD.BillingDetailsID           
+    
+       
+      END    
+  ELSE    
+   BEGIn    
+   IF(@IsFranchisee=1)    
+   Begin    
+        
+SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,                
+             ( CASE                
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+                 ELSE BD.TatDateTime                
+               END )         AS ReportDate,                
+           BDF.ActualAmount AS AMOUNT            
+      FROM   FINALBILL FB WITH(NOLOCK)                
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+                     ON FB.FinalBillID = BD.FinalBillID    
+  INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID        
+             LEFT join @CancelledBillingDetails CB             
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID            
+      WHERE  FB.FinalBillID = @pBillID                
+             AND FB.VisitID = @pVisitID                
+             AND FB.OrgID = @pOrgID             
+    ORDER BY BD.BillingDetailsID            
+   END    
+   ELSE    
+   BEGIN    
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,          
+             ( CASE          
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''          
+                 ELSE BD.TatDateTime          
+               END )         AS ReportDate,          
+             BD.ActualAmount AS AMOUNT      
+      FROM   FINALBILL FB WITH(NOLOCK)          
+         INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)          
+                     ON FB.FinalBillID = BD.FinalBillID          
+             LEFT join @CancelledBillingDetails CB       
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID      
+      WHERE  FB.FinalBillID = @pBillID          
+             AND FB.VisitID = @pVisitID          
+             AND FB.OrgID = @pOrgID       
+    ORDER BY BD.BillingDetailsID            
+ END    
+   END    
+    END        
+  END      
+ END        
+      
+        
+     
+    IF(@IsFranchisee=1)    
+ BEGIN    
+ SELECT BD.FeeDescription,                
+     ( CASE                
+      WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''                
+      ELSE BD.TatDateTime                
+       END )         AS ReportDate,         
+     BDF.ActualAmount AS AMOUNT                
+    FROM   FINALBILL FB WITH(NOLOCK)                
+     INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)                
+       ON FB.FinalBillID = BD.FinalBillID    
+    INNER JOIN FINALBILL_Franchisee FBF WITH(NOLOCK)   ON FBF.FinalBillID=FB.FinalBillID             
+             INNER JOIN BILLINGDETAILS_Franchisee BDF WITH(NOLOCK)                
+                     ON FB.FinalBillID = BDF.FinalBillID and BD.BillingDetailsID=BDF.BillingDetailsID    
+    WHERE  FB.FinalBillID = @pBillID                
+     AND FB.VisitID = @pVisitID                
+     AND FB.OrgID = @pOrgID                 
+  ORDER BY BD.BillingDetailsID      
+     
+ END    
+ ELSE    
+ BEGIN    
+    SELECT BD.FeeDescription,          
+     ( CASE          
+      WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''          
+      ELSE BD.TatDateTime          
+       END )         AS ReportDate,          
+     BD.ActualAmount AS AMOUNT          
+    FROM   FINALBILL FB WITH(NOLOCK)          
+     INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)          
+       ON FB.FinalBillID = BD.FinalBillID          
+    WHERE  FB.FinalBillID = @pBillID          
+     AND FB.VisitID = @pVisitID          
+     AND FB.OrgID = @pOrgID           
+  ORDER BY BD.BillingDetailsID  
+  END
+  END        
+                  
+                    
+        
+END        
+  

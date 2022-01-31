@@ -1,0 +1,383 @@
+CREATE PROCEDURE [dbo].[pUpdatePatientDetails_IAPI] @pOrgID                 [INT],                                          
+@pPatientName           [NVARCHAR](50),                                          
+@pTitleCode             [TINYINT],                                          
+@pAge                   [NVARCHAR](30),                                          
+@pSex                   [NCHAR](1),                                          
+@pCreatedBy             [BIGINT],                                          
+@pPriorityID            [INT],                                          
+@pReferingPhysicianID   [INT],                                          
+@pReferingPhysicianName [NVARCHAR](100),           
+@pReferringDoctorContactNo   [NVARCHAR](100),        
+@pReferringDoctorCode      [NVARCHAR](100),                                
+@pHospitalID            [INT],                                          
+@pHospitalName          [NVARCHAR](100),                                          
+@pOrgAddID              [BIGINT],                                          
+@pCollectionCentreID    [INT],                                          
+@pCollectionCentreName  [NVARCHAR](100),                                          
+@pURNo                  [NVARCHAR](50),                                          
+@pURNof                 [BIGINT],                                          
+@pURNType               [BIGINT],                                          
+@pRace                  [NVARCHAR](50),                                          
+@pNationality           [BIGINT],                                                                                     
+@pHPatientID            [nvarchar](30),                                         
+@pAgeValue              [INT],                                          
+@pAgeUnits              [NCHAR](1),                                          
+@pDOB                   [DATETIME],                                          
+@pPayerTypeID           [INT],                                          
+@pPayerName             [NVARCHAR](255),                                          
+@patientNumber          [NVARCHAR](50),                                          
+@ExternalVisitID        [NVARCHAR](255),                                          
+@pWardNo                [NVARCHAR](400),                                          
+@pVisitType             [INT],                                          
+@pReferVisitId          [BIGINT],                                          
+@pTPAAttributes         [NVARCHAR](max),                                          
+@pTPAType               [NCHAR](3),                                          
+@PreviousName           [NVARCHAR](255),                                          
+@Aliasname              [NVARCHAR](255),                                          
+@Relationanme           [NVARCHAR](255),                                          
+@Relationtype           [BIGINT],                                          
+@pIsNotify              [INT],                                          
+@pEMail                 [NVARCHAR](100),                                          
+@pIsDueBill             [INT],                                      
+@pClientName            [NVARCHAR](200),                                      
+@pConsultingPhysicianName [NVARCHAR](100),                                        
+@pTreatingPhysicianName [NVARCHAR](100),                                       
+@pConsentFlag           [bit],                                      
+@pDiagnosisCode         [nvarchar](20),                                      
+@pDiagnosisName         [nvarchar](500),                                      
+@pDiagnosisDescription [nvarchar](500),                                      
+@pPatientSpecialty [nvarchar](500),                                      
+@pRemarks [varchar](250),                                    
+@IsSTAT VARCHAR(10) ,                                
+@pVisitDate   DATETIME,                                 
+@ContextInfo           [UDT_CONTEXT] READONLY,                                          
+@VisitClientMapping     VISITCLIENTMAPPING READONLY                                          
+WITH EXECUTE AS OWNER                
+AS                      
+                                      
+BEGIN                      
+ SET TRANSACTION ISOLATION LEVEL SERIALIZABLE                         
+   SET NOCOUNT ON;                       
+BEGIN TRY                      
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)                      
+    DECLARE @pModifiedAt DATETIME                      
+    DECLARE @ret INT                      
+                      
+  BEGIN                      
+      SET @pModifiedAt=(SELECT dbo.Fn_getserverdate(@ContextInfo))                      
+      SET @ret = -1                      
+                      
+      DECLARE @pPatientID AS BIGINT                      
+                      
+      SELECT @pPatientID = Patientid                      
+      FROM   Patient WITH (NOLOCK)                      
+   WHERE PatientNumber = @patientNumber                      
+             AND OrgID = @pOrgID                      
+                      
+      SET @ret = -1                      
+                      
+      --**Audit Code Begin**--                            
+      DECLARE @AuditCount1 INT                      
+      DECLARE @AuditCount2 INT                      
+                      
+      SELECT @AuditCount1 = Count(PatientID)                      
+      FROM   Patient WITH (NOLOCK)                      
+      WHERE  ( NAME != @pPatientName                      
+                OR SEX != @pSex                      
+                OR TITLECode != @pTitleCode                      
+                OR Age != @pAge                      
+                OR --AgeUnit != @pAgeUnit OR                                         
+               URNO != @pURNO                      
+                --OR URNofId != @pURNofId                      
+                --OR URNTypeId != @pURNTypeId                      
+                OR Race != @pRace                      
+                OR Nationality != @pNationality )                      
+             AND PatientID = @pPatientID                      
+                      
+      --SELECT @AuditCount2 = Count(PatientID)                      
+      --FROM   PatientAddress WITH (NOLOCK)                      
+      --WHERE  ( @pAddr1 != Add1                      
+      --          OR @pAddr2 != Add2                      
+      --          OR @pAddr3 != Add3                      
+      --          OR @pPostalCode != PostalCode                      
+      --          OR @pCountryID != CountryID                      
+      --          OR @pCity != City                      
+      --          OR @pStateID != StateID                      
+      --          OR @pMobileNumber != MobileNumber                      
+      --          OR @pLandLineNumber != LandLineNumber )                      
+      --       AND PatientID = @pPatientID                      
+      --       AND AddressType = @pAddrType                      
+                      
+      DECLARE @StrpPatientID NVARCHAR(30)                      
+                      
+      SELECT @StrpPatientID = CONVERT(NVARCHAR, @pPatientID)                      
+                      
+                  
+                      
+      --**Code End**--                               
+      DECLARE @oldSex         NCHAR (1),                      
+              @oldAge         NVARCHAR(30),                      
+              @patientID      BIGINT                      
+       Declare @visitTable as table   ( ID  int identity(1,1),  Patientvisitid BIGINT  )                    
+    DECLARE @OLDPatientName NVARCHAR(500)                  
+                      
+      SELECT @oldSex = SEX,                      
+             @oldAge = Age,                      
+             @patientID = PatientID,                
+    @OLDPatientName=Name                      
+      FROM   Patient WITH (NOLOCK)                      
+      WHERE  PatientNumber = @patientNumber                      
+             AND OrgID = @pOrgID                      
+                      
+                    
+                      
+      UPDATE Patient                       
+SET    NAME = @pPatientName,                      
+             SEX = @pSex,                      
+             TITLECode = @pTitleCode,                      
+             Age = @pAge,                      
+             --AgeUnit = @pAgeUnit,                         
+             ModifiedBy = 0,                      
+             ModifiedAt = @pModifiedAt,                      
+             URNO = @pURNO,                      
+            -- URNofId = @pURNofId,                      
+            -- URNTypeId = @pURNTypeId,                      
+   Race = @pRace,                      
+             Nationality = @pNationality,                      
+             EMail = @pEMail                      
+         --    ExternalPatientNumber = @ExternalPatientNumber                      
+      --, OrgID=@pOrganizationID   AND OrgID = @pOrgID                                                     
+      WHERE  PatientNumber = @patientNumber                      
+    AND OrgID = @pOrgID                      
+                      
+      --UPDATE PatientAddress                       
+      --SET    PatientID = @pPatientID,                      
+      --       AddressType = @pAddrType,                      
+      --       Add1 = @pAddr1,                      
+      --  Add2 = @pAddr2,                      
+      --       Add3 = @pAddr3,                      
+      --       PostalCode = @pPostalCode,                      
+      --       CountryID = @pCountryID,                      
+      --       City = @pCity,                      
+      --       StateID = @pStateID,                      
+      --       MobileNumber = @pMobileNumber,                 LandLineNumber = @pLandLineNumber,                      
+   --       ModifiedBy = @pModifiedBy,                      
+      --       ModifiedAt = (SELECT dbo.Fn_getserverdate(@ContextInfo))                      
+      --WHERE  PatientID = @pPatientID                      
+      --       AND AddressType = @pAddrType                      
+                      
+      --AddressID = @pAddressID                       
+      --UPDATE patientvisit                      
+      --SET ReferingPhysicianName = @RefDocName,                      
+      --       HospitalName = @RefHospitalName,                      
+      --       VisitType = @VisitType                      
+      --WHERE  PatientVisitId = @patientvisitid                      
+      --       AND OrgID = @pOrgID                   
+                     
+ insert into @visitTable                     
+         SELECT PatientvisitID                      
+      FROM   PatientVisit WITH (NOLOCK)                      
+      WHERE  patientid = @patientID                      
+      AND OrgID = @pOrgID  and PreviousLabNumber=@ExternalVisitID               
+                
+   IF(@OLDPatientName<>@pPatientName)                
+   BEGIN                
+                   
+  UPDATE N SET Status='',Createdat=getdate() FROM Patient P                
+    Inner Join PatientVisit PV on PV.PatientID=P.PatientID and P.Orgid=PV.Orgid                
+    Inner Join Orderedinvestigations OI on OI.Visitid=PV.patientvisitid                
+    Inner Join Notifications N on N.IdentityID=OI.VisitID and N.orgid=PV.OrgID                
+    Where P.PatientNumber = @patientNumber  and OI.Status in ('Approve','Co-Authorize')                 
+    and N.actiontype in ('Pdf','ROUNDBPDF') and N.Status='Completed'                
+                
+   END                
+                  
+                    
+     Declare @ccount int,@inc int=1                  
+     select  @ccount=count(1) from  @visitTable                  
+      IF( @oldSex = @pSex                      
+          AND @oldAge = @pAge )                      
+        BEGIN                    
+                    
+       
+      --      IF EXISTS (SELECT 1                      
+      --                 FROM   OrderedInvestigations WITH (NOLOCK)                       
+      --                 WHERE  Status = 'Approve'                      
+      --                        AND VisitID = @patientvisitid                      
+      --                        AND OrgID = @pOrgID)                      
+      --        BEGIN                 
+                                     
+      --Declare @temps as table(id bigint)                    
+      --insert into @temps                    
+      --select 1                    
+                    
+      --        END                      
+                   
+   --UPDATE PV  SET PV.HospitalID=@pHospitalID,PV.HospitalName=@pHospitalName,PV.ModifiedBy=0,PV.ModifiedAt=@pModifiedAt,                
+   --PV.ReferingPhysicianID=@pReferingPhysicianID,PV.ReferingPhysicianName=@pReferingPhysicianName,PV.ClientName=@pClientName,PV.WardNo = @pWardNo                 
+   --FROM PatientVisit PV                
+   --Inner Join  @visitTable V On PV.Patientvisitid=V.Patientvisitid                
+   --Where PV.OrgID=@pOrgID                
+                
+     --UPDATE PatientVisit SET HospitalID = @pHospitalID, HospitalName = @pHospitalName,                                     
+     -- ModifiedBy = 0, ModifiedAt = @pModifiedAt,ReferingPhysicianID = @pReferingPhysicianID                                  
+     -- ,ReferingPhysicianName = @pReferingPhysicianName ,ClientName=@pClientName                                            
+     -- ,WardNo = @pWardNo                      
+     -- WHERE ExternalVisitID = @ExternalVisitID AND OrgID = @pOrgID                  
+                
+                
+   UPDATE PV SET PV.HospitalID = @pHospitalID, PV.HospitalName = @pHospitalName,                                     
+      PV.ModifiedBy = 0, PV.ModifiedAt = @pModifiedAt,PV.ReferingPhysicianID = @pReferingPhysicianID                                  
+      ,PV.ReferingPhysicianName = @pReferingPhysicianName ,PV.ClientName=@pClientName                                            
+      ,PV.WardNo = @pWardNo  ,PV.DischargedDT=Case When(@pWardNo like '%Discharged%') Then getdate() else PV.DischargedDT End ,  
+   PV.TPAName=case when isnull(@pDiagnosisDescription,'')='' then 'Self'  else @pDiagnosisDescription end  ,             
+         PV.ICDCodeStatus=@pPatientSpecialty               
+   From PatientVisit PV                
+   Inner Join  @visitTable V on V.PatientVisitID=PV.PatientVisitID                
+   Where PV.Orgid=@pOrgID                 
+                        
+                
+                     
+                   
+   END                
+      ELSE                      
+        BEGIN                      
+                
+  Declare @Reason Nvarchar(300)                
+  SET @Reason=''                
+   IF( @oldSex <> @pSex )                 
+   Begin                
+    Set @Reason = 'Gender '+ @oldSex +'-'+@pSex                
+   End                
+   IF (@oldAge <> @pAge)                
+   Begin                
+   Set @Reason =@Reason + 'Age '+@oldAge+'-'+@pAge                
+   End                
+                  
+              
+        INSERT INTO InvestigationStatusHistory                
+                    (PatientVisitID,                
+                     InvestigationID,                
+                     InvestigationName,                
+                     Type,                
+                     ModifiedBy,                
+                     modifiedat,                
+                     UID,                
+                     OrgID,                
+                     OrginalStatus,                
+                     AlteredStatus,                
+                     ApprovedBy,                
+                     Reason)                
+        SELECT O.visitid,                
+               O.id,                
+               O.name,                
+               O.type,                
+                Isnull((SELECT TOP 1 loginid          
+                       FROM   login                
+        WHERE  loginname = 'Integration'), 0),                
+               Getdate(),                
+               O.uid,                
+               O.orgid,                
+               O.status,                
+               'Pending',                
+               Isnull((SELECT TOP 1 loginid                
+                       FROM   login                
+     WHERE  loginname = 'Integration'), 0),                
+               'IntegrationUpdate' + @Reason                
+        FROM   orderedinvestigations O                
+               INNER JOIN @visitTable v                
+                       ON O.visitid = v.Patientvisitid                
+        WHERE  o.visitid =  v.Patientvisitid                
+               AND O.Status NOT IN( 'SampleCollected', 'SampleReceived', 'paid', 'SampleTransferred',                
+                                  'Yet to Transfer', 'Not given', 'Approve', 'Rejected', 'Retest','Cancel' ,'co-authorize' )                
+               AND O.orgid = @pOrgID                
+                 
+                
+  UPDATE O SET O.Status = 'Pending'                
+   from OrderedInvestigations O                
+  Inner Join @visitTable V ON O.VisitID=V.PatientVisitID                
+  Where O.Orgid=@pOrgID                
+    And O.Status NOT IN( 'SampleCollected', 'SampleReceived', 'paid', 'SampleTransferred',                
+                                  'Yet to Transfer', 'Not given', 'Approve', 'Rejected', 'Retest','Cancel','co-authorize' )                
+                
+                        
+                
+                
+   UPDATE PV                
+        SET    PV.Status = 'Pending',                
+               PV.ReferenceRange = IOM.ReferenceRange                
+        FROM   PatientInvestigation PV                
+      INNER JOIN @visitTable V                 
+      ON V.PatientVisitID=PV.PatientVisitID                
+               INNER JOIN OrderedInvestigations OI                
+       ON OI.Visitid = V.PatientVisitID                
+                          AND PV.Orgid = OI.ORGID                
+               INNER JOIN InvestigationOrgMapping IOM                
+                       ON IOM.InvestigationID = PV.InvestigationID                
+                          AND OI.ORGID = IOM.ORGID                
+        WHERE  PV.PatientVisitID = V.PatientVisitID                
+               AND PV.OrgID = @pOrgID                
+               AND PV.Status NOT IN( 'SampleCollected', 'SampleReceived', 'paid', 'SampleTransferred',                
+    'Yet to Transfer', 'Not given', 'Approve', 'Rejected', 'Retest','Cancel','co-authorize'  )                
+                
+                        
+                
+  UPDATE IV SET IV.Status = 'Pending'                
+   FROM InvestigationValues IV                
+  Inner Join @visitTable V ON V.PatientVisitID=IV.PatientVisitID                
+  Where IV.OrgID = @pOrgID                 
+    AND IV.Status NOT IN( 'SampleCollected', 'SampleReceived', 'paid', 'SampleTransferred',                
+                                  'Yet to Transfer', 'Not given', 'Approve', 'Rejected', 'Retest','Cancel','co-authorize'  )                 
+                        
+                                
+                  
+   --UPDATE PV  SET PV.HospitalID=@pHospitalID,PV.HospitalName=@pHospitalName,PV.ModifiedBy=0,PV.ModifiedAt=@pModifiedAt,                
+   --PV.ReferingPhysicianID=@pReferingPhysicianID,PV.ReferingPhysicianName=@pReferingPhysicianName,PV.ClientName=@pClientName,PV.WardNo = @pWardNo                 
+   --FROM PatientVisit PV                
+   --Inner Join  @visitTable V On PV.Patientvisitid=V.Patientvisitid                
+   --Where PV.OrgID=@pOrgID                
+                
+    --UPDATE PatientVisit SET HospitalID = @pHospitalID, HospitalName = @pHospitalName,                                     
+    --  ModifiedBy = 0, ModifiedAt = @pModifiedAt,ReferingPhysicianID = @pReferingPhysicianID                                  
+    --  ,ReferingPhysicianName = @pReferingPhysicianName ,ClientName=@pClientName                                   
+    -- -- ,VisitType = @pVisitType                          
+    --  ,WardNo = @pWardNo                      
+    --  WHERE ExternalVisitID = @ExternalVisitID AND OrgID = @pOrgID                  
+                
+                
+   UPDATE PV SET PV.HospitalID = @pHospitalID, PV.HospitalName = @pHospitalName,                                     
+      PV.ModifiedBy = 0, PV.ModifiedAt = @pModifiedAt,PV.ReferingPhysicianID = @pReferingPhysicianID                                  
+      ,PV.ReferingPhysicianName = @pReferingPhysicianName ,PV.ClientName=@pClientName                   
+      ,PV.WardNo = @pWardNo  ,PV.DischargedDT=Case When(@pWardNo like '%Discharged%') Then getdate() else PV.DischargedDT End ,--PV.TPAName= @pDiagnosisDescription ,              
+      PV.ICDCodeStatus=@pPatientSpecialty                     
+   From PatientVisit PV                
+   Inner Join  @visitTable V on V.PatientVisitID=PV.PatientVisitID                
+   Where PV.Orgid=@pOrgID                 
+                
+                
+                   
+  IF( @oldAge <> @pAge And ISNULL(@pDOB,'')<>'' )                
+  BEGIN                
+  Update Patient  SET DOB=@pDOB                
+  WHERE  PatientNumber = @patientNumber                      
+             AND OrgID = @pOrgID                  
+  END                
+         
+                
+       END                      
+                      
+                  
+                     
+      SET @ret = 0                      
+                      
+      RETURN @ret                      
+  END                       
+ END TRY                      
+                      
+BEGIN CATCH                                                      
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pUpdatePatientDetailsForIntegration @pOrgID = '+CAST(@pOrgID AS VARCHAR)+'@pPatientNumber = '+                
+ @patientNumber +'@pTitleCode = '+CAST(@pTitleCode AS VARCHAR) + '@pURNO = '+@pURNO                       
+                        
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;            
+END CATCH                        
+  END 

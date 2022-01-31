@@ -1,0 +1,23 @@
+CREATE proc PdeleteInvRuleMaster
+@RuleMasterId int,
+@RuleTypeId int,
+@InvestigationID bigint,
+@pOrgID INT,
+@PRemarksId int,
+@ContextInfo [UDT_Context] READONLY  
+AS
+Begin
+update PAG set PAG.isactive =0 from PatientAgeGenderRule PAG 
+Inner Join InvRuleMaster IR on PAG.RuleMasterId=IR.RuleMasterId and IR.Ruletypeid=@RuleTypeId and IR.Investigationid=@InvestigationID
+where PAG.rulemasterid=@RuleMasterId and isnull(PAG.remarksid,0) =@PRemarksId
+
+update PAG set PAG.isactive =0 from TestResultsRule PAG 
+Inner Join InvRuleMaster IR on PAG.RuleMasterId=IR.RuleMasterId and IR.Ruletypeid=@RuleTypeId and IR.Investigationid=@InvestigationID
+where PAG.rulemasterid=@RuleMasterId and isnull(PAG.remarksid,0) =@PRemarksId
+
+update PAG set PAG.isactive =0 from MachineErrorRule PAG 
+Inner Join InvRuleMaster IR on PAG.RuleMasterId=IR.RuleMasterId and IR.Ruletypeid=@RuleTypeId and IR.Investigationid=@InvestigationID
+where PAG.rulemasterid=@RuleMasterId and isnull(PAG.remarksid,0) =@PRemarksId
+
+End
+

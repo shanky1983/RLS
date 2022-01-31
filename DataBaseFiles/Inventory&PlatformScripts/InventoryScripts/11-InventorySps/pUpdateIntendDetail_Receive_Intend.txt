@@ -1,0 +1,436 @@
+/****** Object:  StoredProcedure [dbo].[pUpdateStockReceived]    Script Date: 08/14/2015 17:24:04 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[pUpdateIntendDetail_Receive_Intend]      
+ @pIntendID [bigint],      
+ @pOrgID [bigint],      
+ @pOrgAddressID [bigint],      
+ @pLocationID [int],      
+ @pCreatedBy [bigint],      
+ @StockINV [dbo].[InventoryItemsMapping] READONLY,      
+ @pIndentReceivedID [bigint],      
+ @IndID [bigint] OUTPUT,      
+ @IndentReceivedID [bigint] OUTPUT,      
+ @ContextInfo [dbo].[UDT_Context] READONLY      
+WITH EXECUTE AS OWNER      
+AS      
+BEGIN      
+    DECLARE @ServerDate DATETIME      
+SET @ServerDate=dbo.fn_GetServerDate(@ContextInfo)                                                                                    
+                                                                                        
+DECLARE @pCreatedAt datetime      
+                                                                    
+DECLARE @RCount int      
+                                                                                        
+DECLARE @returnstatus int      
+            
+declare @RaiseOrgID int      
+                                                                                       
+DECLARE @insCnt INT,@ToLocationID INT,@FromLocationID INT,@StockOutFlowId BIGINT      
+                                                                     
+DECLARE @TABLE1 TABLE(IntendID BIGINT ,IntendDetailID BIGINT ,ReceivedID BIGINT,IssueQty decimal(18,2)                                
+,RecvQty Decimal(18,2),[Status] NVARCHAR(50),                                
+BalQty Decimal(18,2),ProductID BIGINT,BatchNo NVARCHAR(50),StockOutFlowID BIGINT,ParentProductID BIGINT)      
+                                                             
+DECLARE @pStockReceivedNo NVARCHAR(50)      
+      
+DECLARE @StockReceivedID BIGINT      
+      
+DECLARE @InsertFlag DECIMAL(18,2)=0      
+                                  
+DECLARE @OrgID int      
+declare @IssuedOrgID int                    
+SET @returnstatus = -1      
+      
+ Declare @pRaiseOrgIDForReturn bigint      
+ Declare @pRaiseOrgAddIDForReturn bigint      
+--BEGIN TRY                                                                                                                                    
+-- BEGIN TRAN  T1                        
+  
+  
+            DECLARE                                                                         
+   @pInventoryItemsMapping_Intend [dbo].[InventoryItemsMapping]              
+             
+   INSERT INTO @pInventoryItemsMapping_Intend           
+   SELECT imt.* FROM @StockINV  imt   
+   INNER JOIN IntendDetail id on id.ProductID=imt.productid and id.ParentProductID=imt.ParentProductID  
+   WHERE id.IntendID=@pIntendID                         
+      
+      
+SELECT      
+ @FromLocationID = I.ToLocationID,      
+ @ToLocationID = I.LocationID,      
+ @StockOutFlowId = IR.StockOutFlowId,      
+ @OrgID = I.OrgID,      
+ @IssuedOrgID=I.RaiseOrgID,                   
+ @RaiseOrgID = IR.RaiseOrgID ,      
+ @pRaiseOrgIDForReturn=IR.OrgID,      
+  @pRaiseOrgAddIDForReturn=IR.OrgAddressID      
+FROM Intend I WITH(NOLOCK)      
+INNER JOIN IntendReceived IR  WITH(NOLOCK)      
+ ON IR.IntendID = I.IntendID      
+WHERE I.IntendID = @pIntendID AND IR.IntendReceivedID = @pIndentReceivedID      
+      
+SET @pCreatedAt = @ServerDate      
+SET @RCount = -1      
+      
+      
+UPDATE IRD      
+SET IRD.RecdQty = ISNULL(S.Quantity, 0),      
+ IRD.IntendReceivedDate = @pCreatedAt      
+FROM IntendReceivedDetail IRD      
+INNER JOIN @pInventoryItemsMapping_Intend S      
+ ON IRD.ProductID = S.ProductID AND IRD.BatchNo = S.BatchNo AND IRD.IntendReceivedDetailID = S.ID      
+WHERE IRD.RaiseOrgID = @RaiseOrgID --AND IRD.IntendReceivedID = @pIndentReceivedID                                            
+      
+UPDATE ID      
+SET ID.Receivedquantity = ISNULL(ID.Receivedquantity, 0) + ISNULL(PP.Quantity, 0)      
+FROM IntendDetail ID      
+INNER JOIN (SELECT      
+ P.productid,      
+ SUM(P.Quantity) AS quantity      
+FROM @pInventoryItemsMapping_Intend P      
+GROUP BY P.ProductID) PP      
+ ON PP.ProductID = Id.ProductID AND ID.IntendID = @pIntendID      
+WHERE ID.IntendID = @pIntendID AND ID.OrgID = @RaiseOrgID      
+         
+           
+   declare @ProductsCTE table(OrgID bigint,      
+ CategoryId int, ProductId bigint, BatchNo NVARCHAR(100),      
+ ExpiryDate datetime, POQuantity decimal(18,2),      
+ Tax decimal(18,2), POUnit NVARCHAR(10), UnitPrice decimal(18,2),      
+ RECQuantity decimal(18,2), RECUnit NVARCHAR(10),      
+ OrgAddressID bigint, SellingPrice decimal(18,2),      
+ SellingUnit NVARCHAR(10), RcvdLSUQty decimal(18,2),      
+ StockReceivedDate datetime, LocationID bigint,      
+ InvoiceQty decimal(18,2), ProductKey NVARCHAR(1000))      
+         
+       
+    INSERT INTO @ProductsCTE(OrgID,      
+ CategoryId, ProductId, BatchNo,      
+ ExpiryDate, POQuantity,      
+ Tax, POUnit, UnitPrice,      
+ RECQuantity, RECUnit,      
+ OrgAddressID, SellingPrice,      
+ SellingUnit, RcvdLSUQty,      
+ StockReceivedDate, LocationID,      
+ InvoiceQty, ProductKey)         
+  select @pOrgID,      
+  P.CategoryID,P.ProductID,SIH.BatchNo,SIH.ExpiryDate,(ISNULL(IRD.IssueQty,0) - ISNULL(S.Quantity ,0))      
+   ,SIH.Tax,SIH.SellingUnit,S.UnitPrice,(ISNULL(IRD.IssueQty,0) - ISNULL(S.Quantity ,0)),SIH.SellingUnit      
+   ,@pOrgAddressID,S.Rate,SIH.SellingUnit,(ISNULL(IRD.IssueQty,0) - ISNULL(S.Quantity ,0)),@ServerDate,@pLocationID,1,        
+    IRD.ProductKey         
+   FROM IntendReceivedDetail IRD                            
+   INNER JOIN @pInventoryItemsMapping_Intend S ON IRD.ProductID=S.ProductID AND IRD.BatchNo =S.BatchNo  AND IRD.IntendReceivedDetailID =S.ID        
+   INNER JOIN Products P ON P.ProductID=S.ProductID AND P.OrgID=@pOrgID        
+   INNER JOIN StockInHand SIH ON SIH.ProductID=P.ProductID AND SIH.BatchNo=S.BatchNo      
+   AND IRD.ProductKey=SIH.ProductKey      
+   AND SIH.OrgID=@pOrgID       
+   AND SIH.LocationID=@FromLocationID                                         
+   WHERE IRD.RaiseOrgID =@pOrgID       
+         
+         
+      
+      
+ ----UPDATE  SI SET SI.TotalLocationIssued =SI.TotalLocationIssued+(S.Quantity-IRD.IssueQty) ,                                                                                      
+ ----ModifiedAt=@pCreatedAt,ModifiedBy=@pCreatedBy                                                                                                        
+ ----FROM  StockInHand SI  INNER JOIN   IntendReceivedDetail IRD on SI.ProductID=IRD.ProductID AND SI.ProductKey=IRD.ProductKey                               
+ ----INNER JOIN @pInventoryItemsMapping_Intend S  ON SI.ProductID=S.ProductId AND  IRD.IntendReceivedDetailID=S.ID                                         
+ ----WHERE SI.OrgID=@pOrgID and SI.LocationID=@ToLocationID                                                                       
+      
+ --@TABLE1 values                                                                    
+ INSERT INTO @TABLE1 (IntendID, IntendDetailID, ReceivedID, IssueQty, RecvQty, [Status], BalQty, ProductID, BatchNo, StockOutFlowID, ParentProductID)      
+  SELECT      
+   IR.IntendID,      
+   IRD.IntendReceivedDetailID,      
+   IRD.IntendReceivedID,      
+   ISNULL(IRD.Quantity, 0      
+   ),      
+   ISNULL(IRD.RecdQty, 0),      
+   CASE      
+    WHEN (ISNULL(IRD.IssueQty, 0) - ISNULL(IRD.RecdQty, 0)) = 0 THEN 'Received' ELSE 'Pending'      
+   END [Status],      
+   ISNULL(IRD.IssueQty, 0) - ISNULL(IRD.RecdQty, 0),      
+   IRD.ProductID,      
+   IRD.BatchNo,      
+   IR.StockOutFlowID,      
+   IRD.ParentProductID      
+  FROM IntendReceivedDetail IRD      
+  INNER JOIN IntendReceived IR      
+   ON IR.IntendReceivedID = IRD.IntendReceivedID      
+  INNER JOIN Intend I      
+   ON I.IntendID = IR.IntendID      
+  WHERE IR.IntendID = @pIntendID AND IR.RaiseOrgID = @pOrgID AND IR.IntendReceivedID = @pIndentReceivedID      
+      
+--AND IR.OrgAddressID =@pOrgAddressID                                                               
+      
+      
+      
+EXEC pUpdateStockIssue @pIntendID,      
+      '',      
+      @pCreatedBy,      
+      @pOrgID,      
+      @pOrgAddressID,      
+      @pIndentReceivedID,@ContextInfo                   
+      
+---------------------------------indOK--------     -- Fromlocation=cs   to location = pos                                                                                      
+      
+--==============  BEFORE Trusted ORG =============                                       
+--   UPDATE  SI SET SI.TotalLocationIssued =SI.TotalLocationIssued +(S.Quantity-IRD.IssueQty) ,                                                                                      
+--   ModifiedAt=@pCreatedAt,ModifiedBy=@pCreatedBy                                                                                                          
+--  -- FROM  StockInHand SI  INNER JOIN   IntendReceivedDetail IRD on SI.ProductID=IRD.ProductID AND SI.ProductKey=IRD.ParentProductKey                             
+--    FROM  StockInHand SI  INNER JOIN   IntendReceivedDetail IRD on SI.ProductID=IRD.ProductID   AND SI.ProductKey=IRD.ParentProductKey                                                                                                     
+--   INNER JOIN @pInventoryItemsMapping_Intend S  ON SI.ProductID=S.ProductId AND  IRD.IntendReceivedDetailID=S.ID                                         
+--   WHERE SI.OrgID=@OrgID and SI.LocationID=@FromLocationID                                     
+      
+      
+--   UPDATE SO SET SO.Quantity = SO.Quantity+(S.Quantity - IRD.IssueQty)                                                                          
+--   FROM StockOutFlowDetails SO                                                                                            
+--   --INNER JOIN   IntendReceivedDetail IRD on SO.ProductID=IRD.ProductID AND SO.ProductKey=IRD.ParentProductKey                            
+      
+      
+      
+--   INNER JOIN @pInventoryItemsMapping_Intend S  ON SO.ProductID=S.ProductId AND  IRD.IntendReceivedDetailID=S.ID                                         
+--   WHERE SO.RaiseOrgID =@pOrgID and SO.LocationID=@FromLocationID  and So.StockOutFlowID=@StockOutFlowId                                                       
+      
+--====================================================================================================                                                         
+      
+--UPDATE SI      
+--SET SI.TotalLocationIssued = SI.TotalLocationIssued + (S.Quantity - IRD.IssueQty),      
+-- ModifiedAt = @pCreatedAt,      
+-- ModifiedBy = @pCreatedBy      
+--FROM StockInHand SI      
+--INNER JOIN IntendReceivedDetail IRD      
+-- ON SI.ProductKey = IRD.parentproductkey AND SI.ProductID = (SELECT TOP 1      
+--  ProductID      
+-- FROM Products      
+-- WHERE ParentProductID = IRD.ParentProductID AND OrgID = IRD.OrgID)      
+--INNER JOIN @pInventoryItemsMapping_Intend S      
+-- ON S.BatchNo = IRD.BatchNo AND IRD.IntendReceivedDetailID = S.ID      
+--WHERE SI.OrgID = @OrgID AND SI.LocationID = @FromLocationID AND IRD.IntendReceivedID = @pIndentReceivedID      
+      
+      
+--UPDATE SO      
+--SET SO.Quantity = SO.Quantity + (S.Quantity - IRD.IssueQty)      
+--FROM StockOutFlowDetails SO      
+--INNER JOIN IntendReceivedDetail IRD      
+-- ON SO.ProductKey = IRD.ParentProductKey      
+-- AND SO.ProductID = (SELECT TOP 1      
+--  ProductID      
+-- FROM Products      
+-- WHERE ParentProductID = IRD.ParentProductID AND OrgID = IRD.OrgID)      
+      
+--INNER JOIN @pInventoryItemsMapping_Intend S      
+-- ON SO.BatchNo = S.BatchNo AND IRD.IntendReceivedDetailID = S.ID      
+--WHERE SO.RaiseOrgID = @pOrgID AND SO.LocationID = @FromLocationID AND So.StockOutFlowID = @StockOutFlowId AND IRD.IntendReceivedID = @pIndentReceivedID      
+      
+      
+                            
+BEGIN                                                      
+       
+IF  Exists (SElect 1 from  IntendReceivedDetail IRD                    
+  INNER JOIN @pInventoryItemsMapping_Intend S                    
+ ON   IRD.IntendReceivedDetailID = S.ID                    
+WHERE   IRD.IntendReceivedID = @pIndentReceivedID                    
+ AND IRD.IssueQty-S.Quantity >0  )                       
+BEGIN                    
+                                                
+SET @pStockReceivedNo = 'SRL'+ '0000'        
+                               
+INSERT INTO StockReceived(StockReceivedNo,                                                        
+StockReceivedDate,                                                        
+OrgID,Status,                                                                                            
+Comments,CreatedBy,                                                        
+CreatedAt,OrgAddressID,                                                        
+ToLocationID,FromLocationID,                                                        
+IndentID,IssuedTO,IndentReceivedID)                                                                                                               
+VALUES (@pStockReceivedNo,                                                        
+@pCreatedAt,@pRaiseOrgIDForReturn,                                                          
+'Approved','Return stock from Indent Flow',                                                          
+@pCreatedBy,@pCreatedAt,                                                          
+@pRaiseOrgAddIDForReturn,@FromLocationID,                                                          
+@ToLocationID,@pIntendID,@pCreatedBy,@IndentReceivedID)                                                                                          
+                              
+SET  @StockReceivedID  = SCOPE_IDENTITY()       
+       
+      
+                                                              
+--SElect @pStockReceivedNo =StockReceivedNo,      
+--@StockReceivedId=StockReceivedID  from StockReceived  WITH(NOLOCK) where   IndentID =  @pIntendID  and OrgID = @OrgID         
+                           
+INSERT INTO StockReceivedDetails (               
+StockReceivedId, OrgID,                                                        
+CategoryId, ProductId,BatchNo,                                                                                             
+ExpiryDate, POQuantity,                                                            
+Tax, POUnit, UnitPrice,                                                                                            
+RECQuantity,RECUnit,                           
+OrgAddressID,SellingPrice,                                                                                  
+SellingUnit,RcvdLSUQty,                                                                                  
+StockReceivedDate,LocationID,                                                        
+InvoiceQty,ProductKey,MRP)                                                                                               
+SELECT @StockReceivedId,                                                                                   
+@pRaiseOrgIDForReturn,IRD.CategoryId,                                                                                     
+SO.ProductId ,      
+--(SElect Top 1 S2.ProductID from @tble s2 Where s2.ParentProductID=S.ParentProductID AND S2.orgid=@pOrgID ),          
+SO.BatchNo,                                                                                  
+SO.ExpiryDate,( IRD.IssueQty-S.Quantity ),                                                                                             
+SO.TaxPercent,SO.Unit,                                                     
+SO.UnitPrice,(IRD.IssueQty-S.Quantity),                                                                                            
+SO.Unit,@pRaiseOrgAddIDForReturn,                                                                                    
+SO.SellingPrice,SO.Unit,                                                                                  
+(IRD.IssueQty-S.Quantity),@pCreatedAt,                                                        
+@FromLocationID,1,        
+--IIM.ProductKey            
+CONVERT (NVARCHAR(max),Convert(NVARCHAR(50),(SO.ProductID )) +'@#$'      
++Convert(NVARCHAR(50),SO.BatchNo ) +'@#$'+REPLACE( SUBSTRING(CONVERT(NVARCHAR(11),SO.ExpiryDate , 113), 4, 8),' ','/') +'@#$'      
++ Convert(NVARCHAR(50),ISNULL(SO.UnitPrice ,0)) +'@#$'      
++ Convert(NVARCHAR(50),SO.SellingPrice)+'@#$'+        
+Convert(NVARCHAR(20),ISNULL(SO.Unit ,'Nos'))),ISNULL(IRD.MRP,0)       
+ FROM StockOutFlowDetails SO      
+INNER JOIN IntendReceivedDetail IRD      
+ ON SO.ProductKey = IRD.ParentProductKey      
+ AND SO.ProductID = (SELECT TOP 1      
+  ProductID      
+ FROM Products        
+ WHERE ParentProductID = IRD.ParentProductID AND OrgID = IRD.OrgID)      
+INNER JOIN @pInventoryItemsMapping_Intend S      
+ ON SO.BatchNo = S.BatchNo AND IRD.IntendReceivedDetailID = S.ID      
+WHERE SO.RaiseOrgID = @pOrgID AND SO.LocationID = @FromLocationID AND So.StockOutFlowID = @StockOutFlowId      
+ AND IRD.IntendReceivedID = @pIndentReceivedID      
+ AND IRD.IssueQty-S.Quantity >0      
+                                            
+      
+      
+UPDATE SI      
+SET SI.TotalStockReceived = SI.TotalStockReceived + (IRD.IssueQty -S.Quantity),      
+ ModifiedAt = @pCreatedAt,      
+ ModifiedBy = @pCreatedBy      
+FROM StockInHand SI      
+INNER JOIN IntendReceivedDetail IRD      
+ ON SI.ProductKey = IRD.parentproductkey AND SI.ProductID = (SELECT TOP 1 ProductID FROM Products WHERE ParentProductID = IRD.ParentProductID AND OrgID = IRD.OrgID)      
+INNER JOIN @pInventoryItemsMapping_Intend S      
+ ON S.BatchNo = IRD.BatchNo AND IRD.IntendReceivedDetailID = S.ID      
+WHERE SI.OrgID = @IssuedOrgID AND SI.LocationID = @FromLocationID AND IRD.IntendReceivedID = @pIndentReceivedID      
+ AND IRD.IssueQty-S.Quantity >0      
+       
+END      
+END                    
+      
+                                            
+      
+UPDATE S      
+SET S.Status = 'Approved',      
+ S.ApprovedAt = @pCreatedAt,      
+ S.ApprovedBy = @pCreatedBy,      
+ S.ModifiedAt = @pCreatedAt,      
+ S.ModifiedBy = @pCreatedBy      
+FROM StockOutFlow S      
+INNER JOIN IntendReceived IR      
+ ON S.StockOutFlowID = IR.StockOutFlowID      
+WHERE IR.IntendID = @pIntendID AND IR.IntendReceivedID = @pIndentReceivedID      
+      
+UPDATE IRD      
+SET IRD.Status = 'Received'      
+FROM @TABLE1 T      
+INNER JOIN IntendReceivedDetail IRD      
+ ON IRD.IntendReceivedDetailID = T.IntendDetailID      
+WHERE IRD.IntendReceivedID = @pIndentReceivedID      
+      
+/* IF any Product Status Open issue Qty < ReceiveQty OR Indent Status  */             
+      
+UPDATE IRD      
+SET IRD.Status =      
+ CASE WHEN 0 = (ISNULL(IRD.Quantity,0) - ISNULL(IRD.Receivedquantity,0)) THEN 'Closed'       
+  ELSE 'Open'      
+ END    
+FROM Intend I      
+INNER JOIN IntendDetail IRD ON I.IntendID = IRD.IntendID      
+Inner join IntendReceived ir on ir.IntendID=i.IntendID and ir.OrgID=i.OrgID              
+Inner join IntendReceivedDetail IRDD ON IRDD.IntendReceivedID=ir.IntendReceivedID and irdd.OrgID=ir.OrgID               
+and irdd.ProductID=ird.ProductID and ird.LocationID=irdd.FromLocationID               
+WHERE I.IntendID = @pIntendID AND I.OrgID = @OrgID and ISNULL(IRD.Status,'Open') ='Open'       
+      
+      
+UPDATE I            
+SET I.Status = 'Received'            
+FROM Intend I            
+INNER JOIN IntendDetail ID ON I.IntendID = ID.IntendID            
+WHERE 0 = (SELECT COUNT(1) FROM IntendDetail ID1 WHERE ID1.IntendID = I.IntendID AND (ID1.Status = 'Open' OR ID1.Status IS NULL))            
+AND ISNULL(ID.InvoiceQty, 0) = ISNULL(ID.Receivedquantity, 0) AND I.IntendID = @pIntendID AND I.OrgID = @OrgID       
+      
+      
+/*  When Receive Qty < Issue Qty  OR  Direcet Stock Issue OR Intend Status Issued  */        
+UPDATE I            
+SET I.Status = 'Received'             
+FROM Intend I            
+INNER JOIN IntendDetail IRD ON I.IntendID = IRD.IntendID            
+WHERE I.IntendID = @pIntendID AND I.OrgID = @OrgID and IRD.Status='Closed' AND I.Status ='Issued'      
+AND ISNULL(IRD.Quantity , 0) = ISNULL(IRD.Receivedquantity, 0)         
+      
+/*  one more update  **/      
+UPDATE I                
+SET I.Status = 'Received'                 
+FROM Intend I                
+INNER JOIN IntendDetail IRD ON I.IntendID = IRD.IntendID     
+Inner join IntendReceived ir on ir.IntendID=i.IntendID and ir.OrgID=i.OrgID and ir.Status=''    --Added By Sarvan            
+WHERE I.IntendID = @pIntendID AND I.OrgID  = @OrgID and IRD.Quantity =IRD.InvoiceQty   AND I.Status ='Issued'       
+AND ISNULL(IRD.Quantity , 0) = ISNULL(IRD.Receivedquantity, 0)         
+UPDATE I                 
+SET I.Status =                  
+ CASE WHEN 0 = (ISNULL(IRD.Quantity,0) - ISNULL(IRD.Receivedquantity,0)) THEN 'Received'                   
+  ELSE 'Partial Issued' END                  
+FROM Intend I                  
+INNER JOIN IntendDetail IRD ON I.IntendID = IRD.IntendID               
+WHERE I.IntendID = @pIntendID AND I.OrgID = @OrgID  AND ISNULL(IRD.Status,'Open') <>'Closed'              
+UPDATE IntendReceived      
+SET Status = 'Received',      
+ ModifiedAt = @pCreatedAt,      
+ ModifiedBy = @pCreatedBy      
+WHERE IntendID = @pIntendID AND IntendReceivedID = @pIndentReceivedID      
+         select    @IndID =@pIntendID      
+                     
+               select @IndentReceivedID = @pIndentReceivedID                                       
+                                                                     
+    --***********kit Product******************                                                  
+   Declare @pTypeID NVARCHAR(20)      
+                                                    
+  Declare @Return int      
+                                         
+                                 
+ IF EXISTS (SELECT      
+ *      
+FROM KitPrepMaster KPM  WITH(NOLOCK)      
+INNER JOIN @pInventoryItemsMapping_Intend S      
+ ON KPM.MasterKitID = S.ProductID AND KPM.KitBatchNo = S.BatchNo AND LocationID = @FromLocationID)      
+                                              
+    BEGIN      
+      
+      
+EXEC pUpdateKitIssuedLocation @POrgID,      
+        @ToLocationID,      
+        @FromLocationID,      
+        @pTypeID,      
+        @pInventoryItemsMapping_Intend,      
+        @ContextInfo,      
+        @Return OUTPUT      
+                                
+                       --**********************************                                                                           
+                                                                                                                                   
+                           
+                                                     
+   END      
+      
+--COMMIT TRAN T1                                                                                 
+      
+-- END TRY                        
+-- BEGIN CATCH                                                                                                 
+--  --Set @returnstatus=-1                                                                                                                                    
+--      ROLLBACK TRANSACTION T1                                                                                            
+-- END CATCH                                                                                    
+SET NOCOUNT OFF      
+                                                                                       
+                                                                                                        
+ END 
+GO

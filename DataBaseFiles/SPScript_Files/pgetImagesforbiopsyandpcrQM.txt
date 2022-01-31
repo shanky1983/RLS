@@ -1,0 +1,103 @@
+CREATE PROCEDURE [dbo].[pgetImagesforbiopsyandpcrQM]                                
+
+(                               
+
+ @pVisitID bigint,                                
+
+ @OrgID int,                                
+
+ @TemplateID int ,                         
+
+ @InvestigationID NVARCHAR(2000)            
+
+)                               
+
+                               
+
+AS BEGIN           
+
+         
+
+DECLARE @tblResultSelectID TABLE          
+
+ (          
+
+ AccessionNo BIGINT          
+
+ )            
+
+         
+
+Declare @InvId bigint         
+
+  INSERT INTO @tblResultSelectID (AccessionNo)          
+
+ SELECT item FROM fnSplit(@InvestigationID,',')      
+
+     
+
+            
+
+select @InvId = AccessionNumber from OrderedInvestigations    
+
+ORD    
+
+inner join @tblResultSelectID Tbl on Tbl.AccessionNo=ORD.ReferredAccessionNo    
+
+         
+
+where ReferredAccessionNo = AccessionNo    
+
+    --select @InvId      
+
+if(@InvId is not null AND @InvId > 0)         
+
+BEGIN        
+
+    
+
+   --select 'A'      
+
+select PIF.* from PatientInvestigation PI         
+
+inner join PatientInvestigationFiles PIF on PIF.PatientVisitID = PI.PatientVisitID and PIF.InvestigationID = PI.InvestigationID         
+
+where  PI.AccessionNumber = @InvId         
+
+         
+
+END         
+
+         
+
+ELSE         
+
+      --select 'B'      
+
+BEGIN         
+
+         
+
+--INSERT INTO @tblResultSelectID (AccessionNo)          
+
+-- SELECT item FROM fnSplit(@InvestigationID,',')          
+
+         
+
+select PIF.* from PatientInvestigation PI         
+
+inner join PatientInvestigationFiles PIF on PIF.PatientVisitID = PI.PatientVisitID and PIF.InvestigationID = PI.InvestigationID and PI.OrgID = PIF.OrgID        
+
+INNER JOIN  @tblResultSelectID  Tbl on PI.AccessionNumber=Tbl.AccessionNo    
+
+where PI.PatientVisitID = @pVisitID          
+
+and PI.AccessionNumber = Tbl.AccessionNo    
+
+         
+
+END         
+
+         
+
+END

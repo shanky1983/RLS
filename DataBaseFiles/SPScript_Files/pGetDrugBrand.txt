@@ -1,0 +1,51 @@
+/****** Object:  StoredProcedure [dbo].[pGetDrugBrand]    Script Date: 12/28/2018 7:35:25 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE PROCEDURE [dbo].[pGetDrugBrand]
+	@pOrgID [int],
+	@pBrandName [nvarchar](50),
+	@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN      
+	Declare @LangCode nvarchar(20),@CallFromMasterFlag NVARCHAR(10)
+	SELECT @LangCode =languageCode,@CallFromMasterFlag=ISNULL(AdditionalInfo,'N') from @ContextInfo 
+	IF(@CallFromMasterFlag IS NOT NULL AND  @CallFromMasterFlag ='Y' AND @CallFromMasterFlag <> 'N') 
+	BEGIN
+		 SELECT         
+			IDB.DrugID,IDB.BrandName,IDB.Code,ISNULL(IDFM.familyname,'') AS FamilyName,IDFM.FamilyId AS FMID    
+			FROM InvestigationDrugBrand IDB WITH(NOLOCK)
+			/*SABARI ADDED*/
+			INNER JOIN InvestigationDrugFamilyMaster IDFM  WITH(NOLOCK)
+			 ON   IDB.FMID=IDFM.FamilyId   AND IDB.OrgID=IDFM.OrgID
+				WHERE IDB.OrgID=@pOrgID and isnull(IDB.LangCode,'en-GB')=@LangCode 
+				 ORDER BY BrandName   
+	END
+	ELSE
+	BEGIN
+	   SELECT DrugID,BrandName ,Code     
+   FROM InvestigationDrugBrand      
+   WHERE OrgID=@pOrgID and isnull(LangCode,'en-GB')=@LangCode       
+   ORDER BY BrandName   
+	END		    
+ END
+
+
+
+
+
+
+
+
+
+
+
+
+GO
+
+

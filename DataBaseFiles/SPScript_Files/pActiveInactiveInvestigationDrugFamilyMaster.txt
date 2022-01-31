@@ -1,0 +1,26 @@
+/****** Object:  StoredProcedure [dbo].[pActiveInactiveInvestigationDrugFamilyMaster]    Script Date: 6/25/2018 11:25:07 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE procedure [dbo].[pActiveInactiveInvestigationDrugFamilyMaster](@Id bigint, @IsActive int out,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+declare @Active bit
+declare @OrgId int
+
+select @OrgId=Orgid from  @ContextInfo
+select @Active=isnull(isactive,0) from InvestigationDrugFamilyMaster where OrgID=@OrgId and familyID=@Id
+
+update InvestigationDrugFamilyMaster set IsActive=case when @Active=0 then 1 else 0 end where OrgID=@OrgId and familyID=@Id 
+
+--insert into InvestigationDrugFamilyMasterHistory (familyname,Familycode,orgid,createdat,createdby,modifiedat,modifiedby,LangCode,isactive,familyid) 
+--select familyname,Familycode,orgid,createdat,createdby,modifiedat,modifiedby,LangCode,isactive,familyid from InvestigationDrugFamilyMaster where familyid=@Id and orgid=@OrgId
+
+select @IsActive=isactive from InvestigationDrugFamilyMaster where OrgID=@OrgId and familyID=@Id
+end
+
+GO

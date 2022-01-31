@@ -1,0 +1,255 @@
+Create PROCEDURE [dbo].[PGetReferingPhysicanRateSummary] (
+
+@Fdate DATETIME = NULL
+
+,@Tdate DATETIME = NULL
+
+,@POrgid INT
+
+,@PparamType VARCHAR(20) = NULL
+
+,@Pparamvalue SMALLINT = NULL
+
+,@Debugflag BIT = 0
+
+)
+
+AS
+
+BEGIN
+
+DECLARE @Fromdate DATETIME
+
+,@Todate DATETIME
+
+set @Fdate= CONVERT(varchar(10),@Fdate,103)+' 00:00:00'
+
+set @Tdate= CONVERT(varchar(10),@Tdate,103)+' 23:59:59'
+
+IF @Pparamtype = 'ShowDateRangePopup'
+
+BEGIN
+
+SET @Fromdate = @Fdate
+
+SET @Todate = @Tdate
+
+END
+
+IF @Pparamtype = 'lastMonth'
+
+BEGIN
+
+SELECT @Fromdate = DATEADD(m, - 1, CAST(DATEADD(D, 1 - DATEPART(d, GETDATE()), GETDATE()) AS DATE))
+
+SELECT @Todate = CAST(DATEADD(D, 1 - DATEPART(d, GETDATE()), GETDATE()) AS DATE)
+
+END
+
+IF ISNULL(@Pparamtype, 'CurrentMonth') = 'CurrentMonth'
+
+BEGIN
+
+SELECT @Fromdate = DATEADD(m, 0, CAST(DATEADD(D, 1 - DATEPART(d, GETDATE()), GETDATE()) AS DATE))
+
+SELECT @Todate = GETDATE()
+
+END
+
+SET NOCOUNT ON
+
+DECLARE @Temp2 AS TABLE (
+
+ID INT IDENTITY(1, 1)
+
+,ReferingPhysicianName VARCHAR(255)
+
+,Amount DECIMAL(18, 2)
+
+,MrpAmount DECIMAL(18, 2)
+
+,TotalTests DECIMAL(18, 2)
+
+,DiscountAmount DECIMAL(18, 2)
+
+,Visitid BIGINT
+
+,IscreditBill CHAR(1)
+
+,Feeid BIGINT
+
+,Feetype VARCHAR(50)
+,Location Varchar(50)
+
+)
+
+INSERT INTO @Temp2
+
+--SELECT PV.ReferingPhysicianName
+
+--	,BD.Amount
+
+--	,BD.ActualAmount AS MrpAmount
+
+--	,1 AS TotalTests
+
+--	,FB.DiscountAmount
+
+--	,PV.PAtientvisitid
+
+--	,FB.IscreditBill
+
+--	,BD.FeeID
+
+--	,BD.FeeType
+
+--FROM PatientVisit PV WITH (NOLOCK)
+
+--INNER JOIN Patient pt WITH (NOLOCK) ON pv.PatientID = pt.PatientID
+
+--INNER JOIN FinalBill Fb WITH (NOLOCK) ON VisitID = PatientVisitId
+
+--INNER JOIN BillingDetails BD WITH (NOLOCK) ON Bd.FinalBillID = Fb.FinalBillID
+
+--WHERE PV.Createdat BETWEEN @FROMdate
+
+--		AND @Todate
+
+--	AND pv.OrgID = @POrgid
+
+--	AND Isnull(PV.ReferingPhysicianID, 0) <> 0
+
+--	AND Fb.iscreditbill = 'Y'
+
+--UNION ALL
+
+SELECT PV.ReferingPhysicianName
+
+,BD.Amount
+
+,BD.ActualAmount AS MrpAmount
+
+,1 AS TotalTests
+
+,BD.DiscountAmount
+
+,PV.PAtientvisitid
+
+,FB.IscreditBill
+
+,BD.FeeID
+
+,BD.FeeType
+,OA.Location
+FROM PatientVisit PV WITH (NOLOCK)
+
+INNER JOIN Patient pt WITH (NOLOCK) ON pv.PatientID = pt.PatientID
+
+INNER JOIN FinalBill Fb WITH (NOLOCK) ON VisitID = PatientVisitId
+
+INNER JOIN BillingDetails BD WITH (NOLOCK) ON Bd.FinalBillID = Fb.FinalBillID	
+
+inner join visitclientmapping VCM on  VCM.Visitid=PV.PatientVisitId and VCM.Orgid=PV.Orgid
+
+inner join clientmaster CM on CM.Clientid=VCM.ClientID and CM.OrgId=VCM.Orgid
+Inner Join OrganizationAddress OA On OA.AddressID=pv.OrgAddressID and OA.OrgID=PV.OrgID
+
+WHERE PV.Createdat BETWEEN @FROMdate
+
+AND @Todate
+
+AND pv.OrgID = @POrgid
+
+AND Isnull(PV.ReferingPhysicianID, 0) <> 0
+
+AND Fb.iscreditbill = 'N' and  CM.ClientCode='GENERAL'
+
+DELETE t
+
+FROM @Temp2 t
+
+INNER JOIN orderedinvestigations OI ON OI.Visitid = T.visitid
+
+AND OI.ID = t.Feeid
+
+AND OI.Type = t.FeeType
+
+AND OI.orgid = @POrgid
+
+AND OI.STATUS = 'Cancel'
+
+UPDATE @Temp2
+
+SET DiscountAmount = MrpAmount - Amount
+
+WHERE iscreditbill = 'Y'
+
+UPDATE @Temp2
+
+SET Amount = MrpAmount - DiscountAmount
+
+WHERE iscreditbill = 'N'
+
+DECLARE @Temp3 AS TABLE (
+
+ID INT IDENTITY(1, 1)
+
+,ReferingPhysicianName VARCHAR(255)
+
+,NetAmount DECIMAL(18, 2)
+
+,MrpAmount DECIMAL(18, 2)
+
+,TotalTests DECIMAL(18, 2)
+
+,DiscountAmount DECIMAL(18, 2)
+
+,Visitid BIGINT
+,Location Varchar(50)
+)
+
+INSERT INTO @Temp3
+
+SELECT ReferingPhysicianName
+
+,sum(Amount) AS NetAmount
+
+,sum(MrpAmount) AS MrpAmount
+
+,sum(TotalTests) AS NoOfTests
+
+,sum(DiscountAmount) AS DiscountAmount
+
+,visitid
+,Location
+FROM @Temp2
+
+GROUP BY ReferingPhysicianName,Location
+
+,visitid
+
+SELECT '123' As Empty
+
+,ReferingPhysicianName AS DoctorName
+
+,count(visitid) AS NumberofPatient
+
+,sum(TotalTests) AS TotalInvestigation
+
+,sum(MrpAmount) AS TotalAmount
+
+,sum(DiscountAmount) AS DiscountAmount
+
+,sum(NetAmount) AS NetAmount
+,Location
+FROM @Temp3
+
+GROUP BY ReferingPhysicianName,Location
+
+SET NOCOUNT OFF
+
+END
+
+-- exec [PGetReferingPhysicanRate_Mod] @POrgid=108,@FROMdate='2016-03-01 00:00:00',@Todate='2016-03-10 23:59:59'
+
+-- exec [PGetReferingPhysicanRateSummary_S] @POrgid=109,@PparamType='CurrentMonth' 

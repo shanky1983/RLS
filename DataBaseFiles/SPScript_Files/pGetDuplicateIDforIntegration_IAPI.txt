@@ -1,0 +1,78 @@
+CREATE PROCEDURE [dbo].[pGetDuplicateIDforIntegration_IAPI]                    
+ @tblID [dbo].[InvestigationDetail] READONLY,                    
+ @orgid [bigint],                    
+ @ContextInfo [UDT_Context] READONLY                    
+WITH EXECUTE AS OWNER                    
+AS                    
+BEGIN                            
+  declare   @tblInvs    [dbo].[InvestigationDetail]                  
+                    
+  insert into @tblInvs(ID,Type,Name)                  
+--  select Convert(varchar,IOG.AttGroupID) +'-'+CP.identifyingtype,CP.identifyingtype as InvType from Invorggroup IOG                  
+--Inner join Codemapper CP on CP.identifyingid=IOG.orggroupid                  
+--inner join Codemaster CM on Cm.codemasterid=CP.codemasterid                  
+--inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID                  
+--inner join @tblID p on CM.codename=P.Type                  
+-- where IOG.orgid=@orgid and CSM.OrgID=@orgid  and CP.identifyingtype in('GRP','PKG')               
+-- union                  
+-- select Convert(varchar,IOM.investigationid)+'-'+'INV','INV' as InvType from investigationorgmapping IOM                  
+--Inner join Codemapper CP on CP.identifyingid=IOM.investigationid                   
+--and cp.identifyingtype='investigations'                  
+--inner join Codemaster CM on Cm.codemasterid=CP.codemasterid                  
+--inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID                  
+--inner join @tblID p on CM.codename=P.Type                  
+-- where IOM.orgid=@orgid and CSM.OrgID=@orgid                
+select Convert(varchar,investigationid)+'-'+'INV',TestCode,displaytext from investigationorgmapping(nolock)               
+where orgid=@orgid and TestCode in(select Type from @tblID)              
+union              
+select Convert(varchar,IOG.AttGroupID)+'-'+'GRP' ,IOG.TestCode,iog.displaytext              
+ from invgroupmaster igm inner join invorggroup iog on iog.attgroupid=igm.groupid              
+ where iog.orgid=@orgid and igm.type='GRP' and IOG.TestCode in(select Type from @tblID)              
+ union              
+ select Convert(varchar,IOG.AttGroupID)+'-'+'PKG' ,IOG.TestCode,iog.displaytext              
+ from invgroupmaster igm inner join invorggroup iog on iog.attgroupid=igm.groupid               
+ where iog.orgid=@orgid and igm.type='PKG' and IOG.TestCode in(select Type from @tblID)              
+                          
+                    
+                    
+                    
+                      
+DECLARE @tblInvGrp table(ID bigint,Type nvarchar(10),Liscode nvarchar(10))                            
+                            
+insert into @tblInvGrp                            
+                            
+select LEFT(ID, CHARINDEX('-', ID + '-') -1),                            
+       STUFF(ID, 1, Len(ID) +1- CHARINDEX('-',Reverse(ID)), ''),ID                            
+from @tblInvs                            
+                                     
+-- below query is to identify ID that does not exists in the given orgID                            
+select Liscode As ID,Type from @tblInvGrp where  type='INV' and ID not in (                            
+select InvestigationID from InvestigationOrgMapping WITH (NOLOCK) where InvestigationID in (select ID from @tblInvGrp where type='INV' ) and OrgID=@orgid)                            
+UNION ALL                            
+select Liscode As ID,Type from @tblInvGrp where type='GRP' and ID not in (                            
+select AttGroupID from InvOrgGroup WITH (NOLOCK) where  AttGroupID in (select ID from @tblInvGrp where type='GRP') and OrgID = @orgid)                            
+                            
+--UNION ALL                            
+                            
+                            
+-- below query is to identify duplicate ID exists within the group as well as the outside the group                            
+select Liscode As ID,Type from @tblInvGrp where  type='INV' and ID   in (                    
+select IGMM.InvestigationID from InvGroupMapMaster IGMM  WITH (NOLOCK)                           
+inner join InvOrgGroup IOG WITH (NOLOCK) on IGMM.GroupID = IOG.OrgGroupID and (IGMM.Parent is null or IGMM.Parent = 'N')                         
+inner join @tblInvGrp tmp on IOG.AttGroupID = Tmp.ID                            
+where IOG.OrgID = @orgid)                          
+                            
+UNION ALL                            
+                            
+select Liscode As ID,Type from @tblInvGrp where  type='INV' and ID in (                            
+                            
+select InvestigationID from InvGroupMapMaster WITH (NOLOCK) where GroupID in (                           
+select  IGMM.InvestigationID from InvOrgGroup IOG                            
+inner join InvGroupMapMaster IGMM WITH (NOLOCK) on IOG.OrgGroupID = IGMM.GroupID and IGMM.Parent = 'Y'                            
+inner join @tblInvGrp tmp on IOG.AttGroupID = Tmp.ID                            
+and IOG.OrgID = @orgid)                            
+)                             
+                            
+                      
+    select ID,Name,Type,HistoryDetails,VisitID,TestSequenceOrder from @tblInvs                   
+ END 

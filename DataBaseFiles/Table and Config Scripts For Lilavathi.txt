@@ -1,0 +1,134 @@
+-------------- Table and Config Scripts -------------------
+
+IF NOT EXISTS (SELECT * FROM dbo.sysobjects where id = object_id(N'dbo.[SensitiveTestRemarks]') and OBJECTPROPERTY(id, N'IsTable') = 1)
+	BEGIN
+		CREATE TABLE dbo.[SensitiveTestRemarks]
+		(
+			ID int IDENTITY(1,1) Not Null ,
+			PatientVisitID Bigint Not Null,
+			PatientID Bigint  Not Null,
+			TaskID Bigint  Not Null,
+			OrgID Bigint  Not Null,
+	        	PatientHistory NVARCHAR(500) Null,
+			Remarks NVARCHAR(500) Null,
+			CreatedAt Datetime,
+			CreatedBy bigint
+		) 
+	END
+GO
+------------------
+Declare @ORGID BIGINT=220
+Declare @MetaDataID BIGINT
+IF NOT EXISTS (SELECT 1 FROM MetaDataOrgMapping MDM     
+   INNER JOIN MetaData MD  ON MDM.MetadataID= MD.MetaDataID WHERE MD.Domain='VisitType' and MD.DisplayText='Sensitive Result Task')
+BEGIN
+SELECT 1
+INSERT INTO MetaData(Domain,Code,DisplayText,LangCode,ParentID)
+SELECT 'VisitType',2,'Sensitive Result Task','en-GB',0 
+Select @MetaDataID = MetaDataID from MetaData MD where MD.Domain='VisitType' and MD.DisplayText='Sensitive Result Task'
+END
+
+IF NOT EXISTS (SELECT 1 FROM MetaDataOrgMapping MDM     
+   INNER JOIN MetaData MD  ON MDM.MetadataID= MD.MetaDataID WHERE MD.Domain='VisitType' and MD.DisplayText='Sensitive Result Task')
+ BEGIN
+ SELECT 2
+ INSERT INTO MetaDataOrgMapping (MetadataID,OrgID,LangCode,DisplayText)
+ SELECT @MetaDataID,@ORGID,'en-GB','Sensitive Result Task' 
+ END
+-----------------------------------
+
+
+ Select * from MenuMaster where PageID=452 and orgid=220
+ Select * from RoleMenu where  roleid=8044	and menuid=55286
+ Select * from PageMapping where roleid=8044 and PageID=452 
+
+ --INSERT INTO RoleMenu (MenuID,RoleID,IsMapped)
+	--SELECT (SELECT MenuID FROM MenuMaster WHERE PageID=452 AND OrgId=220) AS MenuID,8044,'Y'
+
+	--INSERT INTO PageMapping (RoleId,PageID,SeqNo)
+	--SELECT 8044,452,1
+
+	--Update PageMapping set seqno=2 where pageid=293 and RoleId=8044
+
+ --update role set langCode='en-GB' where roleid=8044 and orgid=220
+----------------------
+
+Insert into referencerangetype(RangeName,Type,Code,SequenceNo,OrgId,Color,LanguageCode,Bound)
+Select 'Sensitive Result Range','','sensitiveresultrange',6,220,'Blue','en-GB','Inclusive'
+-----------------------------------
+
+Select * from metadata where domain='testreferencerangetype'
+Select * from metadataorgmapping where metadataid=1251
+
+Insert Into metadataorgmapping(metadataid,orgid,langcode,displaytext)
+Select 1251,220,'en-GB','Sensitive Result Range'
+---------------------
+
+Insert Into TaskActions(TaskActionID,ActionName,RedirectURL,DisplayTextTemplate,OrgID,Category,RoleID,ModuleID,IsShareable,LanguageCode)
+Select max(TaskActionID)+1,'Release','~\Investigation\InvestigationQuickApprovel.aspx','Release Sensitive Result for {PatientName}({PatientNumber})(VisitNumber:{VisitNumber})',0,'Release',0,1,'Y','en-GB' from TaskActions
+
+-----------------Insert Into TaskActionOrgMapping  ---------------
+ Select * from TaskActions where   TaskActionID=98 and ActionName='Release'
+ Select * from Role where OrgID=220 and RoleName='Chief Pathologist'
+Insert Into TaskActionOrgMapping (TaskActionID,RoleID,OrgID)      
+Select 98,8044,220 
+---------------------------------
+Insert Into TaskActionMapping (OrgID,VisitPurposeID,OtherID,TaskActionID)      
+Select 220,3,8044,98 
+----------------------------
+
+Declare @ORGID BIGINT=220
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='IsSensitiveResultTest')
+BEGIN
+--SELECT 1
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'IsSensitiveResultTest','Thus IS Sensitive Result Test?','N'	 FROM ConfigKeyMaster 
+END
+
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE ConfigKey='IsSensitiveResultTest')
+ BEGIN
+ --SELECT 2
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='IsSensitiveResultTest'
+ END
+-------------------------------
+Insert into TaskEntityMap (MappingType,MappingID,TaskActionID,OrgID)
+Select 'InvestigationStatus',5,98,220
+-------------------------
+
+Insert into RoleDeptMap(RoleID,DeptID,IsActive,Createdat,CreatedBy,ModifiedBy,ModifiedAt) 
+Select  RoleID,DeptID,IsActive,Getdate(),369400,369400,Getdate() from RoleDeptMap where roleid in (7260) and IsActive='Y'
+
+------- Page Context mapping -----------
+
+SELECT DISTINCT PM.MappingID      
+ ,PM.ContextType      
+ FROM PageContextActionMapping PM      
+ INNER JOIN PageContext PN ON Pm.PageContextID = PN.PageContextID      
+ WHERE PN.PageID = 546      
+ AND PN.ButtonName = 'btnApprove'      
+ AND PM.RoleID = 8044 
+
+Select * from PageContextActionMapping where roleid=7260 and pagecontextid=22 and templateid in (14,25,21)
+Select * from pagecontext where pageid=546 and buttonname='btnApprove'
+Select * from  actionmanagertype where actiontypeid in (9,17,1)
+Select * from actiontemplate where templateid in (14,25,21)
+
+Insert into PageContextActionMapping(PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment)
+Select	22,	8044,	1,	14,	'CP',	'Report', 'Y' union
+Select	22,	8044,	17,	25,	'CP',	'Report', 'Y' union
+Select	22,	8044,	9,	21,	'P',	'Report', 'Y' union
+Select	22,	8044,	17,	25,	'P',	'Report', 'Y' 
+---------------------------------
+------- Investigation Report page Filer type ---------
+
+Select * from metaData where domain ='Filters' and MetaDataID=1262
+Select * from metaDataorgmapping where MetaDataID=1262 and OrgID=220
+
+--Insert Into metaData (Domain,Code,DisplayText,LangCode,ParentID)
+--Select 'Filters','sensitiveresultrange','Sensitive Result Task','en-GB',0
+
+ --INSERT INTO MetaDataOrgMapping (MetadataID,OrgID,LangCode,DisplayText)
+ --Select 1262,220,'en-GB','Sensitive Result Task'
+--------------------

@@ -1,0 +1,58 @@
+CREATE PROCEDURE [dbo].[pGetLocationWiseProductQty]  
+			 @pProductId     [bigint],                
+             @pOrgID  [int],                
+             @OrgAddressID [int],                 
+             @pLocationID [int],                  
+			 @ContextInfo [UDT_Context] READONLY                  
+WITH EXECUTE AS OWNER                  
+AS                  
+  BEGIN                  
+      IF ( @pLocationID = -1 )                  
+        BEGIN                  
+            SET @pLocationID=NULL                  
+        END                
+                  
+      DECLARE @tblDept Table                  
+        (                  
+           DeptID   int,                  
+           DeptName varchar(255)                  
+        )                  
+                        
+   SELECT             
+            l.LocationName as LocationName ,        
+            ISNULL(SI.CurrentStock,0) Quantity               
+   FROM    Products P WITH(NOLOCK)                  
+             --INNER JOIN StockInHand S With(NoLock)                  
+             --        ON P.ProductID = S.ProductID               
+                  
+             INNER JOIN ProductLocationmapping PL WITH(NOLOCK)                  
+                     ON PL.ProductID = P.ProductID        
+                     LEFT OUTER JOIN (        
+   SELECT S.ProductID,S.LocationID,        
+   (SUM(ISNULL(S.TotalStockReceived,0)) -         
+   (SUM(ISNULL(TotalLocationIssued,0)) + SUM(ISNULL(TotalStockIssued ,0))+ SUM(ISNULL(TotalStockDamage,0)) + SUM(ISNULL(TotalStockReturn,0)))) AS CurrentStock         
+   FROM StockInHand S         
+   WHERE  S.ProductID = @pProductId                  
+            AND S.OrgID = @pOrgID                  
+            AND S.OrgAddressID = @OrgAddressID                   
+            AND S.SellingUnit IS NOT NULL         
+            AND (ISNULL(S.TotalStockReceived, 0) - (ISNULL(S.TotalStockIssued, 0)                  
+                                                       + ISNULL(S.TotalLocationIssued, 0)                  
+                                                       + ISNULL(S.TotalStockDamage, 0)                  
+                                                       + ISNULL(S.TotalStockReturn, 0) ) ) > 0.00             
+   GROUP BY S.ProductID,S.LocationID        
+   ) SI ON SI.ProductID=P.ProductID AND si.LocationID=Pl.locationId                     
+             INNER  JOIN Locations L WITH(NOLOCK)                  
+                     ON L.LocationID = Pl.LocationID                 
+   WHERE  p.ProductID = @pProductId                  
+             AND P.OrgID = @pOrgID                  
+             AND P.OrgAddressID = @OrgAddressID                   
+             --AND SI.SellingUnit IS NOT NULL                  
+            -- AND S.LocationID = @LocationID                  
+             --AND ( ISNULL(S.TotalStockReceived, 0) - ( ISNULL(S.TotalStockIssued, 0)                  
+             --                                          + ISNULL(S.TotalLocationIssued, 0)                  
+             --                                          + ISNULL(S.TotalStockDamage, 0)                  
+             --                                          + ISNULL(S.TotalStockReturn, 0) ) ) > 0.00                  
+             --GROUP BY l.LocationName,l.LocationID                
+                    
+  END 

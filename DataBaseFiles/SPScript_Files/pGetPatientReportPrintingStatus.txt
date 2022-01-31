@@ -1,0 +1,12 @@
+CREATE PROCEDURE [dbo].[pGetPatientReportPrintingStatus] @pVisitID    BIGINT,
+                                                   @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+
+  SELECT RS.Status as ReportStatus,
+  (select top 1 case when ISNULL(PS.PrinterType,'Not Printed')='Kiosk' then 'Printed' else 'Not Printed' end as PrintingStatus 
+  from Printsnapshot PS WITH(NOLOCK) where PS.Seq_Num=RS.Seq_Num and PS.VisitID=RS.VisitID and PS.PrinterType='Kiosk' ) as PrintingStatus 
+  FROM  ReportSnapshot RS WITH(NOLOCK)
+  Where RS.VisitID=@pVisitID and RS.Type='Pdf' and  RS.Status='Ready' 
+  END

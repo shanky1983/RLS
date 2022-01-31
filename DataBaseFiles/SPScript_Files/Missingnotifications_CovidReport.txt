@@ -1,0 +1,300 @@
+CREATE PROCEDURE [dbo].[Missingnotifications_CovidReport]                      
+AS                      
+BEGIN                      
+                      
+ Create table #tblActionList  (                      
+  ContextType VARCHAR(50) DEFAULT('')                      
+  ,Description VARCHAR(max) DEFAULT('')                      
+  ,ActionType VARCHAR(524) DEFAULT('')                      
+  ,Attributes VARCHAR(500) DEFAULT('')                      
+  ,MailFrom VARCHAR(124) DEFAULT('')                      
+  ,MailTo VARCHAR(1000) DEFAULT('')                      
+  ,CCTo VARCHAR(124) DEFAULT('')                      
+  ,BccTo VARCHAR(124) DEFAULT('')                      
+  ,Subject VARCHAR(500) DEFAULT('')                      
+  ,NAME VARCHAR(124) DEFAULT('')                      
+  ,PhoneNo VARCHAR(124) DEFAULT('')                      
+  ,RedirectURL VARCHAR(255) DEFAULT('')                      
+  ,PatientNumber VARCHAR(124) DEFAULT('')                      
+  ,MsgedDate VARCHAR(124) DEFAULT('')                      
+  ,OrgName VARCHAR(124) DEFAULT('')                      
+  ,LocationName VARCHAR(124) DEFAULT('')                      
+  ,ClientStatus VARCHAR(50) DEFAULT('')                      
+  ,BlockFrom VARCHAR(50) DEFAULT('')                      
+  ,BlockTo VARCHAR(50) DEFAULT('')                      
+  ,RefDoctorName VARCHAR(50) DEFAULT('')                      
+  ,PublishedDate VARCHAR(50) DEFAULT('')                      
+  ,InvsNValues VARCHAR(max) DEFAULT('')                      
+  ,AccessionNumber VARCHAR(max) DEFAULT('')                      
+  ,ClientName VARCHAR(124) DEFAULT('')                      
+  ,PatientDueStatus VARCHAR(50) DEFAULT('')                      
+  ,IsAttachment VARCHAR(50) DEFAULT('')                      
+  ,Password VARCHAR(255) DEFAULT('')                      
+  ,AdditionalContext VARCHAR(255) DEFAULT('')                      
+  ,Priority INT DEFAULT(1)                      
+  ,ApplicationUrl VARCHAR(max) DEFAULT('')                      
+  ,VisitNumber VARCHAR(50) DEFAULT('')                      
+  ,AttachmentName VARCHAR(500) DEFAULT('')                      
+  ,ClientCode VARCHAR(20) DEFAULT('')                      
+  ,SampleName VARCHAR(100) DEFAULT('')                      
+  ,TestName VARCHAR(2000) DEFAULT('')                      
+  ,RejectedDate DATETIME DEFAULT('')                      
+  ,ReCollectedDate DATETIME                      
+  ,BarcodeNumber VARCHAR(255)                      
+  ,Reason VARCHAR(500)                      
+  ,IsClientblinding VARCHAR(10)               
+  ,BillType VARCHAR(100) DEFAULT('')     ,
+  ReportLanguage Varchar(100),
+  NoofCopies int,
+  ClientID BIGINT              
+  )                      
+ DECLARE @RoleID BIGINT                      
+  ,@PatientVisitID BIGINT                      
+  ,@PatientID BIGINT                      
+  ,@OrgAddID BIGINT                      
+  ,@OrgId INT                      
+  ,@FinalBillId AS BIGINT                      
+  ,@AccessionNumber VARCHAR(Max)                      
+ DECLARE @ActionDetail [ACTIONDETAILS]                      
+ DECLARE @MinId INT                      
+  ,@MaxId AS INT                      
+ DECLARE @DueStatus AS VARCHAR(10)                      
+  ,@ContextType AS VARCHAR(3)                      
+    create table #ClientVisitDetails (              
+  Id INT IDENTITY(1, 1)                      
+  ,PatientId BIGINT                      
+  ,VisitId BIGINT                      
+  ,FinalBillId BIGINT                      
+  ,OrgId INT                      
+  ,OrgAddressId INT                      
+  ,ContextType VARCHAR(3)                      
+  )                      
+ INSERT INTO #ClientVisitDetails (                      
+  PatientId                      
+  ,VisitId                      
+  ,FinalBillId                      
+  ,OrgId                      
+  ,OrgAddressId                      
+  ,ContextType                      
+  )                      
+ SELECT DISTINCT  PV.PatientID                      
+  ,PV.PatientVisitId                      
+  ,VCM.FinalBillID                      
+  ,PV.orgid                      
+  ,PV.OrgAddressID                      
+  ,CASE                       
+   WHEN CM.ClientCode = 'GENERAL'                     
+    THEN 'P'                      
+   ELSE--'CP'    
+   (Case When CAD.ClientID='' or Isnull(CAD.ClientID,0)=0 then 'P' Else 'CP' END)    
+   END                      
+ FROM OrderedInvestigations OI WITH (NOLOCK)                      
+ INNER JOIN PatientVisit PV WITH (NOLOCK) ON OI.VisitID = PV.PatientVisitId   
+ Inner Join covidReportNotification CRN wITH (NOLOCK) On CRN.VisitID=PV.PAtientvisitID and CRN.OrgID=PV.ORgID and CRN.IsProcess=0             
+ INNER JOIN PatientInvestigation PINV WITH (NOLOCK) ON OI.VisitID = PINV.PatientVisitID                      
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON PINV.PatientVisitID = VCM.VisitID                      
+ INNER JOIN ClientMaster CM(NOLOCK) ON CM.ClientID = VCM.ClientID       
+ Outer Apply(Select ClientID from ClientAttributesDetails Where ClientID=CM.ClientID) CAD     
+ LEFT JOIN Notifications NT WITH (NOLOCK) ON OI.VisitID = NT.IdentityID                      
+  AND NT.Category = 'report'                      
+  AND nt.actiontype = 'PDF' and nt.status<>'Differed'                      
+ --and NT.ActionType='bb' --AND NT.Createdat>=PINV.approvedat                       
+ WHERE OI.STATUS IN ('Approve')                      
+  AND NT.IdentityID IS NULL                      
+   
+                 
+ GROUP BY PV.PatientID  ,CAD.ClientID                     
+  ,PV.PatientVisitId                      
+  ,VCM.FinalBillID                      
+  ,PV.orgid                      
+  ,PV.OrgAddressID                      
+  ,CM.ClientCode                              
+ SELECT *                      
+ FROM #ClientVisitDetails              
+ 
+  ----- Update Processed Report -----
+ Update CRN Set CRN.IsProcess=1 
+ from CovidReportNotification CRN (NOLOCK)
+ Inner Join #ClientVisitDetails CVD on CRN.VisitID=CVD.VisitId and CRN.OrgID=CVD.OrgId and 
+ CRN.Isprocess=0
+ ----- Update Processed Report -----
+
+          --drop table #ClientVisitDetails            
+ SELECT @MinId = (                      
+   SELECT Min(Id)                      
+   FROM #ClientVisitDetails                      
+   )                      
+                      
+ SELECT @MaxId = (                      
+   SELECT Max(Id)                      
+   FROM #ClientVisitDetails                      
+   )                      
+                      
+ DECLARE @UDT_Context dbo.UDT_CONTEXT                      
+                      
+ WHILE @MinId <= @MaxId                      
+ BEGIN                      
+  SELECT @PatientID = PatientID                      
+   ,@FinalBillId = FinalBillId                      
+   ,@PatientVisitID = VisitId                      
+   ,@OrgId = OrgId                      
+   ,@OrgAddID = OrgAddressId                      
+   ,@ContextType = ContextType                      
+  FROM #ClientVisitDetails                      
+  WHERE Id = @MinId                      
+                      
+  SELECT @DueStatus = (                      
+    SELECT Isnull(STATUS, '')                      
+    FROM PatientDueDetails(NOLOCK)                      
+    WHERE VisitID = @PatientVisitID                      
+    )                      
+                      
+  SELECT @RoleID = ROLEID                      
+  FROM ROLE                      
+  WITH (NOLOCK)                      
+  WHERE ROLENAME = 'Doctor'  and (Description='Doctor' or Description='Pathologist')                    
+   AND ORGID = @OrgID                      
+                      
+  SELECT @AccessionNumber = (                      
+    SELECT Stuff((                      
+       SELECT N', ' + Ltrim(Rtrim(AccessionNumber))                      
+       FROM OrderedInvestigations                      
+       WHERE STATUS IN (                      
+         'Approve'                      
+         ,'With Held'                      
+         ,'Rejected'                      
+         ,'PartiallyApproved'                      
+         )                      
+        AND VisitID = @PatientVisitID                      
+       FOR XML PATH('')                      
+        ,TYPE                      
+       ).value('text()[1]', 'nvarchar(max)'), 1, 2, N'') AS AccessionNumber                      
+    )            
+                      
+  DELETE                      
+  FROM #tblActionList                      
+                      
+  --declare @p5 dbo.UDT_Context                      
+           
+insert into @UDT_Context 
+values(@OrgID,N'RLS',N'',@OrgAddID,@RoleID,N'Doctor',0,171814,NULL,N'',@OrgAddID,106,N'',NULL,NULL,1,75,11,N'en-GB',452,N'uvs0urulk2vqhsvzchrxqn2e',NULL,NULL,NULL)
+ 
+  INSERT INTO #tblActionList                      
+  EXEC pPerformingNextAction @PageID = 474                      
+   ,@ButtonName = N'btnSave'                      
+   ,@RoleID = @RoleID                      
+   ,@PatientID = @PatientID                      
+   ,@OrgID = @OrgID                      
+   ,@PatientVisitID = @PatientVisitID                      
+   ,@pSampleID = 0                      
+   ,@pIds = ''             
+   ,@ContextInfo=@UDT_Context                     
+                      
+  DELETE                      
+  FROM @ActionDetail                      
+          --select @PatientVisitID            
+  --SELECT *                      
+  --FROM #tblActionList                      
+          --return            
+  INSERT INTO @ActionDetail (                      
+   ActionType                      
+   ,Value                      
+   ,AdditionalContext                      
+   ,Category                      
+   ,version                      
+   ,STATUS                      
+   ,OrgID                      
+   ,OrgAddressID                      
+   ,CreatedAt                      
+   ,CreatedBy                      
+   ,Template                      
+   ,ContextType                      
+   ,IsAttachment                      
+   ,Subject                      
+   ,AttachmentName                      
+   )                      
+  SELECT ActionType                      
+   ,CASE                       
+    WHEN ActionType = 'EMAIL'                      
+    THEN MailTo                      
+    WHEN ActionType = 'SMS'               
+  THEN PhoneNo                      
+    ELSE ''                      
+    END                     
+   ,'<?xml version="1.0" encoding="utf-16"?><ContextInfo><VisitID>' + CONVERT(VARCHAR, @PatientVisitID) + '</VisitID><AccessionNumber>' + @AccessionNumber + '</AccessionNumber></ContextInfo>'                      
+   ,'Report'                      
+   ,''                      
+   ,CASE                       
+    WHEN @DueStatus = 'Open'                      
+     THEN 'Due'                      
+    ELSE ''                      
+    END                      
+   ,@OrgID                      
+   ,@OrgAddID                      
+   ,Getdate()                      
+   ,171814                      
+   ,Description                      
+   ,ContextType                      
+   ,IsAttachment                      
+   ,Subject                      
+   ,Replace(Replace(Replace(AttachmentName, '{VisitNumber}', VisitNumber), '{Name}', NAME), '{ClientCode}', ClientCode) AS AttachmentName                      
+  FROM #tblActionList                      
+  WHERE ContextType = @ContextType                      
+                      
+  DECLARE @SEQ_NUM INT                      
+                      
+  SET @SEQ_NUM = (                      
+    SELECT Isnull(Max(seq_num), 0) + 1                      
+    FROM Notifications(NOLOCK)                      
+    )                      
+                      
+    --select * from @ActionDetail            
+  INSERT INTO notifications (                      
+   ActionType                      
+   ,Value                      
+   ,AdditionalContext                      
+   ,Category                      
+   ,STATUS                      
+   ,OrgID                      
+   ,OrgAddressID                      
+   ,CreatedAt                      
+   ,CreatedBy                      
+   ,Template                      
+   ,ContextType                      
+   ,IsAttachment                      
+   ,Subject                      
+   ,Seq_Num                      
+   ,AttachmentName                      
+   ,IdentityID                      
+  ,IsClientBlinding                      
+   )                      
+  SELECT Distinct ActionType                      
+   ,Value                      
+   ,AdditionalContext                      
+   ,Category                      
+   ,STATUS                      
+   ,OrgID                      
+   ,OrgAddressID                      
+ ,CreatedAt                      
+   ,CreatedBy                      
+   ,Template                      
+   ,ContextType                      
+   ,IsAttachment                      
+   ,Subject                      
+   ,@SEQ_NUM                      
+   ,AttachmentName                      
+   ,@PatientVisitID                      
+   ,''                      
+  FROM @ActionDetail     where actiontype<>'ISSTATPDF'                 
+                      
+  --SELECT *                 
+  --FROM @ActionDetail                      
+                      
+  --EXEC Pinsertnotifications @ActionDetail                      
+  -- ,@UDT_Context                      
+                      
+  SET @MinId = @MinId + 1                      
+ END                      
+ drop table #tblActionList            
+ drop table #ClientVisitDetails            
+END 

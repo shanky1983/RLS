@@ -1,0 +1,1699 @@
+create PROCEDURE [dbo].[pInsertOrderedInvestigation] @pOrderedInvTable [dbo].[ORDEREDINVESTIGATION] READONLY,        
+@OrgID            [BIGINT],        
+@returnstatus     [INT] OUTPUT,        
+@pUnOrderedInv [dbo].[OrderedInvestigation] READONLY,      
+@ContextInfo      [UDT_CONTEXT] READONLY        
+--WITH EXECUTE AS OWNER        
+AS        
+BEGIN        
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)   
+SET @returnstatus=-1        
+DECLARE @ReferVisitID AS BIGINT        
+DECLARE @visitid AS BIGINT        
+DECLARE @CreatedAt DATETIME        
+SET @CreatedAt =(SELECT dbo.Fn_getserverdate(@ContextInfo))        
+DECLARE @LocationId INT          
+/* Code added by T.Suresh for MIS Purpose start here */    
+declare @tmp_patinv as table (patientinvid bigint)    
+declare @tmp_Ordinv as table(accessionNumber bigint)    
+Declare @Loginid bigint    
+Select @loginid = Loginid from @ContextInfo    
+/* Code added by T.Suresh for MIS Purpose end here */    
+SELECT @LocationId = OrgAddressId          
+FROM   @ContextInfo          
+SELECT @visitid = VisitID          
+FROM   @pOrderedInvTable          
+SELECT @ReferVisitID = ReferVisitID          
+FROM   PatientVisit           
+WHERE  PatientVisitId = @visitid          
+--------------------ISsTAT-------------------      
+UPDATE PV    
+SET    IsStat = 'Y'    
+FROM   patientvisit PV with(ROWLOCK)   
+INNER JOIN @pOrderedInvTable PO    
+ON PO.visitID = PV.PatientvisitID    
+AND PO.OrgID = PV.OrgID    
+WHERE  PV.PatientvisitID = @visitid and PV.OrgID=@OrgID    
+AND PO.IsStat = 'Y'    
+IF NOT EXISTS (SELECT 1    
+FROM   @pOrderedInvTable    
+WHERE  visitID = @visitid    
+AND IsStat = 'Y')    
+BEGIN    
+UPDATE PV    
+SET    IsStat = 'N'    
+FROM   patientvisit PV with(ROWLOCK)   
+INNER JOIN @pOrderedInvTable PO    
+ON PO.visitID = PV.PatientvisitID    
+AND PO.OrgID = PV.OrgID    
+WHERE  PV.PatientvisitID = @visitid    
+AND PV.OrgID = @OrgID    
+AND PO.IsStat NOT IN(SELECT IsStat    
+FROM   @pOrderedInvTable    
+WHERE  visitID = @visitid    
+AND IsStat = 'Y')    
+END    
+    
+-----------------------  Added by sudhakar   --------------------------------    
+    
+UPDATE PV    
+SET    PV.IsStat = 'Y'    
+FROM   patientvisit PV with(ROWLOCK)   
+INNER JOIN @pOrderedInvTable PO    
+ON PO.visitID = PV.PatientVisitID AND PO.OrgID = PV.OrgID    
+inner join OrderedInvestigations OI on Oi.VisitID=Po.VisitID and Oi.OrgID=Po.OrgID and Oi.ID=Po.ID    
+where OI.IsStat='Y' and OI.Status='Retest'    
+    
+-------------------------     End            ----------------------------------    
+    
+    
+--------------------ISsTAT-------------------      
+/**********Vijayalakshmi.M ************************/    
+DECLARE @complaintID BIGINT    
+SELECT @complaintID = Complaintid    
+FROM   @pOrderedInvTable    
+IF( @complaintID = 0    
+OR @complaintID = ''    
+OR @complaintID = NULL )    
+BEGIN    
+DECLARE @pLabNo nvarchar(30)    
+EXEC dbo.Pgetnextid    
+@OrgID,    
+'INV',    
+@pLabNo OUTPUT,    
+@LocationId    
+--update @pOrderedInvTable set ComplaintId =@pLabNo where VisitID =@visitid       
+END     
+/***********************End********************/    
+DECLARE @NewOrderedInvestigation AS TABLE          
+(          
+SequenceNo          INT,          
+ContentSeq int,                
+VisitID             BIGINT,          
+ID                  BIGINT,          
+NAME                nvarchar(255),          
+Type                nvarchar(20),          
+Status              nvarchar(50),          
+StudyInstanceUId    nvarchar(150),          
+OrgID               INT,          
+CreatedBy           BIGINT,          
+CreatedAt           DATETIME,          
+PaymentStatus       nvarchar(20),          
+UID                 nvarchar(255),          
+ReferredAccessionNo BIGINT,          
+LabNo               nvarchar(30),          
+ReferredType        nvarchar(50),          
+ResCaptureLoc       INT,          
+PkgID               BIGINT,          
+PkgName             nvarchar (max),          
+IsCopublish         nvarchar(3) ,        
+ReportDateTime DateTime,        
+TatDateTime DateTime,        
+IsStat nchar (1) ,
+IsSensitive nchar(1)        
+)          
+IF( Isnull(@ReferVisitID, 0) = 0 )          
+BEGIN          
+IF NOT EXISTS(SELECT 1      
+FROM   OrderedInvestigations OI           
+INNER JOIN @pOrderedInvTable OrdInv          
+ON OI.VisitID = OrdInv.VisitID          
+AND OI.ID = OrdInv.ID          
+AND Oi.Status in ( 'Paid','Rejected'))          
+BEGIN          
+INSERT INTO @NewOrderedInvestigation          
+(SequenceNo,          
+ContentSeq,          
+VisitID,          
+ID,          
+NAME,          
+Type,          
+Status,          
+StudyInstanceUId,          
+OrgID,          
+CreatedBy,          
+CreatedAt,          
+PaymentStatus,          
+UID,          
+ReferredAccessionNo,          
+LabNo,          
+ReferredType,          
+ResCaptureLoc,          
+PkgID,          
+PkgName,          
+IsCopublish,ReportDateTime,TatDateTime,IsStat,IsSensitive)          
+SELECT DISTINCT OrdInv.SequenceNo,          
+OrdInv.SequenceNo,          
+OrdInv.VisitID,          
+OrdInv.ID,          
+CASE          
+/*WHEN OrdInv.ReferenceType = 'E' THEN (SELECT DISTINCT InvestigationName          
+FROM   PatientInvestigation    (nolock)         
+WHERE  InvestigationID = OrdInv.ID          
+AND PatientVisitID = OrdInv.VisitID)  */        
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOM.DisplayText, OrdInv.NAME)     
+FROM       
+InvestigationOrgMapping IOM           
+WHERE  IOM.InvestigationID = OrdInv.ID          
+AND IOM.OrgID = OrdInv.OrgID)         
+WHEN OrdInv.Type IN ( 'GRP', 'PKG' ) THEN     
+(SELECT DISTINCT Isnull(IOG.DisplayText, OrdInv.NAME)          
+FROM   InvOrgGroup IOG           
+WHERE  IOG.AttGroupID = OrdInv.ID          
+AND IOG.OrgID = OrdInv.OrgID)          
+ELSE OrdInv.NAME          
+END,          
+OrdInv.type,          
+OrdInv.Status,          
+OrdInv.StudyInstanceUId,          
+OrdInv.OrgID,          
+OrdInv.CreatedBy,          
+@CreatedAt,          
+OrdInv.Status,          
+UID,          
+OrdInv.ReferralID,          
+/*************Vijayalakshmi.M********************/    
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,    
+/*************End**********************/                   
+CASE          
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'          
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'          
+WHEN OrdInv.ReferenceType = 'F' THEN 'ReflexTest'    
+/************Added By Arivalagan.kk*************/    
+WHEN OrdInv.ReferenceType = 'S' THEN 'SynopticTest'          
+ELSE OrdInv.ReferenceType          
+END,          
+( CASE          
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId          
+WHEN OrdInv.ReferenceType IN( 'E', 'R', 'F','S' )    
+THEN    
+ (SELECT DISTINCT rescaptureloc      
+ FROM      
+  OrderedInvestigations (nolock)         
+  WHERE     
+   AccessionNumber = OrdInv.ReferralID          
+AND OrgID = OrdInv.OrgID)          
+ELSE OrdInv.ReferedToLocation          
+END ),          
+/***********End *Added By Arivalagan.kk*************/    
+(SELECT DISTINCT PkgID          
+FROM   orderedinvestigations  (nolock)           
+WHERE  visitid = OrdInv.VisitID          
+AND ID = OrdInv.ID          
+AND Type = OrdInv.type          
+AND PkgID IS NOT NULL),          
+(SELECT DISTINCT PkgName          
+FROM   orderedinvestigations(nolock)             
+WHERE  visitid = OrdInv.VisitID          
+AND ID = OrdInv.ID          
+AND Type = OrdInv.type          
+AND PkgID IS NOT NULL),          
+'' ,OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,OrdInv.IsStat  ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------    
+FROM   @pOrderedInvTable OrdInv          
+WHERE  OrdInv.ID NOT IN(SELECT DISTINCT OrdInv.ID          
+FROM   OrderedInvestigations OI  (nolock)           
+INNER JOIN @pOrderedInvTable OrdInv          
+ON OI.ID = OrdInv.ID          
+WHERE  ( OI.ReferredAccessionNo != 0          
+AND OI.ReferredAccessionNo = OrdInv.ReferralID )          
+AND OI.Type = 'INV'          
+AND OI.ReferredType IN( 'Retest', 'Recheck', 'ReflexTest' ))          
+AND OrdInv.Type != 'PKG'          
+INSERT INTO @NewOrderedInvestigation          
+(SequenceNo,          
+ContentSeq,          
+VisitID,          
+ID,          
+NAME,          
+Type,          
+Status,          
+StudyInstanceUId,          
+OrgID,          
+CreatedBy,          
+CreatedAt,          
+PaymentStatus,          
+UID,          
+ReferredAccessionNo,          
+LabNo,          
+ReferredType,          
+ResCaptureLoc,          
+PkgID,          
+PkgName,          
+IsCopublish,ReportDateTime,TatDateTime,IsStat,IsSensitive)          
+SELECT DISTINCT OrdInv.SequenceNo,          
+IPM.SequenceNo,           
+OrdInv.VisitID,          
+IOG1.AttGroupID,          
+Isnull(IOG1.DisplayText, IGM1.GroupName),          
+IPM.type,          
+CASE          
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'          
+ELSE OrdInv.Status          
+END,          
+OrdInv.StudyInstanceUId,          
+OrdInv.OrgID,          
+OrdInv.CreatedBy,          
+@CreatedAt,          
+OrdInv.Status,          
+UID,          
+OrdInv.ReferralID,          
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,           
+CASE          
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'          
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'          
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'          
+ELSE OrdInv.ReferenceType          
+END,          
+( CASE          
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId          
+WHEN OrdInv.ReferenceType IN ( 'E', 'R' ) THEN (SELECT DISTINCT rescaptureloc          
+FROM   OrderedInvestigations    (nolock)         
+WHERE  AccessionNumber = OrdInv.ReferralID          
+AND OrgID = OrdInv.OrgID)          
+ELSE OrdInv.ReferedToLocation          
+END ),          
+OrdInv.ID,          
+OrdInv.NAME,          
+IOG.IsCoPublish ,OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,OrdInv.IsStat   ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------         
+FROM   @pOrderedInvTable OrdInv          
+INNER JOIN InvGroupMaster IGM           
+ON IGM.GroupID = OrdInv.ID          
+AND IGM.Type = 'PKG'          
+INNER JOIN InvOrgGroup IOG           
+ON IOG.AttGroupID = IGM.GroupID          
+AND IOG.OrgID = @OrgID          
+INNER JOIN InvPackageMapping IPM           
+ON IPM.PackageID = IOG.OrgGroupID          
+AND IPM.active <> 'D'          
+INNER JOIN InvOrgGroup IOG1           
+ON IOG1.OrgGroupID = IPM.ID          
+AND IPM.Type = 'GRP'          
+AND IOG1.OrgID = @OrgID          
+INNER JOIN InvGroupMaster IGM1           
+ON IGM1.GroupID = IOG1.AttGroupID          
+WHERE  OrdInv.Type = 'PKG'          
+and IPM.ID not in (select T.ID from @pUnOrderedInv T where IPM.ID=T.ID and IPM.PackageID=T.ReferralID)    
+AND NOT EXISTS (SELECT 1          
+FROM   OrderedInvestigations OI (nolock)            
+WHERE  OI.ID = OrdInv.ID          
+AND Status IN ( 'Ordered', 'Paid', 'Refered' )          
+AND VisitID = OrdInv.VisitID)          
+Order by IPM.SequenceNo asc          
+INSERT INTO @NewOrderedInvestigation          
+(SequenceNo,          
+ContentSeq,          
+VisitID,          
+ID,          
+NAME,          
+Type,          
+Status,          
+StudyInstanceUId,          
+OrgID,          
+CreatedBy,          
+CreatedAt,          
+PaymentStatus,          
+UID,          
+ReferredAccessionNo,          
+LabNo,          
+ReferredType,          
+ResCaptureLoc,          
+PkgID,          
+PkgName,          
+IsCopublish,ReportDateTime,TatDateTime,IsStat,IsSensitive)          
+SELECT DISTINCT OrdInv.SequenceNo,          
+IPM.SequenceNo,          
+OrdInv.VisitID,          
+IOM.InvestigationID,          
+Isnull(IOM.DisplayText, IM.InvestigationName),          
+IPM.type,          
+CASE          
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'          
+ELSE OrdInv.Status          
+END,          
+OrdInv.StudyInstanceUId,          
+OrdInv.OrgID,          
+OrdInv.CreatedBy,          
+@CreatedAt,          
+OrdInv.Status,          
+UID,          
+OrdInv.ReferralID,          
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,        
+CASE          
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'          
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'          
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'          
+ELSE OrdInv.ReferenceType          
+END,          
+( CASE          
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId          
+WHEN OrdInv.ReferenceType IN( 'E', 'R' ) THEN (SELECT DISTINCT rescaptureloc          
+FROM   OrderedInvestigations (nolock)            
+WHERE  AccessionNumber = OrdInv.ReferralID          
+AND OrgID = OrdInv.OrgID)          
+ELSE OrdInv.ReferedToLocation          
+END ),          
+OrdInv.ID,          
+OrdInv.NAME,          
+IOG.IsCoPublish          
+,OrdInv.ReportDateTime,        
+OrdInv.TatDateTime ,OrdInv.IsStat   ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------       
+FROM   @pOrderedInvTable OrdInv          
+INNER JOIN InvGroupMaster IGM           
+ON IGM.GroupID = OrdInv.ID          
+AND IGM.Type = 'PKG'          
+INNER JOIN InvOrgGroup IOG         
+ON IOG.AttGroupID = IGM.GroupID        
+AND IOG.OrgID = @OrgID        
+INNER JOIN InvPackageMapping IPM         
+ON IPM.PackageID = IOG.OrgGroupID        
+AND IPM.active <> 'D'        
+INNER JOIN InvestigationOrgMapping IOM         
+ON IOM.InvestigationID = IPM.ID        
+AND IPM.Type = 'INV'        
+AND IOM.OrgID = @OrgID        
+INNER JOIN InvestigationMaster IM         
+ON IM.InvestigationID = IOM.InvestigationID        
+WHERE  OrdInv.Type = 'PKG'        
+and IPM.ID not in (select T.ID from @pUnOrderedInv T where IPM.ID=T.ID and IPM.PackageID=T.ReferralID)    
+AND NOT EXISTS (SELECT 1        
+FROM   OrderedInvestigations OI (nolock)          
+WHERE  OI.ID = OrdInv.ID        
+AND Status IN ( 'Ordered', 'Paid', 'Refered' )        
+AND VisitID = OrdInv.VisitID)        
+Order by IPM.SequenceNo asc        
+	---- Seetha Part Start ----------
+INSERT INTO @NewOrderedInvestigation  (SequenceNo, 
+        ContentSeq,VisitID,          
+ID,          
+NAME,          
+Type,          
+Status,          
+StudyInstanceUId,          
+OrgID,          
+CreatedBy,          
+CreatedAt,          
+PaymentStatus,          
+UID,          
+ReferredAccessionNo,          
+LabNo,          
+ReferredType,          
+ResCaptureLoc)       
+   SELECT distinct OrdInv.SequenceNo+1,OrdInv.SequenceNo+1,OrdInv.VisitID                                                                    
+  --,OrdInv.ID                                                                  
+  ,invv.ReflexInvestigationID as ID      
+  ,Case --When OrdInv.ReferenceType='E' Then (Select distinct InvestigationName FROM PatientInvestigation  Where InvestigationID=OrdInv.ID And PatientVisitID=OrdInv.VisitID)                                                
+ 
+   When OrdInv.Type='INV' and Isnull(invv.ReflexType,'Rule-Based Reflex')='Rule-Based Reflex' Then (Select distinct ISNULL(IOM.DisplayText,OrdInv.Name) FROM InvestigationOrgMapping IOM  Where IOM.InvestigationID=invv.ReflexInvestigationID And
+  IOM.OrgID=OrdInv.OrgID)
+  When OrdInv.Type='INV' and Isnull(invv.ReflexType,'')='GRP' Then (Select distinct ISNULL(IOG12.DisplayText,OrdInv.Name) FROM InvOrgGroup IOG12  Where IOG12.AttGroupID=invv.ReflexInvestigationID And IOG12.OrgID=OrdInv.OrgID) 
+  When OrdInv.Type='GRP' Then (Select distinct ISNULL(IOG.DisplayText,OrdInv.Name) FROM InvOrgGroup IOG  Where IOG.AttGroupID=OrdInv.ID And IOG.OrgID=OrdInv.OrgID)                                  
+  When OrdInv.Type='PKG' Then (Select distinct ISNULL(IOG.DisplayText,OrdInv.Name)                                     
+  FROM InvOrgGroup IOG  Where IOG.AttGroupID=OrdInv.ID And IOG.OrgID=OrdInv.OrgID)                                                    
+  Else  OrdInv.Name End                                                                  
+  ,Case when OrdInv.Type='INV' and Isnull(invv.ReflexType,'')='GRP' then 'GRP' else OrdInv.type  end 
+  --,OrdInv.Status                                                  
+  ,'ReflexTest'      
+  ,OrdInv.StudyInstanceUId                                                                  
+  ,OrdInv.OrgID                                                                  
+  ,OrdInv.CreatedBy                       
+  ,@CreatedAt                                                   
+  ,OrdInv.Status             
+  ,UID      ,                                   
+  OrdInv.ReferralID  ,                                                
+  OrdInv.ComplaintId,                                              
+  
+ 'ReflexTest',          
+ (                                    
+ CASE                                     
+  WHEN OrdInv.ReferedToLocation=0 THEN null                                    
+  WHEN OrdInv.ReferenceType='E' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)                             
+  WHEN OrdInv.ReferenceType='R' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)                                    
+  WHEN OrdInv.ReferenceType='F' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)                          
+  ELSE OrdInv.ReferedToLocation                                     
+ END                                  
+ )    
+ --invv.*                                   
+FROM @pOrderedInvTable OrdInv       
+Inner join InvValueRangeMaster invv  on OrdInv.ID = invv.InvestigationID and OrdInv.OrgID = invv.OrgID                                             
+WHere OrdInv.ID Not in(select distinct OrdInv.ID from OrderedInvestigations OI  INNER Join @pOrderedInvTable OrdInv ON OI.ID=OrdInv.ID  and OI.VisitID=OrdInv.VisitID                                             
+where (OI.ReferredAccessionNo!=0 AND  OI.ReferredAccessionNo=OrdInv.ReferralID) And OI.Type='INV' AND OI.ReferredType in('Retest','Recheck','ReflexTest'))                                                 
+and OrdInv.Type = 'INV' and isnull(invv.isReflex,'N') = 'Y' and invv.ReflexInvestigationID not in( select ID from @pOrderedInvTable  where TYPE='INV')  
+AND isnull(invv.IsActive,'N')='Y'
+
+INSERT INTO @NewOrderedInvestigation  (SequenceNo, 
+        ContentSeq,VisitID,          
+ID,          
+NAME,          
+Type,          
+Status,          
+StudyInstanceUId,          
+OrgID,          
+CreatedBy,          
+CreatedAt,          
+PaymentStatus,          
+UID,          
+ReferredAccessionNo,          
+LabNo,          
+ReferredType,          
+ResCaptureLoc)       
+   SELECT distinct OrdInv.SequenceNo+1,OrdInv.SequenceNo+1,OrdInv.VisitID                                                                    
+  --,OrdInv.ID                                                                  
+  ,invv.ReflexInvestigationID as ID      
+  ,ISNULL(IOM.DisplayText , IOM.BillingName),                                              
+  'INV'                                               
+  ,'ReflexTest'      
+  ,OrdInv.StudyInstanceUId                                                                  
+  ,OrdInv.OrgID                                                                  
+  ,OrdInv.CreatedBy                                                   
+  ,@CreatedAt                                                   
+  ,OrdInv.Status             
+  ,UID      ,                                   
+  OrdInv.ReferralID  ,                                                
+  OrdInv.ComplaintId,                                              
+  
+ 'ReflexTest',                                         
+ (                                    
+ CASE                                     
+  WHEN OrdInv.ReferedToLocation=0 THEN null                                    
+  WHEN OrdInv.ReferenceType='E' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)                             
+  WHEN OrdInv.ReferenceType='R' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)      
+  WHEN OrdInv.ReferenceType='F' Then (Select rescaptureloc FROM OrderedInvestigations  Where AccessionNumber=OrdInv.ReferralID And OrgID=OrdInv.OrgID)                          
+  ELSE OrdInv.ReferedToLocation                                     
+ END                                  
+ )    
+ --invv.*                                   
+FROM @pOrderedInvTable OrdInv       
+Inner Join InvOrgGroup IOG on IOG.AttGroupID=OrdInv.ID and IOG.OrgID=@OrgID
+Inner Join InvGroupMapMaster IGMM on IGMM.GroupID=IOG.OrgGroupID and IGMM.Parent='N' and IGMM.Active='Y'
+Inner join InvValueRangeMaster invv  on IGMM.InvestigationID = invv.InvestigationID and OrdInv.OrgID = invv.OrgID      
+Inner Join InvestigationOrgMapping IOM on INVV.ReflexInvestigationID=IOM.InvestigationID and INVV.OrgId=IOM.OrgID                                        
+WHere OrdInv.ID Not in(select distinct OrdInv.ID from OrderedInvestigations OI  
+INNER Join @pOrderedInvTable OrdInv ON OI.ID=OrdInv.ID  and OI.VisitID=OrdInv.VisitID                                             
+where (OI.ReferredAccessionNo!=0 AND  OI.ReferredAccessionNo=OrdInv.ReferralID) And OI.Type='INV' AND OI.ReferredType in('Retest','Recheck','ReflexTest'))                                                 
+and OrdInv.Type = 'GRP' and isnull(invv.isReflex,'N') = 'Y' and invv.ReflexInvestigationID not in( select ID from @pOrderedInvTable  where TYPE='INV')  
+AND isnull(invv.IsActive,'N')='Y' 
+
+
+
+---- Seetha Part End ----------------         
+INSERT INTO OrderedInvestigations        
+(VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,ReportDateTime,TatDateTime,IsStat,IsSensitive)        
+output inserted.accessionnumber into @tmp_ordinv    
+SELECT VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish ,     
+ReportDateTime,      
+TatDateTime ,IsStat ,IsSensitive   
+FROM   @NewOrderedInvestigation        
+ORDER  BY SequenceNo ASC,        
+ContentSeq DESC        
+END        
+END        
+ELSE IF( Isnull(@ReferVisitID, 0) > 0 )        
+BEGIN        
+IF NOT EXISTS(SELECT 1        
+FROM   OrderedInvestigations OI         
+INNER JOIN @pOrderedInvTable OrdInv        
+ON OI.VisitID = OrdInv.VisitID        
+AND OI.ID = OrdInv.ID        
+AND Oi.Status  in ('Paid','Rejected','SampleTransferred'))        
+BEGIN        
+INSERT INTO @NewOrderedInvestigation        
+(SequenceNo,        
+ContentSeq,        
+VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,IsSensitive)        
+SELECT DISTINCT OrdInv.SequenceNo,        
+OrdInv.SequenceNo,        
+OrdInv.VisitID,        
+OrdInv.ID,        
+CASE        
+/*WHEN OrdInv.ReferenceType = 'E' THEN (SELECT DISTINCT InvestigationName        
+FROM   PatientInvestigation         
+WHERE  InvestigationID = OrdInv.ID        
+AND PatientVisitID = OrdInv.VisitID) */       
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOM.DisplayText, OrdInv.NAME)        
+FROM   InvestigationOrgMapping IOM         
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.DisplayText, OrdInv.NAME)        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.DisplayText, OrdInv.NAME)        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END,        
+OrdInv.type,        
+OrdInv.Status,        
+OrdInv.StudyInstanceUId,        
+OrdInv.OrgID,        
+OrdInv.CreatedBy,        
+@CreatedAt,        
+OrdInv.Status,        
+UID,        
+OrdInv.ReferralID,        
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,           
+CASE        
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'        
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'        
+WHEN OrdInv.ReferenceType = 'F' THEN 'ReflexTest'        
+ELSE OrdInv.ReferenceType        
+END,        
+( CASE        
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId        
+WHEN OrdInv.ReferenceType = 'E' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+WHEN OrdInv.ReferenceType = 'R' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+WHEN OrdInv.ReferenceType = 'F' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+ELSE OrdInv.ReferedToLocation        
+END ),        
+(SELECT PkgID        
+FROM   orderedinvestigations     
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND PkgID IS NOT NULL),        
+--NULL ,        
+(SELECT PkgName        
+FROM   orderedinvestigations     
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND PkgID IS NOT NULL),        
+--NULL,        
+'',        
+OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,        
+OrdInv.IsStat  ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------         
+FROM   @pOrderedInvTable OrdInv        
+WHERE  OrdInv.ID NOT IN(SELECT OrdInv.ID        
+FROM   OrderedInvestigations OI         
+INNER JOIN @pOrderedInvTable OrdInv        
+ON OI.ID = OrdInv.ID        
+WHERE  ( OI.ReferredAccessionNo != 0        
+AND OI.ReferredAccessionNo = OrdInv.ReferralID )        
+AND OI.Type = 'INV'        
+AND OI.ReferredType IN( 'Retest', 'Recheck', 'ReflexTest' )
+AND OI.Status='SampleTransferred')        
+AND OrdInv.Type != 'PKG'        
+INSERT INTO @NewOrderedInvestigation        
+(SequenceNo,        
+ContentSeq,        
+VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,IsSensitive)        
+SELECT DISTINCT OrdInv.SequenceNo,        
+IPM.SequenceNo,        
+OrdInv.VisitID,        
+IOG1.AttGroupID,        
+Isnull(IOG1.DisplayText, IGM1.GroupName),        
+IPM.type,        
+CASE        
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'        
+ELSE OrdInv.Status        
+END,        
+OrdInv.StudyInstanceUId,        
+OrdInv.OrgID,        
+OrdInv.CreatedBy,        
+@CreatedAt,        
+OrdInv.Status,        
+UID,        
+OrdInv.ReferralID,        
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,           
+CASE        
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'        
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'        
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'        
+ELSE OrdInv.ReferenceType   
+END,        
+( CASE        
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId        
+WHEN OrdInv.ReferenceType = 'E' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+WHEN OrdInv.ReferenceType = 'R' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+ELSE OrdInv.ReferedToLocation        
+END ),        
+OrdInv.ID,        
+--NULL,        
+OrdInv.NAME,        
+--NULL,        
+IOG.IsCoPublish,        
+OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,        
+OrdInv.IsStat  ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------          
+FROM   @pOrderedInvTable OrdInv        
+INNER JOIN InvGroupMaster IGM         
+ON IGM.GroupID = OrdInv.ID        
+AND IGM.Type = 'PKG'        
+INNER JOIN InvOrgGroup IOG         
+ON IOG.AttGroupID = IGM.GroupID        
+AND IOG.OrgID = @OrgID        
+INNER JOIN InvPackageMapping IPM         
+ON IPM.PackageID = IOG.OrgGroupID        
+INNER JOIN InvOrgGroup IOG1         
+ON IOG1.OrgGroupID = IPM.ID        
+AND IPM.Type = 'GRP'        
+AND IOG1.OrgID = @OrgID        
+INNER JOIN InvGroupMaster IGM1         
+ON IGM1.GroupID = IOG1.AttGroupID        
+WHERE  OrdInv.Type = 'PKG'        
+and IPM.ID not in (select T.ID from @pUnOrderedInv T where IPM.ID=T.ID and IPM.PackageID=T.ReferralID)    
+AND NOT EXISTS (SELECT 1        
+FROM   OrderedInvestigations OI         
+WHERE  OI.ID = OrdInv.ID        
+AND Status IN ( 'Ordered', 'Paid', 'Refered','SampleTransferred' )        
+AND VisitID = OrdInv.VisitID)        
+Order By IPM.SequenceNo asc        
+INSERT INTO @NewOrderedInvestigation        
+(SequenceNo,        
+ContentSeq,        
+VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,IsSensitive)        
+SELECT DISTINCT OrdInv.SequenceNo,        
+IPM.SequenceNo,        
+OrdInv.VisitID,        
+IOM.InvestigationID,        
+Isnull(IOM.DisplayText, IM.InvestigationName),        
+IPM.type,        
+CASE        
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'        
+ELSE OrdInv.Status        
+END,        
+OrdInv.StudyInstanceUId,        
+OrdInv.OrgID,        
+OrdInv.CreatedBy,        
+@CreatedAt,        
+OrdInv.Status,        
+UID,        
+OrdInv.ReferralID,        
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,           
+CASE        
+WHEN OrdInv.ReferenceType = 'R' THEN 'Retest'        
+WHEN OrdInv.ReferenceType = 'E' THEN 'Recheck'        
+WHEN Isnull(IPM.isReflex, 'N') = 'Y' THEN 'ReflexTest'        
+ELSE OrdInv.ReferenceType        
+END,        
+( CASE        
+WHEN OrdInv.ReferedToLocation = 0 THEN @LocationId        
+WHEN OrdInv.ReferenceType = 'E' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+WHEN OrdInv.ReferenceType = 'R' THEN (SELECT rescaptureloc        
+FROM   OrderedInvestigations         
+WHERE  AccessionNumber = OrdInv.ReferralID        
+AND OrgID = OrdInv.OrgID)        
+ELSE OrdInv.ReferedToLocation        
+END ),        
+OrdInv.ID,        
+--NULL,        
+OrdInv.NAME,        
+--NULL,        
+IOG.IsCoPublish,        
+OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,        
+OrdInv.IsStat  ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------         
+FROM   @pOrderedInvTable OrdInv        
+INNER JOIN InvGroupMaster IGM         
+ON IGM.GroupID = OrdInv.ID        
+AND IGM.Type = 'PKG'        
+INNER JOIN InvOrgGroup IOG         
+ON IOG.AttGroupID = IGM.GroupID        
+AND IOG.OrgID = @OrgID        
+INNER JOIN InvPackageMapping IPM         
+ON IPM.PackageID = IOG.OrgGroupID        
+INNER JOIN InvestigationOrgMapping IOM         
+ON IOM.InvestigationID = IPM.ID        
+AND IPM.Type = 'INV'        
+AND IOM.OrgID = @OrgID        
+INNER JOIN InvestigationMaster IM         
+ON IM.InvestigationID = IOM.InvestigationID        
+WHERE  OrdInv.Type = 'PKG'        
+and IPM.ID not in (select T.ID from @pUnOrderedInv T where IPM.ID=T.ID and IPM.PackageID=T.ReferralID)    
+AND NOT EXISTS (SELECT 1        
+FROM   OrderedInvestigations OI         
+WHERE  OI.ID = OrdInv.ID        
+AND Status IN ( 'Ordered', 'Paid', 'Refered','SampleTransferred' )        
+AND VisitID = OrdInv.VisitID)        
+ORDER  BY IPM.SequenceNo ASC        
+/****=================For Updating PkgID as NULL for Pkg Content Transfer ===========**/        
+UPDATE TT        
+SET    TT.PkgID = NULL,        
+TT.PkgName = NULL        
+FROM   @NewOrderedInvestigation TT        
+LEFT JOIN (SELECT TT.ReferredAccessionNo        
+FROM   @NewOrderedInvestigation TT        
+INNER JOIN FinalBill FB         
+ON FB.VisitID = TT.VisitID        
+INNER JOIN BillingDetails BD         
+ON BD.FinalBillID = FB.FinalBillID        
+AND BD.FeeId = Isnull(TT.PkgID, 0)        
+AND BD.FeeType = 'PKG') BB        
+ON TT.ReferredAccessionNo = BB.ReferredAccessionNo        
+WHERE  BB.ReferredAccessionNo IS NULL        
+/****=================For Updating PkgID as NULL for Pkg Content Transfer ===========**/        
+INSERT INTO OrderedInvestigations        
+(VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,IsSensitive)        
+output inserted.accessionnumber into @tmp_ordinv    
+SELECT VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,
+IsSensitive        
+FROM   @NewOrderedInvestigation        
+ORDER  BY SequenceNo ASC,        
+ContentSeq DESC        
+/* Seetha PArt Start Parent org Clinical history  start */
+Insert into PatientAttributeFields (PatientVisitID,FieldKey,FieldValue,OrgID,ReferenceID,ReferenceType,TestType)
+select  @visitid,FieldKey,FieldValue,@OrgID,ReferenceID,PAF.ReferenceType,TestType from PatientAttributeFields PAF
+Inner Join @pOrderedInvTable OI on OI.ID=PAF.ReferenceID and OI.Type=PAF.TestType
+where  PatientVisitId = @ReferVisitID
+
+/* Seetha PArt Start Parent org Clinical history  start */      
+END        
+END        
+ELSE        
+BEGIN        
+/*Below ExistingUID line added to merge task which are samplereceived*/        
+DECLARE @ExistingUID AS nvarchar(255) = NULL        
+SELECT TOP 1 @ExistingUID = OI.UID        
+FROM   OrderedInvestigations OI         
+INNER JOIN @pOrderedInvTable OrdInv        
+ON OI.VisitID = OrdInv.VisitID        
+AND OI.OrgID = OrdInv.OrgID        
+INSERT INTO @NewOrderedInvestigation        
+(SequenceNo,        
+ContentSeq,        
+VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,IsSensitive)        
+SELECT DISTINCT OrdInv.SequenceNo,        
+OrdInv.SequenceNo,        
+OrdInv.VisitID,        
+OrdInv.ID,        
+CASE        
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT     
+Isnull(IOM.DisplayText,    
+ OrdInv.NAME)       
+ FROM      
+  InvestigationOrgMapping IOM       
+  WHERE      
+  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)      
+WHEN OrdInv.Type IN ( 'GRP', 'PKG' ) THEN     
+(SELECT DISTINCT Isnull(IOG.DisplayText, OrdInv.NAME)        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END,        
+OrdInv.type,        
+OrdInv.Status,        
+OrdInv.StudyInstanceUId,        
+OrdInv.OrgID,        
+OrdInv.CreatedBy,        
+@CreatedAt,        
+OrdInv.Status,        
+Isnull(@ExistingUID, UID),   
+OrdInv.ReferralID,        
+CASE              
+WHEN OrdInv.ComplaintId  = 0 THEN @pLabNo               
+WHEN OrdInv.ComplaintId  = null THEN @pLabNo                
+WHEN OrdInv.ComplaintId  = '' THEN @pLabNo               
+ELSE OrdInv.ComplaintId              
+END,           
+@LocationId,        
+(SELECT PkgID        
+FROM   orderedinvestigations         
+WHERE  visitid = OrdInv.VisitID        
+AND ID = OrdInv.ID        
+AND Type = OrdInv.type        
+AND PkgID IS NOT NULL),        
+(SELECT PkgName        
+FROM   orderedinvestigations         
+WHERE  visitid = OrdInv.VisitID        
+AND ID = OrdInv.ID        
+AND Type = OrdInv.type        
+AND PkgID IS NOT NULL),        
+'',        
+OrdInv.ReportDateTime,        
+OrdInv.TatDateTime,        
+OrdInv.IsStat ,
+-- Added for Sensitive Test ------------------------------
+Case    
+WHEN OrdInv.Type = 'INV' THEN (SELECT DISTINCT Isnull(IOA.IsSensitiveTest, '')        
+FROM   InvestigationOrgMapping IOM   
+Inner join InvestigationOrgAttributes IOA  ON  
+IOM.InvestigationID=IOA.InvestigationID and IOM.Orgid=IOA.Orgid      
+WHERE  IOM.InvestigationID = OrdInv.ID        
+AND IOM.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'GRP' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+WHEN OrdInv.Type = 'PKG' THEN (SELECT DISTINCT Isnull(IOG.IsSensitiveTest,'')        
+FROM   InvOrgGroup IOG         
+WHERE  IOG.AttGroupID = OrdInv.ID        
+AND IOG.OrgID = OrdInv.OrgID)        
+ELSE OrdInv.NAME        
+END
+-- End ------------------------------         
+FROM   @pOrderedInvTable OrdInv        
+WHERE  OrdInv.ReferralID NOT IN (SELECT ReferredAccessionNo        
+FROM   OrderedInvestigations         
+WHERE  VisitID = OrdInv.VisitID)        
+/*Below filter OrdInv.ID added by mohan to avoid duplicate entries in processing org due to re-push for medall */        
+AND OrdInv.ID NOT IN (SELECT ID        
+FROM   OrderedInvestigations         
+WHERE  VisitID = OrdInv.VisitID        
+AND OrgID = OrdInv.OrgID        
+AND ID = OrdInv.ID)        
+INSERT INTO OrderedInvestigations        
+(VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,
+IsSensitive)        
+output inserted.accessionnumber into @tmp_ordinv    
+SELECT VisitID,        
+ID,        
+NAME,        
+Type,        
+Status,        
+StudyInstanceUId,        
+OrgID,        
+CreatedBy,        
+CreatedAt,        
+PaymentStatus,        
+UID,        
+ReferredAccessionNo,        
+LabNo,        
+ReferredType,        
+ResCaptureLoc,        
+PkgID,        
+PkgName,        
+IsCopublish,        
+ReportDateTime,        
+TatDateTime,        
+IsStat,
+IsSensitive        
+FROM   @NewOrderedInvestigation        
+ORDER  BY SequenceNo ASC,        
+ContentSeq DESC        
+END        
+UPDATE OI        
+SET    OI.Status = OrdInv.Status,        
+OI.CreatedBy = OrdInv.CreatedBy,        
+OI.CreatedAt = @CreatedAt        
+output inserted.AccessionNumber into @tmp_Ordinv    
+FROM   OrderedInvestigations OI with(ROWLOCK)        
+INNER JOIN @pOrderedInvTable OrdInv        
+ON OI.ID = OrdInv.ID        
+AND OI.VisitID = OrdInv.VisitID        
+WHERE  ( OI.ReferredAccessionNo != 0        
+AND OI.ReferredAccessionNo = OrdInv.ReferralID )        
+AND OI.Type = 'INV'        
+AND OI.ReferredType IN( 'Retest', 'Recheck', 'ReflexTest' )        
+IF EXISTS (SELECT 1 FROM PatientInvestigation (NOLOCK) WHERE Patientvisitid=@visitid)
+BEGIN     
+UPDATE PIV        
+SET    PIV.Status = OrdInv.Status,        
+PIV.CreatedBy = OrdInv.CreatedBy,        
+PIV.CreatedAt = @CreatedAt        
+output inserted.patientinvid into @tmp_patinv    
+FROM   OrderedInvestigations OI         
+INNER JOIN @pOrderedInvTable OrdInv        
+ON OI.ID = OrdInv.ID        
+AND OI.VisitID = OrdInv.VisitID        
+INNER JOIN PatientInvestigation PIV with(ROWLOCK)         
+ON PIV.AccessionNumber = OI.AccessionNumber        
+WHERE  ( OI.ReferredAccessionNo != 0        
+AND OI.ReferredAccessionNo = OrdInv.ReferralID )        
+AND OI.Type = 'INV'        
+AND OI.ReferredType IN( 'Retest', 'Recheck', 'ReflexTest' )        
+END       
+UPDATE T        
+SET    T.OrderedUID = Temp.UID        
+FROM   InvestigationQueue  T with(ROWLOCK)       
+INNER JOIN (SELECT OI.Status,        
+OI.ReferredAccessionNo,        
+OI.ID,        
+OI.UID        
+FROM   OrderedInvestigations  OI        
+WHERE  OI.Visitid = @Visitid        
+AND OI.ReferredType IN( 'Retest' )        
+AND Isnull(OI.ReferredAccessionNo, 0) > 0) AS Temp        
+ON T.InvestigationID = Temp.ID        
+AND Temp.ReferredAccessionNo = T.AccessionNumber        
+WHERE  T.Visitid = @Visitid        
+AND t.Type IN( 'INV', 'GRP' )        
+UPDATE T        
+SET    T.OrderedUID = Temp.UID        
+FROM   InvestigationQueue  T with(ROWLOCK)        
+INNER JOIN (SELECT OI.Status,        
+OI.ReferredAccessionNo,        
+OI.ID,        
+OI.UID        
+FROM   OrderedInvestigations  OI        
+WHERE  OI.Visitid = @Visitid        
+AND OI.ReferredType IN( 'Retest', 'Recheck' )        
+AND Isnull(OI.ReferredAccessionNo, 0) > 0        
+AND OI.Type = 'INV') AS Temp        
+ON T.InvestigationID = Temp.ID        
+AND Temp.ReferredAccessionNo = T.AccessionNumber        
+WHERE  T.visitid = @Visitid        
+UPDATE T        
+SET    T.OrderedUID = Temp.UID        
+FROM   InvestigationQueue  T with(ROWLOCK)       
+INNER JOIN (SELECT OI.Status,        
+OI.ReferredAccessionNo,        
+OI.ID,        
+OI.UID,        
+OI.VisitID,        
+OI.Type        
+FROM   OrderedInvestigations  OI        
+WHERE  OI.Visitid = @Visitid        
+AND OI.ReferredType IN( 'ReflexTest' )        
+AND Isnull(OI.ReferredAccessionNo, 0) > 0) AS Temp        
+ON Temp.ReferredAccessionNo = T.AccessionNumber        
+AND Temp.VisitID = T.VisitID        
+AND T.Type = Temp.Type        
+AND T.InvestigationId = Temp.ID        
+WHERE  T.Visitid = @Visitid        
+DECLARE @BillingClient AS nvarchar(10)        
+DECLARE @ParentClient AS nvarchar(10)        
+DECLARE @IsBlindingClient AS nvarchar(10)        
+DECLARE @ClientId BIGINT        
+DECLARE @ParentClientId BIGINT        
+SELECT @ClientId = (SELECT TOP 1 ClientID        
+FROM   VisitClientMapping VCM         
+WHERE  VCM.VisitId = @Visitid        
+ORDER  BY CreatedAt DESC)        
+SELECT @ParentClientId = (SELECT ParentClientID        
+FROM   ClientMaster         
+WHERE  ClientId = @ClientId)        
+IF EXISTS(SELECT 1        
+FROM   ClientMaster CM         
+WHERE  CM.ClientId = @ClientId        
+AND CM.IsMailToParentClient = 'Y'        
+AND Isnull(CM.ParentCLientID, 0) > 0)        
+BEGIN        
+UPDATE OI        
+SET    OI.IsBlindingClient = 'BC'        
+FROM   OrderedInvestigations OI with(ROWLOCK)         
+INNER JOIN ClientTestBlinding CTP         
+ON OI.ID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+WHERE  OI.VisitId = @Visitid        
+AND CTP.ClientId = @ClientId        
+AND Isnull(OI.PkgID, 0) = 0        
+UPDATE OI     
+SET    OI.IsBlindingClient = 'PC'        
+FROM   OrderedInvestigations OI with(ROWLOCK)         
+INNER JOIN ClientTestBlinding CTP         
+ON OI.ID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+INNER JOIN ClientMaster CM         
+ON CTP.ClientID = CM.ParentClientID        
+WHERE  OI.VisitId = @Visitid        
+AND CTP.ClientId = @ParentClientId        
+AND CM.IsMailToParentClient = 'Y'        
+AND Isnull(OI.IsBlindingClient, '') = ''        
+AND Isnull(OI.PkgID, 0) = 0        
+UPDATE OI        
+SET    OI.IsBlindingClient = 'Both'        
+FROM   OrderedInvestigations OI with(ROWLOCK)         
+INNER JOIN ClientTestBlinding CTP         
+ON OI.ID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+INNER JOIN ClientMaster CM         
+ON CTP.ClientID = CM.ParentClientID        
+WHERE  OI.VisitId = @Visitid        
+AND CM.IsMailToParentClient = 'Y'        
+AND OI.IsBlindingClient = 'BC'        
+AND Isnull(OI.PkgID, 0) = 0        
+UPDATE OI        
+SET    OI.IsBlindingClient = 'BC'        
+FROM   OrderedInvestigations OI with(ROWLOCK)        
+INNER JOIN ClientTestBlinding CTP         
+ON OI.PkgID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+WHERE  OI.VisitId = @Visitid        
+AND CTP.ClientId = @ClientId        
+AND Isnull(OI.PkgID, 0) > 0        
+UPDATE OI        
+SET    OI.IsBlindingClient = 'PC'        
+FROM   OrderedInvestigations OI with(ROWLOCK)        
+INNER JOIN ClientTestBlinding CTP         
+ON OI.PkgID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+INNER JOIN ClientMaster CM         
+ON CTP.ClientID = CM.ParentClientID        
+WHERE  OI.VisitId = @Visitid        
+AND CTP.ClientId = @ParentClientId        
+AND CM.IsMailToParentClient = 'Y'        
+AND Isnull(OI.IsBlindingClient, '') = ''        
+AND Isnull(OI.PkgID, 0) > 0        
+UPDATE OI        
+SET    OI.IsBlindingClient = 'Both'        
+FROM   OrderedInvestigations OI with(ROWLOCK)         
+INNER JOIN ClientTestBlinding CTP         
+ON OI.PkgID = CTP.TestId        
+AND OI.TYpe = CTP.TestType        
+AND CTP.IsActive = 'Y'        
+INNER JOIN ClientMaster CM         
+ON CTP.ClientID = CM.ParentClientID        
+WHERE  OI.VisitId = @Visitid        
+AND CM.IsMailToParentClient = 'Y'        
+AND OI.IsBlindingClient = 'BC'        
+AND Isnull(OI.PkgID, 0) > 0        
+END        
+/* Code added by T.Suresh for MIS purpose start here */    
+;with cte as    
+(    
+select row_number() over (partition by AccessionNumber order by AccessionNumber) as sno,accessionnumber from @tmp_Ordinv    
+)    
+delete from cte where sno>1    
+UPdate MIS Set status = OI.status , modifiedby = OI.Createdby , Modifiedat = @CreatedAt,IsStat = OI.IsStat,IsSensitive = OI.IsSensitive    
+From @tmp_ordinv tmp    
+Inner join orderedinvestigations OI  on tmp.accessionNumber = OI.accessionnumber    
+Inner join MISOrderedinvestigations MIS with(ROWLOCK)  on OI.accessionnumber = MIS.accessionnumber    
+Where OI.Visitid = @Visitid    
+Insert Into MISOrderedinvestigations    
+(    
+AccessionNumber , Visitid , ID , Type , Name , status , CreatedBy , CreatedAt , ModifiedBy , ModifiedAt ,     
+ReferralID , ResCaptureLoc , PkgID , PkgName , ReportDateTime , TatDateTime , ReferredAccessionNo ,     
+LabNo,Orgid,Orgaddressid, isstat,IsSensitive)    
+Select    
+OI.AccessionNumber , OI.Visitid , OI.ID , OI.Type , OI.Name , OI.status , OI.CreatedBy , @createdat , Oi.ModifiedBy , @createdat ,     
+OI.ReferralID , OI.ResCaptureLoc , OI.PkgID , OI.PkgName , case when (OI.ReportDateTime <='19000101' or OI.ReportDateTime>='20500101') then Null else OI.ReportDateTime end as ReportDateTime ,     
+case when ( OI.TatDateTime <='19000101' or OI.TatDateTime>='20500101') then Null else OI.TatDateTime end as TatDataTime, OI.ReferredAccessionNo ,     
+OI.LabNo ,OI.Orgid ,PV.OrgAddressID,OI.isstat,OI.IsSensitive    
+From @tmp_ordinv tmp    
+Inner join orderedinvestigations OI  on tmp.AccessionNumber = OI.AccessionNumber    
+Inner join PatientVisit PV  on OI.Visitid = PV.PatientVisitid    
+left join MISOrderedinvestigations MIS  on OI.AccessionNumber = MIS.AccessionNumber    
+Where OI.Visitid = @Visitid and MIS.AccessionNumber is null    
+Insert into MISOrderedinvestigationhistory    
+(    
+AccessionNumber,Visitid,id,type,Name,statusid,status,    
+CreatedBy,CreatedAt,ReferralID,ResCaptureLoc,PkgID,PkgName    
+)    
+Select mOrd.AccessionNumber,mord.Visitid,mord.id,mord.type,mord.Name,tsk.seq as statusid,mord.status,    
+@Loginid as CreatedBy,@CreatedAt as CreatedAt,mord.ReferralID,mord.ResCaptureLoc,mord.PkgID,mord.PkgName    
+From @tmp_ordinv tp    
+Inner join MISOrderedinvestigations MORD  on tp.Accessionnumber = MORD.Accessionnumber    
+Inner join ordtasks tsk  on MORD.status = tsk.status    
+Left join MISOrderedinvestigationhistory OH  on tp.Accessionnumber = OH.Accessionnumber and tsk.seq = Oh.statusid and oh.Createdby = @Loginid    
+Where Oh.Accessionnumber is null    
+Insert Into MISordereddept(AccessionNumber,Deptid)    
+Select    
+tp.AccessionNumber,tp.Deptid    
+From     
+(    
+Select distinct MPIS.AccessionNumber,MPIS.Deptid    
+From @tmp_ordinv tOrd    
+Inner join MIsPatientinvestigation MPIS  on tord.AccessionNumber = MPIS.AccessionNumber    
+) tp    
+Left join MISordereddept Dpt  on tp.AccessionNumber = Dpt.AccessionNumber and tp.Deptid = dpt.Deptid    
+Where Dpt.AccessionNumber is null    
+IF EXISTS (SELECT 1 FROM PatientInvestigation (NOLOCK) WHERE Patientvisitid=@visitid)
+BEGIN  
+UPdate MISPI Set status = PI.status , modifiedby = PI.Createdby , Modifiedat = @CreatedAt    
+From @tmp_patinv tmp    
+Inner join patientinvestigation PI  on tmp.patientinvid = PI.patientinvid    
+Inner join MISpatientinvestigation MISPI with(ROWLOCK)  on PI.patientinvid = MISPI.patientinvid    
+Where PI.PatientVisitid = @Visitid    
+	END
+/* Code added by T.Suresh for MIS purpose end here */   
+
+/*TAT Integration*/
+
+
+                  DECLARE @TATDATE DATETIME
+                  DECLARE @ReportDeliveryDATE DATETIME
+                  DECLARE @p_TATCalculationDateTime DATETIME
+                  DECLARE @p_TATProcessDateTime DATETIME
+                  DECLARE @p_SampleReceiptDateTime DATETIME
+                  DECLARE @p_ProcessStartDateTime DATETIME
+                  DECLARE @p_ReportDateTime DATETIME
+                  DECLARE @p_TATDateTime DATETIME
+                  DECLARE @IsProcessing BIT = 0
+                  DECLARE @Tatprocessdatetype SMALLINT
+                  DECLARE @p_LogisticTimeasmins SMALLINT
+                  DECLARE @p_Processinghoursasmins INT --SMALLINT --Corrected by SYED
+                  DECLARE @p_LabendTime TIME
+                  DECLARE @p_EarlyReportTime TIME
+                  DECLARE @p_Isdebug BIT=0
+                  DECLARE @p_TATReferenceDateBase INT=0
+                  DECLARE @TattblCount BIGINT = 0
+                  DECLARE @loopCount BIGINT = 1
+                  DECLARE @pFeeID BIGINT
+                  DECLARE @pFeeType VARCHAR(5)
+                  DECLARE @TATORDTABLE TABLE
+                    (
+                       ROWID           BIGINT IDENTITY (1, 1),
+                       ID              BIGINT,
+                       Type            VARCHAR(20) ,
+					   visitid		   bigint
+                    )
+
+                  INSERT INTO @TATORDTABLE
+                  SELECT ID,
+                         Type,
+						 visitid--,
+                        --- AccessionNumber
+                  FROM   orderedinvestigations (nolock)
+                  WHERE  VISITID = @visitid
+                         AND Isnull(pkgid, 0) = 0
+                  UNION ALL
+                  SELECT distinct pKGID,
+                         'PKG',
+						 visitid--,
+                      --   AccessionNumber
+                  FROM   orderedinvestigations (nolock)
+                  WHERE  VISITID = @visitid
+                         AND Isnull(pkgid, 0) <> 0
+
+                  SELECT @TattblCount = Count(ROWID)
+                  FROM   @TATORDTABLE
+
+                  DECLARE @pClientId BIGINT
+
+                  SELECT @pClientId = (SELECT TOP 1 clientid
+                                       FROM   visitclientmapping VCM (nolock)
+                                       WHERE  VCM.visitid = @Visitid
+                                       ORDER  BY createdat DESC)
+
+                  SELECT @ReportDeliveryDATE = NULL
+
+				  
+				   DECLARE @configKeyID INT
+					  DECLARE @ConfigValue VARCHAR(50)
+
+					  SELECT @configKeyID = ConfigKeyID
+					  FROM   ConfigKeyMaster WITH(NOLOCK)
+					  WHERE  ConfigKey = 'TAT'
+
+					  SELECT @ConfigValue = ConfigValue
+					  FROM   ConfigOrgMaster WITH(NOLOCK)
+					  WHERE  ConfigKeyID = @configKeyID
+							 AND OrgID = @OrgID
+
+                  IF ( Isnull(@ConfigValue, 'N') = 'Y' )
+                    BEGIN
+                        IF EXISTS (SELECT 1
+                                   FROM   dbo.ConfigKeyMaster ckm WITH (NOLOCK)
+                                          INNER JOIN dbo.ConfigOrgMaster com WITH (NOLOCK)
+                                                  ON com.ConfigKeyID = ckm.ConfigKeyID
+                                                     AND com.OrgID = @OrgID
+                                   WHERE  ckm.ConfigKey = 'NewTATLogic'
+                                          AND com.ConfigValue = 'Y')
+                          BEGIN
+                              IF( @TattblCount <> 0 )
+                                BEGIN
+                                    WHILE ( @TattblCount >= @loopCount )
+                                      BEGIN
+                                          SELECT @pFeeID = id,
+                                                 @pFeeType = type
+                                          FROM   @TATORDTABLE
+                                          WHERE  rowid = @loopCount
+
+                                          SET @p_TATCalculationDateTime = Getdate()
+
+                                          DECLARE @p_OrgId INT = @OrgID
+                                          DECLARE @p_TestId BIGINT = @pFeeID
+                                          DECLARE @p_TestType VARCHAR(5) = @pFeeType
+                                          DECLARE @p_ClientId BIGINT = @pClientID
+
+                                          EXEC dbo.Pgettatreportdatetime
+                                            @p_OrgId,
+                                            @p_TestId,
+                                            @p_TestType,
+                                            @p_ClientId,
+                                            @p_TATCalculationDateTime,
+                                            @p_TATProcessDateTime OUTPUT,
+                                            @p_LogisticTimeasmins OUTPUT,
+                                            @p_SampleReceiptDateTime OUTPUT,
+                                            @p_Processinghoursasmins OUTPUT,
+                                            @p_ProcessStartDateTime OUTPUT,
+                                            @p_TATDateTime OUTPUT,
+                                            @p_LabendTime OUTPUT,
+                                            @p_EarlyReportTime OUTPUT,
+                                            @p_ReportDateTime OUTPUT,
+                                            @p_Isdebug,
+                                            @ContextInfo
+
+                                          SET @p_TATProcessDateTime = @p_TATProcessDateTime
+                                          SET @p_SampleReceiptDateTime = @p_SampleReceiptDateTime
+                                          SET @p_ProcessStartDateTime = @p_ProcessStartDateTime
+                                          SET @p_LogisticTimeasmins = @p_LogisticTimeasmins
+                                          SET @p_Processinghoursasmins = @p_Processinghoursasmins
+                                          SET @p_LabendTime = @p_LabendTime
+                                          SET @p_EarlyReportTime = @p_EarlyReportTime
+                                          SET @TATDATE = @p_TATDateTime
+                                          SET @ReportDeliveryDATE = @p_ReportDateTime
+                                          SET @loopCount=@loopCount + 1
+
+                                          UPDATE Tb
+                                          SET    Tb.TatDatetime = @TATDATE,
+                                                 Tb.ReportDateTime = @ReportDeliveryDATE,
+                                                 Tb.Tatreferencedatetime = @p_TATProcessDateTime,
+                                                 Tb.Tatsamplereceiptdatetime = @p_SampleReceiptDateTime,
+                                                 Tb.Tatprocessstartdatetime = @p_ProcessStartDateTime,
+                                                 Tb.Logistictimeinmins = @p_LogisticTimeasmins,
+                                                 Tb.Processingtimeinmins = @p_Processinghoursasmins,
+                                                 Tb.Labendtime = @p_LabendTime,
+                                                 Tb.Earlyreporttime = @p_EarlyReportTime
+                                          FROM   OrderedInvestigations Tb WITH (nolock)
+                                                 INNER JOIN @TATORDTABLE BT
+                                                         ON  Tb.visitid= BT.visitid and  Tb.Type=BT.Type 
+														 and  Tb.ID=BT.ID 
+                                                            
+                                                          --  AND BT.Accessionnumber = Tb.Accessionnumber
+                                          WHERE  Tb.VisitID = @visitid
+                                                 --AND OrgID = @OrgID
+                                                 AND BT.Type IN ( 'GRP', 'INV' )  
+						  AND  BT.ID  =  @pFeeID
+
+
+                                          UPDATE Tb
+                                          SET    Tb.TatDatetime = @TATDATE,
+                                                 Tb.ReportDateTime = @ReportDeliveryDATE,
+                                                 Tb.Tatreferencedatetime = @p_TATProcessDateTime,
+                                                 --   Tb.Tatreferencedatebase = BT.Tatreferencedatebase,
+                                                 Tb.Tatsamplereceiptdatetime = @p_SampleReceiptDateTime,
+                                                 Tb.Tatprocessstartdatetime = @p_ProcessStartDateTime,
+                                                 Tb.Logistictimeinmins = @p_LogisticTimeasmins,
+                                                 Tb.Processingtimeinmins = @p_Processinghoursasmins,
+                                                 Tb.Labendtime = @p_LabendTime,
+                                                 Tb.Earlyreporttime = @p_EarlyReportTime
+                                          FROM   billingdetails Tb WITH (nolock)
+                                                 INNER JOIN finalbill fb WITH (nolock)
+                                                         ON fb.finalbillid = tb.finalbillid
+                                                 INNER JOIN @TATORDTABLE BT
+                                                         ON BT.ID = Tb.feeID
+                                                            AND BT.Type = Tb.feeType
+                                          WHERE  fb.VisitID = @visitid
+                                                 AND fb.OrgID = @OrgID
+                                                 AND BT.Type IN ( 'GRP', 'INV' )
+												  AND  BT.ID  =  @pFeeID
+
+                                          UPDATE Tb
+                                          SET    Tb.TatDatetime = @TATDATE,
+                                                 Tb.ReportDateTime = @ReportDeliveryDATE,
+                                                 Tb.Tatreferencedatetime = @p_TATProcessDateTime,
+                                                 Tb.Tatsamplereceiptdatetime = @p_SampleReceiptDateTime,
+                                                 Tb.Tatprocessstartdatetime = @p_ProcessStartDateTime,
+                                                 Tb.Logistictimeinmins = @p_LogisticTimeasmins,
+                                                 Tb.Processingtimeinmins = @p_Processinghoursasmins,
+                                                 Tb.Labendtime = @p_LabendTime,
+                                                 Tb.Earlyreporttime = @p_EarlyReportTime
+                                          FROM   OrderedInvestigations Tb WITH (nolock)
+                                                 INNER JOIN @TATORDTABLE BT
+                                                         ON BT.ID = Tb.pkgID
+                                          WHERE  Tb.VisitID = @visitid
+                                                 AND OrgID = @OrgID
+                                                 AND BT.Type = 'PKG'
+												 AND  BT.ID  =  @pFeeID
+
+                                          UPDATE bt
+                                          SET    bt.TatDatetime = @TATDATE,
+                                                 bt.ReportDateTime = @ReportDeliveryDATE,
+                                                 bt.Tatreferencedatetime = @p_TATProcessDateTime,
+                                                 bt.Tatsamplereceiptdatetime = @p_SampleReceiptDateTime,
+                                                 bt.Tatprocessstartdatetime = @p_ProcessStartDateTime,
+                                                 bt.Logistictimeinmins = @p_LogisticTimeasmins,
+                                                 bt.Processingtimeinmins = @p_Processinghoursasmins,
+                                                 bt.Labendtime = @p_LabendTime,
+                                                 bt.Earlyreporttime = @p_EarlyReportTime
+                                          FROM   BIllingdetails bt WITH (nolock)
+                                                 INNER JOIN finalbill fb WITH (nolock)
+                                                         ON bt.finalbillid = fb.finalbillid
+                                                 INNER JOIN @TATordtable TOT
+                                                         ON TOT.id = bt.feeid
+                                                            AND TOT.type = bt.feetype
+                                          WHERE  fb.VisitID = @visitid
+                                                 AND fb.OrgID = @OrgID
+                                                 AND TOT.Type = 'PKG'
+												 AND  TOT.ID  =  @pFeeID
+                                      END
+
+                                    DECLARE @ReportDateTime DATETIME
+
+                                    SELECT @ReportDateTime = Max(bd.ReportDateTime)
+                                    FROM   finalbill fb (nolock)
+                                           INNER JOIN billingdetails bd (nolock)
+                                                   ON bd.finalbillid = fb.finalbillid
+                                    WHERE  fb.VisitID = @visitid
+                                           AND fb.OrgID = @OrgID
+
+                                    UPDATE fb
+                                    SET    ReportDateTime = @ReportDateTime
+                                    FROM   finalbill fb (nolock)
+                                    WHERE  fb.VisitID = @visitid
+                                           AND fb.OrgID = @OrgID
+                                END
+                          END
+                    END
+             
+	      /*TAT Integration*/
+
+ 
+SET @returnstatus=0        
+RETURN @returnstatus        
+SET NOCOUNT OFF   
+  END TRY                                 
+  BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pInsertOrderedInvestigation @OrgID  = '+cast(@OrgID  as varchar)
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH      
+END    

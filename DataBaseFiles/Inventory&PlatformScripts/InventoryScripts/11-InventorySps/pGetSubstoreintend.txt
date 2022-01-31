@@ -1,0 +1,94 @@
+
+CREATE procedure pGetSubstoreintend                  
+                  
+@pFrom             [NVARCHAR](30),                      
+                                    @pTo               [NVARCHAR](30),                      
+                                    @pLocationID       [INT],                    
+                                    @pIntendNo         [NVARCHAR](50),                      
+                                    @pOrgID            [INT],                    
+                                    @pOrgAddressID     [INT],                    
+                                    @pStatus           [NVARCHAR](30),                      
+                                    @pToLoacationID    [INT],                    
+                                    @pType             [NVARCHAR](30),                      
+                                    @pReceivedOrgID    [INT],                    
+                                    @pReceivedOrgAddID [INT],                    
+                                    @ContextInfo       [UDT_CONTEXT] READONLY                    
+WITH EXECUTE AS OWNER                    
+AS                    
+begin                  
+                  
+                  
+      IF @pToLoacationID = -1 OR  @pToLoacationID = 0                    
+        SET @pToLoacationID =NULL                    
+                    
+      IF @pReceivedOrgID = 0 OR @pReceivedOrgID=-1                    
+        SET @pReceivedOrgID =NULL                    
+                    
+      IF @pStatus = '0' OR @pStatus=''                    
+        SET @pStatus =NULL                   
+                  
+                                              
+                
+declare @IntendID [bigint]                
+DECLARE @ToLocID INT                                                                                                            
+DECLARE @OrgID INT                                           
+DECLARE @FromLocID INT                                    
+DECLARE @pRaiseOrgID INT                  
+ SELECT @ToLocID=ToLocationID,@pRaiseOrgID=RaiseOrgID,@FromLocID=LocationID,@OrgID =OrgID FROM Intend  where    IntendID=@IntendID                   
+   if @pIntendNo=''   
+   set @pIntendNo=Null               
+if(@pStatus='Pending')                  
+begin                  
+select L.LocationName + ' (' + o.OrgDisplayName + ')'AS LocName, * from Intend i  INNER JOIN Locations L                    
+                           ON I.LocationID = L.LocationID                    
+                   INNER JOIN Organization O                    
+                           ON O.orgid = i.OrgID where  i.Status='Pending' and i.ReferenceType='StoreReturn'                  
+                          and  CONVERT(DATE, I.CreatedAt, 103) BETWEEN CONVERT(DATE, @pFrom, 103) AND CONVERT(DATE, @pTo, 103)                   
+                       --   and I.IntendNo =  @pIntendNo   
+                                                       
+                  AND I.Status = COALESCE(@pStatus, I.Status)                  
+                   and i.LocationID=@pLocationID  and i.RaiseOrgID=@pOrgID     
+                    AND I.IntendNo = COALESCE(@pIntendNo, I.IntendNo)           
+                                   
+  end                  
+                    
+                    
+  if(@pStatus='Approved')                    
+  begin                  
+  select L.LocationName + ' (' + o.OrgDisplayName + ')'AS LocName,* from Intend i  INNER JOIN Locations L                    
+                           ON I.LocationID = L.LocationID          
+                   INNER JOIN Organization O                    
+                           ON O.orgid = i.OrgID where  i.Status='Approved' and i.ReferenceType='StoreReturn'                   
+                        and    CONVERT(DATE, I.CreatedAt, 103) BETWEEN CONVERT(DATE, @pFrom, 103) AND CONVERT(DATE, @pTo, 103)                    
+      AND I.IntendNo = COALESCE(@pIntendNo, I.IntendNo)    
+      --and I.IntendNo =  @pIntendNo                   
+                   AND I.Status = COALESCE(@pStatus, I.Status)                       
+                   --AND I.RaiseOrgID = @pOrgID                      
+                   and i.LocationID=@pLocationID  and i.RaiseOrgID=@pOrgID            
+                                 
+                   --AND I.ToLocationID = @pToLoacationID                      
+                   --AND I.OrgID = COALESCE(@pReceivedOrgID, I.OrgID)                      
+                   --AND I.LocationID = COALESCE(@pToLoacationID, I.LocationID)                  
+              
+  end          
+          
+    if(@pStatus='Cancelled')                    
+  begin                  
+  select L.LocationName + ' (' + o.OrgDisplayName + ')'AS LocName,* from Intend i  INNER JOIN Locations L                    
+                           ON I.LocationID = L.LocationID                    
+                   INNER JOIN Organization O                    
+                           ON O.orgid = i.OrgID where  i.Status='Cancelled' and i.ReferenceType='StoreReturn'                   
+                        and    CONVERT(DATE, I.CreatedAt, 103) BETWEEN CONVERT(DATE, @pFrom, 103) AND CONVERT(DATE, @pTo, 103)                    
+                         AND I.IntendNo = COALESCE(@pIntendNo, I.IntendNo)   
+                         --and I.IntendNo =  @pIntendNo                    
+                   AND I.Status = COALESCE(@pStatus, I.Status)                       
+                   --AND I.RaiseOrgID = @pOrgID                      
+                   and i.LocationID=@pLocationID  and i.RaiseOrgID=@pOrgID            
+                                 
+                   --AND I.ToLocationID = @pToLoacationID                      
+                   --AND I.OrgID = COALESCE(@pReceivedOrgID, I.OrgID)                      
+                   --AND I.LocationID = COALESCE(@pToLoacationID, I.LocationID)                  
+              
+  end         
+                  
+ end                  

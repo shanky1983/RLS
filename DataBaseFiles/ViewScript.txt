@@ -1,0 +1,185 @@
+
+
+CREATE VIEW [dbo].[VW_TESTINFO]
+AS
+  SELECT *
+  FROM   (SELECT InvOrgGroup.[AttGroupID]  ACRPID,
+                 InvOrgGroup.[OrgGroupID]  AORGID,
+                 InvOrgGroup.[OrgID],
+                 InvOrgGroup.[DisplayText] TNAME,
+                 RIGHT(CODENAME, 4)        as CodeSEQ,
+                 InvOrgGroup.[SequenceNo],
+                 CODEMASTER.CODENAME       TCODE,
+                 CODEMASTER.CODEMASTERID,
+                 INVGROUPMASTER.Type       as AType,
+                 CASE
+                   WHEN ISNULL(IsNonOrderable, 'N') = 'N' THEN 'YES'
+                   ELSE 'NO'
+                 END                       AS Orderable,
+                 InvOrgGroup.CutOffTimeType,
+                 InvOrgGroup.CutOffTimeValue,
+                 InvOrgGroup.IsTatRandom,
+                 InvOrgGroup.[SubCategory],
+                 InvOrgGroup.[ReportTime],
+                 Iscountable,
+                 [DeemedDeptID]            DeptID,
+                 DeptName,
+                 [Classification],
+                 IsRedeem
+          FROM   [dbo].[InvOrgGroup] WITH (NOLOCK)
+                 INNER JOIN [dbo].CODEMAPPER WITH (NOLOCK)
+                         ON CODEMAPPER.IdentifyingID = InvOrgGroup.OrgGroupID
+                 INNER JOIN [dbo].CODEMASTER WITH (NOLOCK)
+                         ON CODEMASTER.CodeMasterID = CODEMAPPER.CodeMasterID
+                 INNER JOIN [dbo].INVGROUPMASTER WITH (NOLOCK)
+                         ON INVGROUPMASTER.GROUPID = InvOrgGroup.AttGroupID
+                            AND [dbo].CODEMAPPER.IdentifyingType = INVGROUPMASTER.Type
+                 LEFT JOIN InvDeptMaster IDM (NOLOCK)
+                        On IDM.OrgID = [InvOrgGroup].OrgID
+                           AND IDM.DeptID = [InvOrgGroup].[DeemedDeptID]
+          WHERE  CODEMASTER.CodeSchemeID = 1
+          UNION
+          SELECT InvestigationOrgMapping.[InvestigationID] as AttuneID,
+                 InvestigationOrgMapping.[InvestigationID] as OrgInvID,
+                 InvestigationOrgMapping.[OrgID],
+                 [InvestigationName]                       TNAME,
+                 RIGHT(CODENAME, 4)                        as CodeSEQ,
+                 InvestigationOrgMapping.[SequenceNo],
+                 CODEMASTER.CODENAME                       TCODE,
+                 CODEMASTER.CODEMASTERID,
+                 'INV'                                     as AType,
+                 CASE
+                   WHEN InvestigationOrgMapping.[Display] = 'Y' THEN 'YES'
+                   ELSE 'NO'
+                 END                                       AS Orderable,
+                 InvestigationOrgAttributes.CutOffTimeType,
+                 InvestigationOrgAttributes.CutOffTimeValue,
+                 InvestigationOrgAttributes.IsTatRandom,
+                 InvestigationOrgAttributes.[Category],
+                 InvestigationOrgAttributes.[ReportTime],
+                 Iscountable,
+                 InvestigationOrgMapping.[DeptID],
+                 DeptName,
+                 [Classification],
+                 IsRedeem
+          FROM   [dbo].[InvestigationOrgMapping] WITH (NOLOCK)
+                 INNER JOIN [dbo].[InvestigationMaster] (NOLOCK)
+                         ON InvestigationMaster.InvestigationID = InvestigationOrgMapping.InvestigationID
+                 INNER JOIN [dbo].[InvestigationOrgAttributes] (NOLOCK)
+                         ON InvestigationOrgAttributes.InvestigationID = InvestigationOrgMapping.InvestigationID
+                            AND InvestigationOrgAttributes.OrgID = InvestigationOrgMapping.OrgID
+                 INNER JOIN [dbo].CODEMAPPER (NOLOCK)
+                         ON CODEMAPPER.IdentifyingID = InvestigationOrgMapping.InvestigationID
+                 INNER JOIN [dbo].CODEMASTER WITH (NOLOCK)
+                         ON CODEMASTER.CodeMasterID = CODEMAPPER.CodeMasterID
+                 LEFT JOIN InvDeptMaster IDM (NOLOCK)
+                        On IDM.OrgID = [InvestigationOrgMapping].OrgID
+                           AND IDM.DeptID = [InvestigationOrgMapping].DEPTID
+          WHERE  [dbo].CODEMASTER.CodeSchemeID = 1
+                 AND CODEMAPPER.IdentifyingType = 'Investigations') t
+
+
+
+GO
+
+
+-------------------------------------view script added by ramya-------------------------------------
+
+
+CREATE VIEW [dbo].[View_Tests671_Test] AS
+
+SELECT * 
+
+FROM 
+
+(SELECT InvOrgGroup.[AttGroupID] ACRPID
+
+,InvOrgGroup.[OrgGroupID] AORGID
+
+,InvOrgGroup.[OrgID]
+
+,InvOrgGroup.[DisplayText] TNAME
+
+, RIGHT(CODEMASTER.CODENAME , 4) as CodeSEQ
+
+,InvOrgGroup.[SequenceNo]
+
+, CODEMASTER.CODENAME TCODE
+
+,  CODEMASTER.CODEMASTERID
+
+,INVGROUPMASTER.Type as AType
+
+, CASE WHEN  ISNULL(IsNonOrderable,'N') = 'N' THEN 'YES' ELSE 'NO' END AS Orderable
+
+, InvOrgGroup.CutOffTimeType  
+
+, InvOrgGroup.CutOffTimeValue
+
+, InvOrgGroup.IsTatRandom,
+
+CODEMASTER.CodeSchemeID 
+
+FROM [dbo].[InvOrgGroup] WITH (NOLOCK)
+
+INNER JOIN [dbo].CODEMAPPER WITH (NOLOCK)ON CODEMAPPER.IdentifyingID = InvOrgGroup.OrgGroupID
+
+INNER JOIN [dbo].CODEMASTER WITH (NOLOCK) ON CODEMASTER.CodeMasterID = CODEMAPPER.CodeMasterID
+
+INNER JOIN [dbo].INVGROUPMASTER WITH (NOLOCK) ON INVGROUPMASTER.GROUPID = InvOrgGroup.AttGroupID
+
+AND [dbo].CODEMAPPER.IdentifyingType = INVGROUPMASTER.Type
+
+-------------------------------------WHERE CODEMASTER.CodeSchemeID=48
+
+UNION
+
+SELECT 
+
+InvestigationOrgMapping.[InvestigationID] as AttuneID 
+
+,  InvestigationOrgMapping.[InvestigationID] as OrgInvID 
+
+,  InvestigationOrgMapping.[OrgID]
+
+,  [InvestigationName] TNAME
+
+,  RIGHT(CODEMASTER.CODENAME , 4) as CodeSEQ
+
+,  [SequenceNo]
+
+,  CODEMASTER.CODENAME TCODE
+
+,  CODEMASTER.CODEMASTERID
+
+, 'INV' as AType
+
+, CASE WHEN  InvestigationOrgMapping.[Display] = 'Y' THEN 'YES' ELSE 'NO' END AS Orderable 
+
+, InvestigationOrgAttributes.CutOffTimeType  
+
+, InvestigationOrgAttributes.CutOffTimeValue
+
+, InvestigationOrgAttributes.IsTatRandom ,
+
+CODEMASTER.CodeSchemeID
+
+FROM [dbo].[InvestigationOrgMapping] WITH (NOLOCK)
+
+INNER JOIN [dbo].[InvestigationMaster] (NOLOCK) ON InvestigationMaster.InvestigationID = InvestigationOrgMapping.InvestigationID
+
+INNER JOIN [dbo].[InvestigationOrgAttributes] (NOLOCK) ON InvestigationOrgAttributes.InvestigationID = InvestigationOrgMapping.InvestigationID
+
+AND InvestigationOrgAttributes.OrgID = InvestigationOrgMapping.OrgID
+
+INNER JOIN [dbo].CODEMAPPER (NOLOCK) ON CODEMAPPER.IdentifyingID = InvestigationOrgMapping.InvestigationID
+
+INNER JOIN [dbo].CODEMASTER WITH (NOLOCK) ON CODEMASTER.CodeMasterID = CODEMAPPER.CodeMasterID
+
+WHERE 
+
+--[dbo].CODEMASTER.CodeSchemeID=48 AND 
+
+CODEMAPPER.IdentifyingType = 'Investigations'
+
+) t

@@ -1,0 +1,707 @@
+CREATE PROCEDURE pHCBookingProcess 
+       @BookingID BIGINT,
+	   @pOrgID    BIGINT
+AS
+	DECLARE @CheckPayID AS INT
+    DECLARE @ServerDateTime AS DATETIME
+    SET @ServerDateTime = Getdate()
+
+  BEGIN
+    --------------------------------------- Payments Process Start ----------------------------------------------
+    
+	Declare @BookId bigint, @TypeID bigint, @AmtRecd decimal(18,2), @ChqorCardNo nvarchar(20) = null, @Paymode nvarchar(50)= null,
+	        @CardHldrName nvarchar(20) = null, @CurrencyID int = 0, @CreatedBy bigint, @CreatedAt datetime,
+			@TransID nvarchar(25) = null, @OrgID bigint 
+	Declare @Loop int = 1, @Count int = 0 
+
+    Create Table #Payment (  
+        Sno           smallint identity(1, 1),  
+		BookingId     bigint,
+		Paymode       nvarchar(50),
+        TypeID        bigint,  
+        AmtRecd       decimal(18,2),
+		ChqorCardNo   nvarchar(20),
+		CardHldrName  nvarchar(20),
+		TransID       nvarchar(25),
+		CurrencyID    int,  
+		CreatedBy     bigint,  
+	    CreatedAt     datetime,
+		OrgID         bigint )
+
+
+	 INSERT #Payment  
+           ( BookingId,			 TypeID,             AmtRecd,	      ChqorCardNo,           TransID,        
+		     CardHldrName,		 CurrencyID,         CreatedBy,       CreatedAt,             Paymode,          OrgID )  
+     SELECT HC.BookingID,        PT.PaymentTypeID,   HC.AmtReceived,  HC.ChequeorCardNumber, HC.TransactionID,
+	        HC.CardHolderName,   HC.PaidCurrencyID,  HC.CreatedBy,    HC.CreatedAt,          HC.PaymentMode,   HC.OrgID   
+     FROM  ERPHCPaymentDetailsInBound HC with(Nolock)
+	 INNER JOIN PaymentType PT with(Nolock) 
+	    ON PT.PaymentCode = HC.PaymentMode 
+		AND ISNULL(PT.LanguageCode,'en-GB') = 'en-GB'
+     WHERE  HC.OrgID = @pOrgID AND 
+	        HC.BookingID = @BookingID AND 
+			ISNULL(HC.ISProcessed,'N') = 'N'
+	 Order by CreatedAt asc 
+
+	 SELECT @Count = Count(1)  
+     FROM   #Payment 
+
+	 WHILE @loop <= @Count  
+     BEGIN  
+		  SELECT @BookId = NULL,  
+                 @TypeID = NULL,
+				 @TransID = NULL,
+				 @AmtRecd = NULL,
+				 @Paymode = NULL,
+				 @ChqorCardNo = NULL,
+				 @CardHldrName = null, 
+				 @CurrencyID = null, 
+				 @CreatedBy = null, 
+				 @CreatedAt = null,
+				 @OrgID = null
+  
+          SELECT @BookId = BookingId,
+			     @TypeID = TypeID,
+				 @TransID = TransID,
+				 @AmtRecd = AmtRecd,
+			     @Paymode = Paymode,	
+                 @ChqorCardNo = ChqorCardNo,
+				 @CardHldrName = CardHldrName,
+				 @CurrencyID = CurrencyID,
+				 @CreatedBy = CreatedBy,
+				 @CreatedAt = CreatedAt,
+				 @OrgID = OrgID
+          FROM   #Payment  
+          WHERE  Sno = @Loop 
+
+		  IF Not Exists(Select 1 from PreBookingPaymentDetails 
+		                          where BookingID = @BookId and OrgID = @pOrgID and TypeID = @TypeID)
+			 BEGIN
+			    INSERT INTO PreBookingPaymentDetails
+				    	 (BookingID,	   TypeID,	        AmtReceived,          ChequeorCardNumber,  CardHolderName,	TransactionID,	
+				          BaseCurrencyID,  PaidCurrencyID,  OtherCurrencyAmount,  OrgID,               CreatedBy,       CreatedAt)
+                SELECT    @BookId,         @TypeID,         @AmtRecd,             @ChqorCardNo,        @CardHldrName,   @TransID,
+			              @CurrencyID,     @CurrencyID,     @AmtRecd,             @OrgID,              @CreatedBy,      @CreatedAt
+
+				UPDATE ERPHCPaymentDetailsInBound
+				SET    ISProcessed = 'Y'
+				WHERE  OrgID = @pOrgID AND PaymentMode = @Paymode AND BookingID = @BookId
+			 END
+          ELSE IF Exists(Select 1 from PreBookingPaymentDetails 
+		   where BookingID = @BookId and OrgID = @pOrgID and TypeID = @TypeID)
+		     BEGIN
+			      UPDATE PreBookingPaymentDetails
+                  SET    AmtReceived = @AmtRecd,
+				         TypeID = @TypeID,
+						 BaseCurrencyID = @CurrencyID,
+						 PaidCurrencyID = @CurrencyID,
+						 OtherCurrencyAmount = @AmtRecd,
+                         CreatedAt = @CreatedAt,
+                         CreatedBy = @CreatedBy
+                  WHERE  OrgID = @pOrgID AND BookingID = @BookId AND TypeID = @TypeID
+
+				  UPDATE ERPHCPaymentDetailsInBound
+				  SET    ISProcessed = 'Y'
+				  WHERE  OrgID = @pOrgID AND PaymentMode = @Paymode AND BookingID = @BookId
+			 END 
+
+	    SELECT @Loop = @Loop + 1  
+	END
+	--------------------------------------- Payments Process End ----------------------------------------------
+
+
+	--------------------------------------- Orders Process Start ----------------------------------------------
+	
+	Declare @BId bigint, @OrdID bigint,  @OrdType nvarchar(30), @TestCode nvarchar(100), 
+	        @Price decimal(18,2), @Name nvarchar(300)= null,
+	        @Status nvarchar(20) = null,  @Created bigint, @Createddt datetime, @Org bigint,
+			@BarcodeNo nvarchar(150)
+	Declare @OrdLoop int = 1, @OrdCount int = 0 
+
+    Create Table #Orders  (  
+        Srno          smallint identity(1, 1),  
+		BookingId     bigint,
+		OrdID         bigint,
+        OrdType       nvarchar(30),
+		TestCode      nvarchar(100),
+        Price         decimal(18,2),
+		Name          nvarchar(300),
+		Status        nvarchar(25),
+		CreatedBy     bigint,  
+	    CreatedAt     datetime,
+		OrgID         bigint,
+		BarcodeNo     nvarchar(300))
+
+    INSERT #Orders  
+           ( BookingId,	   OrdType,       TestCode,	    Price,               Name,        
+		     [Status],	   CreatedBy,     CreatedAt,    OrdID,               
+			 OrgID,        BarcodeNo)  
+    SELECT   HT.BookingID, HT.[Type],     HT.TestCode,  HT.AmtReceived,      IOM.DisplayText,
+	         case HT.[CollectionStatus] when 'Deleted' then  HT.[CollectionStatus] else 'Ordered' end,  HT.CreatedBy,  HT.CreatedAt, IOM.InvestigationID, 
+			 HT.OrgID,     HT.BarcodeNo
+    FROM  ERPHCTestInBound HT with(Nolock)
+	      INNER JOIN InvestigationOrgMapping IOM with(Nolock) ON IOM.TestCode = HT.TestCode AND IOM.OrgID = HT.OrgID AND HT.[Type] IN ('INV')
+	WHERE  HT.OrgID = @pOrgID 
+	      AND HT.BookingID = @BookingID 
+	      AND ISNULL(HT.ISProcessed,'N') = 'N'
+	UNION
+	SELECT  HT.BookingID, HT.[Type],     HT.TestCode,  HT.AmtReceived,      IOM.DisplayText,
+			 case HT.[CollectionStatus] when 'Deleted' then  HT.[CollectionStatus] else 'Ordered' end,    HT.CreatedBy,  HT.CreatedAt, IOM.AttGroupID,      
+			 HT.OrgID,    HT.BarcodeNo
+	FROM ERPHCTestInBound HT with(Nolock)
+		INNER JOIN InvOrggroup IOM with(Nolock) ON IOM.TestCode = HT.TestCode AND IOM.OrgID = HT.OrgID  AND HT.[Type] IN ('GRP','PKG')
+    WHERE  HT.OrgID = @pOrgID 
+	       AND HT.BookingID = @BookingID 
+	       AND ISNULL(HT.ISProcessed,'N') = 'N'
+	
+
+	SELECT @OrdCount = Count(1)  
+    FROM  #Orders 
+
+	WHILE @OrdLoop <= @OrdCount  
+     BEGIN  
+		  SELECT @BId = NULL,  
+                 @OrdID = NULL,
+				 @OrdType = NULL,
+				 @TestCode = NULL,
+				 @Price = NULL,
+				 @Name = NULL,
+				 @Status = NULL, 
+				 @Created = null, 
+				 @Createddt = null,
+                 @Org = null,
+				 @BarcodeNo = null
+
+          SELECT @BId = BookingId,
+		         @OrdID = OrdID,
+			     @OrdType = OrdType,
+				 @TestCode = TestCode,
+				 @Price = Price,
+			     @Name = Name,	
+                 @Status = Status,
+				 @Created = CreatedBy,
+				 @Createddt = CreatedAt,
+				 @Org = OrgID,
+				 @BarcodeNo = BarcodeNo
+          FROM   #Orders  
+          WHERE  Srno = @OrdLoop 
+
+		  IF Not Exists(Select 1 from PreOrderedInvestigations 
+		                             where QuotationID = @BId and OrgID = @pOrgID and [Type] = @OrdType and ID = @OrdID)
+			 BEGIN
+			    INSERT INTO PreOrderedInvestigations
+				    	 ( QuotationId,	 ID,	  [Type],    [Status], AmtReceived, OrgID,  CreatedBy, CreatedAt,  Name,   BarcodeNo)
+                SELECT     @BId,         @OrdID,  @OrdType,  @Status,  @Price,      @pOrgID, @Created,  @Createddt, @Name, @BarcodeNo
+
+				UPDATE ERPHCTestInBound
+				SET    ISProcessed = 'Y'
+				WHERE  OrgID = @pOrgID AND TestCode = @TestCode AND [Type] = @OrdType AND BookingID = @BId
+			 END
+          ELSE IF Exists(Select 1 from PreOrderedInvestigations 
+		                            where QuotationID = @BId and OrgID = @pOrgID and [Type] = @OrdType and ID = @OrdID)
+		     BEGIN
+			      UPDATE PreOrderedInvestigations
+                  SET    AmtReceived = @Price,
+                         CreatedAt = @Createddt,
+                         CreatedBy = @Created,
+						 BarcodeNo = case when ISNULL(@BarcodeNo,'') <> '' then  @BarcodeNo else BarcodeNo end,
+						 Status = @Status
+                   WHERE  OrgID = @pOrgID AND QuotationId = @BId AND [Type] = @OrdType AND ID = @OrdID
+
+				  UPDATE ERPHCTestInBound
+				  SET    ISProcessed = 'Y'
+				  WHERE  OrgID = @pOrgID AND TestCode = @TestCode AND [Type] = @OrdType AND BookingID = @BId
+			 END 
+
+	    SELECT @OrdLoop = @OrdLoop + 1  
+	END
+	
+	--------------------------------------- Orders Process End -------------------------------------------
+
+	--------------------------------------- Trip Status Process Start ------------------------------------
+	 Declare @BkId bigint, @TripStatus nvarchar(50), @TripReason nvarchar(150), 
+	         @ModifiedBy bigint, @ModifiedAt datetime, @BOrgID bigint,
+			 @CollectionTime datetime, @PhoneNumber nvarchar(50) , @Gender nchar(5), @EMail  nvarchar(200),
+			 @DOB datetime, @Age nvarchar(40), @PName nvarchar(300), @Addr nvarchar(500)
+	 Declare @BLoop int = 1, @BCount int = 0 
+
+	 Create Table #Bookings (  
+        Sno            smallint identity(1, 1),  
+		BookingId      bigint,
+		Bookingstatus  nvarchar(50),
+		Reason         nvarchar(150),
+		ModifiedBy     bigint,  
+	    ModifiedAt     datetime,
+		OrgID          bigint,
+		CollectionTime datetime,
+		PhoneNumber    nvarchar(50), 
+		Gender         nchar(5), 
+		EMail          nvarchar(200),
+		DOB            datetime,
+		Age            nvarchar(40),
+		PName          nvarchar(300),
+		Addr           nvarchar(500)
+		)
+
+     INSERT #Bookings  
+         ( BookingId,	   Bookingstatus,  Reason,    OrgID,     ModifiedBy,    ModifiedAt,   
+		   CollectionTime, PhoneNumber,    Gender,    EMail,     DOB,           Age,          PName,         Addr )  
+     SELECT HB.BookingID,  HB.TripStatus,  HB.TripReason, HB.OrgID,  HB.ModifiedBy,  HB.ModifiedAt,
+	        HB.CollectionTime, HB.MobileNumber, HB.Gender, HB.Email, HB.DateofBirth, HB.Age,  HB.FirstName,  HB.[Address]
+     FROM  ERPHCBookingInBound HB with(Nolock)
+     WHERE HB.OrgID = @pOrgID AND HB.BookingID = @BookingID
+	       AND ISNULL(HB.ISProcessed,'N') = 'N'
+	 Order by HB.CreatedAt asc 
+
+	 SELECT @BCount = Count(1)  
+     FROM   #Bookings 
+
+	 WHILE @BLoop <= @BCount  
+     BEGIN  
+		  SELECT @BkId = NULL,  
+                 @TripStatus = NULL,
+				 @TripReason = NULL,
+				 @BOrgID = null,
+				 @ModifiedBy = null,
+				 @ModifiedAt = null,
+				 @CollectionTime = null,
+				 @PhoneNumber = null, 
+				 @Gender = null, 
+				 @EMail = null,
+				 @DOB = null,
+				 @Age = null,
+				 @PName = null,
+				 @Addr = null
+  
+          SELECT @BkId = BookingId,
+			     @TripStatus = Bookingstatus,
+				 @TripReason = Reason,
+				 @BOrgID = OrgID,
+				 @ModifiedBy = ModifiedBy,
+				 @ModifiedAt = ModifiedAt,
+				 @CollectionTime = CollectionTime,
+				 @PhoneNumber = PhoneNumber, 
+				 @Gender = Gender, 
+				 @EMail = EMail,
+				 @DOB   = DOB,
+				 @Age   = Age,
+				 @Addr  = Addr,
+				 @PName = PName
+          FROM   #Bookings  
+          WHERE  Sno = @BLoop 
+
+		  IF Exists(SELECT 1 FROM Bookings with(Nolock) WHERE BookingID = @BkId and OrgID = @pOrgID )
+		     BEGIN
+
+			    INSERT INTO [Bookings_HIST] 
+				  (BookingID,
+					ResourceTemplateID,
+					StartTime,
+					EndTime,
+					TokenNumber,
+					Description,
+					BookingStatus,
+					CreatedBy,
+					CreatedAt,
+					ModifiedBy,
+					ModifiedAt,
+					ScheduleID,
+					PatientNumber,
+					PhoneNumber,
+					PatientName,
+					CancelRemarks,
+					OrgID,
+					BookingOrgID,
+					ReferalID,
+					RemindCount,
+					TokenID,
+					TITLECode,
+					SEX,
+					DOB,
+					Age,
+					LandLineNumber,
+					EMail,
+					ClientID,
+					FeeType,
+					SourceType,
+					CollectionAddress2,
+					PatientID,
+					OrgAddressID,
+					CollectionAddress,
+					RoleID,
+					UserID,
+					CollectionTime,
+					City,
+					BillDescription,
+					PatientVisitID,
+					CreatedOrgID,
+					RefPhysicianName,
+					NRICNumber,
+					NRICType,
+					ExternalPatientNo,
+					State,
+					Pincode,
+					StateID,
+					CityID,
+					Priority,
+					Comments,
+					URNTypeID,
+					URNO,
+					DispatchValue,
+					RefPhysicianID,
+					ReferenceType,
+					ParentID,
+					BookingStatusId,
+					BookingPriority,
+					PaymentTypeID,
+					VisitPurposeID,
+					GroupID,
+					Remarks,
+					Altmobilenoone,
+					Altmobilenotwo,
+					CountryID,
+					CityCode,
+					DistrictCode,
+					PostalCode,
+					RescheduleToken,
+					TaskID,
+					HealthHubID,
+					EmployeeID)
+				  SELECT B.BookingID,
+						B.ResourceTemplateID,
+						B.StartTime,
+						B.EndTime,
+						B.TokenNumber,
+						B.Description,
+						B.BookingStatus,
+						B.CreatedBy,
+						B.CreatedAt,
+						B.ModifiedBy,
+						B.ModifiedAt,
+						B.ScheduleID,
+						B.PatientNumber,
+						B.PhoneNumber,
+						B.PatientName,
+						B.CancelRemarks,
+						B.OrgID,
+						B.BookingOrgID,
+						B.ReferalID,
+						B.RemindCount,
+						B.TokenID,
+						B.TITLECode,
+						B.SEX,
+						B.DOB,
+						B.Age,
+						B.LandLineNumber,
+						B.EMail,
+						B.ClientID,
+						B.FeeType,
+						B.SourceType,
+						B.CollectionAddress2,
+						B.PatientID,
+						B.OrgAddressID,
+						B.CollectionAddress,
+						B.RoleID,
+						B.UserID,
+						B.CollectionTime,
+						B.City,
+						B.BillDescription,
+						B.PatientVisitID,
+						B.CreatedOrgID,
+						B.RefPhysicianName,
+						B.NRICNumber,
+						B.NRICType,
+						B.ExternalPatientNo,
+						B.State,
+						B.Pincode,
+						B.StateID,
+						B.CityID,
+						B.Priority,
+						B.Comments,
+						B.URNTypeID,
+						B.URNO,
+						B.DispatchValue,
+						B.RefPhysicianID,
+						B.ReferenceType,
+						B.ParentID,
+						B.BookingStatusId,
+						B.BookingPriority,
+						B.PaymentTypeID,
+						B.VisitPurposeID,
+						B.GroupID,
+						B.Remarks,
+						B.Altmobilenoone,
+						B.Altmobilenotwo,
+						B.CountryID,
+						B.CityCode,
+						B.DistrictCode,
+						B.PostalCode,
+						B.RescheduleToken,
+						B.TaskID,
+						B.HealthHubID,
+						B.EmployeeID
+					FROM  Bookings B 
+					WHERE B.BookingID = @BkId AND B.OrgID = @pOrgID
+
+			      UPDATE Bookings
+                  SET    BookingStatus = @TripStatus,
+				         Remarks = @TripReason,
+                         ModifiedAt = @ModifiedAt,
+                         ModifiedBy = @ModifiedBy
+                  WHERE  BookingID = @BkId AND OrgID = @pOrgID
+
+				  IF(@TripStatus = 'Completed')
+				   BEGIN
+					  UPDATE Bookings
+					  SET    CollectionTime = @CollectionTime,
+							 PhoneNumber = @PhoneNumber, 
+							 SEX = @Gender, 
+							 EMail = @EMail,
+							 DOB = @DOB,
+							 Age = [dbo].[fn_getAgeDecimalAge](@DOB, @pOrgID),
+							 PatientName = @PName,
+							 CollectionAddress = @Addr
+					  WHERE  BookingID = @BkId AND OrgID = @pOrgID
+                   END
+				  UPDATE ERPHCBookingInBound
+				  SET    ISProcessed = 'Y'
+				  WHERE  BookingID = @BkId AND OrgID = @pOrgID
+			 END 
+
+	    SELECT @BLoop = @BLoop + 1  
+	END
+
+	--------------------------------------- Trip Status Process End --------------------------------------
+
+	--------------------------------------- TRFFile Process Start ----------------------------------------
+	 
+	 Declare @PID bigint,  @VID bigint, @TRFOrgID int, @IdentiID varchar(50), @IdentiType nvarchar(200), @FileName varchar(500),
+	         @FilePath varchar(300), @TRfGuid uniqueidentifier, @TRFCreatedBy bigint, @TRFCreatedAt datetime
+	 Declare @TRFLoop int = 1, @TRFCount int = 0
+	 
+	 Create Table #TRFFiles (  
+        Sno             smallint identity(1, 1),  
+		PatientId       bigint,
+		PatientVisitID  bigint,
+		OrgID           bigint,
+		IdentiID        nvarchar(50),
+		IdentiType      nvarchar(250),
+		Name            nvarchar(500),
+		FilePath     nvarchar(300),
+		TRFGuid         uniqueidentifier, 
+		TRFCreatedBy    bigint,  
+	    TRFCreatedAt    datetime )
+
+	
+	 INSERT INTO #TRFFiles (
+	         PatientId,      PatientVisitID,                               OrgID,     IdentiID,                  IdentiType,        
+			 Name,           FilePath,                                     TRFGuid,   TRFCreatedBy,              TRFCreatedAt )
+	 SELECT  B.PatientID,    ISNULL(B.PatientVisitID,0) as PatientVisitID, T.OrgID,   ISNULL(T.IdentifyingID,0), T.IdentifyingType, 
+	         T.[FileName],   T.FilePath,                                   T.TRfGuid, T.CreatedBy,               T.[Createdat ]  
+	 FROM TRFfilemanager_HC T with(Nolock)
+	 INNER JOIN Bookings B with(Nolock) ON B.BookingID = T.BookingID AND B.OrgID = T.OrgID
+	 WHERE B.BookingID = @BookingID AND B.OrgID = @pOrgID 
+	       AND (ISNULL(B.PatientID,0) != 0 AND ISNULL(B.PatientID,0) != -1)
+	       --AND ISNULL(T.IsProcessed,'N') = 'N'
+	 Order by T.[Createdat ] asc
+
+	 SELECT @TRFCount = Count(1)  
+     FROM   #TRFFiles 
+
+	 IF @TRFCount > 0
+	  BEGIN
+		 WHILE @TRFLoop <= @TRFCount  
+		 BEGIN  
+			  SELECT @PID = null,  
+					 @VID = null,
+					 @TRFOrgID = null,
+					 @IdentiID = null,
+					 @IdentiType = null,
+					 @FileName = null,
+					 @FilePath  = null,
+					 @TRfGuid = null,
+					 @TRFCreatedBy = null,
+					 @TRFCreatedAt = null
+ 
+			  SELECT @PID = PatientId,  
+					 @VID = PatientVisitID,
+					 @TRFOrgID = OrgID,
+					 @IdentiID = IdentiID,
+					 @IdentiType = IdentiType,
+					 @FileName = Name,
+					 @FilePath  = FilePath,
+					 @TRfGuid = TRFGuid,
+					 @TRFCreatedBy = TRFCreatedBy,
+					 @TRFCreatedAt = TRFCreatedAt
+			  FROM   #TRFFiles  
+			  WHERE  Sno = @TRFLoop 
+
+			  IF NOT Exists(SELECT 1 FROM TRFfilemanager with(Nolock) WHERE PatientID = @PID and VisitID = @VID and OrgID = @pOrgID )
+				 BEGIN
+					INSERT INTO TRFfilemanager
+				    		 ( PatientID,  VisitID,    OrgID,     IdentifyingID,             IdentifyingType, 
+							   [FileName], FilePath,   TRFGUID,   Isactive,                  AccessionNumber,  Createdby,     Createdat)
+					SELECT     @PID,       @VID,       @TRFOrgID, Cast(@IdentiID as bigint), @IdentiType,      
+							   @FileName,  @FilePath,  @TRfGuid,  'Y',                       0,                @TRFCreatedBy,  @TRFCreatedAt
+
+					UPDATE TRFfilemanager_HC
+					SET    IsProcessed = 'Y'
+					WHERE BookingID = @BookingID AND OrgID = @pOrgID
+				 END
+			  ELSE IF Exists(SELECT 1 FROM TRFfilemanager with(Nolock) WHERE PatientID = @PID and VisitID = @VID and OrgID = @pOrgID )
+				 BEGIN
+					  UPDATE TRFfilemanager
+					  SET    IdentifyingID = Cast(@IdentiID as bigint),
+							 IdentifyingType = @IdentiType,
+							 [FileName] = @FileName,
+							 FilePath = @FilePath,
+							 TRFGUID = @TRfGuid,
+							 Isactive = 'Y',
+							 AccessionNumber = 0,
+							 Createdby = @TRFCreatedBy,
+							 Createdat = @TRFCreatedAt
+					  WHERE PatientID = @PID AND VisitID = @VID AND OrgID = @pOrgID
+
+					  UPDATE TRFfilemanager_HC
+					  SET    IsProcessed = 'Y'
+					  WHERE BookingID = @BookingID AND OrgID = @pOrgID
+				 END 
+
+			SELECT @TRFLoop = @TRFLoop + 1  
+		 END
+	END
+	--------------------------------------- TRFFile Process End ------------------------------------------
+
+	--------------------------------------- Sample Process Start ----------------------------------------
+	 
+	 Declare @ID bigint,  @SampleCode bigint, @SampleName nvarchar(150), @ContainerID bigint, @ContainerName nvarchar(250), @SampleContainerColour nvarchar(150),
+	         @SampleCollectedTime datetime, @SBarcodeNo nvarchar(150), @Reason nvarchar(150), @IsNewSampleYN nvarchar(5), @ExternalRefNo nvarchar(50),
+			 @SOrgID int,  @SLocationID int, @SCreatedBy bigint, @SCreatedAt datetime, @CollectionStatus nvarchar(75)
+	 Declare @SLoop int = 1, @SCount int = 0
+	 
+	 Create Table #tempSample (  
+        Sno  smallint identity(1, 1),  
+		BookingID bigint,
+		SampleCode bigint,
+		SampleName nvarchar(150),
+		ContainerID bigint NULL,
+		ContainerName nvarchar(250),
+		SampleContainerColour nvarchar(150),
+		SampleCollectedTime datetime,
+		BarcodeNo nvarchar(150),
+	    Reason nvarchar(150),
+		IsNewSampleYN nvarchar(5),
+		ExternalRefNo nvarchar(50),
+		OrgID int,
+		LocationID int,
+		CreatedBy bigint,
+		CreatedAt datetime,
+		CollectionStatus nvarchar(75))
+
+	
+	 INSERT INTO #tempSample (
+	         BookingID,                  SampleCode,             SampleName,     ContainerID,      ContainerName,        
+			 SampleContainerColour,      SampleCollectedTime,    BarcodeNo,      Reason,           IsNewSampleYN,
+			 ExternalRefNo,              OrgID,                  LocationID,     CreatedBy,        CreatedAt,
+			 CollectionStatus)
+	 SELECT  T.BookingID,                T.SampleCode,           T.SampleName,   T.ContainerID,    T.ContainerName, 
+	         T.SampleContainerColour,    T.SampleCollectedTime,  T.BarcodeNo,    T.Reason,         T.IsNewSampleYN,
+			 T.ExternalRefNo,            T.OrgID,                T.LocationID,   T.CreatedBy,      T.CreatedAt,
+			 T.CollectionStatus
+	 FROM ERPHCTestSampleInBound T with(Nolock)
+	 WHERE T.BookingID = @BookingID AND T.OrgID = @pOrgID 
+		   AND ISNULL(T.ISProcessed,'N') = 'N'
+	 Order by T.CreatedAt asc
+
+	 SELECT @SCount = Count(1)  
+     FROM   #tempSample 
+
+	 IF @SCount > 0
+	  BEGIN
+		 WHILE @SLoop <= @SCount  
+		 BEGIN  
+			  SELECT @ID = null,  
+					 @SampleCode = null,
+					 @SampleName = null,
+					 @ContainerID = null,
+					 @ContainerName = null,
+					 @SampleContainerColour = null,
+					 @SampleCollectedTime  = null,
+					 @SBarcodeNo = null,
+					 @Reason = null,
+					 @IsNewSampleYN = null,
+					 @ExternalRefNo = null,
+					 @SOrgID = null,
+					 @SLocationID = null,
+					 @SCreatedBy = null,
+					 @SCreatedAt = null,
+					 @CollectionStatus = null
+ 
+			  SELECT @ID = BookingID,  
+					 @SampleCode = SampleCode,
+					 @SampleName = SampleName,
+					 @ContainerID = ContainerID,
+					 @ContainerName = ContainerName,
+					 @SampleContainerColour = SampleContainerColour,
+					 @SampleCollectedTime  = SampleCollectedTime,
+					 @SBarcodeNo = BarcodeNo,
+					 @Reason = Reason,
+					 @IsNewSampleYN = IsNewSampleYN,
+					 @ExternalRefNo = ExternalRefNo,
+					 @SOrgID = OrgID,
+					 @SLocationID = LocationID,
+					 @SCreatedBy = CreatedBy,
+					 @SCreatedAt = CreatedAt,
+					 @CollectionStatus = CollectionStatus
+			  FROM   #tempSample  
+			  WHERE  Sno = @SLoop 
+
+			  IF NOT Exists(SELECT 1 FROM PreBookingSample with(Nolock) 
+			                WHERE BookingID = @ID and SampleCode = @SampleCode and ContainerID = @ContainerID and OrgID = @pOrgID )
+				 BEGIN
+					INSERT INTO PreBookingSample
+				    		 ( BookingID,      SampleCode,      SampleName,     SampleContainerColour,        SampleCollectedTime, 
+							   ContainerID,    ContainerName,   OrgID,          LocationID,                   ExternalRefNo,
+							   BarcodeNo,  	   Reason,          Createdby,      Createdat,                    CollectionStatus  )
+					SELECT     @ID,            @SampleCode,     @SampleName,    @SampleContainerColour,       @SampleCollectedTime,      
+							   @ContainerID,   @ContainerName,  @SOrgID,        @SLocationID,                 @ExternalRefNo,                
+							   @SBarcodeNo,    @Reason,         @SCreatedBy,    @SCreatedAt,                  @CollectionStatus 
+
+					UPDATE ERPHCTestSampleInBound
+					SET    IsProcessed = 'Y'
+					WHERE BookingID = @ID AND SampleCode = @SampleCode AND ContainerID = @ContainerID AND OrgID = @pOrgID
+				 END
+			  ELSE IF Exists(SELECT 1 FROM PreBookingSample with(Nolock) 
+			                WHERE BookingID = @ID and SampleCode = @SampleCode and ContainerID = @ContainerID and OrgID = @pOrgID )
+				 BEGIN
+					  UPDATE PreBookingSample
+					  SET    SampleCode = @SampleCode,
+							 SampleName = @SampleName,
+							 SampleContainerColour = @SampleContainerColour,
+							 SampleCollectedTime = @SampleCollectedTime,
+							 ContainerID = @ContainerID,
+							 ContainerName = @ContainerName,
+							 BarcodeNo = @SBarcodeNo,
+							 Reason = @Reason,
+							 Createdby = @TRFCreatedBy,
+							 Createdat = @TRFCreatedAt,
+							 CollectionStatus = @CollectionStatus
+					  WHERE BookingID = @ID and SampleCode = @SampleCode and ContainerID = @ContainerID and OrgID = @pOrgID 
+
+					UPDATE ERPHCTestSampleInBound
+					SET    IsProcessed = 'Y'
+					WHERE BookingID = @ID AND SampleCode = @SampleCode AND ContainerID = @ContainerID AND OrgID = @pOrgID
+				 END 
+
+			SELECT @SLoop = @SLoop + 1  
+		 END
+	END
+	--------------------------------------- Sample Process End ------------------------------------------
+
+	drop table #Payment;
+	drop table #Orders;
+	drop table #Bookings;
+	drop table #TRFFiles;
+	drop table #tempSample;
+  
+ END

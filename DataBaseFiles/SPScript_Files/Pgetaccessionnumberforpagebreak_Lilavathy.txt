@@ -1,0 +1,371 @@
+CREATE PROCEDURE [dbo].[Pgetaccessionnumberforpagebreak_Lilavathy] (@pVisitID        BIGINT,      
+                                                          @OrgID           INT,      
+                                                          @TemplateID      INT,      
+                                                          @InvestigationID VARCHAR(max)      
+--,@ContextInfo [UDT_Context] READONLY                                                                                                                                                                            
+)      
+AS      
+  BEGIN      
+      DECLARE @tblResultSelectID TABLE      
+        (      
+           Sno                 INT IDENTITY,      
+           AccessionNo         BIGINT,      
+           PrintSeparately     VARCHAR(3),      
+           PageNumber          INT,      
+           SequenceNo          INT,      
+           ID                  BIGINT,      
+           Type                VARCHAR(10),      
+           ISValue             VARCHAR(3) DEFAULT 'N',      
+           ReferredAccessionNo BIGINT,      
+           VisitID             BIGINT,      
+           OrgID               INT,      
+           ApprovedBy          BIGINT,      
+           Seq1                INT,      
+           Seq2                INT,      
+           Seq3                INT,      
+           Seq1Qualification   VARCHAR(max),      
+           Seq2Qualification   VARCHAR(max),      
+           Seq3Qualification   VARCHAR(max),      
+           Seq1Name            VARCHAR(300),      
+           Seq2Name            VARCHAR(300),      
+           Seq3Name            VARCHAR(300),      
+           Department          VARCHAR(300),      
+           Deptid              INT,
+		   PackageName        [NVARCHAR](MAX) 
+        )      
+      
+      --DECLARE @NewVID bigint ,@NewOrgID int       
+      --IF EXISTS (Select 1 from OrderedInvestigations WITH (NOLOCK) Where ReferredAccessionNo =@InvestigationID)      
+      --BEGIN       
+      --  Select @NewVID = VisitID,@NewOrgID=OrgID from OrderedInvestigations WITH (NOLOCK) where ReferredAccessionNo =@InvestigationID      
+      --END       
+      INSERT INTO @tblResultSelectID      
+                  (AccessionNo)      
+      SELECT DISTINCT item      
+      FROM   Fnsplit(@InvestigationID, ',')      
+      
+      /******    For Org Transferred Visits       ******/      
+      DECLARE @iCount INT      
+      DECLARE @j INT =1      
+      
+      SELECT @iCount = Count(1)      
+      FROM   @tblResultSelectID      
+      
+      WHILE( @iCount >= @j )      
+        BEGIN      
+            DECLARE @RefAccNo BIGINT      
+            DECLARE @AccNo BIGINT      
+            DECLARE @NewVID BIGINT      
+            DECLARE @NewOrgID INT      
+      
+            SELECT @AccNo = AccessionNo      
+            FROM   @tblResultSelectID      
+            WHERE  Sno = @j      
+      
+            IF EXISTS (SELECT 1      
+                       FROM   OrderedInvestigations WITH (NOLOCK)      
+                       WHERE  ReferredAccessionNo = @AccNo)      
+              BEGIN      
+                  SELECT @RefAccNo = AccessionNumber,      
+                         @NewVID = VisitID,      
+                         @NewOrgID = OrgID      
+                  FROM   OrderedInvestigations WITH (NOLOCK)      
+                  WHERE  ReferredAccessionNo = @AccNo      
+      
+                  UPDATE TMP      
+                  SET    TMP.ReferredAccessionNo = @RefAccNo,      
+                         TMP.VisitID = @NewVID,      
+                         TMP.OrgID = @NewOrgID      
+                  FROM   @tblResultSelectID TMP      
+                  WHERE  TMP.AccessionNo = @AccNo      
+              END      
+
+            SELECT @j = @j + 1      
+        END      
+      
+      /******    For Org Transferred Visits     ******/      
+      UPDATE TT      
+      SET    TT.ID = OI.ID,      
+             TT.Type = OI.Type      
+      FROM   OrderedInvestigations OI WITH (NOLOCK)      
+             INNER JOIN @tblResultSelectID TT      
+                     ON TT.AccessionNo = OI.AccessionNumber      
+      WHERE  OI.VisitID = @pVisitID      
+             AND OI.OrgID = @OrgID      
+      
+      UPDATE TT      
+      SET    TT.PrintSeparately = IOG.PrintSeparately,      
+             TT.SequenceNo = IOg.SequenceNo      
+      FROM   InvOrgGroup IOG WITH (NOLOCK)      
+             INNER JOIN @tblResultSelectID TT      
+                     ON TT.ID = IOG.AttGroupID      
+      WHERE  TT.Type = 'GRP'      
+             AND IOG.OrgID = @OrgID      
+      
+      UPDATE TT      
+      SET    TT.PrintSeparately = IOM.PrintSeparately,      
+             TT.SequenceNo = IOm.SequenceNo      
+      FROM   InvestigationOrgMapping IOM WITH (NOLOCK)      
+             INNER JOIN @tblResultSelectID TT      
+                     ON TT.ID = IOM.InvestigationID      
+      WHERE  TT.Type = 'INV'      
+             AND IOM.OrgID = @OrgID      
+      
+            
+      UPDATE TT      
+      SET    TT.ISValue = 'Y'      
+      FROM   @tblResultSelectID TT      
+             INNER JOIN PatientInvestigation PI WITH (NOLOCK)      
+                     ON PI.AccessionNumber = TT.AccessionNo      
+             INNER JOIN InvestigationValues IV WITH (NOLOCK)      
+                     ON IV.InvestigationID = PI.InvestigationID      
+                        AND IV.GroupID = PI.GroupID      
+                        AND PI.PatientVisitID = IV.PatientVisitID      
+      WHERE  Isnull(IV.Value, '') <> ''      
+             AND Ltrim(Rtrim(IV.Value)) <> '<br />'      
+             AND PI.PAtientVisitID = @pVisitID      
+             AND IV.Orgid = @OrgID      
+      
+      -- ISNULL(IV.Value,'')<>''   AND LTRIM(RTRIM(IV.Value)) <> ''        
+      /******    For Org Transferred Visits       ******/      
+      UPDATE TT      
+      SET    TT.ISValue = 'Y'      
+      FROM   @tblResultSelectID TT      
+             INNER JOIN PatientInvestigation PI WITH (NOLOCK)      
+                     ON PI.AccessionNumber = TT.ReferredAccessionNo      
+                        AND PI.PatientVisitID = TT.VisitID      
+             INNER JOIN InvestigationValues IV WITH (NOLOCK)      
+                     ON IV.InvestigationID = PI.InvestigationID      
+                        AND IV.GroupID = PI.GroupID      
+                        AND PI.PatientVisitID = IV.PatientVisitID      
+                        AND IV.OrgID = TT.OrgID      
+      WHERE  Isnull(IV.Value, '') <> ''      
+             AND Ltrim(Rtrim(IV.Value)) <> '<br />'      
+      
+      --and PI.PAtientVisitID =@pVisitID and IV.Orgid=@OrgID         
+      /******    For Org Transferred Visits       ******/      
+      DELETE FROM @tblResultSelectID      
+      WHERE  ISValue = 'N'      
+      
+      DECLARE @count INT=1      
+      DECLARE @pointer INT=1      
+      DECLARE @PageNumber INT=0      
+      
+      SELECT @count = Max(Sno)      
+      FROM   @tblResultSelectID      
+      
+      WHILE( @count >= @pointer )      
+        BEGIN      
+            IF EXISTS(SELECT *      
+                      FROM   @tblResultSelectID      
+                      WHERE  Sno = @pointer      
+                             AND Isnull(PrintSeparately, '') <> 'N')      
+              BEGIN      
+                  SELECT @PageNumber = @PageNumber + 1      
+      
+                  UPDATE @tblResultSelectID      
+                  SET    PageNumber = @PageNumber      
+                  WHERE  Sno = @pointer      
+              END      
+      
+            SELECT @pointer = @pointer + 1      
+        END      
+      
+      UPDATE @tblResultSelectID      
+      SET    PageNumber = @PageNumber + 1      
+      WHERE  Isnull(PrintSeparately, 'N') = 'N'      
+      
+      UPDATE T      
+      SET    T.ApprovedBy = PIV.ApprovedBy      
+      FROM   PatientInvestigation PIV (nolock)      
+             INNER JOIN @tblResultSelectID T      
+                     ON PIV.AccessionNumber = T.AccessionNo      
+                        AND PIV.OrgID = @OrgID      
+      
+      --select distinct T.AccessionNo, IOM.DeptID,Upper(Isnull(IDM.DeptName,'')) as DeptName      
+      DECLARE @FinalTabl TABLE      
+        (      
+           Accessionno INT,      
+           deptid      INT,      
+           deptname    VARCHAR(Max)      
+        )      
+      
+      INSERT INTO @FinalTabl      
+      SELECT DISTINCT T.AccessionNo,      
+  IDM.DeptID,      
+                      IDM.DeptName      
+      FROM   @tblResultSelectID T      
+             INNER JOIN PatientInvestigation PIV  WITH (NOLOCK)       
+                     ON PIV.AccessionNumber = T.AccessionNo      
+             INNER JOIN InvestigationOrgMapping IOM  WITH (NOLOCK)       
+                     ON piv.InvestigationID = IOM.InvestigationID      
+             INNER JOIN InvDeptMaster IDM WITH (NOLOCK)     
+                     ON IDM.DeptID = IOM.DeptID      
+      WHERE  PIV.PatientVisitID = @pVisitID      
+             AND PIV.OrgID = @OrgID      
+      
+      UPDATE T      
+      SET    T.Department = FT.DeptName,      
+             T.Deptid = FT.DeptID      
+      FROM   @tblResultSelectID T      
+             INNER JOIN @FinalTabl FT      
+                     ON FT.Accessionno = T.AccessionNo      
+      
+      --LEFT JOIN InvDeptSignatory IDS on PIV.ApprovedBy=IDS.LoginID      
+      --------------------Added by Baskaran-------------------------      
+      ---------------------Micro RDL Dept Signature Logic ----------------      
+      DECLARE @max INT      
+      DECLARE @min INT      
+      
+      SET @max=(SELECT Max(Sno)      
+                FROM   @tblResultSelectID)      
+      SET @min=(SELECT Min(sno)      
+                FROM   @tblResultSelectID)      
+      
+      WHILE( @min <= @max )      
+        BEGIN      
+            DECLARE @deptid INT      
+      
+            SELECT @deptid = DeptID      
+            FROM   @tblResultSelectID      
+            WHERE  Sno = @min      
+      
+            --UPDATE T      
+            --SET    T.Seq1 = IDS.LoginID      
+            --FROM   @tblResultSelectID T,      
+            --       InvDeptSignatory IDS      
+            --WHERE  IDS.SeqNo = 1      
+            --       AND IDS.DeptID = @deptid      
+            --       AND sno = @min      
+      
+            --UPDATE T      
+            --SET    T.Seq2 = IDS.LoginID      
+            --FROM   @tblResultSelectID T,      
+            --       InvDeptSignatory IDS      
+            --WHERE  IDS.SeqNo = 2      
+            --       AND IDS.DeptID = @deptid      
+            --       AND sno = @min      
+      
+            --DECLARE @Qualification1Login INT      
+            --DECLARE @Qualification2Login INT      
+      
+            --SELECT @Qualification1Login = LoginID      
+            --FROM   InvDeptSignatory      
+            --WHERE  DeptID = @deptid      
+            --       AND SeqNo = 1      
+      
+            --SELECT @Qualification2Login = LoginID      
+            --FROM   InvDeptSignatory      
+            --WHERE  DeptID = @deptid      
+            --       AND SeqNo = 2      
+   ------------------------------------------------------------------------  
+   -- Changed Join condition here  
+   ------------------------------------------------------------------------        
+            UPDATE T        
+            SET    T.Seq1Qualification = U.Qualification,        
+                   Seq1Name = U.Name        
+            FROM   @tblResultSelectID T INNER JOIN         
+                   Users U        
+            ON U.LoginID = ApprovedBy        
+                   AND T.Sno = @min        
+      
+            --UPDATE T      
+            --SET    T.Seq2Qualification = U.Qualification,      
+            --  Seq2Name = U.Name      
+            --FROM   @tblResultSelectID T,      
+            --       Users U      
+            --WHERE  U.LoginID = @Qualification2Login      
+            --       AND T.Sno = @min      
+      
+            DECLARE @approvedby INT      
+      
+            SELECT @approvedby = ApprovedBy      
+            FROM   @tblResultSelectID      
+            WHERE  Sno = @min      
+      
+            IF EXISTS(SELECT 1      
+                      FROM   @tblResultSelectID      
+                      WHERE  Seq1 = @approvedby)      
+              BEGIN      
+                  -- select 'A'      
+                  UPDATE @tblResultSelectID      
+                  SET    Seq2 = NULL      
+                  WHERE  Sno = @min      
+              END      
+            ELSE IF EXISTS(SELECT 1      
+                      FROM   @tblResultSelectID      
+                      WHERE  Seq2 = @approvedby)      
+              BEGIN      
+                  --select 'B'      
+                  UPDATE @tblResultSelectID      
+                  SET    Seq1 = NULL      
+                  WHERE  Sno = @min      
+              END      
+      
+            IF( ( @approvedby <> (SELECT Seq1      
+                                  FROM   @tblResultSelectID      
+                                  WHERE  Sno = @min) )      
+                or ( @approvedby <> (SELECT Seq2      
+                                      FROM   @tblResultSelectID      
+                                      WHERE  Sno = @min) ) )      
+              BEGIN      
+                  --select 'C'      
+                  UPDATE @tblResultSelectID      
+                  SET    Seq2 = NULL,      
+                         seq1 = NULL,      
+                         Seq3 = @approvedby      
+                  WHERE  Sno = @min      
+      
+                  UPDATE T      
+                  SET    Seq3Name = U.Name,      
+                         Seq3Qualification = U.Qualification      
+                  FROM   @tblResultSelectID T      
+                         INNER JOIN Users U      
+                                 ON T.Seq3 = U.LoginID      
+                  WHERE  T.Sno = @min      
+              END      
+      
+            SET @min= @min + 1      
+        END      
+      
+  UPDATE T      
+ set seq1=null,      
+ Seq2=null,      
+ Seq3=null,      
+  Seq1Qualification=null,      
+     Seq2Qualification=null,      
+     Seq3Qualification=null,      
+  Seq1Name=null,      
+  Seq2Name=null,      
+  Seq3Name=null      
+   FROM @tblResultSelectID T inner join PatientInvestigation p(nolock) on T.AccessionNo=p.AccessionNumber      
+ WHERE p.STATUS IN ('Pending') and p.ApprovedBy<>0       
+      
+  Update T set Seq1=NULL,Seq2=NULL    from @tblResultSelectID T  inner join       
+  Orderedinvestigations OI (nolock) on T.AccessionNo=OI.AccessionNumber       
+   where OI.Visitid=@pVisitID and OI.Status not in('Approve')      
+      
+UPDATE T  SET    PackageName = OI.PkgName FROM   @tblResultSelectID T  
+ INNER JOIN OrderedInvestigations OI WITH (NOLOCK)  
+ ON OI.AccessionNumber = T.AccessionNo WHERE  OI.OrgID = @OrgID 
+ AND OI.VisitID = @pVisitID  AND Isnull(OI.PkgName, '') <> ''  
+      ---BM--      
+      SELECT DISTINCT Ltrim(Rtrim(AccessionNo))AS AccessionNo,      
+                      PageNumber,      
+                      SequenceNo,      
+                      ApprovedBy,      
+                      Seq1,      
+                      Seq2,      
+                      Seq3,      
+                      Seq1Qualification,      
+                      Seq2Qualification,      
+                      Seq3Qualification,      
+                      'Dr.'+' '+Seq1Name as Seq1Name,      
+                      'Dr.'+' '+Seq2Name as Seq2Name,      
+                     'Dr.'+' '+ Seq3Name as Seq3Name,      
+                      Deptid,      
+                      Department,
+					  PackageName     
+      FROM   @tblResultSelectID      
+      ORDER  BY AccessionNo      
+  END      

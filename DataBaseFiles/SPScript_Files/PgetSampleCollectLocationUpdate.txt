@@ -1,0 +1,25 @@
+CREATE proc [dbo].[PgetSampleCollectLocationUpdate]
+(
+@VisitNumber NVarchar(50),
+@Orgid int,
+@OrgAddressid bigint
+)
+    
+as
+BEGIN
+BEGIN TRANSACTION
+Update OI set OI.ResCaptureLoc =@OrgAddressid
+from PatientVisit PV
+Inner Join OrderedInvestigations OI (nolock) ON PV.ORGID=OI.ORGID AND PV.PatientVisitid =OI.VisitID 
+Inner Join PatientInvSample PIS (nolock) ON PIS.ORGID=OI.ORGID AND PIS.PatientVisitID =OI.VisitID 
+Inner join organizationAddress OA (nolock) on PV.Orgid = OA.Orgid
+Where OI.Status='SampleTransferred' AND OI.orgid=@Orgid and PV.VisitNumber=@VisitNumber and OI.ResCaptureLoc=PIS.RecSampleLocID
+
+Update PIS set RecSampleLocID =@OrgAddressid 
+from PatientVisit PV
+Inner Join OrderedInvestigations OI (nolock) ON PV.ORGID=OI.ORGID AND PV.PatientVisitid =OI.VisitID 
+Inner Join PatientInvSample PIS (nolock) ON PIS.ORGID=OI.ORGID AND PIS.PatientVisitID =OI.VisitID 
+Where OI.Status='SampleTransferred' AND OI.orgid=@Orgid and PV.VisitNumber=@VisitNumber and OI.ResCaptureLoc=PIS.RecSampleLocID
+COMMIT
+
+END

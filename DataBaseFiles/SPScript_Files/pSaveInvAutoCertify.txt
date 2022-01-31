@@ -1,0 +1,42 @@
+CREATE PROCEDURE [dbo].[pSaveInvAutoCertify]
+@InvAutoCertify [dbo].[UDTInvAutoCertifyValidation] READONLY,
+@ContextInfo [UDT_Context] READONLY
+AS
+BEGIN
+DECLARE @CreatedAt DATETIME,@CreatedBy BIGINT,@OrgID INT
+SELECT @CreatedAt=GETDATE(),@CreatedBy=LoginID,@OrgID=OrgID FROM @ContextInfo
+
+IF EXISTS  (SELECT 1  FROM InvAutoCertifyValidation IAV (NOLOCK)
+INNER JOIN @InvAutoCertify IAC ON IAV.InvestigationId =IAC.InvestigationId
+AND IAV.Type=IAC.Type AND IAV.OrgID=@OrgID)
+BEGIN
+
+UPDATE IAV
+SET IAV.Isautocertify=IAC.Isautocertify,
+IAV.IsDeviceError=IAC.IsDeviceError,
+IAV.IsQCstatus=IAC.IsQCstatus,
+IAV.IsCriticalValue=IAC.IsCriticalValue,
+IAV.IsDeltavalue=IAC.IsDeltavalue,
+IAV.IsAutoauthorizationrange=IAC.IsAutoauthorizationrange,
+IAV.IsGroupDependencies=IAC.IsGroupDependencies,
+IAV.IsCrossParameterCheck=IAC.IsCrossParameterCheck,
+IAV.IsTechnicianVerificationNeeded=IAC.IsTechnicianVerificationNeeded,
+IAV.ModifiedAt=@CreatedAt,
+IAV.ModifiedBy=@CreatedBy
+FROM InvAutoCertifyValidation IAV (NOLOCK)
+INNER JOIN @InvAutoCertify IAC ON IAV.InvestigationId =IAC.InvestigationId
+AND IAV.Type=IAC.Type AND IAV.OrgID=@OrgID
+END
+ELSE
+BEGIN
+INSERT INTO InvAutoCertifyValidation (InvestigationId,Type,Isautocertify,IsDeviceError,IsQCstatus,IsCriticalValue,IsDeltavalue,
+                                     IsAutoauthorizationrange,IsGroupDependencies,IsCrossParameterCheck,IsTechnicianVerificationNeeded,
+ CreatedAt,CreatedBy,OrgID)
+SELECT InvestigationId,Type,Isautocertify,IsDeviceError,IsQCstatus,IsCriticalValue,IsDeltavalue,
+      IsAutoauthorizationrange,IsGroupDependencies,IsCrossParameterCheck,IsTechnicianVerificationNeeded,
+  @CreatedAt,@CreatedBy ,@OrgID
+   FROM @InvAutoCertify
+
+END
+
+END

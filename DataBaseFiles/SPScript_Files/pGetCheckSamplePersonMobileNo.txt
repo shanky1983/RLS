@@ -1,0 +1,42 @@
+--select top 100 * from UserAddress order by 1 desc 
+--Created by Arumugam
+--exec pGetCheckSamplePersonMobileNo '1041797','9790494301','UPDATE'
+
+--select * from login
+CREATE PROCEDURE [dbo].[pGetCheckSamplePersonMobileNo]
+	@pLoginID   [nvarchar](255),
+	@pMobileNo    [nvarchar](20),
+	@pMode        [nvarchar](20)
+WITH EXECUTE AS OWNER
+AS
+BEGIN  
+
+ DECLARE @pOUserIDUSer BIGINT   
+  SELECT @pOUserIDUSer = UserID FROM Users WHERE LoginID = @pLoginID  
+
+	  DECLARE @Count INT
+	  SET @Count = 0
+
+	  IF (@pMode = 'UPDATE')
+		  BEGIN	  
+		   IF EXISTS (select 1 from UserAddress where  UserID <> @pOUserIDUSer AND MobileNumber = @pMobileNo)	 
+			 SET @Count = 1   
+		   ELSE
+			 SET @Count = 0
+	  
+		  END
+	  ELSE
+		  BEGIN	  
+		   IF EXISTS (select 1 from UserAddress where  MobileNumber = @pMobileNo)	 
+			 SET @Count = 1   
+		   ELSE
+			 SET @Count = 0
+	  
+		  END
+
+		 -- PRINT @Count
+		IF(@Count = 1)
+			return 0
+		ELSE
+			return -1
+END

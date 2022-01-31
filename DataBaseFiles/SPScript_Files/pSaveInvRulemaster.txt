@@ -1,0 +1,211 @@
+CREATE PROCEDURE [dbo].[pSaveInvRulemaster]
+(
+ @InvRuleMaster [dbo].[InvRuleMaster] READONLY,
+ @PatientAgeGenderRule [dbo].[PatientAgeGenderRule] READONLY,
+ @TestResultsRule [dbo].[TestResultsRule] READONLY,
+ @MachineErrorRule [dbo].[MachineErrorRule] READONLY,
+ @pOrgID INT,
+ @RemarksId int,
+@ContextInfo [UDT_Context] READONLY  
+ )
+ AS
+ BEGIN
+
+ declare @Remarksval nvarchar(max)
+ declare @ErrRemarksId int=0
+ select top 1 @Remarksval =InvRemarksValue from @InvRuleMaster where PostTriggerFunction='Add Medical Remarks'
+ if(isnull(@Remarksval,'')!='')
+ Begin
+ SELECT  top 1 @ErrRemarksId= item                                    
+FROM   Fnsplit(@Remarksval, '~') 
+End
+
+ if exists (select 1 from @InvRuleMaster where RuleMasterId=0)
+ Begin
+ declare @RuleMasterId int
+ Insert into InvRuleMaster(
+RuleTypeID,
+InvestigationID,
+PostTriggerFunctionId,
+PostTriggerFunction,
+InvRemarksValue,
+Orgid,InvestigationName,InvType)
+select RuleTypeID,
+InvestigationID,
+PostTriggerFunctionId,
+PostTriggerFunction,
+InvRemarksValue,@pOrgID,InvestigationName,InvType from @InvRuleMaster
+
+SELECT @RuleMasterId = Scope_identity()
+ End
+ else
+ Begin
+ SELECT top 1 @RuleMasterId =RuleMasterId from @InvRuleMaster
+ update IR set IR.InvestigationID=IRR.InvestigationID,IR.InvRemarksValue=IRR.InvRemarksValue,IR.Orgid=IRR.OrgId,IR.PostTriggerFunction=IRR.PostTriggerFunction,IR.PostTriggerFunctionId=IRR.PostTriggerFunctionId,
+IR.RuleTypeID=IRR.RuleTypeID,IR.InvestigationName=IRR.InvestigationName from InvRuleMaster IR
+ Inner Join @InvRuleMaster IRR on IRR.RuleMasterId=IR.RuleMasterId
+ End
+
+
+if(@RemarksId=0)
+begin
+update PatientAgeGenderRule set isactive=0      
+where PatientAgeGenderRuleId  not in (select PatientAgeGenderRuleId from @PatientAgeGenderRule) and RuleMasterId=@RuleMasterId
+End
+Else
+begin
+update PatientAgeGenderRule set isactive=0      
+where PatientAgeGenderRuleId  not in (select PatientAgeGenderRuleId from @PatientAgeGenderRule) and RuleMasterId=@RuleMasterId and Remarksid=@RemarksId
+End
+
+Insert into PatientAgeGenderRule(
+RuleMasterId,
+ComponentName,
+Gender,
+SubCategory,
+AgeType,
+AgeOptr,
+AgeValue1,
+Agevalue2,
+LogicalOperator,RemarksId,PatientCondition)
+select @RuleMasterId,
+ComponentName,
+Gender,
+SubCategory,
+AgeType,
+AgeOptr,
+AgeValue1,
+Agevalue2,
+LogicalOperator,RemarksId,
+'if(Gender is '+Gender+' and Age is '+AgeOptr+' '+cast(AgeValue1 as varchar)+' '+case when AgeValue2=0 then ' ' else cast(AgeValue2 as varchar) end + ' '+AgeType +' '+
+case when LogicalOperator='0' then ' ' else LogicalOperator end +')' from @PatientAgeGenderRule where PatientAgeGenderRuleId=0
+
+update PA set PA.ComponentName=PAG.ComponentName,PA.Gender=PAG.Gender,PA.SubCategory=PAG.SubCategory,PA.AgeType=PAG.AgeType,PA.AgeOptr=PAG.AgeOptr,
+PA.AgeValue1=PAG.AgeValue1,PA.Agevalue2=PAG.Agevalue2,PA.LogicalOperator=PAG.LogicalOperator,PA.RemarksId=PAG.RemarksId ,
+PA.PatientCondition='if(Gender is '+PAG.Gender+' and Age is '+PAG.AgeOptr+' '+cast(PAG.AgeValue1 as varchar)+' '+case when PAG.AgeValue2=0 then ' ' else cast(PAG.AgeValue2 as varchar) end + ' '+PAG.AgeType +' '+
+case when PAG.LogicalOperator='0' then ' ' else PAG.LogicalOperator end +')'
+from  PatientAgeGenderRule PA
+Inner Join @PatientAgeGenderRule PAG on PA.PatientAgeGenderRuleId=PAG.PatientAgeGenderRuleId where PAG.PatientAgeGenderRuleId >0
+
+if(@RemarksId=0)
+begin
+update TestResultsRule set isactive=0
+where TestResultsRuleId  not in (select TestResultsRuleId from @TestResultsRule) and RuleMasterId=@RuleMasterId
+End
+Else
+begin
+update TestResultsRule set isactive=0
+where TestResultsRuleId  not in (select TestResultsRuleId from @TestResultsRule) and RuleMasterId=@RuleMasterId and Remarksid=@RemarksId
+End
+
+Insert into TestResultsRule(
+RuleMasterId,
+ComponentName,
+ResultInvestigationID,
+ResultInvestigation,
+ResultType,
+ResultOptr,
+ResultValue1,
+Resultvalue2,
+LogicalOperator,RemarksId,RuleCondition)
+select @RuleMasterId,
+ComponentName,
+ResultInvestigationID,
+ResultInvestigation,
+ResultType,
+ResultOptr,
+ResultValue1,
+Resultvalue2,
+LogicalOperator,RemarksId,
+'if('+ResultInvestigation+' Result is '+ResultOptr+' '+case when Resultvalue1='0'  then ' ' else Resultvalue1 end+' '+case when Resultvalue2='0' then ' ' else Resultvalue2 end + ' '+
+case when LogicalOperator='0' then ' ' else LogicalOperator end +')'
+ from @TestResultsRule where TestResultsRuleId=0
+
+Update TR set TR.ComponentName=TRR.ComponentName,TR.ResultInvestigationID=TRR.ResultInvestigationID,TR.ResultInvestigation=TRR.ResultInvestigation,TR.ResultType=TRR.ResultType,
+TR.ResultOptr=TRR.ResultOptr,TR.ResultValue1=case when TRR.ResultType='RES' then '0' else TRR.ResultValue1 end,TR.Resultvalue2=case when TRR.ResultType='RES' then '0' else TRR.Resultvalue2 end,TR.LogicalOperator=TRR.LogicalOperator,TR.RemarksId=TRR.RemarksId, 
+TR.RuleCondition='if('+TRR.ResultInvestigation+' Result is '+TRR.ResultOptr+' '+case when TRR.Resultvalue1='0'  then ' ' else TRR.Resultvalue1 end+' '+case when TRR.Resultvalue2='0' then ' ' else TRR.Resultvalue2 end + ' '+
+case when TRR.LogicalOperator='0' then ' ' else TRR.LogicalOperator end +')'
+from TestResultsRule TR
+Inner join @TestResultsRule TRR on TR.TestResultsRuleId=TRR.TestResultsRuleId
+where TRR.TestResultsRuleId>0
+
+
+if(@RemarksId=0)
+begin
+update MachineErrorRule set isactive=0   
+where MachineErrorRuleId  not in (select MachineErrorRuleId from @MachineErrorRule) and RuleMasterId=@RuleMasterId
+End
+Else
+begin
+update MachineErrorRule set isactive=0   
+where MachineErrorRuleId  not in (select MachineErrorRuleId from @MachineErrorRule) and RuleMasterId=@RuleMasterId and Remarksid=@RemarksId
+End
+
+insert into MachineErrorRule(
+RuleMasterId,
+ComponentName,
+ErrorCode,
+LogicalOperator,ErrorCondition,RemarksId)
+select @RuleMasterId,
+ComponentName,
+ErrorCode,
+LogicalOperator,
+'if('+Componentname+' Code is '+ErrorCode+' '+ case when LogicalOperator='0' then ' ' else LogicalOperator end +')' ,@ErrRemarksId
+ from @MachineErrorRule where MachineErrorRuleId=0
+
+Update ME set ME.ComponentName=MER.ComponentName,ME.ErrorCode=MER.ErrorCode,ME.LogicalOperator=MER.LogicalOperator,ME.RemarksId=@ErrRemarksId,
+ME.ErrorCondition='if('+MER.Componentname+' Code is '+MER.ErrorCode+' '+ case when MER.LogicalOperator='0' then ' ' else MER.LogicalOperator end +')' 
+ from MachineErrorRule ME
+Inner join @MachineErrorRule MER on ME.MachineErrorRuleId=MER.MachineErrorRuleId
+where MER.MachineErrorRuleId>0
+
+Create table #temp
+(
+RuleMasterId int,
+RuleTypeID int,
+InvestigationName nvarchar(200),
+InvestigationID bigint,
+InvType nvarchar(100),
+RemarksId int,
+Code nvarchar(200),
+ComponentName nvarchar(200),
+PostTriggerFunction  nvarchar(200),
+Condition nvarchar(max)
+)
+insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType, PAG.RemarksId,M.DisplayText as Code,Isnull(PAG.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,PAG.PatientCondition from InvRuleMaster IR(nolock)
+		 Inner Join PatientAgeGenderRule PAG(nolock) on IR.RuleMasterId=PAG.RuleMasterId and  PAG.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 Inner join @InvRuleMaster IRR on IRR.RuleTypeId=IR.RuleTypeId AND IRR.InvestigationId=IR.InvestigationID and IRR.OrgId=IR.Orgid
+		 where   IR.IsActive=1
+		 order by PatientAgeGenderRuleId
+		   
+		  insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,TR.remarksID as RemarksId,M.DisplayText as Code,isnull(TR.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,TR.RuleCondition from InvRuleMaster IR(nolock)
+		 Inner join TestResultsRule TR (nolock) on IR.RuleMasterId=TR.RuleMasterId and TR.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 Inner join @InvRuleMaster IRR on IRR.RuleTypeId=IR.RuleTypeId AND IRR.InvestigationId=IR.InvestigationID and IRR.OrgId=IR.Orgid
+		 where   IR.IsActive=1 
+		 order by TestResultsRuleId
+		 
+		 insert into #temp(RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,ComponentName,PostTriggerFunction,Condition)
+		 select  IR.RuleMasterId,IR.RuleTypeID,IR.InvestigationName,IR.InvestigationID,IR.InvType,ME.remarksID as RemarksId,M.DisplayText as Code,isnull(ME.ComponentName,'') as ComponentName,IR.PostTriggerFunction
+,ME.ErrorCondition from InvRuleMaster IR(nolock)
+		 Inner join MachineErrorRule ME(nolock) on  ME.RuleMasterId = IR.RuleMasterId and  ME.IsActive=1
+		 Inner Join metadata M(nolock) on M.metadataid=IR.RuleTypeId
+		 Inner join @InvRuleMaster IRR on IRR.RuleTypeId=IR.RuleTypeId AND IRR.InvestigationId=IR.InvestigationID and IRR.OrgId=IR.Orgid
+		 where   IR.IsActive=1
+		 order by MachineErrorRuleId
+
+		Select distinct RuleMasterId,RuleTypeID,InvestigationName,InvestigationID,InvType,RemarksId,Code,
+		STUFF((SELECT Distinct ',' +  ComponentName FROM #temp TTT where T.RuleMasterId=TTT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  ComponentName,PostTriggerFunction,STUFF(
+                 (SELECT ',' + Condition FROM #temp TT where  T.RuleMasterId=TT.RuleMasterId FOR XML PATH ('')), 1, 1, ''
+               ) as  Condition from #temp T
+		 group by RuleMasterId,RuleTypeID,Remarksid,InvestigationID,InvestigationName,InvType,RemarksId,Code,ComponentName,PostTriggerFunction
+		
+		 drop table #temp
+		 
+ End

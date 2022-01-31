@@ -1,0 +1,387 @@
+update ClientMaster set InvoiceOrgID=OrgID, InvoiceClientID=ClientID where OrgID=68        
+update ClientMaster set InvoiceOrgID=OrgID, InvoiceClientID=ClientID where OrgID=82
+update ClientMaster set InvoiceOrgID=OrgID,InvoiceClientID=ClientID where OrgID=86
+
+
+
+---------------------Karkuzhali---------------------------
+Update Organization set Isbaseorg='Y'
+----------------------End--------------------------------
+
+
+UPDATE ClientMaster SET InvoiceOrgID=OrgID,InvoiceClientID=ClientID
+
+
+---------------------Karkuzhali---------------------------
+Update RateMaster set SubType='Agreement'
+----------------------End--------------------------------
+---------------------Arivalagan K---------------------------
+update p set  p.Pattern='{CCODE}{ORGCENTRECODE}{Number}'
+from IDPatternMaster p where p.OrgID=81 and p.CategoryID=278
+
+UPDATE oa SET oa.CityCode='A'
+from OrganizationAddress oa where oa.OrganizationID=81 AND oa.AddressID=131
+UPDATE oa SET oa.CityCode='B'
+from OrganizationAddress oa where oa.OrganizationID=81 AND oa.AddressID=141
+UPDATE oa SET oa.CityCode='C'
+from OrganizationAddress oa where oa.OrganizationID=81 AND oa.AddressID=142
+----------------------End--------------------------------
+
+-------------------ramya--------------
+update TaskActions set ActionName='Approval' where ActionName='approvel'
+---- Localization changes -- Seethaladevi - Starts ---------
+
+Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=177
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='LabReception'
+		Update TaskActions set Category='Restitución' where LanguageCode='es-ES' and TaskActionID in (	Select TaskActionID from TaskActionOrgMapping where Orgid=@Orgid and RoleID=@Roleid) and ActionName='Refund'
+		GO
+
+		Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=177
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='LabReception'
+        Update TaskActions set Category=N'Debido WriteOff aprobación' where LanguageCode='es-ES' and TaskActionID in (Select TaskActionID from TaskActionOrgMapping where Orgid=86 and RoleID=3504) and ActionName='Due WriteOff Approval'
+		Go
+
+		Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=177
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='LabReception'
+        Update TaskActions set Category=N'Las restituciones' where LanguageCode='es-ES' and TaskActionID in (Select TaskActionID from TaskActionOrgMapping where Orgid=86 and RoleID=3504) and ActionName='CancelBill'
+		Go
+
+---------- Localization changes - Seethaladevi Ends ------------
+
+
+--------------------------------ramya changes------------------------------------------------------------------
+
+Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=180
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='Administrator'
+		Update TaskActions set Category='Pago' where LanguageCode='es-ES' and TaskActionID in (	Select TaskActionID from TaskActionOrgMapping where Orgid=@Orgid and RoleID=@Roleid) and ActionName='PerformRefund'
+		GO
+
+		Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=180
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='Administrator'
+        Update TaskActions set Category=N'Protocolo aprobación' where LanguageCode='es-ES' and TaskActionID in (Select TaskActionID from TaskActionOrgMapping where Orgid=@Orgid and RoleID=@Roleid) and ActionName='ProtocolApprovel'
+		Go
+
+		Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=180
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='Accession'
+        Update TaskActions set Category=N'recoger la Muestra' where LanguageCode='es-ES' and TaskActionID in (Select TaskActionID from TaskActionOrgMapping where Orgid=@Orgid and RoleID=@Roleid) and ActionName='GenerateBarCode'
+		Go
+
+                Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=180
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='Administrator'
+        Update TaskActions set Category=N'nulo' where LanguageCode='es-ES' and TaskActionID in (Select TaskActionID from TaskActionOrgMapping where Orgid=@Orgid and RoleID=@Roleid) and ActionName='Due WriteOff'
+		Go
+Declare @Orgid int, @TaskActionid int, @Roleid int
+		set @Orgid=180
+		select @Roleid=RoleID from Role where Orgid=@Orgid and RoleName='SrLabTech'
+        Update TaskActions set Category=N'Con validación de retención' where LanguageCode='es-ES' and Category='WithholdValidation'
+
+             Go
+
+update MetaDataOrgMapping set displaytext='Cambiable' where displaytext='Variable' and langcode='es-ES'
+update MetaValue_Common set Value='El médico' where Code='DOCTOR' and langcode='es-ES'
+update MetaValue_Common set Value='Clinica' where code='HOSPITAL'  and langcode='es-ES'
+
+INSERT INTO ActionRoleMapping (ActionID,RoleID,RedirectPageID,SearchTypeID,IsMapped)VALUES(42,3507,55,11,'Y')
+INSERT INTO ActionRoleMapping (ActionID,RoleID,RedirectPageID,SearchTypeID,IsMapped)VALUES(42,3507,55,10,'Y')
+INSERT INTO ActionRoleMapping (ActionID,RoleID,RedirectPageID,SearchTypeID,IsMapped)VALUES(149,3507,460,11,'Y')
+INSERT INTO ActionRoleMapping (ActionID,RoleID,RedirectPageID,SearchTypeID,IsMapped)VALUES(150,3507,352,11,'Y')
+
+---------------------------------------end----------------------------------------------------------------------------------------
+
+
+
+----------------------------------labquickbilling performance fix--------------------------------------------------
+go
+--CREATE NONCLUSTERED INDEX IDX_InvOrggroup_Orgid2
+--ON [dbo].[InvOrgGroup] ([OrgID])
+--INCLUDE ([AttGroupID],[DisplayText],[IsNonOrderable],[Status],[Gender],[TestCode],[BillingName])
+--go
+--sp_Tables '%codesheme%'
+--InvCodeSchemeMapping
+--Select
+--IOM.Investigationid,IOM.Orgid,IOM.TestCode,CM.CodeName
+Update IOM Set TestCode = CM.CodeName
+From InvestigationOrgmapping IOM WITH (nolock)
+INNER JOIN CodingSchemeOrgMapping CSOM WITH (NOLOCK) on IOM.Orgid = CSOM.OrgID
+Inner join CodingSchemeMaster CSM WITH (NOLOCK) ON CSOM.CodeTypeID = CSM.CodeTypeID
+Inner join CodeMaster CM (nolock) on CSM.Codetypeid = CM.CodeSchemeid
+Inner join CodeMapper CMAP (nolock) on CM.CodeMasterid = CMAP.CodeMasterid and CMAP.IdentifyingID = IOM.Investigationid
+WHERE  VersionNo = 1
+AND IsPrimary = 'Y'
+and CMAP.IdentifyingType = 'Investigations'
+go
+--Select
+--IOG.Orggroupid,IOG.Orgid,IOG.TestCode,CM.CodeName,IGM.TestCode
+Update IOG Set TestCode = CM.CodeName
+From InvOrggroup IOG WITH (nolock)
+INNER JOIN InvgroupMaster IGM WITH (nolock) on IOG.Attgroupid = IGM.Groupid 
+INNER JOIN CodingSchemeOrgMapping CSOM WITH (NOLOCK) on IOG.Orgid = CSOM.OrgID
+INNER JOIN CodingSchemeMaster CSM WITH (NOLOCK) ON CSOM.CodeTypeID = CSM.CodeTypeID
+INNER JOIN CodeMaster CM (nolock) on CSM.Codetypeid = CM.CodeSchemeid
+INNER JOIN CodeMapper CMAP (nolock) on CM.CodeMasterid = CMAP.CodeMasterid and CMAP.IdentifyingID = IOG.Orggroupid and CMAP.IdentifyingType = IGM.Type
+WHERE  VersionNo = 1
+AND IsPrimary = 'Y'
+and CMAP.IdentifyingType in ('GRP','PKG')
+go
+--SELECT @CodeTypeID = Max(CSM.CodeTypeID)
+go
+/*
+--48841
+--select 233847-7121
+--226726
+go
+Select
+distinct CSOM.Orgid
+From CodingSchemeOrgMapping CSOM WITH (NOLOCK) --on IOM.Orgid = CSOM.OrgID
+Inner join CodingSchemeMaster CSM WITH (NOLOCK) ON CSOM.CodeTypeID = CSM.CodeTypeID
+WHERE  VersionNo = 1
+AND IsPrimary = 'Y'
+go
+select  Count(1) From InvestigationOrgmapping IOM WITH (nolock) Where Orgid  not in 
+(
+Select
+distinct CSOM.Orgid
+From CodingSchemeOrgMapping CSOM WITH (NOLOCK) --on IOM.Orgid = CSOM.OrgID
+Inner join CodingSchemeMaster CSM WITH (NOLOCK) ON CSOM.CodeTypeID = CSM.CodeTypeID
+WHERE  VersionNo = 1
+AND IsPrimary = 'Y'
+)
+*/
+
+--------------------------------------------------end---------------------------------------------------------------
+
+--------------------------------------------Arunraj kernel_V2 New billing and result entry page -------------------------------------------------------
+
+Declare @OrgID bigint, @Directive nvarchar(255), @DisplayText nvarchar(255), @DirectivePath nvarchar(255)
+Select @OrgID = OrgID from Organization where Name =  'Anderson Diagnostics & Labs'
+
+Set @DisplayText = 'BioPattern1'; Set @Directive='bioPattern1'; Set @DirectivePath='../KernelV2/app/appjs/directives/bioPattern1.js'
+
+IF NOT EXISTS(SELECT * FROM InvestigationPattern WHERE DisplayText=@DisplayText AND IsNull(DirectiveName,'')=@Directive AND OrgID=@OrgID)
+BEGIN
+	Update InvestigationPattern Set DirectiveName=@Directive, DirectivePath=@DirectivePath 
+	where DisplayText=@DisplayText AND IsNull(DirectiveName,'')<>@Directive AND OrgID=@OrgID
+End
+
+Set @DisplayText = 'BioPattern2'; Set @Directive='bioPattern2'; Set @DirectivePath='../KernelV2/app/appjs/directives/bioPattern2.js'
+IF NOT EXISTS(SELECT * FROM InvestigationPattern WHERE DisplayText<>@DisplayText AND IsNull(DirectiveName,'')=@Directive AND OrgID=@OrgID)
+BEGIN
+	Update InvestigationPattern Set DirectiveName=@Directive, DirectivePath=@DirectivePath 
+	where DisplayText=@DisplayText AND IsNull(DirectiveName,'')<>@Directive AND OrgID=@OrgID
+End
+
+Set @DisplayText = 'BioPattern3'; Set @Directive='bioPattern3'; Set @DirectivePath='../KernelV2/app/appjs/directives/bioPattern3.js'
+IF NOT EXISTS(SELECT * FROM InvestigationPattern WHERE DisplayText=@DisplayText AND IsNull(DirectiveName,'')=@Directive AND OrgID=@OrgID)
+BEGIN
+	Update InvestigationPattern Set DirectiveName=@Directive, DirectivePath=@DirectivePath 
+	where DisplayText=@DisplayText AND IsNull(DirectiveName,'')<>@Directive AND OrgID=@OrgID
+End
+
+Set @DisplayText = 'BioPattern4'; Set @Directive='bioPattern4'; Set @DirectivePath='../KernelV2/app/appjs/directives/bioPattern4.js'
+IF NOT EXISTS(SELECT * FROM InvestigationPattern WHERE DisplayText=@DisplayText AND IsNull(DirectiveName,'')=@Directive AND OrgID=@OrgID)
+BEGIN
+	Update InvestigationPattern Set DirectiveName=@Directive, DirectivePath=@DirectivePath 
+	where DisplayText=@DisplayText AND IsNull(DirectiveName,'')<>@Directive AND OrgID=@OrgID
+End
+
+Set @DisplayText = 'BioPattern5'; Set @Directive='bioPattern5'; Set @DirectivePath='../KernelV2/app/appjs/directives/bioPattern5.js'
+IF NOT EXISTS(SELECT * FROM InvestigationPattern WHERE DisplayText=@DisplayText AND IsNull(DirectiveName,'')=@Directive AND OrgID=@OrgID)
+BEGIN
+	Update InvestigationPattern Set DirectiveName=@Directive, DirectivePath=@DirectivePath 
+	where DisplayText=@DisplayText AND IsNull(DirectiveName,'')<>@Directive AND OrgID=@OrgID
+End
+Go
+ 
+ Declare @PageID bigint, @MenuID bigint, @RoleID bigint, @OrgID bigint,
+ @PageName nvarchar(255), @PageURL nvarchar(255), @TemplateUrl nvarchar(max),@Controller nvarchar(max),@Dependencies nvarchar(max),
+ @MenuName nvarchar(255), @RoleName nvarchar(255), @LangugeCode nvarchar(255)
+
+ Select @OrgID = OrgID from Organization where Name='Anderson Diagnostics & Labs'; Set @LangugeCode='en-GB';
+
+ Select @PageID = max(PageID)+1 from Pages
+ Set @PageName='Result-Capture'; 
+ Set @PageURL='resultcapture-new/:vid/:pid/:gUID/:LNo/:Invid/:DeptID/:POrgID';
+ Set @TemplateUrl='resultCapture/form.html'; 
+ Set @Controller='resultCaptureFormController'; 
+ Set @Dependencies='app/appjs/controllers/resultcaptureController.js
+ ,app/appjs/services/resultcaptureService.js
+ ,app/appjs/services/patientbannerService.js
+ ,app/appjs/ng/resultcaptureRuleEngine.js
+ ,app/appjs/directives/biopattern1Directive.js
+ ,app/appjs/directives/biopattern2Directive.js
+ ,app/appjs/directives/biopattern3Directive.js
+ ,app/appjs/directives/biopattern4Directive.js
+ ,app/appjs/directives/biopattern5Directive.js
+ ,app/appjs/directives/patientbannerDirective.js
+ ,app/appjs/directives/orderedinvDirective.js';
+
+--If Exists(Select 1 from Pages where PageName=@PageName and PageURL=@PageURL)
+--Begin
+--	Update Pages Set TemplateUrl=@TemplateUrl,Controller=@Controller,Dependencies=@Dependencies,ModifiedBy=0,ModifiedAt=GETDATE()
+--	where PageName=@PageName and PageURL=@PageURL
+--End
+
+If Not Exists(Select 1 from Pages where PageName=@PageName and PageURL=@PageURL)
+Begin
+	Insert Into Pages (PageID,PageName,PageURL,SequenceId,TemplateUrl,Controller,Dependencies,CreatedBy,CreatedAt)
+	Select @PageID, @PageName,@PageURL,1,@TemplateUrl,@Controller,@Dependencies,0,GETDATE()
+END
+
+Select @MenuID=max(MenuID)+1 from MenuMaster
+Select @PageID = PageID from Pages where PageName=@PageName and PageURL=@PageURL
+Set @MenuName='Result Capture';
+--If Exists(Select 1 from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID and LanguageCode=@LangugeCode )
+--Begin
+--	Update MenuMaster Set DisplayText=@MenuName,PageID=@PageID, ModifiedBy=0, ModifiedAt=GETDATE()
+--	where OrgId=@OrgID and DisplayText=@MenuName and LanguageCode=@LangugeCode 
+--End
+
+If Not Exists(Select 1 from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID  and LanguageCode=@LangugeCode)
+Begin
+	Insert Into MenuMaster (Menuid,DisplayText,Parentid,OrgId,PageID,LanguageCode,CreatedBy,CreatedAt)
+	Select @MenuID, @MenuName,0,@OrgID,@PageID,@LangugeCode,0,GETDATE()
+END
+
+Select @MenuID=MenuID from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID  and LanguageCode=@LangugeCode
+Set @RoleName='Lab Technician';
+Select @RoleID= RoleID from Role where RoleName=@RoleName and OrgID=@OrgID
+If Not Exists(Select 1 from RoleMenu where @PageID=@PageID and MenuID=@MenuID)
+Begin
+	Insert Into RoleMenu (RoleID,MenuID,IsMapped,CreatedBy,CreatedAt)
+	Select @RoleID,@MenuID,'Y',0,GETDATE()
+END
+ 
+ Select @PageID = max(PageID)+1 from Pages
+ Set @PageName='Lab Quick Billing'; 
+ Set @PageURL='billing-new';
+ Set @TemplateUrl='billing/form.html'; 
+ Set @Controller='billingFormController'; 
+ Set @Dependencies='app/appjs/services/billingService.js,app/appjs/services/metadataService.js,app/appjs/services/masterdataService.js,app/appjs/directives/urnDirective.js,app/appjs/directives/clientreferenceDirective.js,app/appjs/directives/documentUploadDirective.js,app/appjs/directives/paymentDirective.js,app/appjs/controllers/billingController.js';
+
+If Exists(Select 1 from Pages where PageName=@PageName and PageURL=@PageURL)
+Begin
+	Update Pages Set TemplateUrl=@TemplateUrl,Controller=@Controller,Dependencies=@Dependencies,ModifiedBy=0,ModifiedAt=GETDATE()
+	where PageName=@PageName and PageURL=@PageURL
+End
+
+If Not Exists(Select 1 from Pages where PageName=@PageName and PageURL=@PageURL)
+Begin
+	Insert Into Pages (PageID,PageName,PageURL,SequenceId,TemplateUrl,Controller,Dependencies,CreatedBy,CreatedAt)
+	Select @PageID, @PageName,@PageURL,1,@TemplateUrl,@Controller,@Dependencies,0,GETDATE()
+END
+
+Select @MenuID=max(MenuID)+1 from MenuMaster
+Select @PageID = PageID from Pages where PageName=@PageName and PageURL=@PageURL
+Set @MenuName='Quick Billing - New';
+--If Exists(Select 1 from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID and LanguageCode=@LangugeCode )
+--Begin
+--	Update MenuMaster Set DisplayText=@MenuName,PageID=@PageID, ModifiedBy=0, ModifiedAt=GETDATE()
+--	where OrgId=@OrgID and DisplayText=@MenuName and LanguageCode=@LangugeCode 
+--End
+
+If Not Exists(Select 1 from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID  and LanguageCode=@LangugeCode)
+Begin
+	Insert Into MenuMaster (Menuid,DisplayText,Parentid,OrgId,PageID,LanguageCode,CreatedBy,CreatedAt)
+	Select @MenuID, @MenuName,0,@OrgID,@PageID,@LangugeCode,0,GETDATE()
+END
+
+Select @MenuID=MenuID from MenuMaster where DisplayText=@MenuName and OrgId=@OrgID  and LanguageCode=@LangugeCode
+Set @RoleName='LabReception';
+Select @RoleID= RoleID from Role where RoleName=@RoleName and OrgID=@OrgID
+If Not Exists(Select 1 from RoleMenu where @PageID=@PageID and MenuID=@MenuID)
+Begin
+	Insert Into RoleMenu (RoleID,MenuID,IsMapped,CreatedBy,CreatedAt)
+	Select @RoleID,@MenuID,'Y',0,GETDATE()
+END
+
+IF NOT EXISTS(SELECT * FROM country WHERE CountryName='India' AND IsNull(PhoneNo_Length,'')<>'')
+BEGIN
+Update country Set PhoneNo_Length=10  where CountryName='India' 
+End
+Go
+ --------------------------------------------Arunraj kernel_V2 New billing and result entry page -------------------------------------------------------
+
+
+-----------Jayaramanan L 29-05-2015--Bill Cancel task assign to Credit Controller---------
+
+ SELECT R.RoleID,R.RoleName,* from Role r where orgid=220 and RoleID in (725,7257)
+
+ Select * from TaskActionOrgMapping where OrgID=220 and RoleID=7253 and TaskActionID in (43,66)
+
+-- Replace from Admin roleid to credit controller
+
+ Update TaskActionOrgMapping Set RoleID=7257 from  TaskActionOrgMapping where OrgID=220 and RoleID=7253 and TaskActionID=43
+ Update TaskActionOrgMapping Set RoleID=7257 from  TaskActionOrgMapping where OrgID=220 and RoleID=7253 and TaskActionID=66
+----------------------SPOT MIS data entry in Table------
+Declare @max Int
+
+Insert into ReportExcelSp (Name,Description)
+
+Select 'PGetPrescriptionScanData' as Name,'PGetPrescriptionScanData' as Description 
+
+set @max= (select max(ID) from ReportExcelSp)
+
+Insert into ReportExcelMaster (ExcelName,Sp,ReportName,Parametertype,IsActive)
+
+Select 'Prescription Scan Data' as ExcelName,@max as Sp,'Prescription Scan Data' as ReportName,'ShowDateRangePopup' as Parametertype,1 as IsActive 
+
+Declare @maxreportid Int
+
+Declare @Roleid Int
+
+set @maxreportid = (select max(ID) from ReportExcelMaster)
+
+select Distinct @Roleid=Roleid from Role where orgid=220 and rolename='Administrator'
+
+Insert into ReportExcelRoleMapping (Reportid,Roleid,IsActive,Createdat)
+
+Select @maxreportid as Reportid,@Roleid as Roleid,1 as IsActive,getdate() as Createdat
+-------------------------New instance meta data for Report Language-------------------------------
+if not exists(select 1 from MetaData M where M.Domain='ReportLanguage')  
+begin  
+    insert into MetaData(MetaDataID,Domain,Code,DisplayText,CreatedBy,CreatedAt) 
+    select Max(MetaDataID)+1,'ReportLanguage','en-GB','English',1,GETDATE() from MetaData
+end 
+Declare @OrgID int,@MetaDataID bigint
+select @OrgID =OrgID from Organization where Name='iGenetic Diagnostics Pvt.Ltd'
+select @MetaDataID=MetaDataID from MetaData M where M.Domain='ReportLanguage' and Code='en-GB'
+if not exists(select 1 from MetaDataOrgMapping MOM inner join MetaData M on M.MetaDataID=MOM.MetaDataID 
+where MOM.OrgID=@OrgID and M.Domain='ReportLanguage' and MOM.LangCode='en-GB' )  
+begin  
+    insert into MetaDataOrgMapping(MetaDataID,OrgID,LangCode,DisplayText,IsActive,CreatedBy,CreatedAt) 
+	select @MetaDataID,@OrgID,'en-GB',N'English','Y',1,GETDATE() 
+end 
+----------------------------------------------------------------
+Declare @max Int
+select @max=max(TemplateID) from invreportmaster
+If Not Exists (select 1 from invreportmaster where Type='BillReceipt' AND ReportTemplateName like '%BillReportB2CHealthCouponCPChecklist%')
+BEGIN
+Insert into invreportmaster (TemplateID,ReportTemplateName,IsDefault,OrgID,IsActive,Type,TemplateName,LangCode)
+select @max as TemplateID,'/LISKERNEL/Prima/BillReportB2CHealthCouponCPChecklist' AS ReportTemplateName,'N' as IsDefault,220 as OrgID,'A' as IsActive,'BillReceipt' as Type,'BilClientB2CHC' AS TemplateName,'en-GB' as LangCode
+END
+Declare @max1 Int
+select @max1=max(TemplateID) from invreportmaster
+If Not Exists (select 1 from invreportmaster where Type='BillReceipt' AND ReportTemplateName like '%OneDiagnoBillPrintInvoice%')
+BEGIN
+Insert into invreportmaster (TemplateID,ReportTemplateName,IsDefault,OrgID,IsActive,Type,TemplateName,LangCode)
+select @max1 as TemplateID,'/LISKERNEL/OneDiagnostics/OneDiagnoBillPrintInvoice' AS ReportTemplateName,'N' as IsDefault,168 as OrgID,'A' as IsActive,'BillReceipt' as Type,'BillReceiptReport' as TemplateName,'en-GB' as LangCode 
+
+Insert into invreportmaster (TemplateID,ReportTemplateName,IsDefault,OrgID,IsActive,Type,TemplateName,LangCode)
+select @max1 + 1 as TemplateID,'/LISKERNEL/OneDiagnostics/OneDiagnoBillPrintInvoice' AS ReportTemplateName,'N' as IsDefault,168 as OrgID,'A' as IsActive,'BillReceipt' as Type,'BillReceiptB2CHC' as TemplateName,'en-GB' as LangCode 
+END
+-----------------------------------------------------
+Declare @m1 int
+select @m1 = TemplateID from invreportmaster where Type='BillReceipt' AND ReportTemplateName like '%OneDiagnoBillPrintInvoice%' and TemplateName='BillReceiptB2CHC'
+if Not exists (select 1 from Templatedetailmaster where ReportType='Bill' AND ReportTemplateName like '%ClientSpecificBillFormat%')
+BEGIN
+Insert into Templatedetailmaster (ParentTemplateID, ReportType, ReportTemplateName, OrgID)
+select @m1 as ParentTemplateID,'Bill' as ReportType,'/LISKERNEL/OneDiagnostics/ClientSpecificBillFormat' as ReportTemplateName,168 as OrgID
+END
+----------------------------------------

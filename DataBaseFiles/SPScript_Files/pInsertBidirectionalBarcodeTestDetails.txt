@@ -1,0 +1,38 @@
+CREATE PROCEDURE [dbo].[pInsertBidirectionalBarcodeTestDetails]                                    
+@pPatientVisitID bigint,                                    
+@pOrgID bigint,
+@TestCode Varchar(5)                                                             
+WITH EXECUTE AS OWNER                                          
+AS                                      
+BEGIN                              
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;            
+         SET NOCOUNT ON;            
+         SET XACT_ABORT ON;            
+         BEGIN TRY                         
+DECLARE @EMsg NVARCHAR(4000), @ELine INT, @Eproc NVARCHAR(128), @ESEVERITY INT, @sptrace VARCHAR(8000);                                                             
+               
+DECLARE @ClientCode NVARCHAR(255)      
+SELECT TOP 1 @ClientCode=CM.ClientCode from VisitClientMapping VCM (NOLOCK)       
+Inner join ClientMaster CM on CM.Clientid=VCM.ClientID and CM.OrgID=VCM.OrgID       
+where VCM.VisitID=@pPatientVisitID and isnull(VCM.isactive,'')='' ORDER BY VCM.Createdat DESC      
+                                    
+     INSERT INTO BidirectionalBarCodeTestDetails (PatientInvID,OrgID,OrgAddressID,CreatedAt,TestCode,Visitid,VisitNumber,AccessionNumber,IsDataPicked,IsProcessed,Teststatus,ClientName)      
+     SELECT PI.PatientInvID,OI.OrgID,OI.ResCaptureLoc,Getdate(),@TestCode,PV.Patientvisitid,PV.VisitNumber,OI.AccessionNumber,0,0,              
+     case when isnull(OI.IsSTAT,'N')='Y' THEN 'S' ELSE NULL END AS Teststatus,@ClientCode as ClientName FROM PatientVisit PV WITH (NOLOCK)                                  
+     INNER JOIN OrderedInvestigations OI WITH(NOLOCK) on OI.Visitid = PV.Patientvisitid and OI.OrgID=PV.OrgID            
+     INNER JOIN PatientInvestigation PI WITH (NOLOCK) on PI.AccessionNumber = OI.AccessionNumber and PI.OrgID=OI.OrgID                                 
+	 INNER JOIN BidirectionalLocationMapping BLM WITH(NOLOCK) ON BLM.OrgID=OI.OrgID AND BLM.AddressID=OI.ResCaptureLoc
+     WHERE PV.PatientVisitID = @pPatientVisitID and OI.STATUS IN ('SampleReceived','Pending')                                                      
+     AND PV.OrgID=@pOrgID  AND PI.PatientInvID NOT IN (SELECT PatientInvID FROM BidirectionalBarcodeTestDetails BI (NOLOCK)                        
+     WHERE BI.VisitID =@pPatientVisitID )        
+                                                      
+ END TRY            
+         BEGIN CATCH            
+             SELECT @EMsg = ERROR_MESSAGE(), @ELine = ERROR_LINE(), @Eproc = ERROR_PROCEDURE(), @ESEVERITY = ERROR_SEVERITY(), @sptrace = 'pInsertBidirectionalBarcodeDetails @pPatientVisitID = '+CAST(@pPatientVisitID AS VARCHAR)+'@pOrgID = '+CAST(@pOrgID 
+
+
+
+AS VARCHAR);            
+			 EXEC usp_insert_errorinfo @EMsg, @ELine, @Eproc, @Eseverity, @sptrace;            
+         END CATCH;                           
+END 

@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Schema Namespace="LISKernelEntities.Store" Provider="System.Data.SqlClient" ProviderManifestToken="2012" Alias="Self" xmlns:store="http://schemas.microsoft.com/ado/2007/12/edm/EntityStoreSchemaGenerator" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+  <EntityType Name="WhatsUpNotification">
+    <Key>
+      <PropertyRef Name="WhatsUpNotificationId" />
+    </Key>
+    <Property Name="WhatsUpNotificationId" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="MobileNo" Type="nvarchar" MaxLength="50" />
+    <Property Name="TemplateMasterNo" Type="int" />
+    <Property Name="TemplateParamJSON" Type="nvarchar" MaxLength="4000" />
+    <Property Name="IsSentYN" Type="nvarchar" MaxLength="1" />
+    <Property Name="IsErrorYN" Type="nvarchar" MaxLength="1" />
+  </EntityType>
+  <EntityType Name="WhatsUpTemplateMaster">
+    <Key>
+      <PropertyRef Name="TemplateMasterNo" />
+    </Key>
+    <Property Name="TemplateMasterNo" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="TemplateName" Type="nvarchar" MaxLength="100" />
+    <Property Name="NoofParameters" Type="int" />
+  </EntityType>
+  <EntityContainer Name="LISKernelEntitiesStoreContainer">
+    <EntitySet Name="WhatsUpNotification" EntityType="Self.WhatsUpNotification" Schema="dbo" store:Type="Tables" />
+    <EntitySet Name="WhatsUpTemplateMaster" EntityType="Self.WhatsUpTemplateMaster" Schema="dbo" store:Type="Tables" />
+  </EntityContainer>
+</Schema>

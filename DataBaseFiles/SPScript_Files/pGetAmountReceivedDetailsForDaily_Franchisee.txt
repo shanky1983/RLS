@@ -1,0 +1,2682 @@
+CREATE PROCEDURE [dbo].[pGetAmountReceivedDetailsForDaily_Franchisee] @pLoginID           [BIGINT],        
+@pOrgId             [INT],        
+@pCurrencyID        [INT],        
+@pFDate             [DATETIME],        
+@pTDate             [DATETIME],        
+@pLocationId        [INT],        
+@TotalAmount        [DECIMAL](18, 0) OUTPUT,        
+@Totalrefund        [DECIMAL](18, 0) OUTPUT,        
+@TotalCancelledAmt  [DECIMAL](18, 0) OUTPUT,        
+@DoctorsAmount      [DECIMAL](18, 0) OUTPUT,        
+@OthersAmount       [DECIMAL](18, 0) OUTPUT,        
+@TotalPendingDueAmt [DECIMAL](18, 0) OUTPUT,        
+@pLoginIDs          [dbo].[GETUSERIDS] READONLY,        
+@TotalIncAmount     [DECIMAL](18, 0) OUTPUT,        
+@ContextInfo        [UDT_CONTEXT] READONLY        
+WITH EXECUTE AS OWNER        
+AS        
+BEGIN        
+DECLARE @AdditionalInfo nvarchar(55) = NULL        
+SELECT @AdditionalInfo = AdditionalInfo        
+FROM   @ContextInfo        
+DECLARE @LangCode NVARCHAR(20)
+SELECT @LangCode = languagecode
+FROM   @ContextInfo
+IF( @AdditionalInfo = 'ModifiedPage' )        
+BEGIN        
+EXEC Pgetamountreceiveddetailsfordaily_modifiedpage        
+@pLoginID,        
+@pOrgId,        
+@pCurrencyID,        
+@pFDate,        
+@pTDate,        
+@pLocationId,        
+@TotalAmount output,        
+@Totalrefund output,        
+@TotalCancelledAmt output,        
+@DoctorsAmount output,        
+@OthersAmount output,        
+@TotalPendingDueAmt output,        
+@pLoginIDs,        
+@TotalIncAmount output,        
+@ContextInfo        
+RETURN        
+END        
+--EXEC pGetAmountReceivedDetailsForDaily 3472,84,63,'01/09/2011','16/09/2011',0,0,0,0,0                                                
+--EXEC pGetAmountReceivedDetailsForDaily 2951,74,63,'14/09/2011','16/09/2011',0,0,0,0,0                                                            
+SELECT @pFDate = CONVERT(DATETIME, @pFDate, 103) + ' 00:00:00'        
+SELECT @pTDate = CONVERT(DATETIME, @pTDate, 103)        
++ ' 23:59:59:998'        
+SELECT @TotalAmount = 0.00        
+SELECT @Totalrefund = 0.00        
+SELECT @TotalCancelledAmt = 0.00        
+SELECT @DoctorsAmount = 0.00        
+SELECT @OthersAmount = 0.00        
+SELECT @TotalPendingDueAmt = 0.00        
+DECLARE @BilledAmtWithoutDueOP DECIMAL(18, 2)        
+DECLARE @BilledAmtOfDueOP DECIMAL(18, 2)        
+DECLARE @CollectionWithoutDueOP DECIMAL(18, 2)        
+DECLARE @CollectionOfDueOP DECIMAL(18, 2)        
+DECLARE @DiscountAmountOP DECIMAL(18, 2)        
+DECLARE @BilledAmtWithoutDueWk DECIMAL(18, 2)        
+DECLARE @BilledAmtOfDueWk DECIMAL(18, 2)        
+DECLARE @CollectionWithoutDueWk DECIMAL(18, 2)        
+DECLARE @CollectionOfDueWk DECIMAL(18, 2)        
+DECLARE @DiscountAmountWk DECIMAL(18, 2)        
+DECLARE @DiscountAmountIP DECIMAL(18, 2)        
+DECLARE @BilledAmtWithoutDue DECIMAL(18, 2)        
+DECLARE @BilledAmtOfDue DECIMAL(18, 2)        
+DECLARE @CollectionWithoutDue DECIMAL(18, 2)        
+DECLARE @CollectionOfDue DECIMAL(18, 2)        
+DECLARE @DiscountAmount DECIMAL(18, 2)        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+DECLARE @DueCollectionAmount DECIMAL(18, 2)                    
+Declare @DueAmtRefund Decimal(18,2)    
+Declare @DueAmtCancel Decimal(18,2)          
+DECLARE @tempIpReceivedAmt AS TABLE        
+(        
+ReceivedAmt DECIMAL,        
+FinalBillID BIGINT        
+)        
+DECLARE @tempIpBilledAmt AS TABLE        
+(        
+BilledAmt   DECIMAL,        
+FinalBillID BIGINT        
+)        
+DECLARE @totalAdvance DECIMAL(18, 2)        
+DECLARE @totalDueCollection DECIMAL(18, 2)        
+DECLARE @ClosingBalance DECIMAL(18, 2)        
+IF ( @pCurrencyID = 0 )        
+SET @pCurrencyID = NULL        
+IF( @pLoginID != 0 ) --and @pLoginID !=-1)                                                  
+BEGIN        
+DECLARE @ptempTable AS TABLE        
+(        
+AmtReceivedID      BIGINT,        
+FinalBillID        nvarchar(15),        
+PatientName        nvarchar(305),        
+Amount             DECIMAL(18, 2),        
+AmtReceived        DECIMAL(18, 2),        
+GrossBillValue     DECIMAL(18, 2),           
+DiscountAmt  DECIMAL(18, 2),           
+DueAmount          DECIMAL(18, 2),            
+ReceivedBy         BIGINT,        
+CreatedAt          DATETIME,        
+CollectedBY        BIGINT,        
+Cash               DECIMAL(18, 2) NULL,        
+Cards              DECIMAL(18, 2) NULL,        
+Cheque             DECIMAL(18, 2) NULL,        
+DD                 DECIMAL(18, 2) NULL,
+--changes by arun --upi added in billing screen rls
+UPI                DECIMAL(18, 2) NULL, 
+Coupon                DECIMAL(18, 2) NULL,        
+RowNUM             BIGINT,        
+RefundAmount       DECIMAL(18, 2),        
+Discount           DECIMAL(18, 2),        
+PatientVisitID     BIGINT,        
+BillNumber         nvarchar(30),        
+VisitType          nvarchar(10),        
+FeeType            nvarchar(3) NULL,        
+Remarks            nvarchar(Max),        
+PaidCurrency       nvarchar(100),        
+PaidCurrencyAmount DECIMAL(18, 2),        
+DepositUsed        DECIMAL(18, 2),        
+PName               nvarchar(255),          
+CollectionAmount   DECIMAL(18, 2),        
+RefundAmt          DECIMAL(18, 2),        
+PaymentTypeID      BIGINT,        
+PaymentName        nvarchar(50),        
+TotalAmount        DECIMAL(18, 2),        
+ReceiptNO          nvarchar(30),        
+PatientID          BIGINT,        
+BillStatus         nvarchar(20),        
+PatientNumber      nvarchar(30),        
+PaymentDetailsID   BIGINT,        
+ISSettlementPage   nvarchar(3),  
+VisitNumber        NVARCHAR(255),
+BookedDate         DATETIME,
+BookedBy           NVARCHAR(150),
+BookingID          BIGINT,
+CollectedDateTime  DATETIME
+)   
+
+DECLARE @CollectionVisits AS TABLE          
+(   
+PatientVisitID     BIGINT,
+BookedDate         DATETIME,
+BookedBy           NVARCHAR(150),
+BookingID          BIGINT,
+CollectedDateTime  DATETIME
+)
+DECLARE @pReftempTable AS TABLE        
+(        
+DetailsidID   BIGINT,        
+FinalBillID   nvarchar(15),        
+PatientName   nvarchar(305),        
+RefundAmount  DECIMAL(18, 2),        
+RefundBy      BIGINT,        
+CreatedAt     DATETIME,        
+Cash          DECIMAL(18, 2) NULL,        
+Cards         DECIMAL(18, 2) NULL,        
+Cheque        DECIMAL(18, 2) NULL,        
+DD            DECIMAL(18, 2) NULL,  
+UPI           DECIMAL(18, 2) NULL,      
+Coupon        DECIMAL(18, 2) NULL,      
+BillNumber    nvarchar(30),        
+Name          nvarchar(255),        
+RefundNO      nvarchar(30),        
+VisitType     nvarchar(305),        
+PatientNumber nvarchar(30)        
+,VisitNumber NVARCHAR(255)
+,City nvarchar(500)--RefundRemarks nvarchar(500)
+)        
+DECLARE @pTable AS TABLE        
+(        
+AmtReceivedID      BIGINT,        
+FinalBillID        nvarchar(30),        
+Amount        DECIMAL(18, 2),        
+AmtReceived        DECIMAL(18, 2),        
+GrossBillValue     DECIMAL(18, 2),           
+DiscountAmt        DECIMAL(18, 2),           
+DueAmount          DECIMAL(18, 2),           
+PaidCurrency       nvarchar(100),        
+PaidCurrencyAmount DECIMAL(18, 2),        
+PaymentTypeID      INT,        
+PaymentName        nvarchar(100),        
+VisitType          nvarchar(100),        
+VisitID            BIGINT,        
+PatientID          BIGINT,        
+ReceiptNO          nvarchar(30),        
+AmtReceivedBY      BIGINT,        
+CreatedAt          DATETIME,        
+BillStatus         nvarchar(20),        
+PaymentDetailsID   BIGINT,        
+ISSettlementPage   nvarchar(3)        
+,VisitNumber NVARCHAR(255)
+,Remarks nvarchar(500)
+)  
+
+DECLARE @pTableDuplicate AS TABLE        
+
+(        
+
+AmtReceivedID      BIGINT,        
+
+FinalBillID        nvarchar(30),        
+
+Amount        DECIMAL(18, 2),        
+
+AmtReceived        DECIMAL(18, 2),        
+
+GrossBillValue     DECIMAL(18, 2),           
+
+DiscountAmt        DECIMAL(18, 2),           
+
+DueAmount          DECIMAL(18, 2),           
+
+PaidCurrency       nvarchar(100),        
+
+PaidCurrencyAmount DECIMAL(18, 2),        
+
+PaymentTypeID      INT,        
+
+PaymentName        nvarchar(100),        
+
+VisitType          nvarchar(100),        
+
+VisitID            BIGINT,        
+
+PatientID          BIGINT,        
+
+ReceiptNO          nvarchar(30),        
+
+AmtReceivedBY      BIGINT,        
+
+CreatedAt          DATETIME,        
+
+BillStatus         nvarchar(20),        
+
+PaymentDetailsID   BIGINT,        
+
+ISSettlementPage   nvarchar(3)        
+
+,VisitNumber NVARCHAR(255)
+,Remarks nvarchar(500)
+)   
+      
+DECLARE @pInterMediateTable AS TABLE        
+(        
+FinalBillID BIGINT,        
+Amount      DECIMAL(18, 2) NULL,        
+PaymentName nvarchar(25),        
+VisitDate   DATETIME,        
+CollectedBY BIGINT        
+)        
+DECLARE @PaymentMode TABLE        
+(        
+Amount        DECIMAL(18, 2),        
+PaymentName   nvarchar(200),        
+PayMentTypeID INT,        
+FinalBillID   BIGINT,        
+Cash          DECIMAL(18, 2),        
+Cheque        DECIMAL(18, 2),        
+DemandDraft   DECIMAL(18, 2),        
+Cards         DECIMAL(18, 2), 
+UPI           DECIMAL(18, 2),
+Coupon        DECIMAL(18, 2),        
+ReceiptNO     nvarchar(30),        
+CollectedBY   BIGINT        
+)        
+DECLARE @PaymentMode1 TABLE   
+(        
+Amount        DECIMAL(18, 2),        
+PaymentName   nvarchar(200),        
+PayMentTypeID INT,        
+FinalBillID   BIGINT,        
+Cash          DECIMAL(18, 2),        
+Cheque        DECIMAL(18, 2),        
+DemandDraft   DECIMAL(18, 2),        
+Cards         DECIMAL(18, 2), 
+UPI           DECIMAL(18, 2),  
+Coupon        DECIMAL(18, 2),        
+ReceiptNO     nvarchar(30),        
+CollectedBY   BIGINT        
+)        
+DECLARE @PaymentModeRef TABLE        
+(        
+Amount        DECIMAL(18, 2),        
+PaymentName   nvarchar(200),        
+PayMentTypeID INT,        
+FinalBillID   BIGINT,        
+Cash          DECIMAL(18, 2),        
+Cheque        DECIMAL(18, 2),        
+DemandDraft   DECIMAL(18, 2),        
+Cards         DECIMAL(18, 2),        
+UPI           DECIMAL(18, 2), 
+Coupon        DECIMAL(18, 2), 
+ReceiptNO     nvarchar(30),        
+CollectedBY   BIGINT        
+)        
+DECLARE @TranSSummary AS TABLE        
+(        
+RowID        BIGINT IDENTITY(1, 1),        
+Descriptions nvarchar(40),        
+Amount       DECIMAL(18, 2)        
+)        
+IF( @pLocationId > 0 )        
+BEGIN        
+INSERT INTO @pTable        
+(AmtReceivedID,        
+FinalBillID,        
+Amount,        
+AmtReceived,        
+GrossBillValue,          
+DiscountAmt,          
+DueAmount,            
+PaidCurrency,        
+PaidCurrencyAmount,        
+PaymentTypeID,        
+PaymentName,        
+VisitType,        
+VisitID,        
+PatientID,        
+ReceiptNO,        
+AmtReceivedBY,        
+CreatedAt,        
+BillStatus,        
+PaymentDetailsID,        
+ISSettlementPage
+,VisitNumber)
+SELECT AmtReceivedID,        
+FinalBill.FinalBillID,        
+case when AmountReceivedDetails.IsDueReceived='Y' then 0 else FBF.NetValue end,        
+AmtReceived,        
+case when AmountReceivedDetails.IsDueReceived='Y' then 0 else FBF.GrossBillValue end,          
+case when AmountReceivedDetails.IsDueReceived='Y' then PDD.DiscountAmt else FBF.DiscountAmount end,   
+case when Pdd.Status='Closed' then 0 else Isnull(Pdd.DueAmount,0)-Isnull(PDD.RefundedAmount,0) end, ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+Isnull(CM.CurrencyCode, (SELECT CM.CurrencyCode        
+FROM   CurrencyOrgMapping COM WITH (NOLOCK)        
+INNER JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON COM.CurrencyID = CM.CurrencyID        
+AND COM.OrgID = @pOrgId        
+AND COM.isbasecurrency = 'Y'
+AND Isnull(COM.languagecode, 'en-GB') = @LangCode)),
+Isnull(AmountReceivedDetails.OtherCurrencyAmount, AmountReceivedDetails.AmtReceived),        
+PaymentTypeID,        
+PaymentName,        
+CASE        
+WHEN FinalBill.VisitID = -1        
+AND FinalBill.PatientID = -1 THEN 'WIP'            
+ELSE 'HOP'        
+END,        
+FinalBill. VisitID,        
+FinalBill.PatientID,            
+Isnull(AmountReceivedDetails. ReceiptNO, 0),        
+ReceivedBy,        
+AmountReceivedDetails.CreatedAt,        
+CASE        
+WHEN Isnull((SELECT TOP 1 AdvanceID        
+FROM   AdvancePaidDetails WITH (NOLOCK)        
+WHERE  VisitID = FinalBill.VisitID        
+AND PatientID = FinalBill.PatientID        
+AND ReceiptNO = AmountReceivedDetails.ReceiptNO), 0) <> 0 THEN 'ADVANCE'        
+ELSE 'OTHERS'        
+END,        
+ip.PaymentDetailsID,        
+Isnull(ip.ISSettlementPage, 'N')        
+,(
+SELECT VisitNumber
+FROM PatientVisit PV
+WHERE PV.PatientVisitId = FinalBill.VisitID
+) AS VisitNumber
+FROM   AmountReceivedDetails WITH (NOLOCK)        
+INNER JOIN FinalBill WITH (NOLOCK)   
+ON AmountReceivedDetails.FinalBillID = FinalBill.FinalBillID    
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=FinalBill.FinalBillID and FBF.OrgID=FinalBill.OrgID    
+left join  PatientDueDetails as pdd on pdd.FinalBillID = FinalBill.FinalBillID and pdd.VisitID = FinalBill.VisitID          
+left join  DuePaidDetail as dpd  on dpd.DueBillNo = FinalBill.FinalBillID          
+LEFT JOIN IPIntermediatePayments ip WITH (NOLOCK)        
+ON ip.ReceiptNO = AmountReceivedDetails.ReceiptNO        
+AND ip.VisitID = FinalBill.VisitID 
+INNER JOIN PaymentType WITH (NOLOCK)        
+ON AmountReceivedDetails.TypeID = PaymentType.PaymentTypeID        
+LEFT JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON CM.CurrencyID = AmountReceivedDetails.PaidCurrencyID        
+WHERE  ReceivedBy = @pLoginID        
+AND FinalBill.OrgId = @pOrgId        
+AND FinalBill.OrgAddressID = @pLocationId        
+AND CONVERT(nvarchar, AmountReceivedDetails.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND ( AmountReceivedDetails.PaidCurrencyID = COALESCE(@pCurrencyID, AmountReceivedDetails.PaidCurrencyID)        
+OR AmountReceivedDetails.PaidCurrencyID IS NULL )        
+AND Isnull(paymenttype.languagecode, 'en-GB') = @LangCode
+UNION        
+SELECT DISTINCT PDH.DepositHistoryID,        
+0,        
+0,        
+PDH.AmountDeposited,        
+0,          
+0,          
+0,            
+Isnull(CM.CurrencyCode, (SELECT CM.CurrencyCode        
+FROM   CurrencyOrgMapping COM WITH (NOLOCK)        
+INNER JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON COM.CurrencyID = CM.CurrencyID        
+AND COM.OrgID = @pOrgId        
+AND COM.isbasecurrency = 'Y'
+AND Isnull(COM.languagecode, 'en-GB') = @LangCode)),
+Isnull(PDH.PaidCurrencyAmount, PDH.AmountDeposited),        
+PT.PaymentTypeID,        
+PaymentName,        
+'DEP',        
+0,        
+PatientID,        
+ReceiptNO,        
+PDH.CreatedBy,        
+PDH.CreatedAt,        
+'DEPOSIT',        
+0,        
+'A' ,
+Null       
+FROM   PatientDepositHistory PDH WITH (NOLOCK)        
+LEFT JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON CM.CurrencyID = PDH.PaidCurrencyID        
+INNER JOIN PaymentType PT WITH (NOLOCK)        
+ON PT.PaymentTypeID = PDH.PaymentTypeID        
+WHERE  PDH.CreatedBy = @pLoginID        
+AND CONVERT(nvarchar, PDH.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND PDH.OrgID = @pOrgId        
+AND ( PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL )        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+
+-- Added By Jayaramanan L 
+----Start --
+-- Make copy -- 
+--Select 'j'
+--Select * from @pTable 
+Insert @pTableDuplicate
+Select * from @pTable 
+
+-- Get Duplicate FinalBillIDs ---
+Declare @TempFinalbillIDs as Table (FinalBillID Bigint)
+Insert Into @TempFinalbillIDs 
+Select FinalBillID from @pTableDuplicate group by finalbillid having count(finalbillid)>1
+
+-- Delete Duplicate FinalBillIDs --
+delete from @pTableDuplicate where FinalBillID in (Select FinalBillID from @TempFinalbillIDs)
+Delete from @pTable where FinalBillID in (Select FinalBillID from @pTableDuplicate)
+
+-- Update grosbillvaue and Netvalue for full due collection row--
+ --Select * from @pTableDuplicate
+--Select FB.GrossBillValue,FB.NetValue,PD.DiscountAmt 
+Update Dup Set Dup.GrossBillValue=FBF.GrossBillValue,Dup.Amount=((FBF.GrossBillValue-(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt+ISNULL(FBF.DiscountAmount,0) End)))
+,Dup.DiscountAmt=(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt End)
+from @pTableDuplicate Dup inner join FinalBill FB On Dup.FinalBillID=FB.FinalBillID
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=FB.FinalBillID and FBF.OrgID=FB.OrgID    
+Inner Join PatientDueDetails PD On PD.FinalBillID=FB.FinalBillID
+--Select '@pTableDuplicate'
+--Select * from @pTableDuplicate  
+--Select * from @pTable  
+Update Dup Set Dup.Amount=((FBF.GrossBillValue-(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt+ISNULL(FBF.DiscountAmount,0) End))) 
+from @pTable Dup inner join FinalBill FB On Dup.FinalBillID=FB.FinalBillID
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=FB.FinalBillID and FBF.OrgID=FB.OrgID  
+Inner Join PatientDueDetails PD On PD.FinalBillID=FB.FinalBillID where dup.ReceiptNo=0
+
+--Select '@pTable'
+--Select * from @pTable
+--- Insert full due collection row into original temp table
+Insert Into @pTable
+Select * from @pTableDuplicate
+--Select * from @pTable
+-- return   
+-------- End ----- 
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+INSERT INTO @pTable        
+(AmtReceivedID,        
+FinalBillID,        
+Amount,        
+AmtReceived,        
+GrossBillValue,          
+DiscountAmt,          
+DueAmount,           
+PaidCurrency,        
+PaidCurrencyAmount,        
+PaymentTypeID,        
+PaymentName,        
+VisitType,        
+VisitID,        
+PatientID,        
+ReceiptNO,        
+AmtReceivedBY,        
+CreatedAt,        
+BillStatus,        
+PaymentDetailsID,        
+ISSettlementPage
+,VisitNumber)
+SELECT AmtReceivedID,        
+FinalBill.FinalBillID,        
+case when AmountReceivedDetails.IsDueReceived='Y' then 0 else FBF.NetValue end,        
+AmtReceived,        
+case when AmountReceivedDetails.IsDueReceived='Y' then 0 else FBF.GrossBillValue end,          
+case when AmountReceivedDetails.IsDueReceived='Y' then PDD.DiscountAmt else  FBF.DiscountAmount end,  
+case when Pdd.Status='Closed' then 0 else Isnull(Pdd.DueAmount,0)-Isnull(PDD.RefundedAmount,0) end,           
+Isnull(CM.CurrencyCode, (SELECT CM.CurrencyCode        
+FROM   CurrencyOrgMapping COM WITH (NOLOCK)        
+INNER JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON COM.CurrencyID = CM.CurrencyID        
+AND COM.OrgID = @pOrgId        
+AND COM.isbasecurrency = 'Y'
+AND Isnull(COM.languagecode, 'en-GB') = @LangCode)),
+Isnull(AmountReceivedDetails.OtherCurrencyAmount, AmountReceivedDetails.AmtReceived),        
+PaymentTypeID,        
+PaymentName,        
+CASE        
+WHEN FinalBill.VisitID = -1        
+AND FinalBill.PatientID = -1 THEN 'WIP'            
+ELSE 'HOP'        
+END,        
+FinalBill. VisitID,        
+FinalBill.PatientID,            
+Isnull(AmountReceivedDetails. ReceiptNO, 0),        
+ReceivedBy,        
+AmountReceivedDetails.CreatedAt,        
+CASE        
+WHEN Isnull((SELECT TOP 1 AdvanceID        
+FROM   AdvancePaidDetails WITH (NOLOCK)        
+WHERE  VisitID = FinalBill.VisitID        
+AND PatientID = FinalBill.PatientID        
+AND ReceiptNO = AmountReceivedDetails.ReceiptNO), 0) <> 0 THEN 'ADVANCE'  
+ELSE 'OTHERS'        
+END,        
+ip.PaymentDetailsID,        
+Isnull(ip.ISSettlementPage, 'N')        
+,(
+SELECT VisitNumber
+FROM PatientVisit PV
+WHERE PV.PatientVisitId = FinalBill.VisitID
+) AS VisitNumber
+FROM   AmountReceivedDetails WITH (NOLOCK)        
+INNER JOIN FinalBill WITH (NOLOCK)        
+ON AmountReceivedDetails.FinalBillID = FinalBill.FinalBillID        
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=FinalBill.FinalBillID and FBF.OrgID=FinalBill.OrgID
+
+left join  PatientDueDetails as pdd on pdd.FinalBillID = FinalBill.FinalBillID and pdd.VisitID = FinalBill.VisitID     
+left join  DuePaidDetail as dpd  on dpd.DueBillNo = FinalBill.FinalBillID          
+LEFT JOIN IPIntermediatePayments ip WITH (NOLOCK)        
+ON ip.ReceiptNO = AmountReceivedDetails.ReceiptNO        
+AND ip.VisitID = FinalBill.VisitID        
+INNER JOIN PaymentType WITH (NOLOCK)        
+ON AmountReceivedDetails.TypeID = PaymentType.PaymentTypeID        
+LEFT JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON CM.CurrencyID = AmountReceivedDetails.PaidCurrencyID        
+WHERE  ReceivedBy = @pLoginID        
+AND FinalBill.OrgId = @pOrgId        
+AND CONVERT(nvarchar, AmountReceivedDetails.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND ( AmountReceivedDetails.PaidCurrencyID = COALESCE(@pCurrencyID, AmountReceivedDetails.PaidCurrencyID)        
+OR AmountReceivedDetails.PaidCurrencyID IS NULL )        
+AND Isnull(paymenttype.languagecode, 'en-GB') = @LangCode
+UNION        
+SELECT DISTINCT PDH.DepositHistoryID,        
+0,        
+0,        
+PDH.AmountDeposited,        
+0,          
+0,          
+0,            
+Isnull(CM.CurrencyCode, (SELECT CM.CurrencyCode 
+FROM   CurrencyOrgMapping COM WITH (NOLOCK)        
+INNER JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON COM.CurrencyID = CM.CurrencyID        
+AND COM.OrgID = @pOrgId        
+AND COM.isbasecurrency = 'Y'
+AND Isnull(COM.languagecode, 'en-GB') = @LangCode)),
+Isnull(PDH.PaidCurrencyAmount, PDH.AmountDeposited),        
+PT.PaymentTypeID,        
+PaymentName,        
+'DEP',        
+0,        
+PatientID,        
+ReceiptNO,        
+PDH.CreatedBy,        
+PDH.CreatedAt,        
+'DEPOSIT',        
+0,        
+'A'   ,
+Null     
+FROM   PatientDepositHistory PDH WITH (NOLOCK)        
+LEFT JOIN CurrencyMaster CM WITH (NOLOCK)        
+ON CM.CurrencyID = PDH.PaidCurrencyID        
+INNER JOIN PaymentType PT WITH (NOLOCK)        
+ON PT.PaymentTypeID = PDH.PaymentTypeID        
+WHERE  PDH.CreatedBy = @pLoginID        
+AND CONVERT(nvarchar, PDH.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND PDH.OrgID = @pOrgId        
+AND ( PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL )        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+-- Added By Jayaramanan L 
+----Start --
+-- Make copy --
+Insert @pTableDuplicate
+Select * from @pTable 
+
+-- Get Duplicate FinalBillIDs ---
+--Declare @TempFinalbillIDs as Table (FinalBillID Bigint)
+Insert Into @TempFinalbillIDs 
+Select FinalBillID from @pTableDuplicate group by finalbillid having count(finalbillid)>1
+
+-- Delete Duplicate FinalBillIDs --
+delete from @pTableDuplicate where FinalBillID in (Select FinalBillID from @TempFinalbillIDs)
+Delete from @pTable where FinalBillID in (Select FinalBillID from @pTableDuplicate)
+
+-- Update grosbillvaue and Netvalue for full due collection row--
+
+--Select FB.GrossBillValue,FB.NetValue,PD.DiscountAmt 
+Update Dup Set Dup.GrossBillValue=FBF.GrossBillValue,Dup.Amount=((FBF.GrossBillValue-(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt End)))
+,Dup.DiscountAmt=(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt End)
+from @pTableDuplicate Dup inner join FinalBill FB On Dup.FinalBillID=FB.FinalBillID
+Inner Join Finalbill_Franchisee FBF on FB.FinalBillID=FBF.FinalBillID and FBF.OrgID=FB.OrgID
+Inner Join PatientDueDetails PD On PD.FinalBillID=FB.FinalBillID
+--Select '@pTableDuplicate'
+--Select * from @pTableDuplicate  
+--Select * from @pTable  
+Update Dup Set Dup.Amount=((FBF.GrossBillValue-(Case when Isnull(PD.DiscountAmt,0)=0 Then FBF.DiscountAmount Else PD.DiscountAmt End))) 
+from @pTable Dup inner join FinalBill FB On Dup.FinalBillID=FB.FinalBillID
+Inner Join Finalbill_Franchisee FBF on FB.FinalBillID=FBF.FinalBillID and FBF.OrgID=FB.OrgID
+Inner Join PatientDueDetails PD On PD.FinalBillID=FB.FinalBillID where dup.ReceiptNo=0
+---
+--- Insert full due collection row into original temp table
+Insert Into @pTable
+Select * from @pTableDuplicate
+--Select * from @pTable
+-- return   
+-------- End ----- 
+END        
+INSERT INTO @PaymentMode        
+(FinalBillID,        
+Cards,        
+Cash,        
+Cheque,        
+DemandDraft,
+UPI,    
+Coupon,
+PaymentName,        
+PayMentTypeID,        
+ReceiptNO,        
+CollectedBY)        
+SELECT FinalBillID,        
+CASE        
+WHEN T.PaymentName NOT IN ( 'Cash', 'Cheque', 'Demand Draft','UPI Payments','Coupon'  ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE        
+WHEN T.PaymentName IN ( 'Cash' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE        
+WHEN T.PaymentName IN ( 'Cheque' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE 
+WHEN T.PaymentName IN ( 'Demand Draft' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,
+CASE        
+WHEN T.PaymentName IN ( 'UPI Payments' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,
+CASE        
+WHEN T.PaymentName IN ( 'Coupon' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+T.PaymentName,        
+T.PayMentTypeID,        
+ReceiptNO,        
+T.AmtReceivedBY        
+FROM   @pTable T        
+GROUP  BY FinalBillID,        
+T.PaymentName,  
+T.PayMentTypeID,        
+ReceiptNO,        
+AmtReceivedBY        
+INSERT @ptempTable        
+(Amount,        
+AmtReceived,        
+GrossBillValue,          
+DiscountAmt,          
+DueAmount,            
+FinalBillID,        
+PaidCurrency,        
+PaidCurrencyAmount,        
+ReceiptNO,        
+PName,        
+Cash,        
+Cards,        
+DD,        
+Cheque,
+UPI,
+Coupon,        
+BillNumber,        
+ReceivedBy,        
+PatientVisitID,        
+PatientID,        
+CreatedAt,        
+BillStatus,        
+PatientNumber,        
+PaymentDetailsID,  
+ISSettlementPage
+,VisitNumber)
+SELECT T.Amount,        
+Sum(T.AmtReceived),        
+isnull(t.GrossBillValue,0),          
+isnull(  (t.DiscountAmt),0),          
+--isnull(T.DueAmount,0),            
+CASE WHEN ISNULL(PDD.DueAmount,0) > 0 
+		THEN ISNULL(PDD.DueAmount,0) - ISNULL(PDD.DuePaidAmt,0) - ISNULL(PDD.DiscountAmt,0) - ISNULL(PDD.RefundedAmount,0) 
+	 ELSE ISNULL(T.Dueamount,0) END DueAmount,                    
+T.FinalBillID,        
+T.PaidCurrency,        
+Sum(T.PaidCurrencyAmount),        
+T.ReceiptNO,     
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN F.Name + '(Walk-in Customer)'        
+ELSE Isnull(S.DisplayText, '') + P.Name        
+END,        
+0,        
+0,        
+0,
+0,        
+0,        
+0,        
+BillNumber,        
+AmtReceivedBY,        
+F.VisitID,        
+F.PatientID,        
+T.CreatedAt,        
+T.BillStatus,        
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN '-1'        
+ELSE P.PatientNumber        
+END,        
+PaymentDetailsID,        
+t.ISSettlementPage
+,T.VisitNumber
+FROM   @pTable T        
+INNER JOIN FinalBill F WITH (NOLOCK)        
+ON F.FinalBillID = T.FinalBillID        
+LEFT JOIN Patient p WITH (NOLOCK)        
+ON T.PatientID = P.PatientID        
+AND P.OrgID = F.OrgID        
+LEFT JOIN SalutationOrgMapping S WITH (NOLOCK)        
+ON S.TitleID = P.TITLECode        
+AND s.OrgID = f.OrgID        
+LEFT JOIN @ContextInfo ctx1        
+ON ctx1.OrgID = S.OrgID        
+AND ctx1.LanguageCode = S.LanguageCode     
+left join patientduedetails PDD ON PDD.VisitID = T.VisitID AND PDD.PatientID = T.PatientID AND PDD.Finalbillid = T.finalbillid               
+WHERE  VisitType <> 'DEP' --  and t.FinalBillID=178937                                                    
+GROUP  BY T.FinalBillID,        
+T.PaidCurrency,        
+T.ReceiptNO,        
+f.VisitID,        
+f.PatientID,        
+P.Name,        
+F.Name,        
+S.DisplayText,        
+BillNumber,        
+AmtReceivedBY,        
+F.VisitID,        
+F.PatientID,        
+T.CreatedAt,        
+T.BillStatus,        
+P.PatientNumber,        
+PaymentDetailsID,        
+t.ISSettlementPage,        
+T.Amount,t.GrossBillValue, T.DueAmount  ,t.DiscountAmt     
+,T.VisitNumber
+,PDD.DueAmount,PDD.DuePaidAmt,PDD.DiscountAmt,PDD.RefundedAmount
+UNION        
+SELECT T.Amount,        
+Sum(T.AmtReceived),        
+isnull (t.GrossBillValue,0),          
+sum (t.DiscountAmt),          
+isnull (T.DueAmount,0),            
+T.FinalBillID,        
+T.PaidCurrency,        
+Sum(T.PaidCurrencyAmount),        
+T.ReceiptNO,        
+Isnull(S.DisplayText, '') + P.Name        
++ '(Deposit)',        
+0,        
+0,        
+0,        
+0,        
+0,        
+0,        
+'',        
+AmtReceivedBY,        
+T.VisitID,        
+T.PatientID,        
+T.CreatedAt,        
+T.BillStatus,        
+P.PatientNumber,        
+0,        
+'A'   ,
+T.VisitNumber
+FROM   @pTable T        
+INNER JOIN PatientDepositHistory F WITH (NOLOCK)        
+ON F.ReceiptNo = T.ReceiptNO        
+AND AmtReceivedID = DepositHistoryID        
+INNER JOIN Patient p WITH (NOLOCK)        
+ON T.PatientID = P.PatientID        
+AND P.OrgID = F.OrgID        
+LEFT JOIN SalutationOrgMapping S WITH (NOLOCK)        
+ON S.TitleID = P.TITLECode        
+AND S.OrgID = F.OrgID        
+LEFT JOIN @ContextInfo ctx1        
+ON ctx1.OrgID = S.OrgID        
+AND ctx1.LanguageCode = S.LanguageCode        
+WHERE  VisitType = 'DEP' -- and t.FinalBillID=178937                                                    
+GROUP  BY T.FinalBillID,        
+T.PaidCurrency,  
+T.ReceiptNO,    
+f.PatientID,        
+P.Name,        
+S.DisplayText,        
+AmtReceivedBY,        
+T.VisitID,        
+T.PatientID,        
+T.CreatedAt,        
+T.BillStatus,        
+P.PatientNumber,        
+T.Amount,t.GrossBillValue,T.DueAmount        
+,T.VisitNumber
+DECLARE @pBillDetails TABLE        
+(        
+FinalBillID  BIGINT,        
+ReceiptNo    nvarchar(30),        
+FeeTypeCount INT,        
+VisitType    nvarchar(50)        
+PRIMARY KEY (FinalBillID, ReceiptNo)        
+)        
+DECLARE @pPharmachBillDetails TABLE        
+(      
+FinalBillID  BIGINT,        
+ReceiptNo    nvarchar(30),        
+FeeTypeCount INT,        
+VisitType    nvarchar(50)        
+PRIMARY KEY (FinalBillID, ReceiptNo)        
+)        
+IF( @pLocationId > 0 )        
+BEGIN        
+INSERT INTO @pBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+IP.ReceiptNO,        
+Count(1),        
+'IP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+INNER JOIN IPIntermediatePayments IP WITH (NOLOCK)        
+ON IP.ReceiptNO = FB.ReceiptNO        
+AND bd.BillingDetailsID BETWEEN IP.StartBillingDetailID AND IP.EndBillingDetaillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.LocationID = @pLocationId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO > 0        
+AND FeeId NOT IN( -3 )        
+GROUP  BY FB.FinalBillID,        
+IP.ReceiptNO        
+INSERT INTO @pBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+0,        
+Count(1),        
+'OP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.LocationID = @pLocationId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO = 0        
+GROUP  BY FB.FinalBillID        
+INSERT INTO @pPharmachBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+IP.ReceiptNO,        
+Count(1),        
+'IP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+INNER JOIN IPIntermediatePayments IP WITH (NOLOCK)        
+ON IP.ReceiptNO = FB.ReceiptNO        
+AND bd.BillingDetailsID BETWEEN IP.StartBillingDetailID AND IP.EndBillingDetaillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.LocationID = @pLocationId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO > 0        
+AND BD.FeeType = 'PRM'        
+GROUP  BY FB.FinalBillID,        
+IP.ReceiptNO        
+INSERT INTO @pPharmachBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+0,        
+Count(1),        
+'OP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.LocationID = @pLocationId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO = 0        
+AND BD.FeeType = 'PRM'        
+GROUP  BY FB.FinalBillID        
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+INSERT INTO @pBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+IP.ReceiptNO,        
+Count(1),        
+'IP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+INNER JOIN IPIntermediatePayments IP WITH (NOLOCK)        
+ON IP.ReceiptNO = FB.ReceiptNO        
+AND bd.BillingDetailsID BETWEEN IP.StartBillingDetailID AND IP.EndBillingDetaillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO > 0        
+AND FeeId NOT IN( -3 )        
+GROUP  BY FB.FinalBillID,        
+IP.ReceiptNO        
+INSERT INTO @pBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+0,        
+Count(1),        
+'OP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO = 0        
+GROUP  BY FB.FinalBillID        
+INSERT INTO @pPharmachBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+IP.ReceiptNO,        
+Count(1),        
+'IP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+INNER JOIN IPIntermediatePayments IP WITH (NOLOCK)        
+ON IP.ReceiptNO = FB.ReceiptNO        
+AND bd.BillingDetailsID BETWEEN IP.StartBillingDetailID AND IP.EndBillingDetaillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.CreatedBy = @pLoginID        
+AND FB.ReceiptNO > 0        
+AND BD.FeeType = 'PRM'        
+GROUP  BY FB.FinalBillID,        
+IP.ReceiptNO        
+INSERT INTO @pPharmachBillDetails        
+SELECT DISTINCT FB.FinalBillID,        
+0,        
+Count(1),        
+'OP'        
+FROM   BillingDetails BD WITH (NOLOCK)        
+INNER JOIN @ptempTable FB        
+ON BD.FinalBillID = FB.FinalBillID        
+WHERE  BD.OrgID = @pOrgId        
+AND BD.CreatedBy = @pLoginID      
+AND FB.ReceiptNO = 0        
+AND BD.FeeType = 'PRM'        
+GROUP  BY FB.FinalBillID        
+END        
+--SELECT * FROM @pBillDetails                                        
+--SELECT * FROM @pPharmachBillDetails                                        
+UPDATE FBI        
+SET    FBI.FeeType = 'PRM'        
+FROM   @ptempTable FBI        
+INNER JOIN @pBillDetails BD        
+ON BD.FinalBillID = FBI.FinalBillID        
+INNER JOIN @pPharmachBillDetails PBD        
+ON BD.FinalBillID = PBD.FinalBillID        
+AND pBD.ReceiptNo = BD.ReceiptNo        
+WHERE  BD.ReceiptNo = FBI.ReceiptNO        
+AND BD.FeeTypeCount = PBD.FeeTypeCount        
+UPDATE FBI        
+SET    FBI.FeeType = ( CASE        
+WHEN R.RoleName <> 'Inventory' THEN 'CON'        
+ELSE 'PRM'        
+END )        
+FROM   @ptempTable FBI        
+INNER JOIN LoginRole LR        
+ON LR.LoginID = FBI.ReceivedBy        
+INNER JOIN Role R        
+ON R.RoleID = LR.RoleID        
+WHERE  OrgID = @pOrgId        
+INSERT INTO @PaymentMode1        
+(FinalBillID,        
+Cards,        
+Cash,        
+Cheque,        
+DemandDraft,   
+UPI,  
+Coupon,   
+ReceiptNO,        
+CollectedBY)        
+SELECT FinalBillID,        
+Sum(Cards),        
+Sum(Cash),        
+Sum(Cheque),        
+Sum(DemandDraft), 
+Sum(UPI),       
+Sum(Coupon),       
+ReceiptNO,        
+CollectedBY        
+FROM   @PaymentMode        
+GROUP  BY FinalBillID,        
+ReceiptNO,        
+CollectedBY        
+UPDATE T        
+SET    T.Cards = Isnull(ARD.Cards, 0),        
+T.Cash = Isnull(ARD.Cash, 0),        
+T.Cheque = Isnull(ARD.Cheque, 0),        
+T.dd = Isnull(ARD.DemandDraft, 0),
+T.UPI = Isnull(ARD.UPI, 0),   
+T.Coupon = Isnull(ARD.Coupon, 0)        
+FROM   @ptempTable T        
+INNER JOIN @PaymentMode1 ARD        
+ON T.FinalBillID = ARD.FinalBillID        
+AND T.ReceiptNO = ARD.ReceiptNO        
+DELETE @pTable        
+DELETE @PaymentMode        
+IF( @pLocationId > 0 )     
+BEGIN        
+INSERT INTO @pTable        
+(AmtReceivedID,        
+FinalBillID,        
+Amount,        
+AmtReceived,        
+ReceiptNO,        
+AmtReceivedBY,        
+PaymentTypeID,        
+PaymentName,        
+VisitType
+,VisitNumber,Remarks)
+SELECT AmtRefundID,        
+AR.FinalBillID,        
+Sum(FBF.NetValue),        
+Sum(Isnull(CancelAmount,0)-ISNULL(AR.RefundAdjustedamt,0)) ,--Sum(AmtRefund),        ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+AR.RefundNo,        
+RefundBy,        
+CASE       
+WHEN ( AR.PaymentTypeID IS NULL )        
+OR ( AR.PaymentTypeID <= 0 ) THEN 1        
+ELSE AR.PaymentTypeID        
+END,        
+CASE        
+WHEN ( AR.PaymentTypeID IS NULL )        
+OR ( AR.PaymentTypeID <= 0 ) THEN 'Cash'        
+ELSE PT.PaymentName        
+END,        
+BillStatus        
+,(
+SELECT VisitNumber
+FROM PatientVisit PV
+WHERE PV.PatientVisitId = F.VisitID
+) AS VisitNumber
+,AR.ReasonforRefund
+FROM   AmountRefundDetails AR WITH (NOLOCK)        
+INNER JOIN FinalBill F WITH (NOLOCK)        
+ON AR.FinalBillID = F.FinalBillID
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=F.FinalBillID and FBF.OrgID=F.OrgID        
+LEFT JOIN PaymentType PT WITH (NOLOCK)        
+ON PT.PaymentTypeID = AR.PaymentTypeID        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103)BETWEEN @pFDate AND @pTDate  and AR.BillStatus in ('Refund','Cancelled','Approved' ) ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount        
+AND RefundBy = @pLoginID        
+AND F.OrgId = @pOrgId        
+AND F.OrgAddressID = @pLocationId        
+AND ( AR.TranCurrencyID = COALESCE(@pCurrencyID, AR.TranCurrencyID)        
+OR AR.TranCurrencyID IS NULL )        
+GROUP  BY AmtRefundID,        
+AR.FinalBillID,        
+RefundBy,        
+AR.PaymentTypeID,        
+PaymentName,        
+RefundNo,        
+BillStatus  ,F.VisitID ,AR.ReasonforRefund    
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+INSERT INTO @pTable        
+(AmtReceivedID,        
+FinalBillID,        
+Amount,        
+AmtReceived,        
+ReceiptNO,        
+AmtReceivedBY,        
+PaymentTypeID,        
+PaymentName,        
+VisitType
+,VisitNumber
+,Remarks)
+SELECT AmtRefundID,        
+AR.FinalBillID,        
+Sum(FBF.NetValue),        
+--Sum(AmtRefund),
+Sum(Isnull(CancelAmount,0)-ISNULL(AR.RefundAdjustedamt,0)),---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount        
+AR.RefundNo,        
+RefundBy,        
+CASE        
+WHEN ( AR.PaymentTypeID IS NULL )        
+OR ( AR.PaymentTypeID <= 0 ) THEN 1        
+ELSE AR.PaymentTypeID        
+END,        
+CASE        
+WHEN ( AR.PaymentTypeID IS NULL )        
+OR ( AR.PaymentTypeID <= 0 ) THEN 'Cash'        
+ELSE PT.PaymentName        
+END,        
+BillStatus        
+,(
+SELECT VisitNumber
+FROM PatientVisit PV
+WHERE PV.PatientVisitId = F.VisitID
+) AS VisitNumber
+,AR.ReasonforRefund
+FROM   AmountRefundDetails AR WITH (NOLOCK)        
+INNER JOIN FinalBill F WITH (NOLOCK)        
+ON AR.FinalBillID = F.FinalBillID  
+Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=F.FinalBillID and FBF.OrgID=F.OrgID      
+LEFT JOIN PaymentType PT WITH (NOLOCK)        
+ON PT.PaymentTypeID = AR.PaymentTypeID        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103)BETWEEN @pFDate AND @pTDate and AR.BillStatus in ('Refund','Cancelled','Approved')---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount        
+AND RefundBy = @pLoginID        
+AND F.OrgId = @pOrgId        
+AND ( AR.TranCurrencyID = COALESCE(@pCurrencyID, AR.TranCurrencyID)        
+OR AR.TranCurrencyID IS NULL )        
+GROUP  BY AmtRefundID,        
+AR.FinalBillID,        
+RefundBy,        
+AR.PaymentTypeID,        
+PaymentName,        
+RefundNo,        
+BillStatus        
+,F.VisitID
+,AR.ReasonforRefund;
+END        
+INSERT INTO @PaymentMode        
+(FinalBillID,        
+Cards,        
+Cash,        
+Cheque,        
+DemandDraft, 
+UPI, 
+Coupon,      
+PaymentName,        
+PayMentTypeID,        
+ReceiptNO,        
+CollectedBY)        
+SELECT FinalBillID,        
+CASE        
+WHEN T.PaymentName NOT IN ( 'Cash', 'Cheque', 'Demand Draft','UPI Payments','Coupon'  ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE        
+WHEN T.PaymentName IN ( 'Cash' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE        
+WHEN T.PaymentName IN ( 'Cheque' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+CASE        
+WHEN T.PaymentName IN ( 'Demand Draft' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,
+CASE        
+WHEN T.PaymentName IN ( 'UPI Payments' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,
+CASE        
+WHEN T.PaymentName IN ( 'Coupon' ) THEN Sum(T.AmtReceived)        
+ELSE 0        
+END,        
+T.PaymentName,        
+T.PayMentTypeID,        
+ReceiptNO,        
+T.AmtReceivedBY        
+FROM   @pTable T        
+WHERE  Isnull(VisitType, '') IN ( 'REFUND', 'CANCELLED','APPROVED' )        
+GROUP  BY FinalBillID,        
+T.PaymentName,        
+T.PayMentTypeID,        
+ReceiptNO,        
+AmtReceivedBY        
+IF( @pLocationId > 0 )        
+BEGIN        
+INSERT @pReftempTable        
+(RefundAmount,        
+FinalBillID,        
+RefundNO,        
+Name,        
+Cash,        
+Cards,        
+DD,        
+Cheque,        
+UPI,
+Coupon,
+BillNumber,        
+RefundBy,        
+VisitType,        
+PatientNumber
+,VisitNumber
+,City)
+SELECT Sum(T.AmtReceived),        
+T.FinalBillID,        
+T.ReceiptNO,        
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN F.Name + '(Walk-in Customer)'        
+ELSE Isnull(S.DisplayText, '') + P.Name        
+END,        
+0,        
+0,        
+0, 
+0,        
+0,        
+0,        
+BillNumber,        
+AmtReceivedBY,        
+t.VisitType,        
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN '-1'        
+ELSE P.PatientNumber        
+END        
+,T.VisitNumber
+,T.Remarks
+FROM   @pTable T        
+INNER JOIN FinalBill F WITH (NOLOCK)        
+ON F.FinalBillID = T.FinalBillID        
+LEFT JOIN Patient p WITH (NOLOCK)        
+ON F.PatientID = P.PatientID        
+AND p.OrgID = f.OrgID        
+LEFT JOIN SalutationOrgMapping S WITH (NOLOCK)        
+ON S.TitleID = P.TITLECode        
+AND s.OrgID = f.OrgID        
+LEFT JOIN @ContextInfo ctx1        
+ON ctx1.OrgID = S.OrgID        
+AND ctx1.LanguageCode = S.LanguageCode        
+WHERE  F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+GROUP  BY T.FinalBillID,        
+T.ReceiptNO,        
+f.VisitID,        
+f.PatientID,        
+P.Name,        
+F.Name,        
+S.DisplayText,        
+BillNumber,        
+AmtReceivedBY,        
+VisitType,        
+P.PatientNumber        
+,T.VisitNumber
+,T.Remarks;
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+INSERT @pReftempTable        
+(RefundAmount,        
+FinalBillID,        
+RefundNO,        
+Name,        
+Cash,        
+Cards,        
+DD,        
+Cheque,        
+UPI,
+Coupon,
+BillNumber,      
+RefundBy,        
+VisitType,        
+PatientNumber,   
+VisitNumber)
+SELECT Sum(T.AmtReceived),       
+T.FinalBillID,        
+T.ReceiptNO,        
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN F.Name + '(Walk-in Customer)'        
+ELSE Isnull(S.DisplayText, '') + P.Name        
+END,        
+0,        
+0,        
+0,    
+0,        
+0,        
+0,        
+BillNumber,        
+AmtReceivedBY,        
+t.VisitType,        
+CASE        
+WHEN f.VisitID = -1        
+AND f.PatientID = -1 THEN '-1'        
+ELSE P.PatientNumber        
+END  
+,T.VisitNumber   
+FROM   @pTable T        
+INNER JOIN FinalBill F WITH (NOLOCK)        
+ON F.FinalBillID = T.FinalBillID        
+LEFT JOIN Patient p WITH (NOLOCK)        
+ON F.PatientID = P.PatientID        
+AND p.OrgID = f.OrgID        
+LEFT JOIN SalutationOrgMapping S WITH (NOLOCK)        
+ON S.TitleID = P.TITLECode        
+AND s.OrgID = f.OrgID        
+LEFT JOIN @ContextInfo ctx1        
+ON ctx1.OrgID = S.OrgID        
+AND ctx1.LanguageCode = S.LanguageCode        
+WHERE  F.OrgID = @pOrgId        
+GROUP  BY T.FinalBillID,        
+T.ReceiptNO,        
+f.VisitID,        
+f.PatientID,        
+P.Name,        
+F.Name,        
+S.DisplayText,        
+BillNumber,        
+AmtReceivedBY,        
+VisitType,        
+P.PatientNumber        
+,T.VisitNumber
+END        
+INSERT INTO @PaymentModeRef        
+(FinalBillID,        
+Cards,        
+Cash,        
+Cheque,        
+DemandDraft,        
+UPI,
+Coupon,
+ReceiptNO,        
+CollectedBY)        
+SELECT FinalBillID,        
+Sum(Cards),        
+Sum(Cash),        
+Sum(Cheque),        
+Sum(DemandDraft),        
+Sum(UPI),
+Sum(Coupon),
+ReceiptNO,        
+CollectedBY        
+FROM   @PaymentMode        
+GROUP  BY FinalBillID,        
+ReceiptNO,        
+CollectedBY        
+UPDATE T  
+SET    T.Cards = Isnull(ARD.Cards, 0),      
+T.Cash = Isnull(ARD.Cash, 0),        
+T.Cheque = Isnull(ARD.Cheque, 0),        
+T.dd = Isnull(ARD.DemandDraft, 0),        
+T.UPI = Isnull(ARD.UPI, 0),        
+T.Coupon = Isnull(ARD.Coupon, 0)        
+FROM   @pReftempTable T        
+INNER JOIN @PaymentModeRef ARD        
+ON T.FinalBillID = ARD.FinalBillID        
+AND T.RefundNO = ARD.ReceiptNO        
+INSERT @ptempTable        
+(FinalBillID,        
+Amount,        
+AmtReceived,        
+GrossBillValue,        
+DiscountAmt,        
+DueAmount,            
+PName,         
+Cash,        
+Cards,        
+DD,        
+Cheque,
+UPI,
+Coupon)        
+SELECT 999999999999,        
+Sum(Amount),        
+Sum(AmtReceived),        
+SUM(GrossBillValue),        
+SUM(DiscountAmt),        
+SUM(DueAmount),            
+'Total ',        
+Sum(Cash),        
+Sum(Cards),        
+Sum(DD),        
+Sum(Cheque),
+Sum(UPI),
+Sum(Coupon)        
+FROM   @ptempTable        
+INSERT @pReftempTable        
+(FinalBillID,        
+RefundAmount,        
+Name,        
+Cash,        
+Cards,        
+DD,      
+Cheque,
+UPI,
+Coupon)        
+SELECT 999999999999,        
+Sum(RefundAmount),        
+'Total ',        
+Sum(Cash),        
+Sum(Cards),        
+Sum(DD),        
+Sum(Cheque),
+Sum(UPI),
+Sum(Coupon)        
+FROM   @pReftempTable        
+WHERE  Isnull(VisitType, '') IN ( 'REFUND', 'CANCELLED','APPROVED' )        
+INSERT INTO @CollectionVisits
+SELECT PT.PatientVisitID,
+B.CreatedAt as BookedDate,              
+U.Name as  BookedBy,              
+B.BookingID as BookingID ,          
+CASE          
+WHEN max(piv.CollectedDateTime)='1/1/1900'          
+THEN ''          
+ELSE max(piv.CollectedDateTime)          
+END  CollectedDateTime 
+FROM   @ptempTable as pt                 
+INNER JOIN Bookings as B on pt.PatientID = B.PatientID                     
+INNER JOIN PatientInvSample piv on piv.PatientVisitID = pt.PatientVisitID and piv.OrgID =B.OrgID            
+INNER JOIN Users U on U.LoginID = B.CreatedBy    
+group by
+pt.PatientVisitID,                        
+B.CreatedAt,            
+U.Name,            
+B.BookingID      
+
+UPDATE PT SET 
+BookedDate=CV.BookedDate,              
+BookedBy=CV.BookedBy,  BookingID=CV.BookingID ,                           
+CollectedDateTime  =  CV.CollectedDateTime 
+FROM   @ptempTable as pt                 
+INNER JOIN @CollectionVisits CV ON CV.PatientVisitID=PT.PatientVisitID
+
+
+SELECT Amount,                
+Sum(AmtReceived) AS AmtReceived,                
+GrossBillValue,          
+pt.DiscountAmt,          
+DueAmount,                    
+pt.FinalBillID,                
+PaidCurrency,                
+Sum(PaidCurrencyAmount) as PaidCurrencyAmount,                
+pt.ReceiptNO,                
+PName as Name,               
+Cash,                
+Cards            Card,                
+DD,                
+Cheque,
+UPI AS BilledAmount, 
+Coupon AS RefundAmount,               
+BillNumber,                
+pt.PatientVisitID   VisitID,                
+pt.PatientID        ModifiedBy,                
+(Max(pt.createdat)) AS CreatedAt,                
+pt.BillStatus,                
+pt.FeeType,                
+pt.PatientNumber    AS Descriptions,                
+PaymentDetailsID DetailsID,                
+ISSettlementPage ClosureStatus ,            
+B.CreatedAt as BookedDate,            
+U.Name as  BookedBy,            
+B.BookingID as BookingID ,                           
+--B.City as City,          
+CASE        
+WHEN max(piv.CollectedDateTime)='1/1/1900'        
+THEN ''        
+ELSE max(piv.CollectedDateTime)        
+END  CollectedDateTime        
+-- isnull(max(piv.CollectedDateTime),'') as CollectedDateTime                              
+,VisitNumber
+FROM   @ptempTable as pt               
+left join Bookings as B on pt.PatientID = B.PatientID            
+left join PatientInvSample piv on piv.PatientVisitID = pt.PatientVisitID and piv.OrgID =B.OrgID          
+left join Users U on U.LoginID = B.CreatedBy          
+group by Amount,          
+--AmtReceived,          
+GrossBillValue,             
+pt.DiscountAmt,          
+pt.DueAmount,          
+pt.FinalBillID,    PaidCurrency,              
+--PaidCurrencyAmount,          
+pt.ReceiptNO,          
+PName,          
+Cash,          
+Cards,          
+DD,          
+Cheque,          
+BillNumber,          
+pt.PatientVisitID,          
+pt.PatientID,          
+Convert(varchar(100),pt.CreatedAt,120) ,
+--pt.CreatedAt,                
+pt.BillStatus,                
+pt.FeeType,           
+pt.PatientNumber,          
+PaymentDetailsID,          
+ISSettlementPage,          
+B.CreatedAt,          
+U.Name,          
+B.BookingID,          
+--B.City,          
+piv.CollectedDateTime           
+,pt.VisitNumber,UPI,Coupon
+--,ARD.DueAmount,ARD.DuePaidAmt,ARD.DiscountAmt,ARD.RefundedAmount
+ORDER  BY FinalBillID,                
+ReceiptNO            
+--UNION ALL                                                    
+SELECT RefundAmount  AmtReceived,        
+FinalBillID,        
+RefundNO      ReceiptNO,        
+Name,        
+Cash,        
+Cards         Card,        
+DD,        
+Cheque,
+UPI,
+Coupon,        
+BillNumber,        
+PatientNumber AS Descriptions        
+,VisitNumber,City
+FROM   @pReftempTable        
+ORDER  BY FinalBillID,        
+ReceiptNO        
+SELECT CONVERT(INT, OutFlowID)      AS AmtReceivedID,        
+CONVERT(nvarchar, ReceiverID) AS FinalBillID,        
+ReceiverName + ' ('        
++ Isnull(Remarks, 'Amount Paid to DOCTOR')        
++ ')'                        AS Name,        
+Sum(AmountReceived)          AS AmtReceived,        
+CreatedBy                    AS ReceivedBy        
+FROM   CashOutFlow WITH (NOLOCK)        
+WHERE  CreatedAt BETWEEN @pFDate AND @pTDate        
+AND OrgID = @pOrgId        
+AND CreatedBy = @pLoginID        
+GROUP  BY OutFlowID,        
+ReceiverID,        
+ReceiverName,        
+CreatedBy,        
+Remarks        
+--------------------------------------------------------------------------------------                    
+IF( @pLocationId > 0 )        
+BEGIN        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount--start
+
+Declare @RefundCouponAmount Decimal(18,2)
+SELECT @RefundCouponAmount = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID   
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+and ARD.Refundby =@pLoginID AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+AND AR.CreatedBy = @pLoginID 
+
+
+ Set @DueAmtRefund=0                    
+ Select @DueAmtRefund=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select ARD.FinalBillID From                
+ AmountRefundDetails ARD                                   
+   INNER JOIN Users U ON ARD.RefundBy=U.LoginID                                        
+   AND ARD.RefundBy=@pLoginID AND ARD.OrgID=@pOrgID                       
+   where isnull(BillStatus,'') in ('REFUND','APPROVED') and ARD.FinalBillID in(Select FinalBillID from FinalBill F where f.OrgAddressID=@pLocationId and F.OrgID=@pOrgID  ) and                                   
+   Convert(nvarchar,ARD.CreatedAt,103) BETWEEN @pFDate AND @pTDate  )                
+              
+       Set @DueAmtCancel=0                    
+ Select @DueAmtCancel=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select ARD.FinalBillID From                
+ AmountRefundDetails ARD                                   
+   INNER JOIN Users U ON ARD.RefundBy=U.LoginID                                        
+   AND ARD.RefundBy=@pLoginID AND ARD.OrgID=@pOrgID                       
+   where isnull(BillStatus,'') in ('CANCELLED') and ARD.FinalBillID in(Select FinalBillID from FinalBill F where f.OrgAddressID=@pLocationId and F.OrgID=@pOrgID  ) and                                   
+   Convert(nvarchar,ARD.CreatedAt,103) BETWEEN @pFDate AND @pTDate  )  and FinalbillId NOT in (Select ARD.FinalBillID From                
+ AmountRefundDetails ARD                                   
+   INNER JOIN Users U ON ARD.RefundBy=U.LoginID                                        
+   AND ARD.RefundBy=@pLoginID AND ARD.OrgID=@pOrgID                       
+   where isnull(BillStatus,'') in ('REFUND','APPROVED') and ARD.FinalBillID in(Select FinalBillID from FinalBill F where f.OrgAddressID=@pLocationId and F.OrgID=@pOrgID  ) and                                   
+   Convert(nvarchar,ARD.CreatedAt,103) BETWEEN @pFDate AND @pTDate  )                 
+           
+SELECT @TotalRefund = --Sum(Isnull(CancelAmount,0)-(Isnull(RefundadjustedAmt,0)+ Isnull(DiscountAdjustedAmt,0)))                                  
+ Sum(Isnull(CancelAmount, 0)) - Isnull(@DueAmtRefund,0)  - ISNULL(@RefundCouponAmount,0)  --- Sum(Isnull(RefundedAmount,0))                
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount                  
+FROM   AmountRefundDetails ARD WITH (NOLOCK)        
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND ARD.FinalBillID IN(SELECT FinalBillID        
+FROM   FinalBill        
+WHERE  OrgAddressID = @pLocationId        
+AND OrgID = @pOrgId)        
+AND ARD.OrgId = @pOrgId        
+AND BillStatus in ('REFUND','APPROVED')        
+AND RefundBy = @pLoginID        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+
+Declare @CancelCouponAmount Decimal(18,2)
+SELECT @CancelCouponAmount = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+and ARD.Refundby =@pLoginID AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+AND AR.CreatedBy = @pLoginID 
+
+
+SELECT @TotalCancelledAmt = Sum(Isnull(CancelAmount,0))-Isnull(@DueAmtCancel,0) - ISNULL(@CancelCouponAmount,0)     
+FROM   AmountRefundDetails ARD WITH (NOLOCK)        
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND ARD.FinalBillID IN(SELECT FinalBillID        
+FROM   FinalBill        
+WHERE  OrgAddressID = @pLocationId        
+AND OrgID = @pOrgId)        
+AND ARD.OrgId = @pOrgId        
+AND BillStatus = 'CANCELLED'        
+AND RefundBy = @pLoginID  
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+Set @DueAmtRefund=0                    
+ Select @DueAmtRefund=Isnull(Sum(Isnull(RefundedAmount,0)),0)from PatientDueDetails Where FinalbillId in (Select FinalBillID FROM   AmountRefundDetails ARD WITH (NOLOCK)                    
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus in ('REFUND','APPROVED')                                  
+AND RefundBy = @pLoginID )                
+              
+Set @DueAmtCancel=0                    
+ Select @DueAmtCancel=Isnull(Sum(Isnull(RefundedAmount,0)),0)from PatientDueDetails Where FinalbillId in (Select FinalBillID FROM   AmountRefundDetails ARD WITH (NOLOCK)                    
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus = 'CANCELLED'                                  
+AND RefundBy = @pLoginID ) and FinalbillId not in (Select FinalBillID FROM   AmountRefundDetails ARD WITH (NOLOCK)                    
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate    
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus in ('REFUND','APPROVED')                                  
+AND RefundBy = @pLoginID )                  
+              
+Declare @CancelCouponAmountLOC Decimal(18,2)
+SELECT @CancelCouponAmountLOC = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+and ARD.Refundby =@pLoginID AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+AND AR.CreatedBy = @pLoginID 
+
+Declare @RefundCouponAmountLOC Decimal(18,2)
+SELECT @RefundCouponAmountLOC = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID   
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+and ARD.Refundby =@pLoginID AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+AND AR.CreatedBy = @pLoginID 
+
+
+SELECT @TotalRefund = --Sum(Isnull(CancelAmount,0)-(Isnull(RefundadjustedAmt,0)+ Isnull(DiscountAdjustedAmt,0)))                        
+Sum(Isnull(CancelAmount, 0)) -  Isnull(@DueAmtRefund,0)  - ISNULL(@RefundCouponAmountLOC,0)    
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount    
+FROM   AmountRefundDetails ARD WITH (NOLOCK)        
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND ARD.OrgId = @pOrgId        
+AND BillStatus in( 'REFUND','APPROVED')        
+AND RefundBy = @pLoginID    
+
+SELECT @TotalCancelledAmt =Sum(Isnull(CancelAmount,0))-Isnull(@DueAmtCancel,0) - ISNULL(@CancelCouponAmountLOC,0)      ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount       
+FROM   AmountRefundDetails WITH (NOLOCK)        
+WHERE  CreatedAt BETWEEN @pFDate AND @pTDate        
+AND OrgId = @pOrgId        
+AND BillStatus = 'CANCELLED'        
+AND RefundBy = @pLoginID 
+    
+END        
+--------------------------------------------------------------------------------------                                                                                       
+--SELECT @TotalCancelledAmt = Isnull(Sum(AmtRefund), 0)        
+--FROM   AmountRefundDetails WITH (NOLOCK)        
+--WHERE  CreatedAt BETWEEN @pFDate AND @pTDate        
+--AND OrgId = @pOrgId        
+--AND BillStatus = 'CANCELLED'        
+--AND RefundBy = @pLoginID        
+SELECT @OthersAmount = Isnull(Sum(AmountReceived), 0)        
+FROM   CashOutFlow        
+WHERE  CreatedAt BETWEEN @pFDate AND @pTDate        
+AND OrgID = @pOrgId        
+AND CreatedBy = @pLoginID        
+--SET @TotalRefund = ISNULL(@TotalRefund,0)+@DoctorsAmount                                                                                        
+--------------------------------------------------------------------------------------------                      
+IF( @pLocationId > 0 )        
+BEGIN        
+SELECT @TotalAmount = Isnull(Sum(AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND ( AR.PaidCurrencyID = COALESCE(@pCurrencyID, AR.PaidCurrencyID)        
+OR AR.PaidCurrencyID IS NULL )        
+AND AR.CreatedBy = @pLoginID        
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+SELECT @TotalAmount = Isnull(Sum(AmtReceived), 0)        
+FROM   AmountReceivedDetails WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AmountReceivedDetails.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AmountReceivedDetails.OrgID = @pOrgId        
+AND ( AmountReceivedDetails.PaidCurrencyID = COALESCE(@pCurrencyID, AmountReceivedDetails.PaidCurrencyID)        
+OR AmountReceivedDetails.PaidCurrencyID IS NULL )        
+AND AmountReceivedDetails.CreatedBy = @pLoginID        
+END        
+SELECT @TotalAmount += Isnull(Sum(PDH.AmountDeposited), 0)   
+FROM   PatientDepositHistory PDH WITH (NOLOCK)        
+WHERE  PDH.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND PDH.OrgID = @pOrgId        
+AND ( PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL )        
+AND CreatedBy = @pLoginID        
+DECLARE @pRefundTable AS TABLE        
+(        
+LoginID          BIGINT,        
+Name             nvarchar(255),        
+PaymentTypeID   BIGINT,        
+PaymentName      nvarchar(30),        
+CollectionAmount DECIMAL(18, 2),        
+RefundAmt        DECIMAL(18, 2),        
+TotalAmt         DECIMAL(18, 2),        
+OtherPayment     DECIMAL(18, 2),
+LangCode         NVARCHAR(20)
+)        
+INSERT INTO @pRefundTable        
+(LoginID,        
+Name,        
+PaymentName,        
+RefundAmt,        
+OtherPayment,
+Langcode)
+EXEC Pgetamountrefundbyuserlocation        
+@pLoginID,        
+@pOrgID,        
+@pLocationId,        
+@pFDate,        
+@pTDate        
+DELETE @PaymentMode1        
+INSERT INTO @PaymentMode1        
+(Cards,        
+Cash,        
+Cheque,        
+DemandDraft, 
+UPI,
+Coupon,       
+CollectedBY)        
+SELECT Isnull(Sum(Cards), 0),        
+Isnull(Sum(Cash), 0),        
+Isnull(Sum(Cheque), 0),        
+Isnull(Sum(DD), 0),   
+Isnull(Sum(UPI), 0), 
+Isnull(Sum(Coupon), 0),        
+ReceivedBy        
+FROM   @ptempTable        
+GROUP  BY ReceivedBy        
+--SELECT * FROM @PaymentMode1                                                       
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.Cash, 0),        
+TotalAmt = ( Isnull(T.Cash, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName = 'Cash'        
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.Cards, 0),        
+TotalAmt = ( Isnull(T.Cards, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName = 'Credit/Debit Card' 
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.Cheque, 0),        
+TotalAmt = ( Isnull(T.Cheque, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName = 'Cheque'        
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.DemandDraft, 0),        
+TotalAmt = ( Isnull(T.DemandDraft, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName in('DD','Demand Draft','DemandDraft')     
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount --start
+SELECT @DueCollectionAmount = Sum(case when Status='Closed' then 0 else Isnull(DueAmount,0)-Isnull(RefundedAmount,0) end)  --Sum(PaidAmount)                                
+FROM   PatientDuedetails                                
+WHERE  CreatedBy = @pLoginID  and Finalbillid in (Select FinalBillID from FinalBill F where f.OrgAddressID=@pLocationId and F.OrgID=@pOrgID  )                               
+AND CONVERT(nvarchar, CreatedAt, 103) BETWEEN @pFDate AND @pTDate                    
+                    
+Update @pRefundTable Set TotalAmt=Isnull(CollectionAmount,0) - (Isnull(RefundAmt,0)  )          
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount --end
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.UPI, 0),        
+TotalAmt = ( Isnull(T.UPI, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName = 'UPI Payments'   
+
+UPDATE R        
+SET    R.CollectionAmount = Isnull(T.Coupon, 0),        
+TotalAmt = ( Isnull(T.Coupon, 0) - ( Isnull(R.RefundAmt, 0)        
++ Isnull(OtherPayment, 0) ) )        
+FROM   @pRefundTable R        
+INNER JOIN @PaymentMode1 T        
+ON T.CollectedBY = R.LoginID        
+WHERE  R.PaymentName = 'Coupon'        
+   
+INSERT INTO @pRefundTable        
+(PaymentName,        
+CollectionAmount,        
+RefundAmt,        
+TotalAmt,        
+OtherPayment)        
+SELECT 'Total',        
+Isnull(Sum(CollectionAmount), 0),        
+Isnull(Sum(RefundAmt), 0),        
+Isnull(Sum(TotalAmt), 0),        
+Isnull(Sum(OtherPayment), 0)        
+FROM   @pRefundTable     
+SELECT Case when PaymentName='Demand Draft'   then 'Prepaid Card' else PaymentName end     AS Descriptions,        
+CollectionAmount AS AmtReceived,        
+RefundAmt        AS RefundAmount,        
+TotalAmt         AS BilledAmount,        
+OtherPayment     PaidCurrencyAmount        
+FROM   @pRefundTable        
+WHERE  Isnull(langcode, 'en-GB') = @LangCode
+SELECT @totalAdvance = Sum(AdvanceAmount)        
+FROM   AdvancePaidDetails        
+WHERE  CreatedBy = @pLoginID   
+AND AdvancePaidDetails.CreatedAt BETWEEN @pFDate AND @pTDate     
+SELECT @totalDueCollection = Sum(PaidAmount)        
+FROM   DuePaidDetail   DuePaidDetail
+--arun -- rls issue fixing -- Userwise collection -- branch filter is not working properly
+inner join Finalbill FB with(NOLOCK)  on FB.OrgID=DuePaidDetail.OrgID and DuePaidDetail.PaidBillNo=FB.FinalBillID and (ISNULL(@pLocationId,-1) =-1 OR (FB.orgaddressid = @pLocationId))                 
+WHERE  DueCollectedBy = @pLoginID        
+AND CONVERT(nvarchar, DuePaidDetail.PaidDate, 103) BETWEEN @pFDate AND @pTDate  
+select '1'
+SELECT @ClosingBalance = ( Isnull(@totalAdvance, 0)        
++ Isnull(@TotalAmount, 0) ) - (Select Sum(Isnull(RefundAmt,0)) from @pRefundTable where PaymentName='Total' )  ---Isnull(@Totalrefund, 0) Hide by Surya
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection        
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+UNION        
+SELECT 'Total Collection',        
+@TotalAmount        
+UNION        
+SELECT 'Closing Balance',        
+@ClosingBalance        
+SELECT Descriptions as Remarks, 
+Amount as AmtReceived        
+FROM   @TranSSummary   
+select '3'
+ SELECT @ClosingBalance = ( Isnull(@totalAdvance, 0)                  
++ Isnull(@TotalAmount, 0) ) - (Select Sum(Isnull(RefundAmt,0)) from @pRefundTable where PaymentName='Total' )  ---Isnull(@Totalrefund, 0) Hide by Surya ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection        
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+UNION       
+SELECT 'Total Collection',        
+@TotalAmount        
+UNION        
+SELECT 'Closing Balance',        
+@ClosingBalance        
+SELECT Descriptions as Remarks,        
+Amount as AmtReceived        
+FROM   @TranSSummary   
+select '4'
+SELECT @ClosingBalance = ( Isnull(@totalAdvance, 0)                                
++ Isnull(@TotalAmount, 0) ) - (Select Sum(Isnull(RefundAmt,0)) from @pRefundTable where PaymentName='Total' )  ---Isnull(@Totalrefund, 0) Hide by Surya ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection        
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+UNION        
+SELECT 'Total Collection',        
+@TotalAmount        
+UNION        
+SELECT 'Closing Balance',        
+@ClosingBalance        
+SELECT Descriptions as Remarks,        
+Amount as AmtReceived        
+FROM   @TranSSummary        
+SELECT DISTINCT U.Name                              AS ReceiptNO,        
+CONVERT(BIGINT, ISPD.ReferenceID)   AS AmtReceivedID,        
+ISPD.PaidDetailsID                  AS FinalBillID,        
+Isnull(Sum(ISPD.AmountReceived), 0) AS AmtReceived,        
+ISPD.CreatedBY                      AS ReceivedBy,        
+Isnull(ISPD.Description, '')        AS Remarks        
+FROM   IncSourcePaidDetails ISPD        
+INNER JOIN PaymentType PT        
+ON PT.PaymentTypeID = ISPD.ReceivedTypeID        
+INNER JOIN Users U        
+ON U.LoginID = ISPD.CreatedBY        
+-- AND U.OrgID = ISPD.OrgID        
+WHERE  ISPD.CreatedBY = @pLoginID        
+AND ISPD.OrgID = @pOrgId --AND PT.PaymentName ='Cash' AND ISPD.Status='Open'                             
+AND CONVERT(nvarchar, ISPD.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+GROUP  BY ISPD.CreatedBy,        
+U.Name,        
+PaidDetailsID,        
+ISPD.ReferenceID,        
+ISPD.Description 
+SELECT @TotalIncAmount = Isnull(Sum(ISPD.AmountReceived), 0)        
+FROM   IncSourcePaidDetails ISPD        
+INNER JOIN Users U        
+ON U.LoginID = ISPD.CreatedBY        
+--AND U.OrgID = ISPD.OrgID        
+INNER JOIN PaymentType PT        
+ON PT.PaymentTypeID = ISPD.ReceivedTypeID        
+WHERE  ISPD.CreatedBY = @pLoginID        
+AND ISPD.OrgID = @pOrgId        
+AND CONVERT(nvarchar, ISPD.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+END        
+IF( @pLoginID = 0 )        
+BEGIN        
+-- select 0, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                     
+IF( @pLocationId > 0 )        
+BEGIN      
+  
+DECLARE @UserwiseAmountDetails AS TABLE
+(
+ FinalBillID VARCHAR(200),
+ AmtReceived DECIMAL(18,2),
+ ReceivedBy BIGINT,
+ Cash DECIMAL(18,2),
+ Cards DECIMAL(18,2),
+ UPI DECIMAL(18,2),
+ Coupon DECIMAL(18,2)
+)
+INSERT INTO @UserwiseAmountDetails(FinalBillID,AmtReceived,ReceivedBy)
+SELECT Ltrim(Rtrim(U.Name)) FinalBillID,        
+Sum(AmtReceived)     AmtReceived,        
+AR.ReceivedBy        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+Users U WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  -- U.OrgID = @pOrgId        
+--AND        
+F.OrgID = @pOrgId        
+AND U.LoginID = AR.ReceivedBy 
+AND AR.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+--AND Convert(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate                                                                       
+AND AR.OrgID = @pOrgId   
+AND AR.FinalBillID = F.FinalBillID        
+AND AR.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AR.AmtReceived > 0        
+AND F.OrgAddressID = @pLocationId  
+AND ( AR.PaidCurrencyID = COALESCE(@pCurrencyID, AR.PaidCurrencyID)        
+OR AR.PaidCurrencyID IS NULL )        
+GROUP  BY U.Name,        
+ReceivedBy        
+--select 1, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                                           
+UNION        
+SELECT ( Ltrim(Rtrim(U.Name)) ) + ' (DepositAmt)' AS FinalBillID,        
+Sum(AmountDeposited)                       AS AmtReceived,        
+PDH.CreatedBy        
+FROM   PatientDepositHistory PDH WITH (NOLOCK),        
+Users U WITH (NOLOCK)        
+WHERE  PDH.OrgID = @pOrgId        
+--AND U.OrgID = @pOrgId        
+AND PDH.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND PDH.CreatedBy = U.LoginID        
+--AND Convert(nvarchar,PDH.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                                
+AND PDH.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL        
+GROUP  BY U.Name,        
+PDH.CreatedBy        
+ORDER  BY FinalBillID   
+
+
+DECLARE @UserPaymentMode AS TABLE
+(
+  LoginID BIGINT,
+  Cash          DECIMAL(18, 2),            
+  Cards         DECIMAL(18, 2),
+  UPI         DECIMAL(18, 2),
+  Coupon         DECIMAL(18, 2)  
+
+)
+INSERT INTO @UserPaymentMode
+SELECT
+ReceivedBy,
+CASE        
+WHEN T.PaymentName IN ( 'Cash' ) THEN Sum(AR.AmtReceived)      
+ELSE 0        
+END,        
+CASE    
+WHEN T.PaymentName NOT IN ( 'Cash', 'Cheque', 'Demand Draft','UPI Payments','Coupon' ) THEN Sum(AR.AmtReceived)      
+ELSE 0        
+END,
+CASE    
+WHEN T.PaymentName IN ( 'UPI Payments' ) THEN Sum(AR.AmtReceived) 
+ELSE 0        
+END,
+CASE    
+WHEN T.PaymentName IN ( 'Coupon' ) THEN Sum(AR.AmtReceived)      
+ELSE 0        
+END 
+--AR.*
+FROM
+ AmountReceivedDetails AR WITH (NOLOCK), 
+ Users U WITH (NOLOCK),        
+ PaymentType T WITH (NOLOCK),
+ --arun -- rls issue fixing -- Userwise collection -- branch filter is not working properly
+ FINALBILL  FB WITH (NOLOCK)            
+WHERE  -- U.OrgID = @pOrgId        
+--AND        
+FB.OrgID = @pOrgId        
+AND
+ U.LoginID = AR.ReceivedBy 
+AND AR.CreatedBy IN (SELECT LoginID FROM @pLoginIDs)        
+--AND Convert(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate                                                                       
+AND AR.OrgID = @pOrgId   
+--AND AR.FinalBillID = F.FinalBillID        
+AND AR.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AR.AmtReceived > 0        
+--AND F.OrgAddressID = @pLocationId        
+AND ( AR.PaidCurrencyID = COALESCE(@pCurrencyID, AR.PaidCurrencyID)        
+OR AR.PaidCurrencyID IS NULL )    
+AND     AR.TypeID=T.PaymentTypeID
+AND (FB.FINALBILLID = AR.FINALBILLID AND (ISNULL(@pLocationId,-1) =-1 OR (FB.orgaddressid = @pLocationId)))
+GROUP  BY AR.ReceivedBy,T.PaymentName
+  
+
+  UPDATE  UAD SET  UAD.Cash=UPM.Cash FROM @UserwiseAmountDetails UAD
+  INNER JOIN  @UserPaymentMode UPM ON UAD.ReceivedBy=UPM.LoginID  
+  WHERE UPM.Cash>0
+
+  UPDATE UAD SET  UAD.Cards=UPM.Cards FROM @UserwiseAmountDetails UAD
+  INNER JOIN  @UserPaymentMode UPM ON UAD.ReceivedBy=UPM.LoginID  
+  WHERE UPM.Cards>0
+
+  UPDATE UAD SET  UAD.UPI=UPM.UPI FROM @UserwiseAmountDetails UAD
+  INNER JOIN  @UserPaymentMode UPM ON UAD.ReceivedBy=UPM.LoginID  
+  WHERE UPM.UPI>0
+
+  UPDATE UAD SET  UAD.Coupon=UPM.Coupon FROM @UserwiseAmountDetails UAD
+  INNER JOIN  @UserPaymentMode UPM ON UAD.ReceivedBy=UPM.LoginID  
+  WHERE UPM.Coupon>0
+  SELECT  FinalBillID,
+ AmtReceived,
+ ReceivedBy,
+ Cash,
+ Cards AS 'Card',UPI AS PendingSettlementAmt,Coupon AS DepositUsed FROM @UserwiseAmountDetails
+
+--select 2, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                                
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+
+/* Seetha Block for Refund Cancel Issue While using Coupon */
+
+Declare @RefundCouponAmount2 Decimal(18,2)
+SELECT @RefundCouponAmount2 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID   
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+Declare @CancelCouponAmount2 Decimal(18,2)
+SELECT @CancelCouponAmount2 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+
+Select * from (                        
+SELECT Users.Name    FinalBillID,                 
+Sum(isnull(CancelAmount,0))- ISNULL(@RefundCouponAmount2,0)AS AmtReceived,            
+--SELECT Users.Name    FinalBillID,        
+--Sum(AmtRefund)AS AmtReceived,        
+RefundBy      AS ReceivedBy,        
+BillStatus        
+FROM   AmountRefundDetails WITH (NOLOCK)        
+INNER JOIN Users WITH (NOLOCK)        
+ON Users.LoginID = RefundBy        
+-- AND Users.OrgID = AmountRefundDetails.OrgID        
+INNER JOIN FinalBill WITH (NOLOCK)        
+ON AmountRefundDetails.FinalBillID = FinalBill.FinalBillID        
+AND FinalBill.OrgID = AmountRefundDetails.OrgID        
+WHERE  AmountRefundDetails.OrgID = @pOrgId        
+--Convert(nvarchar,AmountRefundDetails.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                                                       
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount -- start
+AND AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate and  AmountRefundDetails.BillStatus='Refund'                                 
+AND FinalBill.OrgAddressID = @pLocationId                                  
+AND RefundBy IN (SELECT LoginID FROM   @pLoginIDs)                                  
+--AND                                                               
+AND ( AmountRefundDetails.TranCurrencyID = COALESCE(@pCurrencyID, AmountRefundDetails.TranCurrencyID)                                  
+OR AmountRefundDetails.TranCurrencyID IS NULL )                                  
+AND AmountRefundDetails.AmtRefund <> 0                                  
+GROUP  BY Users.Name,                                  
+RefundBy,                                  
+BillStatus                          
+                     
+Union All                        
+SELECT Users.Name    FinalBillID,                                  
+--Sum(AmtRefund)AS AmtReceived,                           
+Sum(Isnull(CancelAmount,0)-(Isnull(RefundadjustedAmt,0))) - ISNULL(@CancelCouponAmount2,0)  AS AmtReceived,                        
+                         
+RefundBy      AS ReceivedBy,                                  
+BillStatus                                  
+FROM   AmountRefundDetails WITH (NOLOCK)                                  
+INNER JOIN Users WITH (NOLOCK)                                  
+ON Users.LoginID = RefundBy                                  
+-- AND Users.OrgID = AmountRefundDetails.OrgID                                  
+INNER JOIN FinalBill WITH (NOLOCK)                                  
+ON AmountRefundDetails.FinalBillID = FinalBill.FinalBillID                                  
+AND FinalBill.OrgID = AmountRefundDetails.OrgID                                  
+WHERE  AmountRefundDetails.OrgID = @pOrgId and  AmountRefundDetails.BillStatus='Cancelled'                                
+--Convert(nvarchar,AmountRefundDetails.CreatedAt,103) BETWEEN @pFDate AND @pTDate 
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount--end
+AND AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND FinalBill.OrgAddressID = @pLocationId        
+AND RefundBy IN (SELECT LoginID FROM   @pLoginIDs)        
+--AND                                     
+AND ( AmountRefundDetails.TranCurrencyID = COALESCE(@pCurrencyID, AmountRefundDetails.TranCurrencyID)        
+OR AmountRefundDetails.TranCurrencyID IS NULL )        
+AND AmountRefundDetails.AmtRefund <> 0        
+GROUP  BY Users.Name,        
+RefundBy,        
+BillStatus        
+)T ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+ORDER  BY FinalBillID        
+END        
+--select 3, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                     
+IF( @pLocationId = -1 )        
+BEGIN        
+SELECT Ltrim(Rtrim(U.Name)) FinalBillID,        
+Sum(AmtReceived)     AmtReceived,        
+AR.ReceivedBy        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+Users U WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  -- U.OrgID = @pOrgId        
+--AND        
+F.OrgID = @pOrgId        
+AND U.LoginID = AR.ReceivedBy        
+AND AR.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+--AND Convert(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate                                            
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND AR.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AR.AmtReceived > 0        
+AND ( AR.PaidCurrencyID = COALESCE(@pCurrencyID, AR.PaidCurrencyID)        
+OR AR.PaidCurrencyID IS NULL )        
+GROUP  BY U.Name,        
+ReceivedBy        
+--select 1, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                                           
+UNION        
+SELECT ( Ltrim(Rtrim(U.Name)) ) + ' (DepositAmt)' AS FinalBillID,        
+Sum(AmountDeposited)       AS AmtReceived,        
+PDH.CreatedBy        
+FROM   PatientDepositHistory PDH WITH (NOLOCK),        
+Users U WITH (NOLOCK)        
+WHERE  PDH.OrgID = @pOrgId        
+-- AND U.OrgID = @pOrgId        
+AND PDH.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND PDH.CreatedBy = U.LoginID        
+--AND Convert(nvarchar,PDH.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                           
+AND PDH.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL        
+GROUP  BY U.Name,        
+PDH.CreatedBy        
+ORDER  BY FinalBillID        
+--select 2, (SELECT dbo.fn_GetServerDate(@ContextInfo))                 
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+
+Declare @RefundCouponAmount3 Decimal(18,2)
+SELECT @RefundCouponAmount3 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID          
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+Declare @CancelCouponAmount3 Decimal(18,2)
+SELECT @CancelCouponAmount3 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+
+Select * from (               
+SELECT Users.Name    FinalBillID,                                  
+Sum(isnull(CancelAmount,0)-ISNULL(RefundAdjustedamt,0))- ISNULL(@RefundCouponAmount3,0)AS AmtReceived,     
+--SELECT Users.Name    FinalBillID,        
+--Sum(AmtRefund)AS AmtReceived,        
+RefundBy      AS ReceivedBy,        
+BillStatus        
+FROM   AmountRefundDetails WITH (NOLOCK)        
+INNER JOIN Users WITH (NOLOCK)        
+ON Users.LoginID = RefundBy        
+--  AND Users.OrgID = AmountRefundDetails.OrgID        
+INNER JOIN FinalBill WITH (NOLOCK)        
+ON AmountRefundDetails.FinalBillID = FinalBill.FinalBillID        
+AND FinalBill.OrgID = AmountRefundDetails.OrgID        
+WHERE  AmountRefundDetails.OrgID = @pOrgId        
+--Convert(nvarchar,AmountRefundDetails.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                                    
+AND AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate      and    AmountRefundDetails.BillStatus='Refund' ---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount      
+AND RefundBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+--AND                                     
+AND ( AmountRefundDetails.TranCurrencyID = COALESCE(@pCurrencyID, AmountRefundDetails.TranCurrencyID)      
+OR AmountRefundDetails.TranCurrencyID IS NULL )        
+GROUP  BY Users.Name,        
+RefundBy,        
+BillStatus        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount --start
+Union All                        
+SELECT Users.Name    FinalBillID,          
+--Sum(AmtRefund)AS AmtReceived,           
+Sum(Isnull(CancelAmount,0)-(Isnull(RefundadjustedAmt,0))) - ISNULL(@CancelCouponAmount3,0) AS AmtReceived,                        
+RefundBy      AS ReceivedBy,                    
+BillStatus                                  
+FROM   AmountRefundDetails WITH (NOLOCK)                                  
+INNER JOIN Users WITH (NOLOCK)                                  
+ON Users.LoginID = RefundBy                                  
+--  AND Users.OrgID = AmountRefundDetails.OrgID                                  
+INNER JOIN FinalBill WITH (NOLOCK)                                
+ON AmountRefundDetails.FinalBillID = FinalBill.FinalBillID                                  
+AND FinalBill.OrgID = AmountRefundDetails.OrgID                                  
+WHERE  AmountRefundDetails.OrgID = @pOrgId                                  
+--Convert(nvarchar,AmountRefundDetails.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                                                              
+AND AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate      and    AmountRefundDetails.BillStatus='Cancelled'                          
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)                --AND                                                               
+AND ( AmountRefundDetails.TranCurrencyID = COALESCE(@pCurrencyID, AmountRefundDetails.TranCurrencyID)                                
+OR AmountRefundDetails.TranCurrencyID IS NULL )           
+GROUP  BY Users.Name,                                  
+RefundBy,                                 
+BillStatus                               
+)T
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount --end
+ORDER  BY FinalBillID        
+END        
+--------------------------------------------------------------------------------------                                                                                       
+SELECT US.Name                FinalBillID,        
+Sum(CF.AmountReceived) AS AmtReceived,        
+CF.CreatedBy           AS ReceivedBy        
+FROM   CashOutFlow CF WITH (NOLOCK)        
+INNER JOIN Users US WITH (NOLOCK)        
+ON CF.CreatedBy = US.LoginID        
+--AND US.OrgID = CF.OrgID        
+--WHERE Convert(nvarchar,CF.CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                             
+WHERE  CF.OrgID = @pOrgId        
+AND CF.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND CF.CreatedBy IN (SELECT LoginID        
+FROM  @pLoginIDs)        
+GROUP  BY CF.CreatedBy,        
+US.Name --,ReceiverID,OutFlowID                                                                                       
+ORDER  BY FinalBillID        
+----------                                     
+--select 4, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                  
+SELECT '' AS Descriptions        
+--------------------------------------------------------------------------------------                     
+IF( @pLocationId > 0 )        
+BEGIN        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+Set @DueAmtRefund=0                    
+ Select @DueAmtRefund=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select FinalBill.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)                                  
+Inner Join FinalBill  FinalBill ON FinalBill.FinalBillID=ARD.FinalBillID                  
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus IN ( 'REFUND'  ,'Approved')                                 
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)                                  
+AND ARD.FinalBillID = FinalBill.FinalBillID                                  
+AND FinalBill.OrgAddressID = @pLocationId                                  
+AND FinalBill.OrgID = @pOrgId   )                
+Declare @RefundCouponAmount1 Decimal(18,2)
+SELECT @RefundCouponAmount1 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID   
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+
+            
+ 
+            
+SELECT @TotalRefund =-- Isnull(Sum(AmtRefund), 0)     
+Sum(Isnull(CancelAmount, 0)) - Isnull(@DueAmtRefund,0) - ISNULL(@RefundCouponAmount1,0)
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount   
+FROM   AmountRefundDetails(NOLOCK),        
+FinalBill WITH (NOLOCK)        
+WHERE  AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AmountRefundDetails.OrgId = @pOrgId        
+AND BillStatus IN ( 'REFUND'  ,'Approved')      
+AND RefundBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND AmountRefundDetails.FinalBillID = FinalBill.FinalBillID        
+AND FinalBill.OrgAddressID = @pLocationId        
+AND FinalBill.OrgID = @pOrgId        
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+Set @DueAmtRefund=0                    
+ Select @DueAmtRefund=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select ARD.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)                  
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus IN ( 'REFUND'  ,'Approved')                             
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)   )   
+
+Declare @CancelCouponAmountLOC1 Decimal(18,2)
+SELECT @CancelCouponAmountLOC1 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+and ARD.Refundby IN (SELECT LoginID                                  
+FROM   @pLoginIDs) AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+--AND AR.CreatedBy = @pLoginID 
+
+Declare @RefundCouponAmountLOC1 Decimal(18,2)
+SELECT @RefundCouponAmountLOC1 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)    
+ WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID   
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('REFUND','APPROVED')  
+and ARD.Refundby IN (SELECT LoginID FROM   @pLoginIDs) AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+--AND AR.CreatedBy = @pLoginID 
+             
+SELECT @TotalRefund = --Isnull(Sum(AmtRefund), 0)   
+Isnull(Sum(CancelAmount), 0)  - Isnull(@DueAmtRefund,0) - ISNULL(@RefundCouponAmountLOC1,0)
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount     
+FROM   AmountRefundDetails(NOLOCK)        
+WHERE  AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AmountRefundDetails.OrgId = @pOrgId        
+AND BillStatus IN ( 'REFUND'  ,'Approved')    
+AND RefundBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+END        
+--select 5, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                                                          
+--------------------------------------------------------------------------------------                      
+IF( @pLocationId > 0 )        
+BEGIN      
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount  
+
+Declare @CancelCouponAmount1 Decimal(18,2)
+SELECT @CancelCouponAmount1 = Isnull(Sum(AR.AmtReceived), 0)        
+FROM   AmountReceivedDetails AR WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND AR.OrgID = @pOrgId        
+AND AR.FinalBillID = F.FinalBillID        
+AND F.OrgAddressID = @pLocationId        
+AND F.OrgID = @pOrgId        
+AND TypeID=10    and F.AmountRefund <> 0
+AND F.FinalBillID in ( select FinalbillID from AmountRefundDetails ARD where  ARD.BillStatus in ('Cancelled')     
+ AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)  AND CONVERT(nvarchar, AR.CreatedAt, 103) BETWEEN @pFDate AND @pTDate and ARD.OrGID=@pOrgId)
+
+Set @DueAmtCancel=0                    
+ Select @DueAmtCancel=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select FinalBill.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)                                  
+Inner Join FinalBill  FinalBill ON FinalBill.FinalBillID=ARD.FinalBillID                  
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus = 'CANCELLED'                                  
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)                                  
+AND ARD.FinalBillID = FinalBill.FinalBillID                                  
+AND FinalBill.OrgAddressID = @pLocationId                           
+AND FinalBill.OrgID = @pOrgId   ) and FinalBillID not   in (Select FinalBill.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)                                  
+Inner Join FinalBill  FinalBill ON FinalBill.FinalBillID=ARD.FinalBillID                  
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus in( 'REFUND','APPROVED')                                  
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)                                  
+AND ARD.FinalBillID = FinalBill.FinalBillID                                  
+AND FinalBill.OrgAddressID = @pLocationId                                  
+AND FinalBill.OrgID = @pOrgId   ) 
+SELECT @TotalCancelledAmt =-- Isnull(Sum(AmtRefund), 0) 
+Sum(Isnull(CancelAmount,0))-Isnull(@DueAmtCancel,0) - Isnull(@CancelCouponAmount1,0)
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount       
+FROM   AmountRefundDetails (NOLOCK),        
+FinalBill WITH (NOLOCK)    
+WHERE  AmountRefundDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AmountRefundDetails.OrgId = @pOrgId        
+AND BillStatus = 'CANCELLED'        
+AND RefundBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND AmountRefundDetails.FinalBillID = FinalBill.FinalBillID        
+AND FinalBill.OrgAddressID = @pLocationId        
+AND FinalBill.OrgID = @pOrgId        
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+Set @DueAmtCancel=0                    
+ Select @DueAmtCancel=Isnull(Sum(Isnull(RefundedAmount,0)),0) from PatientDueDetails Where FinalbillId in (Select ARD.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)                  
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus = 'CANCELLED'                                  
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)   )      and FinalbillId not in (Select ARD.FinalBillID FROM   AmountRefundDetails ARD (NOLOCK)   
+WHERE  ARD.CreatedAt BETWEEN @pFDate AND @pTDate                                  
+AND ARD.OrgId = @pOrgId                                  
+AND BillStatus in ('Refund','APPROVED')                                  
+AND RefundBy IN (SELECT LoginID                                  
+FROM   @pLoginIDs)   )
+SELECT @TotalCancelledAmt =-- Isnull(Sum(AmtRefund), 0)        
+Sum(Isnull(CancelAmount,0))-Isnull(@DueAmtCancel,0) - ISNULL(@CancelCouponAmountLOC1,0)
+---changes by arun--userwise collection -- adjusted due amount not reduce from refund amount
+FROM   AmountRefundDetails (NOLOCK)        
+WHERE  CreatedAt BETWEEN @pFDate AND @pTDate        
+AND OrgId = @pOrgId        
+AND BillStatus = 'CANCELLED'        
+AND RefundBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+END        
+-- select 6, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                    
+/*------------------------Refund to Doctor -------------------------------------------*/        
+--SELECT @DoctorsAmount = ISNULL(SUM(AmountReceived),0) from CashOutFlow                                                                                       
+--WHERE OrgID =@pOrgId                                                                             
+--AND Convert(nvarchar,CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                                                       
+--AND ReceiverID <> 0                                                                                       
+SELECT @OthersAmount = Isnull(Sum(AmountReceived), 0)        
+FROM   CashOutFlow CF WITH (NOLOCK)        
+INNER JOIN Users US WITH (NOLOCK)        
+ON CF.CreatedBy = US.LoginID        
+WHERE  CF.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND CF.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND CF.OrgID = @pOrgId        
+--select 7, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                    
+--SELECT @OthersAmount = ISNULL(SUM(AmountReceived),0) from CashOutFlow 
+--WHERE OrgID =@pOrgId AND ReceiverID = 0                                                      
+---- AND CreatedBy in (Select LoginID from @pLoginIDs)                                                                                          
+--AND Convert(nvarchar,CreatedAt,103) BETWEEN @pFDate AND @pTDate                                                   
+--SET @TotalRefund = ISNULL(@TotalRefund,0)+@DoctorsAmount               
+--------------------------------------------------------------------------------------------                          
+IF( @pLocationId > 0 )        
+BEGIN        
+SELECT @TotalAmount = Isnull(Sum(AmtReceived), 0)        
+FROM   AmountReceivedDetails WITH (NOLOCK),        
+FinalBill F WITH (NOLOCK)        
+WHERE  AmountReceivedDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AmountReceivedDetails.OrgID = @pOrgId        
+AND AmountReceivedDetails.FinalBillID = f.FinalBillID        
+AND F.OrgID = @pOrgId        
+AND F.OrgAddressID = @pLocationId        
+AND AmountReceivedDetails.CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND ( AmountReceivedDetails.PaidCurrencyID = COALESCE(@pCurrencyID, AmountReceivedDetails.PaidCurrencyID)        
+OR AmountReceivedDetails.PaidCurrencyID IS NULL )        
+END        
+IF( @pLocationId = -1 )        
+BEGIN        
+SELECT @TotalAmount = Isnull(Sum(AmtReceived), 0)        
+FROM   AmountReceivedDetails WITH (NOLOCK)        
+WHERE  AmountReceivedDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND AmountReceivedDetails.OrgID = @pOrgId        
+AND CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND ( AmountReceivedDetails.PaidCurrencyID = COALESCE(@pCurrencyID, AmountReceivedDetails.PaidCurrencyID)        
+OR AmountReceivedDetails.PaidCurrencyID IS NULL )        
+END        
+--select 8, (SELECT dbo.fn_GetServerDate(@ContextInfo))                                                                                  
+SELECT @TotalAmount += Isnull(Sum(PDH.AmountDeposited), 0)        
+FROM   PatientDepositHistory PDH WITH (NOLOCK)        
+WHERE  PDH.CreatedAt BETWEEN @pFDate AND @pTDate        
+AND PDH.OrgID = @pOrgId        
+AND CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND ( PDH.PaidCurrencyID = COALESCE(@pCurrencyID, PDH.PaidCurrencyID)        
+OR PDH.PaidCurrencyID IS NULL )        
+SELECT @totalAdvance = Sum(AdvanceAmount)        
+FROM   AdvancePaidDetails        
+WHERE  CreatedBy IN (SELECT LoginID        
+FROM   @pLoginIDs)        
+AND AdvancePaidDetails.CreatedAt BETWEEN @pFDate AND @pTDate        
+SELECT @totalDueCollection = Isnull(Sum(PaidAmount),0)
+FROM   DuePaidDetail DuePaidDetail 
+inner join Finalbill FB with(NOLOCK)  on FB.OrgID=DuePaidDetail.OrgID and DuePaidDetail.PaidBillNo=FB.FinalBillID and FB.OrgAddressID= @pLocationId   
+WHERE  DuePaidDetail.DueCollectedBy IN (SELECT LoginID        
+FROM @pLoginIDs)       
+AND CONVERT(nvarchar, DuePaidDetail.PaidDate, 103) BETWEEN @pFDate AND @pTDate   
+IF( @pLocationId = -1 ) 
+begin
+SELECT @totalDueCollection = Isnull(Sum(PaidAmount),0)
+FROM   DuePaidDetail DuePaidDetail 
+--inner join Finalbill FB with(NOLOCK)  on FB.OrgID=DuePaidDetail.OrgID and DuePaidDetail.PaidBillNo=FB.FinalBillID and FB.OrgAddressID= @pLocationId   
+WHERE  DuePaidDetail.DueCollectedBy IN (SELECT LoginID        
+FROM @pLoginIDs)       
+AND CONVERT(nvarchar, DuePaidDetail.PaidDate, 103) BETWEEN @pFDate AND @pTDate  
+end      
+SELECT @ClosingBalance = ( Isnull(@totalAdvance, 0)        
++ Isnull(@TotalAmount, 0) ) - Isnull(@Totalrefund, 0)    
+select ''
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection       
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+--union                        
+--SELECT 'Total Collection',@TotalAmount                              
+--union                               
+--SELECT 'Closing Balance',@ClosingBalance                              
+SELECT Descriptions as Remarks,        
+Amount       as AmtReceived 
+FROM   @TranSSummary 
+select ''
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection       
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+--union                               
+--SELECT 'Total Collection',@TotalAmount                              
+--union                               
+--SELECT 'Closing Balance',@ClosingBalance                              
+SELECT Descriptions as Remarks,        
+Amount       as AmtReceived 
+FROM   @TranSSummary 
+select ''
+INSERT INTO @TranSSummary        
+SELECT 'Advance',        
+isnull(@totalAdvance,0)        
+UNION        
+SELECT 'Due Collection',        
+@totalDueCollection       
+UNION        
+SELECT 'Total Refund',        
+@Totalrefund        
+--union                               
+--SELECT 'Total Collection',@TotalAmount                              
+--union                               
+--SELECT 'Closing Balance',@ClosingBalance                              
+SELECT Descriptions as Remarks,        
+Amount       as AmtReceived 
+FROM   @TranSSummary     
+SELECT DISTINCT U.Name                              AS ReceiptNO,        
+Max(ISPD.ReferenceID)               AS AmtReceivedID,        
+Max(ISPD.PaidDetailsID)             AS FinalBillID,        
+Isnull(Sum(ISPD.AmountReceived), 0) AS AmtReceived,        
+ISPD.CreatedBY                      AS ReceivedBy        
+FROM   IncSourcePaidDetails ISPD        
+INNER JOIN PaymentType PT        
+ON PT.PaymentTypeID = ISPD.ReceivedTypeID        
+INNER JOIN Users U        
+ON U.LoginID = ISPD.CreatedBY        
+--  AND U.OrgID = ISPD.OrgID -- AND U.LoginID=@pLoginID                                     
+WHERE  ISPD.OrgID = @pOrgId        
+AND --PT.PaymentName ='Cash' AND ISPD.Status='Open' AND                              
+CONVERT(nvarchar, ISPD.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+GROUP  BY ISPD.CreatedBy,        
+U.Name,        
+ISPD.ReferenceID        
+SELECT @TotalIncAmount = Isnull(Sum(ISPD.AmountReceived), 0)        
+FROM   IncSourcePaidDetails ISPD        
+INNER JOIN Users U        
+ON U.LoginID = ISPD.CreatedBY        
+--AND U.OrgID = ISPD.OrgID        
+INNER JOIN PaymentType PT        
+ON PT.PaymentTypeID = ISPD.ReceivedTypeID        
+WHERE  ISPD.OrgID = @pOrgId        
+AND CONVERT(nvarchar, ISPD.CreatedAt, 103) BETWEEN @pFDate AND @pTDate        
+AND Isnull(PT.languagecode, 'en-GB') = @LangCode
+END        
+END 

@@ -1,0 +1,231 @@
+  
+CREATE PROCEDURE [dbo].[PgetMISMISOrderedinvestigationhistorysync]  
+(  
+@pOrgId INT  
+)  
+AS   
+  BEGIN   
+      DECLARE @P_FromDate DATETIME   
+      DECLARE @P_ToDate DATETIME   
+      DECLARE @ServerDate DATETIME   
+      DECLARE @SynInterval INT   
+      DECLARE @ServerName NVARCHAR(200)   
+      DECLARE @ServerIP NVARCHAR(100)   
+      DECLARE @CurrentDatabase NVARCHAR(100)   
+      DECLARE @TableName NVARCHAR(100)   
+  
+      SET @TableName='MISOrderedinvestigationhistory'   
+   
+  CREATE TABLE #TempOrg  
+   (  
+   OrgId INT  
+   )  
+  
+  insert into #TempOrg(OrgId)  
+  select @pOrgId  
+  
+      SELECT @ServerName = @@servername,   
+             @CurrentDatabase = Db_name()   
+  
+      SELECT @ServerIP = dec.local_net_address   
+      FROM   sys.dm_exec_connections AS dec   
+      WHERE  dec.session_id = @@SPID   
+  
+      SET @ServerDate=Getdate()   
+      SET nocount ON   
+  
+      SELECT @P_FromDate = Cast('1753-1-1' AS DATETIME),   
+--   @P_FromDate ='2019-04-01 16:22:14.377',  
+             @SynInterval = 0,   
+             @P_ToDate = @ServerDate   
+  
+      SELECT @P_FromDate = lastrun,   
+             @P_ToDate = @ServerDate,   
+             @SynInterval = syninterval   
+      FROM   [integrationdatasync]   
+      WHERE  servername = @ServerName   
+             AND dbname = @CurrentDatabase   
+             AND tablename = @TableName  
+    AND OrgId=@pOrgId  
+	 
+      IF Isnull(Datediff(mi, @P_FromDate, @P_ToDate), 0) >=@SynInterval   
+        BEGIN   
+            --*****************Physician Sync *********************     
+--            CREATE TABLE [BiMISOrderedinvestigationhistory_IntSync]   
+--              (   
+--                 AccessionNumber bigint,  
+--     Visitid bigint,  
+--     Id bigint,  
+--Type nvarchar(10),  
+  
+--Status nvarchar(50),  
+--                 [collecteddate]         [DATETIME] NULL,   
+                   
+--                 [pendingdate]           [DATETIME] NULL,   
+--                 [completedate]          [DATETIME] NULL,   
+--                 [validatedate]          [DATETIME] NULL,   
+--                 [approvedate]           [DATETIME] NULL,   
+--                 [retestgivendate]       [DATETIME] NULL,   
+--                 [recheckgivendate]      [DATETIME] NULL,   
+--                 [currentstatus]         [NVARCHAR](50) NULL,   
+--                 [createdat]             [DATETIME] NULL,   
+--                 [createdby]             [BIGINT] NULL,   
+--                 [modifiedat]            [DATETIME] NULL,   
+--                 [modifiedby]            [BIGINT] NULL  
+--              )   
+  
+            INSERT INTO BiMISOrderedinvestigationhistory_IntSync   
+                        (  
+      AccessionNumber,  
+      Visitid,  
+      Id,  
+      Type,  
+      CreatedAt,  
+      Status,
+	  PkgID,
+	  PkgName  
+      )   
+            SELECT AccessionNumber,  
+      Visitid,  
+      Id,  
+      Type,  
+      OI.CreatedAt,  
+      Status,
+	  PkgID,
+	  PkgName   
+            FROM   MISOrderedinvestigationhistory(nolock) OI   
+   INNER JOIN PatientVisit PV ON OI.Visitid=PV.PatientVisitId  
+   INNER JOIN #TempOrg T ON T.OrgId=PV.OrgId  
+                    
+            WHERE -- oi.visitid=3722414
+			( OI.createdat >= @P_FromDate   
+                     AND OI.createdat < @P_ToDate )   
+      ---and OrgId=@pOrgId   
+	   
+UPDATE B SET CollectedDate=M.createdat
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='SampleReceived'  
+  
+  
+UPDATE B SET PendingDate=M.createdat  
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Pending'  
+  
+  
+UPDATE B SET CompleteDate=M.createdat  
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Completed'  
+     
+--select * from sys.objects where name like '%mis%order%'   
+  
+  
+UPDATE B SET ValidateDate=M.createdat  
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Validate'  
+  
+UPDATE B SET ApproveDate=M.createdat  
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Approve'  
+  
+  
+UPDATE B SET ApproveDate=M.createdat  
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Recheck'  
+  
+  
+UPDATE B SET ApproveDate=M.createdat,ReTestGivenDate=M.createdat
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE M.Status='Retest'  
+  
+UPDATE B SET B.PkgID=M.PkgID, B.PkgName=M.PkgName
+FROM bidashboardorderdetail(NOLOCK) B   
+INNER JOIN BiMISOrderedinvestigationhistory_IntSync M ON   
+M.AccessionNumber=B.AccessionNumber  
+AND M.Visitid=B.PatientVisitId  
+AND M.ID=B.TestID  
+AND M.Type=B.Type  
+WHERE Isnull(M.pkgID,0)>0   
+  
+  
+  
+            IF EXISTS (SELECT TOP 1 1   
+                       FROM   BiMISOrderedinvestigationhistory_IntSync)   
+              BEGIN   
+                  IF NOT EXISTS (SELECT 1   
+                                 FROM   integrationdatasync   
+                                 WHERE  servername = @ServerName   
+                                        AND dbname = @CurrentDatabase   
+                                        AND tablename = @TableName)   
+                    BEGIN   
+                        INSERT INTO integrationdatasync   
+                                    (ipaddress,   
+                                     servername,   
+                                     dbname,   
+                                     lastrun,   
+                                     tablename,   
+                                     syninterval,  
+          OrgId)   
+                        SELECT @ServerIP,   
+                               @ServerName,   
+                               @CurrentDatabase,   
+                               @P_ToDate,   
+                               @TableName,   
+                               30,  
+          @pOrgId  
+                    END   
+                  ELSE   
+                    BEGIN   
+                        UPDATE integrationdatasync   
+                        SET    lastrun = @P_ToDate   
+                        WHERE  servername = @ServerName   
+                               AND dbname = @CurrentDatabase   
+                               AND tablename = @TableName   
+          AND OrgId=@pOrgId  
+                    END   
+              END   
+  
+            ---TRUNCATE TABLE  BiMISOrderedinvestigationhistory_IntSync    --- Not possible since it is synonym  
+   EXECUTE dbo.pTruncateTableBySynonymName @SchemaName = 'dbo', @SynonymName = 'BiMISOrderedinvestigationhistory_IntSync'  
+        END   
+  END   
+  
+  
+  
+  
+  
+  

@@ -1,0 +1,26 @@
+Create Procedure pUpdateSameSampleLocationTransfer_PMS
+@orgid int,
+@VisitNumber nvarchar(512),
+@TestID bigint,
+@Locid bigint
+As 
+Begin
+declare @status nvarchar (100)
+declare @visitid bigint
+declare @barcode nvarchar(500)
+
+select @visitid=patientvisitid from patientvisit where visitnumber=@VisitNumber and orgid=@orgid
+select @status=status from orderedinvestigations where visitid=@visitid and ID=@TestID and orgid=@orgid
+
+select @barcode=Barcode from Patientinvsamplemapping PSM
+inner join Orderedinvestigations OI on OI.Visitid=PSM.Visitid and OI.Orgid=PSM.Orgid and OI.ID=@TestID and OI.ID=PSM.ID 
+and OI.Type=PSM.Type
+where PSM.Visitid=@visitid and PSM.Orgid=@orgid and PSM.ID=@TestID
+
+if (@status='SampleTransferred')
+Begin
+update Orderedinvestigations set ResCaptureLoc=@Locid where visitid=@visitid and ID=@TestID and orgid=@orgid 
+
+update Patientinvsample set RecSampleLocID=@Locid where patientvisitid=@visitid and BarcodeNumber=@barcode and orgid=@orgid 
+End
+End

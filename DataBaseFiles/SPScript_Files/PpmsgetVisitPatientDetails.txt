@@ -1,0 +1,22 @@
+Create proc PpmsgetVisitPatientDetails
+(
+@orgid int,
+ @Fromdate datetime,
+ @ToDate Datetime,
+ @Clientid bigint = null
+
+ )
+ as 
+ begin
+select PV.PatientVisitId, PA.Name as PatientName,PV.VisitNumber,PA.Age,PA.SEX,PAA.MobileNumber PatientContact,PAA.landlinenumber as [Telephone Number],convert(varchar,VisitDate,120) as VisitDate,CM1.ClientName,PV.ReferingPhysicianName,
+PA.EMail PatientEmail,CM.EmailID ClientEmail 
+ from PatientVisit PV
+inner join Patient PA on PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+inner join PatientAddress PAA on PAA.PatientID=PA.PatientID and AddressType='P'
+Inner join VisitClientMapping VCM ON VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID
+inner join ClientMaster CM1 on CM1.ClientID=VCM.ClientID --and CM1.ClientID=@Clientid
+inner join AddressDetails CM ON CM.ReferenceID=VCM.ClientID
+where PV.OrgID=@orgid and PV.Createdat between @Fromdate and  @ToDate + ' 23:59:59' and VCM.ClientID=@Clientid
+Order by VisitNumber
+
+End

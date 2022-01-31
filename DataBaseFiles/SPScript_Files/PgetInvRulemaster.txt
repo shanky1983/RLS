@@ -1,0 +1,62 @@
+CREATE proc PgetInvRulemaster
+@RuleTypeId int,
+@InvestigationID bigint,
+@pOrgID INT,
+@PRemarksId int,
+@ContextInfo [UDT_Context] READONLY  
+AS
+Begin
+if(@InvestigationID>0)
+Begin
+
+Declare @remarks nvarchar(max)
+select @remarks= RemarksText from Remarks where remarksID=@PRemarksId
+select RuleMasterId,RuleTypeID,InvestigationID,PostTriggerFunctionId,PostTriggerFunction,isnull(@remarks,'') as InvRemarksValue,OrgId,InvestigationName,@PRemarksId as RemarksId,InvType
+		 from InvRuleMaster where investigationid=@InvestigationID and orgid=@pOrgID and Rulemasterid=@RuleTypeId and IsActive=1
+
+		 select PatientAgeGenderRuleId,PAG.RuleMasterId,ComponentName,Gender,SubCategory,AgeType,AgeOptr,AgeValue1,Agevalue2,LogicalOperator from PatientAgeGenderRule PAG
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=PAG.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and IR.RuleMasterId=@RuleTypeId and PAG.IsActive=1 and IR.IsActive=1
+		 and isnull(PAG.remarksId,0)=@PRemarksId
+
+		 select TestResultsRuleId,TR.RuleMasterId,ComponentName,ResultInvestigationID,ResultInvestigation,ResultType,ResultOptr,ResultValue1,Resultvalue2,LogicalOperator from TestResultsRule TR
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=TR.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and  IR.RuleMasterId=@RuleTypeId and TR.IsActive=1 and IR.IsActive=1
+		 and isnull(TR.remarksId,0)=@PRemarksId
+
+		 select MachineErrorRuleId,ME.RuleMasterId,ComponentName,ErrorCode,LogicalOperator from MachineErrorRule ME
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=ME.RuleMasterId 
+		 where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and IR.RuleMasterId=@RuleTypeId and ME.IsActive=1 and IR.IsActive=1 and  isnull(ME.remarksId,0)=@PRemarksId
+End
+Else
+begin
+	if(@RuleTypeId=0 and @InvestigationID > 0)
+		begin
+		 select RuleMasterId,RuleTypeID,InvestigationID,PostTriggerFunctionId,PostTriggerFunction,InvRemarksValue,OrgId,InvestigationName ,InvType
+		 from InvRuleMaster where investigationid=@InvestigationID and orgid=@pOrgID and IsActive=1
+
+		 select PatientAgeGenderRuleId,PAG.RuleMasterId,ComponentName,Gender,SubCategory,AgeType,AgeOptr,AgeValue1,Agevalue2,LogicalOperator from PatientAgeGenderRule PAG
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=PAG.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and PAG.IsActive=1 and IR.IsActive=1
+
+		 select TestResultsRuleId,TR.RuleMasterId,ComponentName,ResultInvestigationID,ResultInvestigation,ResultType,ResultOptr,ResultValue1,Resultvalue2,LogicalOperator from TestResultsRule TR
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=TR.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and TR.IsActive=1 and IR.IsActive=1
+
+		 select MachineErrorRuleId,ME.RuleMasterId,ComponentName,ErrorCode,LogicalOperator from MachineErrorRule ME
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=ME.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and ME.IsActive=1 and IR.IsActive=1
+
+		end
+		else
+		Begin
+		select RuleMasterId,RuleTypeID,InvestigationID,PostTriggerFunctionId,PostTriggerFunction,InvRemarksValue,OrgId,InvestigationName,InvType
+		 from InvRuleMaster where investigationid=@InvestigationID and orgid=@pOrgID and RuleTypeID=@RuleTypeId and IsActive=1
+
+		 select PatientAgeGenderRuleId,PAG.RuleMasterId,ComponentName,Gender,SubCategory,AgeType,AgeOptr,AgeValue1,Agevalue2,LogicalOperator from PatientAgeGenderRule PAG
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=PAG.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and IR.RuleTypeID=@RuleTypeId and PAG.IsActive=1 and IR.IsActive=1
+
+		 select TestResultsRuleId,TR.RuleMasterId,ComponentName,ResultInvestigationID,ResultInvestigation,ResultType,ResultOptr,ResultValue1,Resultvalue2,LogicalOperator from TestResultsRule TR
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=TR.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and  IR.RuleTypeID=@RuleTypeId and TR.IsActive=1 and IR.IsActive=1
+
+		 select MachineErrorRuleId,ME.RuleMasterId,ComponentName,ErrorCode,LogicalOperator from MachineErrorRule ME
+		 Inner Join InvRuleMaster IR on IR.RuleMasterId=ME.RuleMasterId where IR.investigationid=@InvestigationID and IR.orgid=@pOrgID and IR.RuleTypeID=@RuleTypeId and ME.IsActive=1 and IR.IsActive=1
+		End
+	End
+End
+

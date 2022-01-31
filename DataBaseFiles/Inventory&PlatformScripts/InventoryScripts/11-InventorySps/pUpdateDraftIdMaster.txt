@@ -1,0 +1,49 @@
+/****** Object:  StoredProcedure [dbo].[pUpdateDraftIdMaster]    Script Date: 2/9/2016 10:10:56 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE  PROCEDURE [dbo].[pUpdateDraftIdMaster]
+	@Configvalue [bigint],
+	@ID [nvarchar](30) OUTPUT
+WITH EXECUTE AS CALLER
+AS
+BEGIN
+      SET nocount ON
+
+      DECLARE @TmpTable TABLE
+        (
+           Draftid int
+        )
+
+
+      IF NOT EXISTS(SELECT 1
+                    FROM   DraftIDMaster
+                    WHERE  OrgID = @Configvalue)
+        BEGIN
+            INSERT INTO DraftIDMaster
+                        (OrgID,
+                         DraftID)
+            SELECT @Configvalue,
+                   0
+        END
+      --ELSE  
+      --  BEGIN  
+            UPDATE DraftIDMaster
+            SET    DraftID = IsNull(DraftID, 0) + 1
+            OUTPUT INSERTED.DraftID
+            INTO @TmpTable
+            WHERE  OrgID = @Configvalue
+        --END  
+
+      select @ID = CONVERT(NVARCHAR, DraftID)
+      from   @TmpTable
+
+      SET nocount OFF
+  END
+
+
+
+
+GO

@@ -1,0 +1,52 @@
+
+ --pGetPatientConsontformdetails 81621,220,'MRI'
+CREATE PROC pGetPatientConsontformdetails
+(
+    @VisitID BIGINT,
+	@OrgID INT,
+	@DeptName NVARCHAR(200)
+)
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  DECLARE @PatientDetails AS TABLE
+  (
+    PatientName NVARCHAR(1000),
+	Age NVARCHAR(300),
+	MobileNumber NVARCHAR(100),
+	Email NVARCHAR(300),
+	PhysicianName NVARCHAR(1000),
+	TestName NVARCHAR(MAX),
+	VisitID BIGINT,
+	Address NVARCHAR(MAX),
+	VisitDate NVARCHAR(100),
+	VisitTime NVARCHAR(100)
+  )
+
+  INSERT INTO @PatientDetails (PatientName,Age,MobileNumber,Email,PhysicianName,VisitID,Address,VisitDate,VisitTime)
+  SELECT S.TitleName+P.Name, P.Age+' / '+P.SEX Age,COALESCE(PA.MobileNumber,PA.LandLineNumber) MobileNumber,ISNULL(Email,'') Email,
+         ISNULL(PV.ReferingPhysicianName,''),PV.PatientVisitID,ISNULL(PA.Add1,''),CONVERT(NVARCHAR,PV.VisitDate,103),CONVERT(VARCHAR(5), GETDATE(), 108) + 
+    (CASE WHEN DATEPART(HOUR, GETDATE()) > 12 THEN ' PM'
+        ELSE ' AM'
+    END) VisitTime
+  FROM Patient P (NOLOCK)
+  INNER JOIN PatientAddress PA(NOLOCK) ON P.PatientID=PA.PatientID AND AddressType='P'
+  INNER JOIN PatientVisit PV (NOLOCK) ON PV.PatientID=P.PatientID 
+  INNER JOIN Salutation S (NOLOCK ) ON S.TitleID=P.TITLECode 
+  WHERE PV.PatientVisitID=@VisitID AND PV.OrgID=@OrgID
+
+  UPDATE P
+  SET   P.testName=(select  Stuff((Select DISTINCT ','+ OI.Name  from OrderedInvestigations OI (NOLOCK)  
+  INNER JOIN InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID =OI.ID AND OI.Type='INV'
+  INNER JOIN InvDeptMaster IDM (NOLOCK) ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID WHERE OI.VisitID=@VisitID
+  AND IDM.DeptName=@DeptName AND OI.Status!='cancel'
+   For XML Path('')),1, 1, N'')) 
+  FROM @PatientDetails P 
+
+  SELECT * FROM @PatientDetails
+  
+END
+
+
+

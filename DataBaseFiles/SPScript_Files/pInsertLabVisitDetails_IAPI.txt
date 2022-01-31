@@ -1,0 +1,247 @@
+        
+CREATE PROCEDURE [dbo].[pInsertLabVisitDetails_IAPI] @pPatientID             [BIGINT],        
+                                                @pOrgID                 [INT],        
+                                                @pPriorityID            [INT],        
+                                                @pReferingPhysicianID   [INT],        
+                                                @pReferingPhysicianName [NVARCHAR] (100),        
+                                                @pHospitalID            [INT],        
+                                                @pHospitalName          [NVARCHAR] (100),        
+                                                @pCreatedBy             [BIGINT],        
+                                                @pCollectionCentreID    [INT],        
+                                                @pCollectionCentreName  [NVARCHAR] (100),        
+                                                @pOrgAddID              [BIGINT],        
+                                                @pExternalVisitID       [NVARCHAR] (255),    
+                                                @pOrderID    [VARCHAR] (40),        
+                                                @pReferVisitID          [BIGINT],        
+                                                @pVisitType             [INT],        
+                                                @WardNo                 [NVARCHAR] (255),        
+                                                @pIsDueBill             [INT],        
+                                                @pClientID     [BIGINT],        
+                                                @pVisitID               [BIGINT] OUTPUT,     
+                                                @pVisitNumber           [NVARCHAR](30) OUTPUT,    
+                                                @pClientName            [NVARCHAR](200),                
+            @pConsultingPhysicianName [NVARCHAR](100),                  
+            @pTreatingPhysicianName [NVARCHAR](100),                 
+            @pConsentFlag           [bit],                
+            @pDiagnosisCode         [nvarchar](20),                
+            @pDiagnosisName         [nvarchar](500),                
+            @pDiagnosisDescription [nvarchar](500),                
+            @pPatientSpecialty [nvarchar](500),                
+            @pRemarks [varchar](250),              
+            @IsSTAT VARCHAR(10) ,    
+            @pVisitDate   DATETIME,                      
+                                                @ContextInfo            [UDT_CONTEXT] READONLY        
+WITH EXECUTE AS OWNER        
+AS        
+    DECLARE @pCreatedAt DATETIME        
+    DECLARE @ret BIGINT        
+    DECLARE @Ratingid INT        
+        
+  BEGIN        
+      SET @pCreatedAt = (SELECT dbo.Fn_getserverdate(@ContextInfo))        
+      SET @ret = -1        
+        
+     -- DECLARE @pVisitNumber AS NVARCHAR(30)        
+        
+      EXEC Pgetnextid        
+        @pOrgID,        
+        'PVN',        
+        @pVisitNumber OUT,        
+        @pOrgAddID        
+        
+
+Declare @patienttype varchar(20)      
+ select @patienttype=RegistrationType from clientmaster where clientid=@pClientID     
+        
+		IF(@pClientID is not null)
+		Begin
+		Update Patient Set PatientStatus=@patienttype Where Patientid=@pPatientID and orgid=@pOrgID
+		End
+              
+      INSERT INTO PatientVisit        
+                  (PatientID,        
+                   OrgID,        
+                   VisitDate,        
+                   PriorityID,        
+                   ReferingPhysicianID,        
+                   ReferingPhysicianName,        
+                   HospitalID,        
+                   HospitalName,        
+                   --ClientID,    
+                   ClientName,        
+                   CollectionCentreID,        
+                   CollectionCentreName,        
+                   CreatedBy,        
+                   CreatedAt,        
+                   VisitPurposeID,        
+                   OrgAddressID,        
+                   VisitType,       
+                   Labvisittype,       
+                   ExternalVisitID,        
+                   ReferVisitID,        
+                   WardNo,        
+              VisitNumber,        
+                   IsDueBill,    
+                   PreviousLabNumber,TPAName,ICDCodeStatus)            
+      VALUES      ( @pPatientID,        
+              @pOrgID,        
+                    @pCreatedAt,        
+                    @pPriorityID,        
+                    @pReferingPhysicianID,        
+                    @pReferingPhysicianName,        
+                    @pHospitalID,        
+                    @pHospitalName,        
+                    --,@pClientID,    
+                    @pClientName,        
+                    @pCollectionCentreID,        
+                    @pCollectionCentreName,        
+                    @pCreatedBy,        
+                    @pCreatedAt,        
+                    3,        
+                    @pOrgAddID,        
+                    @pVisitType,       
+                    @pVisitType,       
+                    @pExternalVisitID,        
+                    @pReferVisitID,        
+                    @WardNo,        
+                    @pVisitNumber,        
+                    @pIsDueBill,    
+                    @pOrderID,@pPatientSpecialty,@pDiagnosisDescription )            
+        
+      SET @pVisitID = Scope_identity()        
+      SET @ret = 0        
+        
+      IF NOT EXISTS (SELECT 1        
+                     FROM   visitclientMapping        
+                     WHERE  orgID = @pOrgID        
+                            AND visitid = @pVisitID)        
+        BEGIN        
+            DECLARE @clientID BIGINT        
+        
+   IF @pClientID>0        
+   BEGIN        
+   INSERT INTO VisitClientMapping        
+                        (VisitID,        
+                         ClientID,        
+                         FinalBillID,        
+                         RateID,        
+    OrgID)        
+            VALUES      ( @pVisitID,        
+                          @pClientID,        
+                          0,        
+                          0,        
+                          @pOrgID )        
+   END        
+   ELSE        
+   BEGIN        
+    SELECT @clientID = ClientID        
+            FROM   ClientMaster        
+            WHERE  OrgID = @pOrgID        
+                   AND ClienTName = 'GENERAL'        
+        
+            INSERT INTO VisitClientMapping        
+                        (VisitID,        
+                         ClientID,        
+                         FinalBillID,        
+                         RateID,        
+                         OrgID)        
+            VALUES      ( @pVisitID,        
+                          @clientID,        
+                          0,        
+                          0,        
+                          @pOrgID )        
+   END        
+    IF NOT EXISTS (                
+      SELECT 1                
+      FROM AdditionalVisitDetails                
+      WHERE PatientVisitID = @pVisitID                
+      )                
+    BEGIN                
+     INSERT INTO AdditionalVisitDetails (                
+      PatientVisitID,                
+      ConsultingDoctor,                
+      TreatingDoctor,                
+      ConsentFlag,                
+      DiagnosisCode,                
+      DiagnosisName,                
+      DiagnosisDescription,                
+      PatientSpecialty)                
+      select @pVisitID,                
+      @pConsultingPhysicianName,                
+      @pTreatingPhysicianName,                
+      @pConsentFlag,                
+      @pDiagnosisCode,                
+      @pDiagnosisName,                
+      @pDiagnosisDescription,                
+      @pPatientSpecialty                
+     End                
+                  
+INSERT INTO PatientHistoryExt                    
+(              
+--DetailHistory,                    
+PatientVisitId,                    
+PatientID,                    
+OrgID,                    
+CreatedAt,                    
+CreatedBy,                    
+Remarks)                    
+values(               
+--DetailHistory,                    
+@pVisitID,                    
+@pPatientID,                    
+@pOrgID,       
+@pCreatedAt,                    
+@pCreatedBy,                    
+@pRemarks)                    
+    
+                   
+        END        
+        
+		IF NOT EXISTS(SELECT VisitID                        
+FROM   PatientDisPatchDetails                        
+WHERE  VisitID = @pvisitID                        
+AND OrgID = @pOrgID)                        
+BEGIN                        
+INSERT PatientDisPatchDetails                        
+(PatientID,                        
+VisitID,                        
+OrgID,                        
+DispatchType,                        
+DispatchValue)                        
+SELECT @pPatientID,                        
+@pvisitID,                      
+@pOrgID,                        
+'M',                        
+1 --from @pDespatchMode                               
+INSERT PatientDisPatchDetails                        
+(PatientID,                        
+VisitID,                        
+OrgID,                        
+DispatchType,                        
+DispatchValue)                        
+SELECT @pPatientID,                        
+@pvisitID,                        
+@pOrgID,                        
+'M',                        
+3                        
+INSERT PatientDisPatchDetails                        
+(PatientID,                        
+VisitID,                        
+OrgID,                        
+DispatchType,                        
+DispatchValue)                        
+SELECT @pPatientID,                        
+@pvisitID,                        
+@pOrgID,                        
+'N',                        
+11                        
+END                        
+-----------------//END//------------------------------------------------  
+
+      RETURN @ret        
+  END         
+        
+        
+        
+        
+        

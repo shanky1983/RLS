@@ -1,0 +1,81 @@
+CREATE PROCEDURE pUpdatestockreturnCancel                                       
+ @IntendID [bigint],                                    
+ @pLocationID [int],                                    
+ @pOrgID [int],                                    
+ @pOrgAddressID [int],                              
+  @CreatedBy [bigint],                               
+  @Raiseqty decimal(18,2) ,                         
+  @pInventoryItemsMappingType [dbo].[InventoryItemsMapping] READONLY,                      
+ @ContextInfo [UDT_Context] READONLY                                        
+WITH EXECUTE AS OWNER                                        
+AS                                                                 
+DECLARE @ToLocID INT                                                                                                                 
+DECLARE @OrgID INT                                             
+DECLARE @FromLocID INT                                      
+DECLARE @pRaiseOrgID INT                     
+                                         
+BEGIN                                                                                       
+ IF (@pLocationID=0)                                                                                    
+  SET @pLocationID =Null                                                                                                                                                    
+set @Raiseqty=null                                                                
+ SELECT @ToLocID=ToLocationID,@pRaiseOrgID=RaiseOrgID,@FromLocID=LocationID,@OrgID =OrgID FROM Intend  where    IntendID=@IntendID                                                                
+                                                 
+DECLARE @pCreatedAt DATETIME                                     
+DECLARE @IntendNo [NVARCHAR](50)                                                                                                                                  
+ SET @pCreatedAt= GETDATE()                                     
+                     
+update intend set Status='Cancelled' ,ModifiedBy=@CreatedBy,                                               
+    ModifiedAt=@pCreatedAt                             
+ where  RaiseOrgID=@porgid and IntendID=@IntendID                                
+                                
+update ID set Status='Closed',Receivedquantity=0,ModifiedBy=@CreatedBy,                                               
+    ModifiedAt=@pCreatedAt from IntendDetail ID           
+    inner join   @pInventoryItemsMappingType im on im.ProductID=id.ProductID and im.BatchNo=id.BatchNo and im.ExpiryDate=id.ExpiryDate                            
+inner join Intend I on id.IntendID=i.IntendID and id.RaiseOrgID=@porgid                           
+where id.IntendID=@IntendID     
+    
+update IntendReceived set Status='Cancelled'                     
+where RaiseOrgID=@porgid and IntendID=@IntendID                                    
+                                    
+update IRD set  Status='Cancelled',RecdQty=0,ModifiedBy=@CreatedBy,                                               
+    ModifiedAt=@pCreatedAt from IntendReceivedDetail IRD           
+    inner join  @pInventoryItemsMappingType Im on im.ProductID=ird.ProductID and im.BatchNo=ird.BatchNo and im.ExpiryDate=ird.ExpiryDate                              
+inner join IntendReceived IR on IRD.IntendReceivedID=IR.IntendReceivedID and ird.RaiseOrgID=@porgid                            
+and IntendID=@IntendID                      
+                    
+                     
+ update SOF set Status='Cancelled',ModifiedBy=@CreatedBy,                                                   
+    ModifiedAt=@pCreatedAt from StockOutFlow SOF                                    
+inner join IntendReceived IR on ir.StockOutFlowID=sof.StockOutFlowID                                    
+where sof.RaiseOrgID=@porgid and ir.IntendID=@IntendID                                    
+                                    
+update SOFD set Quantity=0,ModifiedBy=@CreatedBy,             
+    ModifiedAt=@pCreatedAt from StockOutFlowDetails SOFD            
+                               inner join StockOutFlow SOF on SOF.StockOutFlowID=SOFD.StockOutFlowID                       
+inner join IntendReceived Ir on ir.StockOutFlowID=SOFD.StockOutFlowID            
+inner join IntendReceivedDetail ird on ird.ParentProductKey=sofd.ProductKey  and ir.IntendReceivedID=ird.IntendReceivedID          
+inner join @pInventoryItemsMappingType im on im.ProductID=ird.ProductID and im.BatchNo=ird.BatchNo and im.ExpiryDate=ird.ExpiryDate                             
+where SOFD.RaiseOrgID=@porgid and ir.IntendID=@IntendID                                    
+                                    
+                                    
+update StockReceived set Status='Cancelled',ModifiedBy=@CreatedBy,                                                  
+    ModifiedAt=@pCreatedAt                                  
+ where IndentID=@IntendID and OrgID=@porgid                                  
+                                     
+update  SRD set RECQuantity=0,POQuantity=0,ModifiedBy=@CreatedBy,                                               
+    ModifiedAt=@pCreatedAt    from StockReceivedDetails SRD                         
+inner join StockReceived SR on sr.StockReceivedID=srd.StockReceivedId           
+inner join   @pInventoryItemsMappingType im on im.ProductID=srd.ProductId and im.BatchNo=SRD.BatchNo and im.ExpiryDate=SRD.ExpiryDate                       
+where ReferenceType='StoreReturn'   and sr.IndentID=@IntendID                
+     
+ update SIH set      
+ sih.SubstoreReturnqty=(isnull(sih.SubstoreReturnqty,0)-isnull(ird.IssueQty,0)),    
+ ModifiedBy=@CreatedBy  from stockinhand SIH                           
+ inner join StockOutFlowDetails sof                      
+ on   sof.ProductID=sih.ProductID                     
+ and sof.ProductKey=sih.ProductKey  and sof.BatchNo=sih.BatchNo      
+ inner join IntendReceived Ir on ir.StockOutFlowID=sof.StockOutFlowID            
+inner join IntendReceivedDetail ird on ird.ParentProductKey=sof.ProductKey  and ir.IntendReceivedID=ird.IntendReceivedID            
+inner join @pInventoryItemsMappingType im on im.ProductID=ird.ProductID and im.BatchNo=ird.BatchNo and im.ExpiryDate=ird.ExpiryDate                              
+where ir.IntendID=@IntendID and sih.OrgID=@OrgID  and sih.LocationID= @ToLocID                      
+end

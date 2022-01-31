@@ -1,0 +1,112 @@
+ 
+/****** Object:  StoredProcedure [dbo].[Pgetlocationworkinghours]    Script Date: 2/28/2019 2:05:47 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ 
+CREATE PROCEDURE [dbo].[Pgetlocationworkinghours] @pOrgID      [BIGINT],
+                                         @pLID        [BIGINT],
+                                         @pRID        [BIGINT],
+                                         @pLocationID [BIGINT],
+                                         @ContextInfo [UDT_CONTEXT] READONLY
+WITH EXECUTE AS OWNER
+AS
+  BEGIN
+      IF ( @pLocationID = ''
+            OR @pLocationID = 0 )
+        BEGIN
+            SET @pLocationID=NULL
+        END
+
+      SELECT Cast(Row_number()
+                    OVER(
+                      ORDER BY T.ID) AS INT) AS ID,
+             T.OrgID,
+             T.OrgAddressId,
+             T.Labstart,
+             T.Labend,
+             T.Location,
+             T.OrganizationName,
+             T.FrequencyDays
+      FROM   (SELECT DISTINCT 1                                           AS ID,
+                              LWH.Orgid                                   AS OrgID,
+                              Cast(LWH.Orgaddressid AS INT)               AS OrgAddressId,
+                             --CONVERT(varchar(15),CAST(LWH.Labstart AS TIME),100) Labstart,
+							 --CONVERT(varchar(15),CAST(LWH.Labend AS TIME),100) Labend,
+							  REVERSE(LEFT(REVERSE(CONVERT(VARCHAR(20),CONVERT(TIME,LWH.Labstart),100)),2) + ' ' + SUBSTRING(REVERSE(CONVERT(VARCHAR(20),CONVERT(TIME,LWH.Labstart),100)),3,20)) 	 Labstart,
+							  REVERSE(LEFT(REVERSE(CONVERT(VARCHAR(20),CONVERT(TIME,LWH.Labend),100)),2) + ' ' + SUBSTRING(REVERSE(CONVERT(VARCHAR(20),CONVERT(TIME,LWH.Labend),100)),3,20)) 	 Labend,						
+                              OA.Location,
+                              O.OrgDisplayName                            AS OrganizationName,
+                              (SELECT Stuff((SELECT '-' + CONVERT(VARCHAR, CASE WHEN LWH1.Weekdayno = 7 THEN 'Sunday' 
+																				WHEN LWH1.Weekdayno = 1 THEN 'Monday' 
+																				WHEN LWH1.Weekdayno = 2 THEN 'Tuesday' 
+																				WHEN LWH1.Weekdayno = 3 THEN 'Wednesday' 
+																				WHEN LWH1.Weekdayno = 4 THEN 'Thursday' 
+																				WHEN LWH1.Weekdayno = 5 THEN 'Friday' 
+																				WHEN LWH1.Weekdayno = 6 THEN 'Saturday' 
+																				ELSE '' END) AS [text()]
+                                             FROM   LocationWorkingHours LWH1 (NOLOCK)
+                                                    INNER JOIN OrganizationAddress OA (NOLOCK)
+                                                            ON LWH1.Orgaddressid = OA.AddressID
+                                                               AND LWH1.Orgid = OA.OrgID
+                                                               AND LWH1.Orgaddressid = LWH.Orgaddressid
+                                                               AND LWH1.Orgid = LWH.Orgid
+                                                               AND LWH1.Labstart = LWH.Labstart
+                                                               AND LWH1.Labend = LWH.Labend
+                                                    INNER JOIN Organization O1 (NOLOCK)
+                                                            ON O1.OrgID = OA.OrgID
+                                                               AND O1.OrgID = LWH.Orgid
+                                             WHERE  LWH1.Orgaddressid = Isnull(@pLocationID, LWH1.Orgaddressid)
+                                             GROUP  BY LWH1.Orgid,
+                                                       LWH1.Orgaddressid,
+                                                       LWH1.Weekdayno,
+                                                       LWH1.Labstart,
+                                                       LWH1.Labend,
+                                                       OA.Location,
+                                                       O1.OrgDisplayName
+                                             FOR xml PATH('')), 1, 1, ''))
+											 + 
+											 '#'
+											 + (SELECT Stuff((SELECT ',' + CONVERT(VARCHAR,LWH2.ID) AS [text()]
+                                             FROM   LocationWorkingHours LWH2 (NOLOCK)
+                                                    INNER JOIN OrganizationAddress OA1 (NOLOCK)
+               ON LWH2.Orgaddressid = OA1.AddressID
+                                                               AND LWH2.Orgid = OA1.OrgID
+                                                               AND LWH2.Orgaddressid = LWH.Orgaddressid
+                                                               AND LWH2.Orgid = LWH.Orgid
+                                                               AND LWH2.Labstart = LWH.Labstart
+                                                               AND LWH2.Labend = LWH.Labend
+                                                    INNER JOIN Organization O2 (NOLOCK)
+                                                            ON O2.OrgID = OA1.OrgID
+                                                               AND O2.OrgID = LWH.Orgid
+                                             WHERE  LWH2.Orgaddressid = Isnull(@pLocationID, LWH2.Orgaddressid)
+                                             GROUP  BY LWH2.Orgid,
+                                                       LWH2.Orgaddressid,
+                                                       LWH2.Weekdayno,
+                                                       LWH2.Labstart,
+                                                       LWH2.Labend,
+                                                       OA1.Location,
+                                                       O2.OrgDisplayName,
+													   LWH2.ID
+                                             FOR xml PATH('')), 1, 1, ''))
+											 AS FrequencyDays
+              FROM   LocationWorkingHours LWH (NOLOCK)
+                     INNER JOIN OrganizationAddress OA (NOLOCK)
+                             ON LWH.Orgaddressid = OA.AddressID
+                                AND LWH.Orgid = OA.OrgID
+                     INNER JOIN Organization O (NOLOCK)
+                             ON O.OrgID = OA.OrgID
+              WHERE  LWH.Orgid = @pOrgID
+                     AND O.OrgID = @pOrgID
+           AND LWH.Orgaddressid = Isnull(@pLocationID, LWH.Orgaddressid)
+              GROUP  BY LWH.Orgid,
+                        LWH.Orgaddressid,
+                        Labstart,
+                        Labend,
+                        OA.Location,
+                        O.OrgDisplayName,
+                        Weekdayno) T
+  END 
+
+

@@ -1,0 +1,37 @@
+   
+CREATE PROCEDURE pGetPatientwiseVisitDetails_LIMSAPI    
+ -- Add the parameters for the stored procedure here    
+@pOrgCode nvarchar(100),                                                                    
+@pPatientNo [nvarchar](30)    
+AS    
+BEGIN    
+    
+SET NOCOUNT ON;    
+    
+ DECLARE @pOrgID INT = NULL, @pOrgAddrID INT = NULL    
+    
+    
+  IF EXISTS(SELECT 1 FROM Integrationtypemaster WHERE IntegrationTypeName = @pOrgCode)    
+    BEGIN    
+       SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID    
+        FROM Integrationtypemaster ITM    
+            INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID    
+            INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID    
+        WHERE ITM.IntegrationTypeName = @pOrgCode    
+    END    
+     
+    
+  SELECT O.IntegrationName AS OrgCode, O.Name AS OrgName , P.PatientID, P.PatientNumber,SA.TitleName + '' + P.Name AS PatientName, PV.VisitNumber,     
+     CONVERT(NVARCHAR,PV.VisitDate,103) AS VisitDate, OA.LocationCode , OA.Location LocationName , CM.ClientName, CM.ClientCode    
+  FROM Patient P    
+  INNER JOIN PatientVisit PV (NOLOCK)  ON P.PatientID = PV.PatientID       
+  INNER JOIN VisitClientMapping VCM (NOLOCK) ON PV.Patientvisitid = VCM.visitID      
+  INNER JOIN CLientmaster CM(NOLOCK)  ON VCM.ClientID = CM.ClientID   INNER JOIN Organizationaddress OA (NOLOCK)  ON OA.AddressID = PV.OrgAddressID    
+  INNER JOIN Organization O (NOLOCK)   ON OA.OrgID = O.OrgID    
+  INNER JOIN Salutation SA(NOLOCK)  ON P.TitleCode = SA.TitleID    
+  WHERE P.PatientNumber = @pPatientNo --AND P.OrgID = @pOrgID    
+    
+END    
+    
+    
+    

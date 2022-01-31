@@ -1,0 +1,46 @@
+Create Procedure pUpdateRateCardDetails_LIMSAPI
+(
+@RateCardCode Varchar(50),
+@TestCode Varchar(50),
+@TestType Varchar(10),
+@OrgCode Varchar(50),
+@Status Char(1)
+)
+
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+Declare @RateId bigint, @TestID bigint, @ORgID int
+
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @OrgCode)
+   BEGIN
+	  SELECT @ORgID = VOM.AttuneOrgID 
+	         
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @OrgCode
+	END
+
+
+	set @RateID = ( select RateID from RateMaster where RateCode=@RateCardCode and ORgID=@ORgID)
+
+	If ( @TestType='INV')
+	Begin
+	Set @TestID=( select InvestigationID from InvestigationOrgMapping where TestCode=@TestCode and ORgID=@ORgID)
+	END
+	Else 
+	BEGIN
+	Set @TestID=( select OrgGroupID from InvOrgGroup where TestCode=@TestCode and ORgID=@ORgID)
+	END
+	
+	If (@Status = 'Y')
+	BEGIN
+	Update IRM set IRM.IsIntegration=1 from InvRateMaster IRM 
+	Inner Join RateMaster RM (NOLOCK) On RM.RateID=IRM.RateID and RM.OrgID=@ORgID
+	where IRM.RateID=@RateID and IRM.ID=@TestID and IRM.TYPE=@TestType and IRM.IsIntegration=0
+	END
+	
+
+END

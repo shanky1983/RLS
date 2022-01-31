@@ -1,0 +1,105 @@
+
+CREATE PROCEDURE [dbo].[pGetInvestigationResultsCaptureTest_PathWorks] @VID 
+[bigint], 
+                                                                   @OrgID 
+[int], 
+                                                                   @RoleID 
+[bigint], 
+                                                                   @pGUID 
+[nvarchar](255), 
+                                                                   @DeptID 
+[bigint], 
+                                                                   @pInvID 
+NVARCHAR(max), 
+                                                                   @pLocationID 
+[int], 
+                                                                   @TaskID 
+[bigint], 
+                                                                   @Namesonly 
+NChar(1), 
+                                                                   @LoginDetail 
+[dbo].[LoginDetail] READONLY, 
+                                                                   @ContextInfo 
+[UDT_Context] READONLY, 
+@IsTrustedDetails [nvarchar](3), 
+@Status           nvarchar(50) 
+--WITH RECOMPILE   
+AS 
+BEGIN 
+--IF @pInvID =''                                         
+-- EXEC pGetInvestigationResultsCaptureFormat @VID,@OrgID,@RoleID,@pGUID  , @pLocationID ,@LoginDetail                                      
+-- ELSE                                        
+--EXEC pGetInvestigationResultsCaptureFormatWithInvID @VID,@OrgID,@RoleID,@pGUID,@pInvID,@pLocationID ,@LoginDetail                   
+if( @TaskID = 0 
+and @Status = 'Approve' ) 
+Begin 
+EXEC pGetInvestigationResultsCaptureFormatWithInvIDTest_PathWorks 
+@VID, 
+@OrgID, 
+@RoleID, 
+@DeptID, 
+@pGUID, 
+@pInvID, 
+@Namesonly, 
+@LoginDetail, 
+@IsTrustedDetails, 
+0, 
+@ContextInfo 
+END 
+ELSE IF( @TaskID = 0 
+and @Status <> 'Approve' ) 
+Begin 
+EXEC pGetInvestigationResultsCaptureFormatWithInvIDTest_PathWorks 
+@VID, 
+@OrgID, 
+@RoleID, 
+@DeptID, 
+@pGUID, 
+'', 
+@Namesonly, 
+@LoginDetail, 
+@IsTrustedDetails, 
+0, 
+@ContextInfo 
+END 
+ELSE 
+BEGIN 
+/**********************modify by Arivalagan k****************************/ 
+IF( @pInvID != '' ) 
+BEGIN 
+EXEC pGetInvestigationResultsCaptureFormatWithInvIDTest_PathWorks 
+@VID, 
+@OrgID, 
+@RoleID, 
+@DeptID, 
+@pGUID, 
+@pInvID, 
+@Namesonly, 
+@LoginDetail, 
+@IsTrustedDetails, 
+@TaskID, 
+@ContextInfo 
+END 
+ELSE 
+BEGIN 
+EXEC pGetInvestigationResultsCaptureFormatWithInvIDTest_PathWorks 
+@VID, 
+@OrgID, 
+@RoleID, 
+@DeptID, 
+@pGUID, 
+'', 
+@Namesonly, 
+@LoginDetail, 
+@IsTrustedDetails, 
+@TaskID, 
+@ContextInfo 
+END 
+/**********************End  modify by Arivalagan k***********************/ 
+END 
+END 
+
+
+
+
+

@@ -1,0 +1,11 @@
+CREATE procedure pUpdateOrderStatus_IAPI
+
+@OrderStatus   UDT_OrderStatus READONLY
+WITH EXECUTE AS OWNER
+as
+begin
+
+UPDATE IH SET IH.ProcessStatus='P' , ProcessedDateTime=getdate() from MISOrderedinvestigationhistory ih
+ inner join @OrderStatus os on os.MessageID=ih.AccessionNumber  and ih.createdat=os.ContentStatusDateTime
+ where ih.ProcessStatus='S'
+end

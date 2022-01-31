@@ -1,0 +1,32 @@
+CREATE Procedure PGetGrpContentSequenceMaster
+@OrgGroupID int,
+@OrgID int
+
+As
+Begin
+
+Create table #temp12 (Orggroupid int,ParentGroupCode Nvarchar(100),ParentGroupName nvarchar(255),ParentSequenceNumber int,InvestigationID int,Parent char)
+
+
+Insert into #temp12 (Orggroupid,ParentGroupCode,ParentGroupName,ParentSequenceNumber,InvestigationID,Parent)
+select Distinct IOG.Orggroupid,CM.Codename,CM.Codedesc,IGMM.SequenceNo as ParentSequenceNumber,IGMM.InvestigationID,IGMM.Parent from Invorggroup IOG 
+inner join Invgroupmapmaster IGMM on IGMM.Groupid=IOG.OrgGroupID 
+inner join Codemapper CMM on CMM.IdentifyingID=IOG.OrggroupID
+inner join Codemaster CM on Cm.Codemasterid=CMM.CodeMasterID and CM.Codetype=CMM.IdentifyingType and CM.CodeSchemeID=120
+where IOG.orgID=@orgid and IGMM.GroupID=@OrgGroupID and CM.Codetype='GRP' and isnull(IGMM.Active,'N')='Y'
+
+select T.ParentSequenceNumber,IGMM.SequenceNo as SubGroupSequenceNumber,IGMM.InvestigationID from #temp12 T 
+inner join INVgroupmapmaster IGMM on IGMM.Groupid=T.Investigationid
+inner join Codemapper CN on CN.IdentifyingID=IGMM.GroupID
+inner join Codemaster CNN on CNN.CodeMasterID=CN.CodeMasterID and CNN.CodeType=CN.IdentifyingType and CNN.CodeSchemeID=120 and CNN.Codetype='GRP'
+inner join Codemapper CM on CM.IdentifyingID=IGMM.InvestigationID
+inner join Codemaster CMM on CMM.CodeMasterID=CM.CodeMasterID and CMM.CodeType=CM.IdentifyingType and CMM.CodeSchemeID=120 and CMM.Codetype='Investigations'
+where T.Parent='Y' and isnull(IGMM.Active,'N')='Y'  
+union all
+select T.ParentSequenceNumber,'' as SubGroupSequenceNumber,IGMM.InvestigationID from #temp12 T 
+inner join Investigationorgmapping IGMM on IGMM.Investigationid=T.Investigationid and IGMM.OrgID=@orgid
+inner join Codemapper CM on CM.IdentifyingID=IGMM.InvestigationID
+inner join Codemaster CMM on CMM.CodeMasterID=CM.CodeMasterID and CMM.CodeType=CM.IdentifyingType and CMM.CodeSchemeID=120 and CMM.Codetype='Investigations'
+where T.Parent='N'
+Drop table #temp12
+End

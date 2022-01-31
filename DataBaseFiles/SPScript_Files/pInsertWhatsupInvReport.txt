@@ -1,0 +1,74 @@
+ 
+CREATE PROCEDURE pInsertWhatsupInvReport
+(
+    @pOrgID bigint,
+	@PatientID bigint,
+	@PatientVisitID bigint
+)
+
+AS
+BEGIN   
+     BEGIN
+	   DECLARE @TemplateNo int,  @OrgName nvarchar(250), 
+	          @PName nvarchar(250), @CollectionTime nvarchar(50), @SourceType nvarchar(4000),
+			  @IsWhatsUp varchar(5), @ExtRefNo nvarchar(50),@pMobileNumber NVARCHAR(100),
+@pTemplateName NVARCHAR(500),@LoginID nvarchar(250), @Pwd nvarchar(250),
+@pTemplateParamJSON NVARCHAR(4000),@pVisitId bigint,
+@pIdentifyingId BIGINT,
+@pCreatedBy BIGINT,@VisitNumber NVARCHAR(100)
+
+    
+	
+	
+	SELECT @IsWhatsUp = ISNULL(com.configvalue,'N')
+		        FROM dbo.configkeymaster ckm WITH (NOLOCK)
+			    INNER JOIN dbo.configorgmaster com WITH (NOLOCK) ON com.configkeyid = ckm.configkeyid
+						AND com.orgid = @pOrgID
+					WHERE ckm.configkey = 'WhatsupIntegration';
+
+					IF(@IsWhatsUp = 'Y')
+	          BEGIN
+			   SELECT @pTemplateName = TemplateName FROM WhatsUpTemplateMaster WHERE TemplateName ='investigationreport'
+
+select @pVisitId=PV.PatientVisitId,@LoginID=L.LoginID,@Pwd=L.Password,@VisitNumber=PV.VisitNumber FROM PatientVisit PV 
+ 
+  inner join  Patient P WITH(Nolock) on P.PatientID=@PatientID and P.LoginID is not null 
+    inner join  login L WITH(Nolock) on L.loginID=P.LoginID and l.OrgID=@pOrgID and L.IsLocked='N' and P.PatientNumber=L.LoginName
+   inner join LoginRole LR WITH(Nolock) on LR.LoginID=L.LoginID
+   inner join Role R WITH(Nolock) on R.Rolename='Patient' and LR.RoleId=R.RoleID
+   where PV.PatientVisitID=@PatientVisitID
+
+   select  @OrgName=Name from Organization where OrgID=@pOrgID
+
+   declare @url nvarchar(4000),@hs nvarchar(100),@hs1 nvarchar(100),@hs2 nvarchar(100),@hs3 nvarchar(100)
+   set @hs='http://180.151.56.37/limsapi/Api/Attachment/GetPatientFilePDF?pOrgID='
+    set @hs1='&LoginID='
+	set @hs2= '&Password='
+	set @hs3='&VisitNumber='
+--   select @hs,@hs1,@hs2,@hs3
+   set @url=@hs+CONVERT(nvarchar, @pOrgID)+@hs1 +CONVERT(nvarchar, @LoginID)+@hs2+ @Pwd +@hs3 + @Visitnumber
+	--	  select @url	   
+select @pMobileNumber=PA.MobileNumber,@PName=P.Name,@CollectionTime=PV.VisitDate,@SourceType=@url from Patient P
+inner join  Patientvisit PV on PV.PatientID=P.PatientID  and PV.PatientVisitId=@PatientVisitID
+inner join Patientaddress PA on PA.PatientID=PV.PatientID and PA.AddressType='C'
+inner join notifications N on N.IdentityID=PV.PatientVisitID
+where P.PatientID=@PatientID  and P.OrgID=@pOrgID
+set @pIdentifyingId=@PatientID
+set @pCreatedBy=0
+
+--select @SourceType
+ SELECT @pTemplateParamJSON = @PName +'|'+ @CollectionTime +'|'+ @SourceType +''+'|'+ @OrgName
+
+
+
+		  EXEC pInsertWhatsUpNotifications @pMobileNumber,@pTemplateName,@pTemplateParamJSON,@pIdentifyingId,@pCreatedBy
+
+			  END
+	 END
+END
+
+
+
+
+
+

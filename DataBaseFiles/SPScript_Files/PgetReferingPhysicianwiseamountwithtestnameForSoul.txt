@@ -1,0 +1,233 @@
+create procedure PgetReferingPhysicianwiseamountwithtestnameForSoul
+(
+@fdate [DATETIME]=null ,    
+ @tdate [DATETIME] =null,      
+ @pOrgID bigint      
+,@Pparamtype VARCHAR(100)=null    
+,@Pparamvalue VARCHAR(100)=null    
+,@pExcelReportId [INT] = NULL    
+,@pExcelReportName VARCHAR(255) = NULL    
+,@pToExecute VARCHAR(10) = NULL 
+)
+As
+Begin
+	SET NOCOUNT ON
+	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+	DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+	Declare @patientinfo as table (VisitID bigint,ReferingphysicianName varchar(255),VisitDate datetime,VisitNumber varchar(255),PatientName varchar(255),
+	 TestName nvarchar(max),BillingAmount decimal(18,2), NetAmount decimal(18,2),Discount decimal(18,2),ReceivedAmount decimal(18,2),RefundAmount decimal(18,2)) 
+BEGIN TRY 
+
+	IF(@pOrgID=222)
+	BEGIN
+
+	 Declare @patienttbl as table (VisitID bigint,DeptHeader varchar(255),ClientName varchar(255),ReferingphysicianName varchar(255),DeptName varchar(255),VisitDate datetime,
+	 VisitNumber varchar(255),AccessionNumber varchar(255),PatientName varchar(255),TestName nvarchar(max),Type varchar(10),BillingAmount decimal(18,2), 
+	 NetAmount decimal(18,2),Discount decimal(18,2),ReceivedAmount decimal(18,2),RefundAmount decimal(18,2),location varchar(255)) 
+
+	
+			INSERT @patienttbl 
+			   (visitid, 
+				clientname, 
+				referingphysicianname, 
+				visitdate, 
+				visitnumber, 
+				accessionnumber, 
+				patientname, 
+				testname, 
+				type, 
+				receivedamount, 
+				refundamount, 
+				location) 
+		SELECT DISTINCT PV.patientvisitid, 
+						cm.clientname, 
+						PV.referingphysicianname, 
+						PV.visitdate, 
+						PV.visitnumber, 
+						OI.accessionnumber, 
+						PA.NAME AS PatientName, 
+						CASE 
+						  WHEN Isnull(OI.pkgid, '') = '' THEN OI.NAME 
+						  ELSE OI.pkgname 
+						END, 
+						CASE 
+						  WHEN Isnull(OI.pkgid, '') = '' THEN OI.type 
+						  ELSE 'PKG' 
+						END, 
+						0       AS ReceivedAmount, 
+						0       AS RefundAmount, 
+						oa.location 
+		FROM   patientvisit PV (nolock) 
+			   INNER JOIN patient PA (nolock) 
+					   ON PA.patientid = PV.patientid 
+						  AND PA.orgid = PV.orgid 
+			   INNER JOIN orderedinvestigations OI WITH(nolock) 
+					   ON OI.visitid = PV.patientvisitid 
+						  AND OI.orgid = PV.orgid 
+			   LEFT JOIN organizationaddress oa WITH (nolock) 
+					  ON oa.addressid = pv.orgaddressid 
+						 AND oa.orgid = oi.orgid 
+			   INNER JOIN finalbill FB (nolock) 
+					   ON FB.visitid = OI.visitid 
+						  AND FB.orgid = OI.orgid 
+			   LEFT JOIN visitclientmapping vcm WITH (nolock ) 
+					  ON vcm.finalbillid = FB.finalbillid 
+						 AND vcm.visitid = FB.visitid 
+						 AND vcm.orgid = OI.orgid 
+			   LEFT JOIN clientmaster cm WITH (nolock) 
+					  ON cm.clientid = vcm.clientid 
+						 AND cm.orgid = vcm.orgid 
+		WHERE  PV.orgid = @pOrgID 
+			   AND PV.visitdate BETWEEN CONVERT(DATETIME, @fdate) + ' 00:00:00' AND 
+											CONVERT(DATETIME, @tdate) + ' 23:59:59' 
+		GROUP  BY PV.patientvisitid, 
+				  PV.referingphysicianname, 
+				  PV.visitdate, 
+				  PV.visitnumber, 
+				  PA.NAME, 
+				  OI.NAME, 
+				  OI.pkgid, 
+				  OI.pkgname, 
+				  OI.NAME, 
+				  OI.type, 
+				  OI.accessionnumber, 
+				  cm.clientname, 
+				  oa.location 
+
+				  select * from @patienttbl
+
+	UPDATE p set p.BillingAmount=BD.Amount, p.NetAmount=BD.ActualAmount, p.Discount=BD.DiscountAmount, p.RefundAmount=RF.AmtRefund From @patienttbl p
+	INNER JOIN OrderedInvestigations OI with (nolock) on OI.VisitID=p.VisitID and OI.Orgid=@pOrgID  and  OI.pkgid is not null
+	INNER JOIN FinalBill FB with (nolock) on FB.VisitID=OI.VisitID and FB.Orgid=OI.Orgid
+	INNER JOIN BillingDetails BD with (nolock) on BD.FinalBillID=FB.FinalBillID and BD.Orgid=FB.OrgID and BD.FeeID=OI.pkgID and BD.FeeType='PKG'
+	left join AmountRefunddetails RF ON RF.FinalBillID=BD.FinalBillID and RF.Orgid=FB.OrgID and RF.BillingDetailsID=BD.BillingDetailsID
+	Where p.visitid=OI.VisitID and  OI.pkgid=BD.FeeID and P.Accessionnumber=OI.Accessionnumber and OI.pkgid is not null
+
+	
+	UPDATE p set p.BillingAmount=BD.Amount, p.NetAmount=BD.ActualAmount, p.Discount=BD.DiscountAmount,p.RefundAmount=RF.AmtRefund From @patienttbl p
+	INNER JOIN OrderedInvestigations OI with (nolock) on OI.VisitID=p.VisitID and OI.Orgid=@pOrgID  and  OI.pkgid is null
+	INNER JOIN FinalBill FB with (nolock) on FB.VisitID=OI.VisitID and FB.Orgid=OI.Orgid
+	INNER JOIN BillingDetails BD with (nolock) on BD.FinalBillID=FB.FinalBillID and BD.Orgid=FB.OrgID and BD.FeeID=OI.ID and BD.FeeType<>'PKG'
+	left join AmountRefunddetails RF ON RF.FinalBillID=BD.FinalBillID and RF.Orgid=FB.OrgID and RF.BillingDetailsID=BD.BillingDetailsID
+	Where p.visitid=OI.VisitID and BD.FeeType=OI.Type and OI.ID=BD.FeeID and P.Accessionnumber=OI.Accessionnumber and OI.pkgid is  null
+
+	
+	
+	UPDATE p set p.DeptName=IDM.DeptName,p.DeptHeader=IDM.departmentcode from @patienttbl p
+	Inner Join OrderedInvestigations OI with (nolock) on OI.visitid=p.visitid and OI.Orgid=@pOrgID and OI.Type=p.type
+	Inner Join InvestigationOrgMapping IOM with (nolock ) on IOM.investigationid=OI.ID and IOM.orgid=OI.orgid 
+	Inner JOIN InvDeptMaster IDM with (nolock) on IDM.DeptID=IOM.DeptiD and IDM.Orgid=IOM.Orgid
+	where OI.visitid=p.visitid and OI.orgid=@pOrgID and (OI.PkgID=''  or OI.PkgID is null) and p.Type='INV' and p.accessionnumber=oi.accessionnumber
+
+	UPDate p set p.DeptName= ltrim(rtrim(stuff((select distinct ', '+ t.DeptName for XML path('')),1,1,''))),
+	p.DeptHeader= ltrim(rtrim(stuff((select distinct ', '+ t.departmentcode for XML path('')),1,1,'')))
+	from @patienttbl p
+	inner join 
+	(
+	Select Distinct IDM.departmentcode,IDM.DeptName,p.visitID,OI.AccessionNumber from @patienttbl p
+	Inner Join OrderedInvestigations OI with (nolock) on OI.visitid=p.visitid and OI.Orgid=@pOrgID and OI.Type=p.type
+	inner join InvOrgGroup IOG with (nolock) on IOG.AttGroupID=OI.ID and IOG.Orgid=OI.OrgID
+	inner join INVGroupMapMaster IGMM with (nolock) on IGMM.GroupID=IOG.OrgGroupID and  IGMM.Active='Y' and IGMM.Parent='N'
+	Inner Join InvestigationOrgMapping IOM with (nolock ) on IOM.investigationid=IGMM.InvestigationID  and IOM.orgid=OI.orgid
+	Inner JOIN InvDeptMaster IDM with (nolock) on IDM.DeptID=IOM.DeptiD and IDM.Orgid=IOM.Orgid
+	where OI.visitid=p.visitid and OI.orgid=@pOrgID and (OI.PkgID=''  or OI.PkgID is null) and p.Type='GRP'
+	union all
+	Select Distinct IDM.departmentcode,IDM.DeptName,p.visitID,OI.AccessionNumber from @patienttbl p
+	Inner Join OrderedInvestigations OI with (nolock) on OI.visitid=p.visitid and OI.Orgid=@pOrgID and OI.Type=p.type
+	inner join InvOrgGroup IOG with (nolock) on IOG.AttGroupID=OI.ID and IOG.Orgid=OI.OrgID
+	inner join INVGroupMapMaster IGMM with (nolock) on IGMM.GroupID=IOG.OrgGroupID and  IGMM.Active='Y' and IGMM.Parent='Y'
+	inner join INVGroupMapMaster IGMM1 with (nolock) on IGMM1.GroupID=IGMM.investigationid and  IGMM1.Active='Y' and IGMM1.Parent='N'
+	Inner Join InvestigationOrgMapping IOM with (nolock ) on IOM.investigationid=IGMM1.InvestigationID  and IOM.orgid=OI.orgid
+	Inner JOIN InvDeptMaster IDM with (nolock) on IDM.DeptID=IOM.DeptiD and IDM.Orgid=IOM.Orgid
+	where OI.visitid=p.visitid and OI.orgid=@pOrgID and (OI.PkgID=''  or OI.PkgID is null) and p.Type='GRP'
+	)
+	 as t
+	on t.visitid=p.visitid and p.type='GRP' and t.accessionnumber=p.accessionnumber
+
+	Update p set p.DeptName ='Package',p.DeptHeader='Package' from  @patienttbl p where p.type='PKG'
+
+
+	select * from @patienttbl
+
+	;With CTE as (
+	select distinct Visitnumber,Patientname,sum(billingamount) over (partition by visitnumber,DeptHeader,patientname) as Billingamount, 
+						sum(NetAmount) over (partition by visitnumber,DeptHeader,patientname) as NetAmount , 
+						sum(discount) over (partition by visitnumber,DeptHeader,patientname) as Discount,
+						sum(refundamount) over (partition by visitnumber,DeptHeader)  as RefundAmount,deptheader from @patienttbl
+						 )
+						update p1 set p1.billingamount=c.billingamount,
+						p1.netamount=c.netamount,
+						p1.discount=c.discount,
+						p1.refundamount=c.refundamount	 from  @patienttbl p1
+						inner join CTE c on c.VisitNumber=p1.VisitNumber and p1.patientname=c.patientname
+						where c.VisitNumber=p1.VisitNumber and p1.deptheader=c.deptheader and p1.patientname=c.patientname
+						and p1.type<>'PKG'
+					
+
+	 select distinct  'xyz' as report,ClientName,ReferingphysicianName as PhysicianName,VisitDate,VisitNumber,PatientName,ltrim(rtrim(DeptHeader)) as [Department Header],
+	 ltrim(rtrim( stuff((select distinct ', '+p1.DeptName  from @patienttbl p1  where p1.visitid=p.visitid and p1.DeptHeader=p.DeptHeader for xml path('')),1,1,''))) as [Department],
+	 ltrim(rtrim(stuff((select distinct ', '+p1.TestName  from @patienttbl p1 where p1.visitid=p.visitid and isnull(p1.DeptHeader,'')=isnull(p.DeptHeader,'') for xml path('')),1,1,''))) as [TestName],
+	 sum(p.BillingAmount) over (partition by visitnumber,DeptHeader) as BillingAmount,
+	 sum(NetAmount) over (partition by visitnumber,DeptHeader) as NetAmount,
+	 sum(discount) over (partition by visitnumber,DeptHeader) as Discount,
+	 sum(refundamount) over (partition by visitnumber,DeptHeader)  as RefundAmount,location as Location
+	 from @patienttbl p group by ClientName,ReferingphysicianName,VisitNumber,PatientName,BillingAmount,NetAmount,discount,VisitDate,
+	 refundamount,location,DeptHeader,visitid order by visitnumber
+	
+
+	END
+	ELSE
+	BEGIN
+	INSERT @patientinfo
+	SELECT Distinct PV.Patientvisitid,PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name as PatientName,
+	 stuff(                                                                        
+	 (                                                         
+	 select ','+TestName +'' From                                                                        
+	 (                                                                        
+	 select O.Name as TestName from Orderedinvestigations O WITH(NOLOCK) where O.Visitid=PV.patientVisitID and O.OrgID=@pOrgID and O.pkgid is null
+	 union
+	 select O.PkgName as TestName from Orderedinvestigations O WITH(NOLOCK) where O.Visitid=PV.patientVisitID and O.OrgID=@pOrgID and Isnull(O.PkgID,0)>0                                                                                           
+	 ) tp                         
+	 for XML path('') ) ,1,1,'')
+	 ,
+	Isnull(FB.GrossBillValue,0) as BillingAmount,Isnull(FB.NetValue,0)as NetAmount,Isnull(FB.DiscountAmount,0) as Discount,0 as ReceivedAmount,0 as RefundAmount
+	from Patientvisit  PV (NOLOCK)
+	inner join Patient PA (NOLOCK) ON PA.PatientID=PV.PatientID and PA.OrgID=PV.OrgID
+	inner join Orderedinvestigations OI WITH(NOLOCK) ON OI.Visitid=PV.patientvisitid and OI.OrgID=PV.OrgID
+	inner join finalbill FB (NOLOCK) on FB.Visitid=OI.VisitID and FB.OrgID=OI.OrgID
+	inner join billingdetails BD (NOLOCK) on BD.FInalBillid=FB.FinalBillid and BD.OrgID=FB.OrgID 
+	where PV.orgid=@pOrgID and PV.visitdate between Convert(datetime,@fdate) +' 00:00:00' and Convert(Datetime,@tdate) +' 23:59:59' --and pv.visitnumber='18IDN00566'
+	group by PV.PatientVisitid,PV.ReferingphysicianName,PV.VisitDate,PV.VisitNumber,PA.Name,OI.Name,Isnull(FB.GrossBillValue,0),Isnull(FB.NetValue,0),Isnull(FB.DiscountAmount,0)--,
+	order by PV.VisitNumber   
+	 
+	UPDATE p SET ReceivedAmount = AmtReceived FROM @patientinfo P
+	INNER JOIN 
+	(select SUM(RF.AmtReceived) as AmtReceived,RF.finalbillid,FB.visitid from FinalBill FB WITH(NOLOCK)                                               
+	Inner Join amountreceiveddetails RF ON RF.finalbillid=FB.finalbillid                                                                             
+	group by RF.finalbillid,FB.visitid)TP on TP.visitid =P.visitid 
+
+	UPDATE p SET RefundAmount = AmtRefund FROM @patientinfo P
+	INNER JOIN 
+	(select SUM(RF.AmtRefund) as AmtRefund,RF.finalbillid,FB.visitid from FinalBill FB WITH(NOLOCK)                                               
+	Inner Join AmountRefunddetails RF ON RF.finalbillid=FB.finalbillid                                                                             
+	group by RF.finalbillid,FB.visitid)TP on TP.visitid =P.visitid 
+	 
+	Select '123' as empty ,ReferingphysicianName,VisitDate,VisitNumber,PatientName,TestName,BillingAmount, NetAmount,Discount,ReceivedAmount,RefundAmount from @patientinfo  
+	END
+
+	   
+END TRY
+ BEGIN CATCH
+	IF (@@TRANCOUNT > 0)
+			ROLLBACK TRANSACTION
+		SELECT @EMsg = Error_Message(),
+		@ELine = Error_Line(),
+		@Eproc = Error_procedure(),
+		@ESEVERITY = Error_SEVERITY()--,
+		--@sptrace ='PgetReferingPhysicianwiseamountwithtestname_jay18062018 @fdate = '+ @fdate +'@porgid='+CAST(@porgid AS varchar)+'@Pparamtype='+@Pparamtype
+		--exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace
+	END CATCH
+End
+
+
+      

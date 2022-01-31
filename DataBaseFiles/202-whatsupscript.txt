@@ -1,0 +1,1211 @@
+/**** bookingconfirmationprima ***/ 
+
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT,@PageName NVARCHAR(100)
+
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollection.aspx'
+SET @PageName='Home Collection'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnSave'
+SET @ButtonValue='Save'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl  and PageName like '%'+@PageName 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='bookingconfirmationprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{BookingID}|888-927-1826','bookingconfirmationprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingconfirmationprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='DEO Home Visit' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingconfirmationprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCB','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+ /*** bookingconfirmationprima ***/
+ 
+ /*** bookingassignedprima ***/
+ 
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Apply'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{UserName}|{BookingID}|888-927-1826','bookingassignedprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCA','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Save And Update'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{UserName}|{BookingID}|888-927-1826','bookingassignedprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='bookingassignedprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCA','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+
+ /*** bookingassignedprima ***/
+ 
+  /***cancelbookingprima ***/
+ 
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE orgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Apply'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|888-927-1826','cancelbookingprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCCAN','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE orgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Save And Update'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|888-927-1826','cancelbookingprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='cancelbookingprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCCAN','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+ /*** cancelbookingprima***/
+ 
+ /*** updatebooking ***/
+ 
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE Orgid=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Save And Update'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{UserName}|{BookingID}|888-927-1826','updatebooking',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCR','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+ 
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE Orgid=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApply'
+SET @ButtonValue='Apply'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{UserName}|{BookingID}|888-927-1826','updatebooking',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCR','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ 
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE Orgid=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/HomeCollection/homecollectiontaskscheduler.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='update'
+SET @ButtonValue='Update'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Booking'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{OrgName}|{Reg_Date} at {Reg_Time}|{UserName}|{BookingID}|888-927-1826','updatebooking',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Scheduler' AND OrgID=@OrgID
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='updatebooking'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'HCR','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+ GO
+ /*** updatebooking **/
+ 
+ /*** billmessage ***/
+ 
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx?&RCP=Y'SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='billmessage')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|billmessage.pdf|{VisitNumber}|{OrgName}|{Name}|{Date}|{Time}','billmessage','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx?&RCP=Y'SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='Generate Work Order'
+SET @ButtonValue='btnFinish'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='billmessage')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|billmessage.pdf|{VisitNumber}|{OrgName}|{Name}|{Date}|{Time}','billmessage','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx'SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='billmessage')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|billmessage.pdf|{VisitNumber}|{OrgName}|{Name}|{Date}|{Time}','billmessage','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/ClientBilling.aspx'SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='billmessage')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|billmessage.pdf|{VisitNumber}|{OrgName}|{Name}|{Date}|{Time}','billmessage','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/ClientBilling.aspx'SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='billmessage')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|billmessage.pdf|{VisitNumber}|{OrgName}|{Name}|{Date}|{Time}','billmessage','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='billmessage'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='DEO B2B' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+
+ 
+ 
+
+/*** billmessage***/
+
+  /*** reportreadyprima ***/
+ DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/Investigation/InvestigationQuickApprovel.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApprove'
+SET @ButtonValue='Approve'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Report'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{Name}|lis.attunelive.net - Triesta Sciences','reportreadyprima','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Doctor' AND OrgID=@OrgID AND LangCode='en-GB'
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/Investigation/InvestigationApprovel.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnSaveToDispatch'
+SET @ButtonValue='Save And Home'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Report'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'{Name}|lis.attunelive.net - Triesta Sciences','reportreadyprima','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Doctor' AND OrgID=@OrgID AND LangCode='en-GB'
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='reportreadyprima'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+/*** reportreadyprima ***/
+ /*** registrationsmsprima ***/
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx?&RCP=Y'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'{Name}|{OrgName}|{VisitNumber}|+91 78294 90000 / 78294 93333|"http://bit.ly/Prima-JN"','registrationsmsprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx?&RCP=Y'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='Generate Work Order'
+SET @ButtonValue='btnFinish'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'{Name}|{OrgName}|{VisitNumber}|+91 78294 90000 / 78294 93333|"http://bit.ly/Prima-JN"','registrationsmsprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/LabQuickBilling.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'{Name}|{OrgName}|{VisitNumber}|+91 78294 90000 / 78294 93333|"http://bit.ly/Prima-JN"','registrationsmsprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+
+  DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/ClientBilling.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'{Name}|{OrgName}|{VisitNumber}|+91 78294 90000 / 78294 93333|"http://bit.ly/Prima-JN"','registrationsmsprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='LabReception' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+        @TemplateTypeID INT,@TemplateID INT
+
+ 
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 -- Name Like  '%RLS-Gorakhpur%'
+SET @PageUrl='/Billing/ClientBilling.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnGenerate'
+SET @ButtonValue='Generate Bill'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE ''+@PageUrl+''
+select @PageID,@PageUrl,@ButtonName,@ButtonValue
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+    INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+    SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+ 
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+    INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+    SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='PatientRegistration'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima')
+BEGIN
+    INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,CreatedAt,CreatedBy)
+    SELECT @TemplateTypeID,'{Name}|{OrgName}|{VisitNumber}|+91 78294 90000 / 78294 93333|"http://bit.ly/Prima-JN"','registrationsmsprima',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+    SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+END 
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+ SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='registrationsmsprima'
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='DEO B2B' AND OrgID=@OrgID
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+    INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+    SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','N',@CreatedAt,@CreatedBy
+END
+
+
+/** registrationsmsprima **/
+
+/***labreport ***/
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/Investigation/InvestigationQuickApprovel.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnApprove'
+SET @ButtonValue='Approve'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Report'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='labreport')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|Investigation.pdf|{VisitNumber}|{Name}|{Reg_Date}|{Reg_Time}','labreport','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='labreport'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Doctor' AND OrgID=@OrgID AND LangCode='en-GB'
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='labreport'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+
+
+DECLARE @PageID INT,@RoleID BIGINT,@OrgID INT,@PageContextID INT,@TypeID INT,@PageUrl NVARCHAR(200),
+        @CreatedAt DATETIME,@CreatedBy BIGINT,@ButtonName NVARCHAR(100),@ButtonValue NVARCHAR(100),@ActionTypeID INT,
+		@TemplateTypeID INT,@TemplateID INT
+
+SELECT @OrgID=OrgID FROM Organization WHERE OrgID=202 --Name Like '%RLS-Gorakhpur%'
+SET @PageUrl='/Investigation/InvestigationApprovel.aspx'
+SET @CreatedAt=GETDATE()
+SET @CreatedBy =182
+SET @ButtonName='btnSaveToDispatch'
+SET @ButtonValue='Save And Home'
+SELECT @PageID =PageID FROM Pages (NOLOCK) WHERE PageURL LIKE '%'+@PageUrl 
+IF EXISTS (SELECT  1 FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue)
+BEGIN
+  SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+END
+ELSE
+BEGIN
+	INSERT INTO PageContext (PageID,ButtonName,ButtionValue,CreatedAt,CreatedBy)
+	SELECT @PageID,@ButtonName,@ButtonValue,@CreatedAt,@CreatedBy
+END
+
+IF NOT EXISTS (SELECT  1 FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp')
+BEGIN
+	INSERT INTO ActionManagerType (ActionType,IsDisplay,ActionCode,Type,LangCode,CreatedAt,CreatedBy)
+	SELECT 'WhatsApp','Y','REPWhat','Whatsapp','en-GB',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+END
+SELECT @TemplateTypeID =TemplateTypeID FROM ActionTemplateType WHERE TemplateType='Report'
+IF NOT EXISTS (SELECT 1 FROm ActionTemplate (NOLOCK) WHERE TemplateName='labreport')
+BEGIN
+	INSERT INTO ActionTemplate(TemplateTypeID,Template,TemplateName,AttachmentName,CreatedAt,CreatedBy)
+	SELECT @TemplateTypeID,'document|http://180.151.56.37/LISKernelLIMSAPI/Api/Report/GetPDF?OrgCode=RLS&Type=Report&LoginName={PatintNumber}&Password={Password}&ReferenceNumber={VisitNumber}|Investigation.pdf|{VisitNumber}|{Name}|{Reg_Date}|{Reg_Time}','labreport','Report-{VisitNumber}_{Name}_{Date}_{Time}.pdf',@CreatedAt,@CreatedBy
+END
+ELSE
+BEGIN
+	SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='labreport'
+END 
+SELECT @PageContextID =PageContextID FROM PageContext (NOLOCK) WHERE PageID=@PageID AND ButtonName=@ButtonName AND ButtionValue=@ButtonValue
+SELECT @RoleID =RoleID FROM Role WHERE RoleName='Doctor' AND OrgID=@OrgID AND LangCode='en-GB'
+
+SELECT @TemplateID=TemplateID FROM ActionTemplate (NOLOCK) WHERE TemplateName='labreport'
+SELECT  @ActionTypeID=ActionTypeID FROM ActionManagerType (NOLOCK) WHERE ActionType='WhatsApp' AND Type='Whatsapp'
+IF NOT EXISTS (SELECT 1 FROM PageContextActionMapping (NOLOCK) WHERE PageContextID=@PageContextID AND RoleID=@RoleID AND TemplateID=@TemplateID AND ActionTypeID=@ActionTypeID)
+BEGIN
+	INSERT INTO PageContextActionMapping (PageContextID,RoleID,ActionTypeID,TemplateID,ContextType,AdditionalContext,IsAttachment,Createdat,CreatedBy)
+	SELECT @PageContextID,@RoleID,@ActionTypeID,@TemplateID,'P','WhatsApp','Y',@CreatedAt,@CreatedBy
+END
+/***labreport ***/
+  

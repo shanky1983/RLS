@@ -1,0 +1,30 @@
+CREATE procedure [dbo].[pGetPrimaWhatsappStatusReport]
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+	  
+	 SELECT P.PatientNumber,PV.PatientVisitID,PV.VisitNumber,PA.MobileNumber,N.CompletionTime 'DeliveryTime',
+	        N.RetryCount 'NoofAttempts',(select item from dbo.fnSplitNew(AdditionalContext,'|') where ID=2) 'PDF Url'
+	 FROM  Notifications N (NOLOCK)
+	 INNER JOIN PatientVisit PV (NOLOCK) ON N.IdentityID=PV.PatientVisitID
+	 INNER JOIN Patient P (NOLOCK) ON P.PatientID=PV.PatientID
+	 INNER JOIN PatientAddress PA (NOLOCK) ON P.patientID=PA.PatientID AND PA.AddressType='P'
+	 WHERE N.ActionType='WhatsApp' AND Template='labreport'
+	 AND N.CreatedAt BETWEEN @pFDate AND @pTDate  AND N.OrgID=@pOrgId
+ END
+GO
+
+ 

@@ -1,0 +1,56 @@
+
+CREATE PROCEDURE [dbo].[pInsertPatientInvestigationFilesSingleScreen]
+	@pupload [dbo].[PatientInvestigationFiles] READONLY,
+	@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN  
+
+	--declare @returnstatus int
+	
+	--set @returnstatus=-1	
+	
+	--INSERT INTO PatientInvestigationFiles(PatientVisitID,InvestigationID,FilePath,CreatedBy,CreatedAt)
+	--SELECT PatientVisitID,InvestigationID,FilePath,CreatedBy,(SELECT dbo.fn_GetServerDate(@ContextInfo)) from @pupload 
+    
+ --   Update	PatientInvestigation 
+ --   Set		IsCompleted='Y', 
+	--		ModifiedBy=P.ModifiedBy,  
+	--		ModifiedAt=(SELECT dbo.fn_GetServerDate(@ContextInfo))
+ --   FROM	PatientInvestigation PI INNER JOIN @pupload P
+ --   ON		PI.InvestigationID = P.InvestigationID
+ --   WHERE	PI.PatientVisitID=P.PatientVisitID
+    
+ --   set @returnstatus=0
+    
+ --   return @returnstatus
+ declare @returnstatus int
+	
+	set @returnstatus=-1	
+	
+ UPDATE PIF SET PIF.ImageSource=TMP.ImageSource,PIF.FilePath=TMP.FilePath FROM PatientInvestigationFiles PIF WITH(NOLOCK)      
+ JOIN @pupload TMP ON TMP.ImageID=PIF.ImageID    
+ WHERE TMP.ImageID<>0      
+ INSERT INTO PatientInvestigationFiles(PatientVisitID,        
+      InvestigationID,FilePath,ImageSource,CreatedBy,OrgID,Description)          
+ SELECT  PatientVisitID,InvestigationID,FilePath,ImageSource,CreatedBy,OrgID,Description from @pupload           
+ WHERE ImageID=0           
+   -- Update	PatientInvestigation 
+   -- Set		IsCompleted='Y', 
+			--ModifiedBy=P.ModifiedBy,  
+			--ModifiedAt=(SELECT dbo.fn_GetServerDate(@ContextInfo))
+   -- FROM	PatientInvestigation PI INNER JOIN @pupload P
+   -- ON		PI.InvestigationID = P.InvestigationID
+   -- WHERE	PI.PatientVisitID=P.PatientVisitID
+    
+    set @returnstatus=0
+    
+    return @returnstatus
+END
+
+
+
+
+
+
+

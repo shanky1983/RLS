@@ -1,0 +1,44 @@
+/****** Object:  StoredProcedure [dbo].[pInsertUpdateOrganismMapping]    Script Date: 6/25/2018 11:37:42 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+    
+    
+CREATE procedure [dbo].[pInsertUpdateOrganismMapping](            
+@pId bigInt,            
+@Mapping [OrganismMapping] READONLY,            
+@ContextInfo [UDT_Context] READONLY)            
+as            
+begin            
+        
+ declare @LoginId bigint    
+ declare @OrgId bigint    
+ select @LoginId=LoginId,@OrgId=orgid from @ContextInfo    
+ select @pId=MappingID from @Mapping  
+ --select @pId  
+  --return  
+ if(@pId=0 or @pId is null)    
+ begin    
+ print 'Add'  
+ insert into InvOrganismDrugMapping(InvestigationID,OrganismID,DrugID,SequenceNo,CreatedBy,CreatedAt,IsActive,OrgID)    
+ select InvestigationId,OrganismId,DrugID,SequenceNo,@LoginId,getdate(),1,@OrgId from @Mapping    
+ end    
+ else    
+ begin     
+  print 'Edit'     
+  
+update M set M.SequenceNo=P.SequenceNo,ModifiedBy=@LoginId, ModifiedAt=getdate(),DrugID=p.DrugID from InvOrganismDrugMapping M    
+inner join @Mapping  p 
+ON M.DrugID=P.DrugID --and M.OrganismId=P.OrganISMiD       
+WHERE  M.OrgID =@OrgId --and P.InvestigationID=m.InvestigationID and p.OrganismId=m.OrganismID
+     end       
+end     
+    
+  
+
+GO
+
+

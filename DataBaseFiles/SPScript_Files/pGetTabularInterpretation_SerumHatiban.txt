@@ -1,0 +1,96 @@
+CREATE PROCEDURE [dbo].[pGetTabularInterpretation_SerumHatiban] --67,2239,1950,'GRP'                                              
+(            
+ @OrgID int,            
+ @pVisitID bigint,                                              
+ @ID bigint,            
+ @Type nvarchar(10)            
+)                                              
+AS                                              
+BEGIN                                                                                                   
+                                      
+DECLARE @docHandle int                                      
+DECLARE @xmlDocument nvarchar(max)            
+            
+IF (@Type='INV')            
+BEGIN                                             
+ SET @xmlDocument  = (SELECT Top 1 Interpretation FROM PatientInvestigation with (nolock)                                              
+    where OrgID=@OrgID AND PatientVisitID=@pVisitID AND InvestigationID = @ID)                                            
+END            
+ELSE IF (@Type='GRP')            
+BEGIN            
+IF EXISTS(SELECT 1 FROM PatientInvestigation with (nolock) where OrgID=@OrgID AND PatientVisitID=@pVisitID AND GroupID = @ID)  
+BEGIN  
+
+	/*        
+		SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+		where OrgID=@OrgID AND OrgGroupID = @ID)   
+	*/        
+	IF EXISTS (SELECT 1 FROM dbo.VisitGrpInterpretationDetails vgid with (nolock)                                                
+	WHERE vgid.OrgID=@OrgID AND vgid.OrgGroupID = @ID AND vgid.IdentityType=@Type AND vgid.VisitId=@pVisitID)
+	BEGIN
+
+--SET @xmlDocument  = (SELECT Top 1 vgid.Interpretation FROM dbo.VisitGrpInterpretationDetails vgid with (nolock)                                                
+--WHERE vgid.OrgID=@OrgID AND vgid.OrgGroupID = @ID AND vgid.IdentityType=@Type AND vgid.VisitId=@pVisitID)
+SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+where OrgID=@OrgID AND OrgGroupID = @ID) 
+	END
+	ELSE
+	BEGIN
+		SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+		where OrgID=@OrgID AND OrgGroupID = @ID) 
+	END
+
+   
+END  
+ELSE  
+BEGIN  
+	
+	/*        
+		SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+		where OrgID=@OrgID AND AttGroupID = @ID)  
+	*/        
+	IF EXISTS (SELECT  1  FROM dbo.VisitGrpInterpretationDetails vgid with (nolock)                                                
+	WHERE vgid.OrgID=@OrgID AND vgid.AttGrpId = @ID AND vgid.IdentityType=@Type)
+	BEGIN
+--SET @xmlDocument  = (SELECT Top 1 vgid.Interpretation FROM dbo.VisitGrpInterpretationDetails vgid with (nolock)                                                
+--WHERE vgid.OrgID=@OrgID AND vgid.AttGrpId = @ID AND vgid.IdentityType=@Type)
+SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+where OrgID=@OrgID AND AttGroupID = @ID)  
+	END
+	ELSE
+	BEGIN
+	    SET @xmlDocument  = (SELECT Top 1 groupinterpretation FROM InvOrgGroup with (nolock)                                                
+		where OrgID=@OrgID AND AttGroupID = @ID)  
+	END
+
+END            
+END                                      
+Declare @Temp Table                                                
+(                                               
+[Type] nvarchar(max), Value nvarchar(max), RowNo int, ColumnNo int, ColumnCount int            
+)            
+                                          
+IF(CHARINDEX('<Interpretation><Layout',@xmlDocument) > 0)            
+BEGIN                                              
+--Create an internal representation of the XML document.                                              
+ EXEC sp_xml_preparedocument @docHandle OUTPUT, @xmlDocument                                      
+-- Use OPENXML to provide rowset consisting of customer data.                                                       
+                           
+ insert into @Temp                                      
+ SELECT * FROM OPENXML(@docHandle, N'/Interpretation/Item',1) WITH ([Type] nvarchar(max), Value nvarchar(max), RowNo int, ColumnNo int, ColumnCount int)            
+                 
+ EXEC sp_xml_removedocument @docHandle                                       
+END            
+ELSE            
+BEGIN            
+ insert into @Temp            
+    SELECT 'text1',@xmlDocument,'','',0            
+END              
+select [Type], RowNo, ColumnNo, Value, ColumnCount from @Temp                                     
+              
+END
+
+
+
+
+

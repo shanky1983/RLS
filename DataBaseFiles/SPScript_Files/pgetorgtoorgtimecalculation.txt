@@ -1,0 +1,60 @@
+ 
+/****** Object:  StoredProcedure [dbo].[pgetorgtoorgtimecalculation]    Script Date: 2/12/2019 2:24:38 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE PROCEDURE [dbo].[pgetorgtoorgtimecalculation]
+(
+   @p_Registeredorgid        INT             ,
+   @p_Registeredlocationid   BIGINT          ,
+   @p_Processingorgid        INT             ,
+   @p_Processinglocationid   BIGINT          ,
+   @p_TATCalculationDateTime DATETIME        ,
+   @p_Transittimeasmins      SMALLINT OUTPUT , 
+   @p_Samplereciptdatetime   DATETIME OUTPUT ,
+   @p_@ContextInfo           UDT_Context READONLY
+
+)
+AS
+
+/*
+
+DECLARE @l_Samplereciptdatetime DATETIME
+DECLARE @l_Transittimeasmins SMALLINT
+DECLARE @p11 dbo.UDT_Context
+INSERT INTO @p11 values(67,N'Metropolis Vidyavihar',N'',104,1856,N'LabReception',0,3366,NULL,N'',104,0,N'',NULL,NULL,1,75,11,N'en-GB',0,NULL,NULL,NULL)
+
+Exec pgetorgtoorgtimecalculation @p_Registeredorgid = 88,@p_Registeredlocationid = 178,@p_Processingorgid = 67,@p_Processinglocationid = 104,
+                                 @p_TATCalculationDateTime = '20170103 13:00:00',@p_Transittimeasmins = @l_Transittimeasmins OUTPUT,
+								 @p_Samplereciptdatetime = @l_Samplereciptdatetime OUTPUT,@p_@ContextInfo = @p11
+
+SELECT @l_Samplereciptdatetime as Samplereciptdatetime,@l_Transittimeasmins as Transittimeasmins
+
+SELECT * FROM Tatlogisticdetails WHERE FromOrgid = 88 
+SELECT 610 / 60 
+
+*/
+
+BEGIN
+
+     SET NOCOUNT ON;
+	 
+	 SELECT @p_Transittimeasmins = ( CASE WHEN TL.Transittimetype = 'D' THEN Transittimevalue * 1440
+			                              WHEN TL.Transittimetype = 'H' THEN Transittimevalue * 60
+						                  WHEN TL.Transittimetype = 'M' THEN Transittimevalue
+			                         END
+								   )
+		    FROM Tatlogisticdetails TL (NOLOCK) 
+			     WHERE Fromorgid = @p_Registeredorgid AND Fromorgaddressid = @p_Registeredlocationid AND
+					   Toorgid = @p_Processingorgid AND Toorgaddressid = @p_Processinglocationid
+ 
+	  SELECT @p_Samplereciptdatetime = DATEADD(MI,isnull(@p_Transittimeasmins,0),@p_TATCalculationDateTime)
+
+END
+
+
+

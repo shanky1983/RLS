@@ -1,0 +1,15 @@
+Declare @ORGID BIGINT=232
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='AllowExternalBarcode')
+BEGIN
+SELECT 1
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'AllowExternalBarcode','AllowExternalBarcode','N'	 FROM ConfigKeyMaster 
+END
+
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='AllowExternalBarcode')
+ BEGIN
+ SELECT 2
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='AllowExternalBarcode'
+ END

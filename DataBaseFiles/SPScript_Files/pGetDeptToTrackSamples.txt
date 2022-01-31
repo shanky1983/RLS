@@ -1,0 +1,1872 @@
+/****** Object:  StoredProcedure [dbo].[pGetDeptToTrackSamples]    Script Date: 6/25/2018 4:06:35 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+ CREATE PROCEDURE [dbo].[pGetDeptToTrackSamples] @PatientVisitID [BIGINT],
+ @OrgID          [INT],
+ @RoleID         [BIGINT],
+ @gUID           [NVARCHAR](255),
+ @ContextInfo    [UDT_CONTEXT] READONLY
+ WITH EXECUTE AS OWNER
+ AS
+ BEGIN
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+ SET NOCOUNT ON; 
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+ DECLARE @LangCode AS NVARCHAR(80);
+ SELECT @LangCode = languageCode
+ FROM   @ContextInfo
+ DECLARE @LocationType NVARCHAR (50)
+ DECLARE @SamplePrefix NVARCHAR(50)
+ SET @LocationType = (SELECT Isnull(OA.CenterTypeCode, '')
+ FROM   OrganizationAddress OA 
+ INNER JOIN @contextInfo CO
+ ON OA.AddressId = CO.LocationID)
+ IF EXISTS (SELECT COM.ConfigKeyID
+ FROM   ConfigOrgMaster COM 
+ INNER JOIN ConfigKeyMaster CKM 
+ ON CKM.ConfigKeyID = COM.ConfigKeyID
+ WHERE  CKM.ConfigKey = 'SamplePrefixWithBarcode'
+ AND COM.OrgID = @OrgId)
+ BEGIN
+ SET @SamplePrefix = 'Y'
+ END
+ DECLARE @TblPatientInvSample AS TABLE
+ (
+ SampleCode          INT,
+ SampleDesc          NVARCHAR(250),
+ SampleContainerID   INT,
+ SampleContainerName NVARCHAR (255),
+ InvestigtionName    NVARCHAR (Max),
+ BarcodeNumber       NVARCHAR(255),
+ Reason              NVARCHAR(50),
+ InvestigationID     BIGINT,
+ RecSampleLocID      INT,
+ IsOutsourcingSample NCHAR (1),
+ SampleID            INT,
+ IsTimed             NCHAR(1),
+ SequenceNo          INT,
+ LocationType        NVARCHAR(50),
+ Type                NVARCHAR (30),
+ DeptID              INT,
+ IsMLNumber          NCHAR(1),
+ PackageID           BIGINT,
+ AddExtraTube        CHAR(1),
+ Suffix              VARCHAR(10),
+ VisitNumber         VARCHAR (Max),
+ PatientVisitID      INT
+ ,ExternalBarcode NVARCHAR(255)
+ ,NeedExBarcode varchar(10)
+ )
+ DECLARE @NewCollectSamples TABLE
+ (
+ SampleCode          INT,
+ SampleDesc          NVARCHAR(250),
+ SampleContainerID   INT,
+ SampleContainerName NVARCHAR(255),
+ InvestigtionName    NVARCHAR(max),
+ BarcodeNumber       NVARCHAR(255),
+ Reason              NVARCHAR(50),
+ InvestigationID     NVARCHAR(255),
+ RecSampleLocID      INT,
+ IsOutsourcingSample NCHAR(1),
+ SampleID            INT,
+ IsTimed             NCHAR(1),
+ SequenceNo          INT,
+ LocationType        NVARCHAR(50),
+ Type                NVARCHAR (30),
+ DeptID              INT,
+ IsMLNumber          NCHAR(1),
+ PackageID           BIGINT,
+ AddExtraTube        CHAR(1),
+ Suffix              VARCHAR(10),
+ VisitNumber         VARCHAR (Max),
+PatientVisitID      INT,
+IsHistoPathSample   char(1),
+HistoPathSampleCount int
+,ExternalBarcode NVARCHAR(255)
+ )
+ --Added by Phani Kumar DB Team Starts
+ /* This table variable is declared to store the status and use this table variable instead of the 'IN' using 'INNER JOIN'*/
+ DECLARE @tbl_Status TABLE(Status VARCHAR(50));
+ INSERT INTO @tbl_Status
+ VALUES('Ordered'), ('Paid'),  ('Not given'), ('Rejected'), ('PartialyCollected'), ('ReflexTest');
+ --VALUES('Ordered'), ('Paid'), ('SampleReceived'), ('Pending'), ('Not given'), ('Rejected'), ('PartialyCollected'), ('ReflexTest');
+ --Added by Phani Kumar DB Team Starts
+ SELECT OI.Name AS InvestigationName,
+ OI.Type,
+ OI.ID AS InvestigationID,
+ OI.VisitID AS PatientVisitID,
+ OI.OrgID,
+ OI.Status,
+ IOM.DeptID,
+ IDM.IsMLNumber AS IsMLNumber,
+ IDM.Display,
+ 0 AS PackageID
+ FROM OrderedInvestigations OI 
+ INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = OI.ID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE OI.Type = 'INV'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT
+ IM.InvestigationName,
+ 'INV' AS Type,
+ IOM.InvestigationID,
+ OI.VisitID AS PatientVisitID,
+ OI.OrgID,
+ OI.Status,
+ ISNULL(IOM.DeptID, 0) AS DeptID,
+ IDM.IsMLNumber AS IsMLNumber,
+ IDM.Display,
+ 0 AS PackageID
+ FROM OrderedInvestigations OI 
+ INNER JOIN InvGroupMaster IGM  ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG  ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM  ON IGMM.GroupID = IOG.OrgGroupID
+ INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = IGMM.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM  ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND ISNULL(IGMM.Active, 'Y') = 'Y'
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT
+ IM.InvestigationName,
+ 'INV' AS Type,
+ IOM.InvestigationID,
+ OI.VisitID AS PatientVisitID,
+ OI.OrgID,
+ OI.Status,
+ ISNULL(IOM.DeptID, 0) AS DeptID,
+ IDM.IsMLNumber AS IsMLNumber,
+ IDM.Display,
+ 0 AS PackageID
+ FROM OrderedInvestigations OI 
+ INNER JOIN InvGroupMaster IGM  ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG  ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM  ON IGMM.GroupID = IOG.OrgGroupID
+ AND IGMM.Parent = 'Y'
+ INNER JOIN InvOrgGroup IOG1  ON IOG1.OrgGroupID = IGMM.InvestigationID
+ AND IOG1.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM1  ON IGMM1.GroupID = IOG1.OrgGroupID
+ INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = IGMM1.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM  ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND ISNULL(IGMM.Active, 'Y') = 'Y'
+ AND ISNULL(IGMM1.Active, 'Y') = 'Y'
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT
+ --IM.InvestigationName,
+ --'INV' AS Type,
+ --IOM.InvestigationID,
+ --OI.VisitID AS PatientVisitID,
+ --OI.OrgID,
+ --OI.Status,
+ --ISNULL(IOM.DeptID, 0) AS DeptID,
+ --IDM.IsMLNumber AS IsMLNumber,
+ --IDM.Display,
+ --CONVERT( INT, OI.ID) AS PackageID
+ --FROM OrderedInvestigations OI 
+ --INNER JOIN InvGroupMaster IGP  ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP  ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM  ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND ISNULL(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG  ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM  ON IGMM.GroupID = IOG.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = IGMM.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE(OI.Type = 'PKG'
+ --OR OI.Type = 'INS')
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.OrgID = @OrgID
+ --AND OI.UID = @gUID
+ --AND ISNULL(IGMM.Active, 'Y') = 'Y'
+ --AND ISNULL(IPM.Active, 'Y') = 'Y'
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT
+ --IM.InvestigationName,
+ --'INV' AS Type,
+ --IOM.InvestigationID,
+ --OI.VisitID AS PatientVisitID,
+ --OI.OrgID,
+ --OI.Status,
+ --ISNULL(IOM.DeptID, 0) AS DeptID,
+ --IDM.IsMLNumber AS IsMLNumber,
+ --IDM.Display,
+ --CONVERT( INT, OI.ID) AS PackageID
+ --FROM OrderedInvestigations OI 
+ --INNER JOIN InvGroupMaster IGP  ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP  ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM  ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND ISNULL(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG  ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM  ON IGMM.GroupID = IOG.OrgGroupID
+ --AND IGMM.Parent = 'Y'
+ --INNER JOIN InvOrgGroup IOG1  ON IOG1.OrgGroupID = IGMM.InvestigationID
+ --AND IOG1.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM1  ON IGMM1.GroupID = IOG1.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = IGMM1.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM  ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE(OI.Type = 'PKG'
+ --OR OI.Type = 'INS')
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.OrgID = @OrgID
+ --AND OI.UID = @gUID
+ --AND ISNULL(IGMM.Active, 'Y') = 'Y'
+ --AND ISNULL(IGMM1.Active, 'Y') = 'Y'
+ --AND ISNULL(IPM.Active, 'Y') = 'Y'
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT
+ --IM.InvestigationName,
+ --'INV' AS Type,
+ --IOM.InvestigationID,
+ --OI.VisitID AS PatientVisitID,
+ --OI.OrgID,
+ --OI.Status,
+ --ISNULL(IOM.DeptID, 0) AS DeptID,
+ --IDM.IsMLNumber AS IsMLNumber,
+ --IDM.Display,
+ --CONVERT( INT, OI.ID) AS PackageID
+ --FROM OrderedInvestigations OI 
+ --INNER JOIN InvGroupMaster IGP  ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP  ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM  ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'INV'
+ --AND ISNULL(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvestigationOrgMapping IOM  ON IOM.InvestigationID = IPM.ID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM  ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM  ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE(OI.Type = 'PKG'
+ --OR OI.Type = 'INS')
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.OrgID = @OrgID
+ --AND OI.UID = @gUID
+ --AND ISNULL(IPM.Active, 'Y') = 'Y' AND ISNULL(IDM.Display,'Y') = 'Y';
+ ----QUERY -2                                                                                     
+ INSERT INTO @TblPatientInvSample
+ (SampleCode,
+ SampleDesc,
+ SampleContainerID,
+ SampleContainerName,
+ InvestigtionName,
+ BarcodeNumber,
+ Reason,
+ InvestigationID,
+ RecSampleLocID,
+ IsOutsourcingSample,
+ SampleID,
+ IsTimed,
+ SequenceNo,
+ Type,
+ DeptID,
+ IsMLNumber,
+ PackageID,
+ Suffix,
+ VisitNumber,
+ PatientVisitID,NeedExBarcode)
+ SELECT *
+ FROM   (SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ + '0' + '~' + '0' + '~'
+ + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                     AS BarcodeNumber,
+ OI.Status                               AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ --, ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ --,IOM.ProcessingAddressID as RecSampleLocID  
+ 0                                       AS RecSampleLocID,
+ CASE
+ WHEN Isnull(ILM.ProcessingAddressID, 0) > 0
+ AND ILM.Type = 12 THEN 'Y'
+ ELSE 'N'
+ END                                     AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                 AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                     AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                     AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = OI.ID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOM.InvestigationID
+ AND ILM.OrgID = IOM.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'INV'
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE  
+ OI.Type = 'INV'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.UID = @gUID
+ AND OI.OrgID = @OrgID
+ AND IOM.SampleCode NOT IN 
+ (
+ SELECT DISTINCT SampleCode
+ FROM   PatientInvSample PIV  
+ inner join SampleTracker ST 
+ ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ WHERE  PIV.PatientVisitID = @PatientVisitID 
+ AND PIV.OrgID = @OrgID
+ AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IGMM.InvestigationID)
+ + '~' + CONVERT(NVARCHAR, IGMM.GroupID) + '~' + '0'
+ + '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                           AS BarcodeNumber,
+ OI.Status                                     AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ --,IOM.ProcessingAddressID as RecSampleLocID                                                                    
+ 0                                             AS RecSampleLocID,
+ 'N'                                           AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                       AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                           AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                           AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvGroupMaster IGM 
+ ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG 
+ ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOG.AttGroupID
+ AND ILM.OrgID = IOG.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'GRP'
+ INNER JOIN InvGroupMapMaster IGMM 
+ ON IGMM.GroupID = IOG.OrgGroupID
+ AND IGMM.Parent <> 'Y'
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = IGMM.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = iom.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE  
+ OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND Isnull(IGMM.Active, 'Y') = 'Y'
+ AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ WHERE  PIV.PatientVisitID = @PatientVisitID 
+ AND PIV.OrgID = @OrgID
+ AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+/*-----------------*/
+/* HISTO SPECIMEN SAMPLES */
+union all
+SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+SM.SampleDesc,
+Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
++ CONVERT(NVARCHAR, OI.Type) + '~'
++ CONVERT(NVARCHAR, IGMM.InvestigationID)
++ '~' + CONVERT(NVARCHAR, IGMM.GroupID) + '~' + '0'
++ '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+CASE
+WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
++ CONVERT(VARCHAR, PV.ExternalVisitID)
+ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
++ Isnull(SM.Suffix, '')
+END                                           AS BarcodeNumber,
+OI.Status                                     AS Reason,
+CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+--ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+--,IOM.ProcessingAddressID as RecSampleLocID                                                                    
+0                                             AS RecSampleLocID,
+'N'                                           AS IsOutsourcingSample,
+Isnull(PIS.SampleID, 0)                       AS SampleID,
+CASE
+WHEN EXISTS(SELECT 1
+FROM   InvMedicalDetailsMapping 
+WHERE  InvID = IOM.InvestigationID
+AND Isnull(InvType, '') NOT IN ( 'GRP' )
+AND MeanTime IS NOT NULL) THEN 'Y'
+ELSE 'N'
+END                                           AS IsTimed,
+SM.SequenceNo,
+OI.Type,
+IOM.DeptID,
+IDM.IsMLNumber,
+Isnull(OI.PkgID, 0)                           AS PackageID,
+sm.Suffix,
+pv.VisitNumber,
+pv.PatientVisitId
+,PV.NurseNotes as NeedExBarcode
+FROM   OrderedInvestigations OI 
+INNER JOIN PatientVisit PV 
+ON PV.PatientVisitId = OI.VisitID
+INNER JOIN histospecimendetails HSD 
+ON OI.VisitID=HSD.PatientVisitID and HSD.PatientVisitID=@PatientVisitID
+INNER JOIN InvGroupMaster IGM 
+ON IGM.GroupID = OI.ID
+AND IGM.Type = OI.Type
+INNER JOIN InvOrgGroup IOG 
+ON IGM.GroupID = IOG.AttGroupID
+AND IOG.OrgID = OI.OrgID
+INNER JOIN InvGroupMapMaster IGMM 
+ON IGMM.GroupID = IOG.OrgGroupID
+INNER JOIN InvestigationOrgMapping IOM 
+ON IOM.InvestigationID = IGMM.InvestigationID
+AND IOM.OrgID = OI.OrgID
+INNER JOIN InvDeptMaster IDM 
+ON IDM.DeptID = IOM.DeptID
+AND IDM.OrgID = IOM.OrgID AND IDM.Code='Histo'
+INNER JOIN InvestigationMaster IM 
+ON IM.InvestigationID = IOM.InvestigationID
+INNER JOIN InvSampleMaster SM 
+ON SM.SampleCode = HSD.SampleID and sm.IsSpecialSample='Y'
+AND Sm.OrgID = iom.OrgID
+AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+LEFT JOIN InvestigationSampleContainer ISC 
+ON ISC.SampleContainerID = IOM.SampleContainerID
+AND ISC.OrgID = IOM.OrgID
+AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+LEFT JOIN PatientInvSample PIS 
+ON IOM.SampleCode = PIS.SampleCode
+AND PIS.PatientVisitID = OI.VisitID
+AND PIS.OrgID = OI.OrgID
+AND IOM.SampleContainerID = PIS.SampleContainerID
+INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+WHERE  
+OI.Type = 'GRP'
+AND OI.VisitID = @PatientVisitID
+AND OI.OrgID = @OrgID
+AND OI.UID = @gUID
+AND Isnull(IGMM.Active, 'Y') = 'Y'
+AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+WHERE  PIV.PatientVisitID = @PatientVisitID 
+AND PIV.OrgID = @OrgID
+AND PIV.UID = @gUID and ST.InvSampleStatusID<>3 AND ISNULL(IDM.Display,'Y') = 'Y')
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IGMM1.InvestigationID)
+ + '~' + CONVERT(NVARCHAR, IGMM1.GroupID) + '~' + '0'
+ + '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                           AS BarcodeNumber,
+ OI.Status                                     AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ --,IOM.ProcessingAddressID as RecSampleLocID                                                                    
+ 0                                             AS RecSampleLocID,
+ 'N'                                           AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                       AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                           AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                           AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvGroupMaster IGM 
+ ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG 
+ ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOG.AttGroupID
+ AND ILM.OrgID = IOG.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'GRP'
+ INNER JOIN InvGroupMapMaster IGMM 
+ ON IGMM.GroupID = IOG.OrgGroupID
+ AND IGMM.Parent = 'Y'
+ INNER JOIN InvOrgGroup IOG1 
+ ON IOG1.OrgGroupID = IGMM.InvestigationID
+ AND IOG1.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM1 
+ ON IGMM1.GroupID = IOG1.OrgGroupID
+ AND Isnull(IGMM1.Parent, 'N') = 'N'
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = IGMM1.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE  OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND Isnull(IGMM.Active, 'Y') = 'Y'
+ AND Isnull(IGMM1.Active, 'Y') = 'Y'
+ AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ WHERE  PIV.PatientVisitID = @PatientVisitID 
+ AND PIV.OrgID = @OrgID
+ AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IGMM1.InvestigationID)
+ + '~' + CONVERT(NVARCHAR, IGMM1.GroupID) + '~' + '0'
+ + '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                           AS BarcodeNumber,
+ OI.Status                                     AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ --,IOM.ProcessingAddressID as RecSampleLocID                
+ 0                                             AS RecSampleLocID,
+ 'N'                                           AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                       AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                           AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                           AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvGroupMaster IGM 
+ ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG 
+ ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOG.AttGroupID
+ AND ILM.OrgID = IOG.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'GRP'
+ INNER JOIN InvGroupMapMaster IGMM 
+ ON IGMM.GroupID = IOG.OrgGroupID
+ AND IGMM.Parent = 'Y'
+ INNER JOIN InvOrgGroup IOG1 
+ ON IOG1.OrgGroupID = IGMM.InvestigationID
+ AND IOG1.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM1 
+ ON IGMM1.GroupID = IOG1.OrgGroupID
+ AND IGMM1.Parent = 'Y'
+ INNER JOIN InvOrgGroup IOG2 
+ ON IOG2.OrgGroupID = IGMM1.InvestigationID
+ AND IOG2.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM2 
+ ON IGMM2.GroupID = IOG2.OrgGroupID
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = IGMM2.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE   OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND Isnull(IGMM.Active, 'Y') = 'Y'
+ AND Isnull(IGMM1.Active, 'Y') = 'Y'
+ AND Isnull(IGMM2.Active, 'Y') = 'Y'
+ AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ WHERE  PIV.PatientVisitID = @PatientVisitID 
+ AND PIV.OrgID = @OrgID
+ AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)                                            
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ CONVERT(NVARCHAR, IGMM.GroupID ) + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID as RecSampleLocID  
+ --0                                       AS RecSampleLocID,
+ --'N'                                     AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG 
+ --ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM 
+ --ON IGMM.GroupID = IOG.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IGMM.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE   ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND Isnull(IGMM.Active, 'Y') = 'Y'
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ --FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ --WHERE  PIV.PatientVisitID = @PatientVisitID 
+ --AND PIV.OrgID = @OrgID
+ --AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ CONVERT(NVARCHAR, IGMM1.GroupID) + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID                as RecSampleLocID  
+ --0                                       AS RecSampleLocID,
+ --'N'                                     AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG 
+ --ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM 
+ --ON IGMM.GroupID = IOG.OrgGroupID
+ --AND IGMM.Parent = 'Y'
+ --INNER JOIN InvOrgGroup IOG1 
+ --ON IOG1.OrgGroupID = IGMM.InvestigationID
+ --AND IOG1.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM1 
+ --ON IGMM1.GroupID = IOG1.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IGMM1.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE   ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND Isnull(IGMM.Active, 'Y') = 'Y'
+ --AND Isnull(IGMM1.Active, 'Y') = 'Y'
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ --FROM   PatientInvSample PIV inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ --WHERE  PIV.PatientVisitID = @PatientVisitID 
+ --AND PIV.OrgID = @OrgID
+ --AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ '0' + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID                as RecSampleLocID  
+ --0                                       AS RecSampleLocID,
+ --'N'                                     AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'INV'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IPM.ID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE  ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND IOM.SampleCode NOT IN (SELECT DISTINCT SampleCode
+ --FROM   PatientInvSample PIV  inner join SampleTracker ST ON ST.PatientVisitID = PIV.PatientVisitID 												 
+ --WHERE  PIV.PatientVisitID = @PatientVisitID 
+ --AND PIV.OrgID = @OrgID
+ --AND PIV.UID = @gUID and ST.InvSampleStatusID<>3)
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ -- QUERY 3 - Added as discussed with Venkat                                                                      
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ + '0' + '~' + '0' + '~'
+ + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                     AS BarcodeNumber,
+ OI.Status                               AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ 0                                       AS RecSampleLocID
+ --,IOM.ProcessingAddressID as RecSampleLocID                                                        
+ ,
+ CASE
+ WHEN Isnull(ILM.ProcessingAddressID, 0) > 0
+ AND ILM.Type = 12 THEN 'Y'
+ ELSE 'N'
+ END                                     AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                 AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                     AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                     AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = OI.ID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOM.InvestigationID
+ AND ILM.OrgID = IOM.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'INV'
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE   OI.Type = 'INV'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.UID = @gUID
+ AND OI.OrgID = @OrgID
+ AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ FROM   PatientInvSample PIS 
+ INNER JOIN PatientInvSampleMapping PIM 
+ ON PIS.OrgID = PIM.OrgID
+ AND PIS.PatientVisitID = PIM.VisitID
+ AND PIS.SampleCode = PIM.SampleID
+ AND PIS.UID = PIM.UID
+ INNER JOIN SampleTracker ST 
+ ON ST.OrgID = PIM.OrgID
+ AND ST.PatientVisitID = PIM.VisitID
+ AND ST.SampleID = PIS.SampleID
+ WHERE  ST.PatientVisitID = @PatientVisitID
+ AND ST.OrgID = @OrgID
+ AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ FROM   PatientInvSample 
+ WHERE  PatientVisitID = PIS.PatientVisitID)
+ AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ FROM   SampleTracker sa 
+ WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ AND Sa.SampleID = ST.SampleID))
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IGMM.InvestigationID)
+ + '~' + CONVERT(NVARCHAR, IGMM.GroupID) + '~' + '0'
+ + '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                           AS BarcodeNumber,
+ OI.Status                                     AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID 
+ 0                                             AS RecSampleLocID
+ --,IOM.ProcessingAddressID as RecSampleLocID                                                                    
+ ,
+ 'N'                                           AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                       AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                           AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                           AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.PatientVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvGroupMaster IGM 
+ ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG 
+ ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOG.AttGroupID
+ AND ILM.OrgID = IOG.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'GRP'
+ INNER JOIN InvGroupMapMaster IGMM 
+ ON IGMM.GroupID = IOG.OrgGroupID      AND ISNULL(IGMM.Parent, 'N') = 'N'
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = IGMM.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE   OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ FROM   PatientInvSample PIS 
+ INNER JOIN PatientInvSampleMapping PIM 
+ ON PIS.OrgID = PIM.OrgID
+ AND PIS.PatientVisitID = PIM.VisitID
+ AND PIS.SampleCode = PIM.SampleID
+ AND PIS.UID = PIM.UID
+ AND PIS.SampleID = PIM.SID
+ INNER JOIN SampleTracker ST 
+ ON ST.OrgID = PIM.OrgID
+ AND ST.PatientVisitID = PIM.VisitID
+ AND ST.SampleID = PIS.SampleID
+ WHERE  ST.PatientVisitID = @PatientVisitID
+ AND ST.OrgID = @OrgID
+ AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ FROM   PatientInvSample 
+ WHERE  PatientVisitID = PIS.PatientVisitID)
+ AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ FROM   SampleTracker sa 
+ WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ AND Sa.SampleID = ST.SampleID))
+ AND Isnull(IGMM.Active, 'Y') = 'Y'
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ UNION ALL
+ SELECT DISTINCT Isnull(IOM.SampleCode, '0')                   AS SampleCode,
+ SM.SampleDesc,
+ Isnull(IOM.SampleContainerID, '0')            AS SampleContainerID,
+ Isnull(ISC.ContainerName, '')                 AS SampleContainerName,
+ CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ + CONVERT(NVARCHAR, OI.Type) + '~'
+ + CONVERT(NVARCHAR, IGMM1.InvestigationID)
+ + '~' + CONVERT(NVARCHAR, IGMM1.GroupID) + '~' + '0'
+ + '~' + CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ CASE
+ WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ + CONVERT(VARCHAR, PV.ExternalVisitID)
+ ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ + Isnull(SM.Suffix, '')
+ END                                           AS BarcodeNumber,
+ OI.Status                                     AS Reason,
+ CONVERT(NVARCHAR(15), OI.ID)                  AS InvestigationID,
+ --ISNULL(ILM.ProcessingAddressID, IOM.ProcessingAddressID) as RecSampleLocID  
+ 0                                             AS RecSampleLocID
+ --,IOM.ProcessingAddressID as RecSampleLocID                                                                    
+ ,
+ 'N'                                           AS IsOutsourcingSample,
+ Isnull(PIS.SampleID, 0)                       AS SampleID,
+ CASE
+ WHEN EXISTS(SELECT 1
+ FROM   InvMedicalDetailsMapping 
+ WHERE  InvID = IOM.InvestigationID
+ AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ AND MeanTime IS NOT NULL) THEN 'Y'
+ ELSE 'N'
+ END                                           AS IsTimed,
+ SM.SequenceNo,
+ OI.Type,
+ IOM.DeptID,
+ IDM.IsMLNumber,
+ Isnull(OI.PkgID, 0)                           AS PackageID,
+ sm.Suffix,
+ pv.VisitNumber,
+ pv.ParentVisitId
+ ,PV.NurseNotes as NeedExBarcode
+ FROM   OrderedInvestigations OI 
+ INNER JOIN PatientVisit PV 
+ ON PV.PatientVisitId = OI.VisitID
+ INNER JOIN InvGroupMaster IGM 
+ ON IGM.GroupID = OI.ID
+ AND IGM.Type = OI.Type
+ INNER JOIN InvOrgGroup IOG 
+ ON IGM.GroupID = IOG.AttGroupID
+ AND IOG.OrgID = OI.OrgID
+ LEFT JOIN InvestigationLocationMapping ILM 
+ ON ILM.InvestigationID = IOG.AttGroupID
+ AND ILM.OrgID = IOG.OrgID
+ AND ILM.LocationID = PV.OrgAddressID
+ AND ILM.FeeType = 'GRP'
+ INNER JOIN InvGroupMapMaster IGMM 
+ ON IGMM.GroupID = IOG.OrgGroupID
+ AND IGMM.Parent = 'Y'
+ INNER JOIN InvOrgGroup IOG1 
+ ON IOG1.OrgGroupID = IGMM.InvestigationID
+ AND IOG1.OrgID = OI.OrgID
+ INNER JOIN InvGroupMapMaster IGMM1 
+ ON IGMM1.GroupID = IOG1.OrgGroupID
+ INNER JOIN InvestigationOrgMapping IOM 
+ ON IOM.InvestigationID = IGMM1.InvestigationID
+ AND IOM.OrgID = OI.OrgID
+ INNER JOIN InvDeptMaster IDM 
+ ON IDM.DeptID = IOM.DeptID
+ AND IDM.OrgID = IOM.OrgID
+ INNER JOIN InvestigationMaster IM 
+ ON IM.InvestigationID = IOM.InvestigationID
+ INNER JOIN InvSampleMaster SM 
+ ON SM.SampleCode = IOM.SampleCode
+ AND Sm.OrgID = IOM.OrgID
+ AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN InvestigationSampleContainer ISC 
+ ON ISC.SampleContainerID = IOM.SampleContainerID
+ AND ISC.OrgID = IOM.OrgID
+ AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ LEFT JOIN PatientInvSample PIS 
+ ON IOM.SampleCode = PIS.SampleCode
+ AND PIS.PatientVisitID = OI.VisitID
+ AND PIS.OrgID = OI.OrgID
+ AND IOM.SampleContainerID = PIS.SampleContainerID
+ INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ WHERE   OI.Type = 'GRP'
+ AND OI.VisitID = @PatientVisitID
+ AND OI.OrgID = @OrgID
+ AND OI.UID = @gUID
+ AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ FROM   PatientInvSample PIS 
+ INNER JOIN PatientInvSampleMapping PIM 
+ ON PIS.OrgID = PIM.OrgID
+ AND PIS.PatientVisitID = PIM.VisitID
+ AND PIS.SampleCode = PIM.SampleID
+ AND PIS.UID = PIM.UID
+ AND PIS.SampleID = PIM.SID
+ INNER JOIN SampleTracker ST 
+ ON ST.OrgID = PIM.OrgID
+ AND ST.PatientVisitID = PIM.VisitID
+ AND ST.SampleID = PIS.SampleID
+ WHERE  ST.PatientVisitID = @PatientVisitID
+ AND ST.OrgID = @OrgID
+ AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ FROM   PatientInvSample 
+ WHERE  PatientVisitID = PIS.PatientVisitID)
+ AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ FROM   SampleTracker sa 
+ WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ AND Sa.SampleID = ST.SampleID))
+ AND Isnull(IGMM.Active, 'Y') = 'Y'
+ AND Isnull(IGMM1.Active, 'Y') = 'Y'
+ AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ CONVERT(NVARCHAR, IGMM.GroupID) + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID                as RecSampleLocID,  
+ --0                               AS RecSampleLocID,
+ --'N'                                     AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG 
+ --ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM 
+ --ON IGMM.GroupID = IOG.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IGMM.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE  ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ --FROM   PatientInvSample PIS 
+ --INNER JOIN PatientInvSampleMapping PIM 
+ --ON PIS.OrgID = PIM.OrgID
+ --AND PIS.PatientVisitID = PIM.VisitID
+ --AND PIS.SampleCode = PIM.SampleID
+ --AND PIS.UID = PIM.UID
+ --INNER JOIN SampleTracker ST 
+ --ON ST.OrgID = PIM.OrgID
+ --AND ST.PatientVisitID = PIM.VisitID
+ --AND ST.SampleID = PIS.SampleID
+ --WHERE  ST.PatientVisitID = @PatientVisitID
+ --AND ST.OrgID = @OrgID
+ --AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ --AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ --FROM   PatientInvSample 
+ --WHERE  PatientVisitID = PIS.PatientVisitID)
+ --AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ --FROM   SampleTracker sa 
+ --WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ --AND Sa.SampleID = ST.SampleID))
+ --AND Isnull(IGMM.Active, 'Y') = 'Y'
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ CONVERT(NVARCHAR, IGMM1.GroupID) + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID                as RecSampleLocID,  
+ --0                                       AS RecSampleLocID,
+ --'N'                                     AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'GRP'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvOrgGroup IOG 
+ --ON IOG.OrgGroupID = IPM.ID
+ --AND IOG.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM 
+ --ON IGMM.GroupID = IOG.OrgGroupID
+ --AND IGMM.Parent = 'Y'
+ --INNER JOIN InvOrgGroup IOG1 
+ --ON IOG1.OrgGroupID = IGMM.InvestigationID
+ --AND IOG1.OrgID = OI.OrgID
+ --INNER JOIN InvGroupMapMaster IGMM1 
+ --ON IGMM1.GroupID = IOG1.OrgGroupID
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IGMM1.InvestigationID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE   ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ --FROM   PatientInvSample PIS 
+ --INNER JOIN PatientInvSampleMapping PIM 
+ --ON PIS.OrgID = PIM.OrgID
+ --AND PIS.PatientVisitID = PIM.VisitID
+ --AND PIS.SampleCode = PIM.SampleID
+ --AND PIS.UID = PIM.UID
+ --INNER JOIN SampleTracker ST 
+ --ON ST.OrgID = PIM.OrgID
+ --AND ST.PatientVisitID = PIM.VisitID
+ --AND ST.SampleID = PIS.SampleID
+ --WHERE  ST.PatientVisitID = @PatientVisitID
+ --AND ST.OrgID = @OrgID
+ --AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ --AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ --FROM   PatientInvSample 
+ --WHERE  PatientVisitID = PIS.PatientVisitID)
+ --AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ --FROM   SampleTracker sa 
+ --WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ --AND Sa.SampleID = ST.SampleID))
+ --AND Isnull(IGMM.Active, 'Y') = 'Y'
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND Isnull(IGMM1.Active, 'Y') = 'Y'
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --UNION ALL
+ --SELECT DISTINCT Isnull(IOM.SampleCode, '0')             AS SampleCode,
+ --SM.SampleDesc,
+ --Isnull(IOM.SampleContainerID, '0')      AS SampleContainerID,
+ --Isnull(ISC.ContainerName, '')           AS SampleContainerName,
+ --CONVERT(NVARCHAR, OI.ID) + '~' + OI.NAME + CASE WHEN PkgName IS NOT NULL THEN ' ('+PkgName+')' ELSE ''END + '~'
+ --+ CONVERT(NVARCHAR, OI.Type) + '~'
+ --+ CONVERT(NVARCHAR, IOM.InvestigationID) + '~'
+ --+ '0' + '~' + '0' + '~'
+ --+ CONVERT(NVARCHAR, OI.AccessionNumber) AS InvestigtionName,
+ --CASE
+ --WHEN @SamplePrefix = 'Y' THEN Isnull(SM.Suffix, '')
+ --+ CONVERT(VARCHAR, PV.ExternalVisitID)
+ --ELSE CONVERT(VARCHAR, PV.ExternalVisitID)
+ --+ Isnull(SM.Suffix, '')
+ --END                                     AS BarcodeNumber,
+ --OI.Status                               AS Reason,
+ --CONVERT(NVARCHAR(15), OI.ID)            AS InvestigationID,
+ ----IOM.ProcessingAddressID                as RecSampleLocID,  
+ --0                                       AS RecSampleLocID,
+ --'N'               AS IsOutsourcingSample,
+ --Isnull(PIS.SampleID, 0)                 AS SampleID,
+ --CASE
+ --WHEN EXISTS(SELECT 1
+ --FROM   InvMedicalDetailsMapping 
+ --WHERE  InvID = IOM.InvestigationID
+ --AND Isnull(InvType, '') NOT IN ( 'GRP' )
+ --AND MeanTime IS NOT NULL) THEN 'N'
+ --ELSE 'N'
+ --END                                     AS IsTimed,
+ --SM.SequenceNo,
+ --OI.Type,
+ --IOM.DeptID,
+ --IDM.IsMLNumber,
+ --Isnull(OI.PkgID, 0)                     AS PackageID,
+ --sm.Suffix,
+ --pv.VisitNumber,
+ --pv.PatientVisitId
+ --FROM   OrderedInvestigations OI 
+ --INNER JOIN PatientVisit PV 
+ --ON PV.PatientVisitId = OI.VisitID
+ --INNER JOIN InvGroupMaster IGP 
+ --ON IGP.GroupID = OI.ID
+ --AND IGP.Type = OI.Type
+ --INNER JOIN InvOrgGroup IOGP 
+ --ON IGP.GroupID = IOGP.AttGroupID
+ --AND IOGP.OrgID = OI.OrgID
+ --INNER JOIN InvPackageMapping IPM 
+ --ON IPM.PackageID = IOGP.OrgGroupID
+ --AND IPM.Type = 'INV'
+ --AND Isnull(ipm.active, 'A') <> 'D'
+ --INNER JOIN InvestigationOrgMapping IOM 
+ --ON IOM.InvestigationID = IPM.ID
+ --AND IOM.OrgID = OI.OrgID
+ --INNER JOIN InvDeptMaster IDM 
+ --ON IDM.DeptID = IOM.DeptID
+ --AND IDM.OrgID = IOM.OrgID
+ --INNER JOIN InvestigationMaster IM 
+ --ON IM.InvestigationID = IOM.InvestigationID
+ --INNER JOIN InvSampleMaster SM 
+ --ON SM.SampleCode = IOM.SampleCode
+ --AND Sm.OrgID = IOM.OrgID
+ --AND Isnull(Sm.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN InvestigationSampleContainer ISC 
+ --ON ISC.SampleContainerID = IOM.SampleContainerID
+ --AND ISC.OrgID = IOM.OrgID
+ --AND Isnull(ISC.LangCode, 'en-GB') = @LangCode
+ --LEFT JOIN PatientInvSample PIS 
+ --ON IOM.SampleCode = PIS.SampleCode
+ --AND PIS.PatientVisitID = OI.VisitID
+ --AND PIS.OrgID = OI.OrgID
+ --AND IOM.SampleContainerID = PIS.SampleContainerID
+ --INNER JOIN @tbl_Status St ON OI.Status = ST.Status
+ --WHERE  ( OI.Type = 'PKG'
+ --OR OI.Type = 'INS' )
+ --AND OI.VisitID = @PatientVisitID
+ --AND OI.UID = @gUID
+ --AND OI.OrgID = @OrgID
+ --AND PIS.SampleID IN (SELECT DISTINCT PIS.SampleID
+ --FROM   PatientInvSample PIS 
+ --INNER JOIN PatientInvSampleMapping PIM 
+ --ON PIS.OrgID = PIM.OrgID
+ --AND PIS.PatientVisitID = PIM.VisitID
+ --AND PIS.SampleCode = PIM.SampleID
+ --AND PIS.UID = PIM.UID
+ --INNER JOIN SampleTracker ST 
+ --ON ST.OrgID = PIM.OrgID
+ --AND ST.PatientVisitID = PIM.VisitID
+ --AND ST.SampleID = PIS.SampleID
+ --WHERE  ST.PatientVisitID = @PatientVisitID
+ --AND ST.OrgID = @OrgID
+ --AND ST.InvSampleStatusID IN ( 4, 6, 7 )
+ --AND Isnull(IPM.Active, 'Y') = 'Y'
+ --AND ISNULL(IDM.Display,'Y') = 'Y'
+ --AND ST.SampleID NOT IN (SELECT Isnull(SampleRelationshipID, 0)
+ --FROM   PatientInvSample 
+ --WHERE  PatientVisitID = PIS.PatientVisitID)
+ --AND ST.SampleTrackerID = (SELECT Max(sa.SampleTrackerID)
+ --FROM   SampleTracker sa 
+ --WHERE  sa.PatientVisitID = PIS.PatientVisitID
+ --AND Sa.SampleID = ST.SampleID))
+ ) T
+ ORDER  BY T.SequenceNo
+ IF EXISTS(SELECT 1
+ FROM   @TblPatientInvSample
+ WHERE  PackageID <> 0)
+ BEGIN
+ UPDATE tmp
+ SET    tmp.PackageID = IOG.OrgGroupID
+ FROM   @TblPatientInvSample tmp
+ INNER JOIN InvOrgGroup IOG
+ ON IOG.AttGroupID = tmp.PackageID
+ AND IOG.OrgID = @OrgID
+ END
+ UPDATE T
+ SET    T.RecSampleLocID = ILM.ProcessingAddressID
+ FROM   @TblPatientInvSample T
+ INNER JOIN InvestigationLocationMapping ILM 
+ ON T.InvestigationID = ILM.InvestigationID
+ AND T.Type = ILM.FeeType
+ WHERE  ILM.OrgID = @OrgID
+ AND ILM.LocationID = (SELECT LocationId
+ FROM   @ContextInfo)
+ DECLARE @ProcessingAddressId BIGINT
+ SELECT @ProcessingAddressId = ProcessingAddressId
+ FROM   OrganizationAddress 
+ WHERE  AddressId = (SELECT LocationId
+ FROM   @ContextInfo)
+ UPDATE T
+ SET    T.RecSampleLocID = @ProcessingAddressId
+ FROM   @TblPatientInvSample T
+ WHERE  Isnull(T.RecSampleLocID, 0) = 0
+ UPDATE T
+ SET    T.LocationType = @LocationType
+ FROM   @TblPatientInvSample T
+ Declare @ShowExternalBarcode varchar(10)
+  set @ShowExternalBarcode =( SELECT COM.ConfigValue
+ FROM   ConfigOrgMaster COM 
+ INNER JOIN ConfigKeyMaster CKM 
+ ON CKM.ConfigKeyID = COM.ConfigKeyID
+ WHERE  CKM.ConfigKey = 'ShowExternalBarcodeInsteadofBarcode'
+ AND COM.OrgID = @OrgId)
+ 
+ IF (@ShowExternalBarcode ='Y')
+ Begin
+ IF Exists (Select Top 1 * From @TblPatientInvSample Where Isnull(NeedExBarcode,'1')='0')
+ Begin
+ 
+ Declare @PatientID bigint,@ExPatientVisitID Bigint
+ 
+ Select Top 1 @PatientID=PatientID from PatientVisit PV  Where PV.PatientVisitID=@PatientVisitID Order by PV.CreatedAt asc
+ Select Top 1 @ExPatientVisitID=PatientVisitID from PatientVisit PV  Where PV.PatientID=@PatientID Order by PV.CreatedAt asc
+
+ Select Distinct PISM.PatientVisitID,PISM.SampleCode,ISM.SampleDesc,ISC.ContainerName,PISM.BarcodeNumber 
+ Into #TempExBarcode
+ from PatientInvSample PISM
+ Inner Join InvSampleMaster ISM On ISM.OrgID=PISm.OrgID and ISM.SampleCode=PISM.SampleCode
+ Inner Join InvestigationSampleContainer ISC ON ISC.OrgID=PISM.OrgID and ISC.SampleContainerID=PISM.SampleContainerID
+ Where PatientVisitID=@ExPatientVisitID and 
+ PISM.SampleID not in (Select SampleId From SampleTracker where PatientvisitID=@ExPatientVisitID and InvSampleStatusID in (4,6))
+   
+
+ Update T Set T.ExternalBarcode=TEB.BarcodeNumber 
+ from @TblPatientInvSample T
+ Inner Join #TempExBarcode TEB ON TEB.SampleDesc=T.SampleDesc and TEB.ContainerName=T.SampleContainerName
+ Where T.PatientVisitID<>TEB.PatientVisitID  
+ Drop Table #TempExBarcode
+ END
+ End
+ INSERT INTO @NewCollectSamples
+ (SampleCode,
+ SampleDesc,
+ SampleContainerID,
+ SampleContainerName,
+ InvestigtionName,
+ BarcodeNumber,
+ Reason,
+ InvestigationID,
+ RecSampleLocID,
+ IsOutsourcingSample,
+ SampleID,
+ IsTimed,
+ SequenceNo,
+ PackageID,
+ AddExtraTube,
+ Suffix,
+ VisitNumber,
+PatientVisitID,IsHistoPathSample,HistoPathSampleCount,Type,ExternalBarcode)
+ SELECT tmp.SampleCode,
+ SampleDesc,
+ SampleContainerID,
+ SampleContainerName,
+ InvestigtionName,
+ BarcodeNumber,
+ Reason,
+ InvestigationID,
+ RecSampleLocID,
+ IsOutsourcingSample,
+ SampleID,
+ IsTimed,
+ tmp.SequenceNo,
+ PackageID,
+ CASE
+ WHEN ATM.SampleCode = tmp.SampleCode THEN 'Y'
+ ELSE 'N'
+ END AS AddExtraTube,
+ Suffix,
+ VisitNumber,
+PatientVisitID,'N',0,tmp.Type, tmp.ExternalBarcode
+ FROM   @TblPatientInvSample tmp
+ LEFT JOIN AdditionalTubeMapping ATM 
+ ON ATM.ID = tmp.PackageID
+ AND ATM.SampleCode = tmp.SampleCode
+delete @NewCollectSamples from @NewCollectSamples T1 INNER JOIN 
+HistoSpecimenDetails T2 ON  T1.PatientVisitID=T2.PatientVisitID AND T1.InvestigationID=T2.ID AND T1.Type=T2.Type
+WHERE T1.PatientVisitID=@PatientVisitID AND OrgID=@OrgID
+INSERT INTO @NewCollectSamples
+(SampleCode,
+SampleDesc,
+SampleContainerID,
+SampleContainerName,
+InvestigtionName,
+BarcodeNumber,
+Reason,
+InvestigationID,
+RecSampleLocID,
+IsOutsourcingSample,
+SampleID,
+IsTimed,
+SequenceNo,
+PackageID,
+AddExtraTube,
+Suffix,
+VisitNumber,
+PatientVisitID,IsHistoPathSample,HistoPathSampleCount,Type,ExternalBarcode)
+SELECT HSD.SampleID,
+HSD.SampleName,
+tmp.SampleContainerID,
+tmp.SampleContainerName,
+tmp.InvestigtionName,
+tmp.BarcodeNumber,
+tmp.Reason,
+tmp.InvestigationID,
+tmp.RecSampleLocID,
+tmp.IsOutsourcingSample,
+0,
+tmp.IsTimed,
+tmp.SequenceNo,
+tmp.PackageID,
+'N' AS AddExtraTube,
+tmp.Suffix,
+tmp.VisitNumber,
+tmp.PatientVisitID,'Y',HSD.SampleCount,tmp.Type,tmp.ExternalBarcode
+FROM   @TblPatientInvSample tmp
+inner JOIN HistoSpecimenDetails HSD ON hsd.PatientVisitID=tmp.PatientVisitID
+and HSD.ID=tmp.InvestigationID and HSD.Type=tmp.Type
+ SELECT *
+ FROM   @NewCollectSamples
+ END TRY
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetDeptToTrackSamples @OrgID = '+cast(@OrgID as varchar)+'@RoleID = '+cast(@RoleID as varchar)
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+ END
+
+
+
+

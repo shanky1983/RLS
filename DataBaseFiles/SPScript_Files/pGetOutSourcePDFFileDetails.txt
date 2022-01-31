@@ -1,0 +1,23 @@
+CREATE PROCEDURE [dbo].[pGetOutSourcePDFFileDetails]      
+@pPatientVisitid bigint,      
+@pInvestigationId bigint,      
+@POrgID bigint    
+As      
+Begin   
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON;
+   SET XACT_ABORT ON; 
+BEGIN TRY
+       DECLARE @EMsg NVARCHAR(4000),@ELine INT,@Eproc NVARCHAR(128),@ESEVERITY INT,@sptrace VARCHAR(8000)   
+IF @POrgID=-1 SET @POrgID=null   
+  SELECT VisitID,AccessionNumber,FilePath,OFM.OrgID,OFM.ActionType as 'Statustype' from OutSourcesFilesManager OFM         
+  WHERE  OFM.VisitID=@pPatientVisitid and OFM.AccessionNumber=@pInvestigationId and OFM.OrgID=coalesce(@POrgID,OFM.OrgID)   
+  ORDER BY OutSourceFileID  
+      
+END TRY
+BEGIN CATCH   			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pGetOutSourcePDFFileDetails @pPatientVisitid = '
+	+CAST(@pPatientVisitid AS VARCHAR) +'@pInvestigationId = '	+CAST(@pInvestigationId AS VARCHAR) +'@POrgID = '+CAST(@POrgID AS VARCHAR)
+    EXEC usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH       
+END

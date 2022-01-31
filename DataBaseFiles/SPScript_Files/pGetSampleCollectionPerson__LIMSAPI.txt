@@ -1,0 +1,509 @@
+
+--UPDATE   APIConfiguration SET MAXIMUMRECORDCOUNT=200
+-- WHERE SPName='pGetSampleCollectionPerson__LIMSAPI'
+ --SELECT MaximumRecordCount 
+ --FROM APIConfiguration 
+ --WHERE SPName='pGetSampleCollectionPerson__LIMSAPI'
+---select * from organization where orgid=189
+----	
+--pGetSampleCollectionPerson__LIMSAPIsri 'LIMSAPI','Phlebotomist',1,100
+CREATE  PROCEDURE pGetSampleCollectionPerson__LIMSAPI(
+	 @pOrgCode NVARCHAR(100),
+	  @pRoleName NVARCHAR(100),
+	  @Page INT,
+      @Size INT
+	)
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+--pGetSampleCollectionPerson__LIMSAPI 'LIMSAPI','all',1,100
+----pGetSampleCollectionPerson__LIMSAPI 'LIMSAPI','Phlebotomist',1,100
+
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50) 
+DECLARE @RoleID BIGINT      
+
+DECLARE @MaxRecordCount INT
+ DECLARE @MaxCountReached BIT
+ DECLARE @TotalRecords INT
+
+
+ SELECT @MaxRecordCount=MaximumRecordCount 
+ FROM APIConfiguration 
+ WHERE SPName='pGetSampleCollectionPerson__LIMSAPI'
+
+ IF @Size > @MaxRecordCount
+ BEGIN
+   SET @Size = @MaxRecordCount
+   SET @MaxCountReached=1
+ END
+
+ 
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+
+SELECT @RoleID=RoleId FROM Role where RoleName=@pRoleName AND OrgId=@pOrgID
+
+
+
+
+	CREATE TABLE #Temp_Users
+	(
+	OrgID INT,
+LocationID bigint,
+UserType NVARCHAR(50),
+RoleID BIGINT,
+UserID BIGINT,
+Salutation NVARCHAR(20),
+NAME NVARCHAR(200),
+LoginID NVARCHAR(200),
+LoginName NVARCHAR(200),
+Password NVARCHAR(50),
+MobileNumber NVARCHAR(15),
+Gender NVARCHAR(10),
+DOB DATETIME,
+EmailID NVARCHAR(50),
+State NVARCHAR(50),
+Country NVARCHAR(50),
+Status NVARCHAR(10)
+)
+
+CREATE TABLE #TempLogins
+(
+LoginId BIGINT,
+OrgId BIGINT
+)
+
+CREATE TABLE #TempLoginsRole
+(
+LoginId NVARCHAR(200),
+LoginName NVARCHAR(200),
+RoleID BIGINT,
+RoleName NVARCHAR(200),
+Status NVARCHAR(10),
+UserID BIGINT,
+State NVARCHAR(50),
+Country NVARCHAR(50),
+City  NVARCHAR(50),
+)
+CREATE TABLE #TempRole
+(
+LoginId NVARCHAR(200),
+LoginName NVARCHAR(200),
+RoleID BIGINT,
+RoleName NVARCHAR(200),
+State NVARCHAR(50),
+Country NVARCHAR(50),
+City  NVARCHAR(50),
+)
+DECLARE @PatientRoleID BIGINT
+---DECLARE @pRoleId BIGINT
+
+SELECT @PatientRoleID=RoleID from Role(NOLOCK) where RoleName='Patient' AND OrgId=@pOrgID
+
+INSERT INTO #TempLogins
+SELECT DISTINCT LR.LoginId,L.Orgid FROM LoginRole(NOLOCK) LR 
+INNER JOIN Login L  WITH(NOLOCK) ON L.LoginId=LR.LoginId and L.Status='A'
+inner join Role R WITH(NOLOCK) on LR.RoleID=R.RoleID and R.RoleName!='Patient' and R.LangCode='en-GB'
+WHERE L.OrgId=@pOrgId -- and RoleId <> @PatientRoleID  
+
+
+
+IF @pRoleName='ALL'
+
+BEGIN
+
+SELECT @TotalRecords = COUNT(1) 
+FROM LOGIN L WITH(NOLOCK) 
+INNER JOIN #TempLogins  T WITH(NOLOCK) ON T.LoginId=L.LoginId
+WHERE L.OrgID = @pOrgID and L.Status='A' 
+
+
+
+
+INSERT INTO #Temp_Users(OrgID,LoginName,Password,Status,LoginId)
+SELECT  L.OrgID AS OrgID,L.LoginName AS LoginName, '###' as Password,L.Status AS STATUS,L.loginID
+FROM LOGIN L WITH(NOLOCK) 
+INNER JOIN #TempLogins  T WITH(NOLOCK) ON T.LoginId=L.LoginId
+WHERE L.OrgID = @pOrgID --and L.Status='A' 
+--AND LOGINID NOT IN (SELECT LOGINID FROM LoginRole(NOLOCK) WHERE RoleID=@PatientRoleID)
+ORDER BY L.loginID
+OFFSET (@Page -1) * @Size ROWS
+FETCH NEXT @Size ROWS ONLY
+
+
+END
+
+ELSE 
+	
+BEGIN
+
+
+SELECT @TotalRecords = COUNT(1) FROM LOGIN L	WITH(NOLOCK) 
+INNER JOIN LoginRole LR  WITH(NOLOCK) ON L.LoginID=LR.LoginID
+WHERE L.OrgID = @pOrgID and L.Status='A'
+AND LR.RoleId=@RoleID
+	
+INSERT INTO #Temp_Users(OrgID,LoginName,Password,Status,LoginId)
+SELECT  L.OrgID AS OrgID,L.LoginName AS LoginName, '###' as Password,L.Status AS STATUS,L.loginID
+FROM LOGIN L WITH(NOLOCK) 
+INNER JOIN LoginRole LR WITH(NOLOCK) ON LR.LoginId=L.LoginId
+WHERE L.OrgID = @pOrgID and L.Status='A'
+AND RoleId=@RoleID
+ORDER BY L.loginID
+OFFSET (@Page -1) * @Size ROWS
+FETCH NEXT @Size ROWS ONLY
+
+END
+
+
+
+
+----select * from role where orgid=189
+--select * from #Temp_Users
+--return
+
+UPDATE #Temp_Users SET LocationID=TMP.AddressID,NAME=TMP.NAME,UserID=TMP.UserID,
+Salutation=TMP.DisplayText,Gender=TMP.Gender,DOB=TMP.DOB,
+EmailID=TMP.Email,MobileNumber=TMP.MobileNumber
+--,State=TMP.StateName,Country=tmp.CountryName,City=tmp.City
+from
+(
+SELECT L.Loginid,UR.AddressID,Ur.NAME,
+UR.UserID,SOM.DisplayText,
+CASE WHEN UR.Sex='M' THEN 'Male'
+WHEN UR.SEX='F' THEN 'Female'
+ELSE 'Male' END  AS Gender,
+UR.DOB,UR.Email, 
+UA.MobileNumber
+--,s.StateName,c.CountryName,OA.City
+
+
+FROM #Temp_Users L WITH(NOLOCK)
+
+INNER JOIN Users UR  WITH(NOLOCK)  ON UR.LoginID = L.LoginID AND UR.OrgID=L.OrgID
+left JOIN useraddress UA WITH(NOLOCK) ON UA.UserID = UR.UserID AND UR.OrgID = @pOrgID
+INNER JOIN LoginRole LR WITH(NOLOCK) ON  LR.LoginID=L.loginID and UR.LoginID=LR.LoginID and LR.Status='A' 
+INNER JOIN ROLE R WITH(NOLOCK) ON  R.RoleName !='Patient'  AND R.OrgID=L.OrgID  --and R.RoleID=
+and LR.RoleID=R.RoleID and R.LangCode='en-GB'   --LR.LoginID=L.LoginId  and
+LEFT JOIN SalutationOrgMapping SOM  WITH(NOLOCK)  ON UR.TITLECode = SOM.TitleID
+AND UR.OrgID=SOM.OrgID
+--left join OrganizationAddress OA WITH(NOLOCK) ON  OA.OrgID=@pOrgID --and OA.AddressID=L.LocationID 
+--left join State s WITH(NOLOCK) ON OA.StateID = s.StateID
+--left join Country c WITH(NOLOCK) ON OA.CountryID = c.CountryID 
+WHERE L.OrgID = @pOrgID and L.Status='A' and L.loginID=Ur.LoginID--and  UR.AddressID=@pOrgAddrID
+)TMP
+WHERE tmp.Loginid=#Temp_Users.loginid
+
+
+select OrgID,
+@pOrgAddrID as [LocationID],
+LocationID as UserLocID,
+--City,State,Country,
+UserType,
+RoleID,
+UserID,
+Salutation AS TitleName,
+Name,
+LoginID AS LoginID,
+LoginName,
+Password,
+ISNULL(MobileNumber,'') as MobileNumber,
+Gender,
+DOB AS DateofBirth,
+EmailID AS EmailID,
+Status
+ FROM #Temp_Users
+ --where Userid>0
+-- order by LoginName
+
+insert into #TempLoginsRole (LoginId,LoginName,RoleID,RoleName,Status)  
+   SELECT distinct T.LoginID,T.LoginName,R.RoleID,R.RoleName,LR.Status AS Status
+  
+  
+   --,TD.Location,TD.Comments,TD.AddressID
+ FROM #Temp_Users T
+ --inner join @tmpLocation TD ON TD.LoginID=T.LoginID -- AND TD.RoleID=T.RoleID
+ INNER JOIN LoginRole LR WITH(NOLOCK) ON LR.LoginID=T.LoginId  and LR.Status='A'
+ INNER JOIN ROLE R WITH(NOLOCK) ON R.RoleID=LR.RoleID and R.RoleName !='Patient' and R.LangCode='en-GB'
+ AND R.OrgID=T.OrgID --and T.LoginId=374168
+-- left join OrganizationAddress OA on T.LocationID=OA.AddressID
+-- inner join UserAddress UA on T.UserID=UA.UserID
+
+
+Insert into #TempRole (LoginId ,LoginName ,RoleID,RoleName,City,State,Country)  
+
+  select  
+T.LoginID,T.LoginName,R.RoleID, r.RoleName,
+--  OA.City,
+ -- OA.StateID,
+  --OA.CountryID
+  (case when r.RoleName='Phlebotomist' then ISNULL(OA.City,ISNULL(UA.City,'')) else ISNULL(UA.City,ISNULL(OA.City,'')) end),
+  (case when r.RoleName='Phlebotomist' then ISNULL(OA.StateID,ISNULL(UA.StateID,'')) else ISNULL(UA.StateID,ISNULL(OA.StateID,'')) end),
+  (case when r.RoleName='Phlebotomist' then ISNULL(OA.CountryID,ISNULL(UA.CountryID,'')) else ISNULL(UA.CountryID,ISNULL(OA.CountryID,'')) end)
+
+ --,State=
+ from  #Temp_Users T
+  inner join Users U on  T.UserID=T.UserID and T.LoginID=U.Loginid
+-- inner join @tmpLocation TD ON TD.LoginID=T.LoginID -- AND TD.RoleID=T.RoleID
+inner JOIN LoginRole LR WITH(NOLOCK) ON LR.LoginID=t.LoginId  and LR.Status='A'
+ inner JOIN ROLE R WITH(NOLOCK) ON R.RoleID=LR.RoleID and R.LangCode='en-GB'
+
+AND R.OrgID=T.OrgID --and T.LoginId=374168
+inner join OrganizationAddress OA  on OA.AddressID=@pOrgAddrID--and OA.Orgid=T.Orgid
+ left join UserAddress UA on T.UserID=UA.UserID and U.UserID=UA.UserID -- and OA.Orgid=T.Orgid
+
+--where  R.RoleName='Phlebotomist'
+--select * from #TempRole
+
+ update T set T.City=R.City, T.State=S.Statename,T.Country=C.CountryName
+
+ from #TempLoginsRole T
+ --inner join #Temp_Users TU on T.LoginID=TU.LoginID
+ inner join #TempRole R on T.RoleID=R.RoleID
+ inner join State S on S.StateID=R.State
+ inner join Country C on C.CountryID=R.Country
+
+ IF @pRoleName='ALL'
+ begin
+
+   SELECT distinct T.LoginID,T.LoginName,T.RoleID,T.RoleName,T.Status
+  ,T.City,T.State,T.Country
+   
+   --,TD.Location,TD.Comments,TD.AddressID
+ FROM #TempLoginsRole T
+ --left join #TempLoginsRole TLR on T.loginid=TLR.loginid
+ --inner join @tmpLocation TD ON TD.LoginID=T.LoginID -- AND TD.RoleID=T.RoleID
+-- inner JOIN LoginRole LR WITH(NOLOCK) ON LR.LoginID=TLR.LoginId  and LR.Status='A'
+ --inner JOIN ROLE R WITH(NOLOCK) ON R.RoleID=LR.RoleID and R.RoleName !='Patient' and R.LangCode='en-GB'
+
+-- AND R.OrgID=T.OrgID --and T.LoginId=374168
+--left join State s on s.stateID=TLR.State
+ --left Join Country C on c.CountryID=TLR.Country
+
+ 
+  /** Dept **/
+  CREATE TABLE #tempDept
+--DECLARE @tempDept AS TABLE
+(UserID NVARCHAR(200),DeptName NVARCHAR(300),DeptID INT,DeptCode NVARCHAR,RoleID bigint,LoginID NVARCHAR(200),OrgID bigint)     
+INSERT INTO #tempDept(USERID,DeptName, DeptID,RoleID,LoginID,DeptCode,OrgID)    
+--SELECT U.USERID,LR.LOGINID,LDM.rOLEDETPID,RDM.ROLEDETPID,R.ROLEID,RDM.DEPTID
+--FROM USERS U
+SELECT U.USERID,IDM.DeptName, RDM.DeptID ,RDM.RoleID,LDM.loginID,'N',IDM.OrgID 
+FROM #Temp_Users T
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId
+INNER JOIN LOGINROLE   LR WITH(NOLOCK) ON LR.LOGINID=U.LOGINID
+INNER JOIN LOGINDEPTMAP  LDM WITH(NOLOCK) ON  LDM.LOGINID=LR.LOGINID
+INNER JOIN ROLEDEPTMAP RDM WITH(NOLOCK) ON RDM.ROLEDETPID=LDM.ROLEDETPID
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID
+
+
+=RDM.DeptID   and IDM.LangCode='en-GB'
+INNER JOIN ROLE R WITH(NOLOCK)  ON R.ROLEID=RDM.ROLEID and R.LangCode='en-GB'
+
+
+WHERE IDM.OrgID=@pOrgID  
+
+IF NOT EXISTS(SELECT 1 FROM #tempDept where DeptCode='Y')
+BEGIN
+UPDATE #tempDept SET DeptCode='Y'
+END
+
+
+
+
+
+
+SELECT distinct LoginID,RoleID,DeptID,DeptName,Orgid FROM #tempDept where OrgID=@pOrgID
+
+CREATE TABLE #tempLocation
+(UserID bigint,LoginID bigint,RoleID bigint,OrgID bigint,LocationID INT,LocationName NVARCHAR(300),DeptName NVARCHAR(200),DeptID bigint,Comments NVARCHAR) 
+--DECLARE @tempLocation AS TABLE(UserID bigint,LoginID bigint,RoleID bigint,OrgID bigint,LocationID INT,LocationName NVARCHAR(300),DeptName NVARCHAR(200),DeptID bigint,Comments NVARCHAR)  
+
+--INSERT INTO #tempLocation(UserID,LoginID,RoleID,OrgID,LocationID,LocationName,DeptName,DeptID,Comments) 
+INSERT INTO #tempLocation(UserID,LoginID,RoleID,OrgID,LocationID,LocationName,Comments) 
+SELECT distinct U.USERID,LDM.loginID,
+LR.RoleID,LLM.OrgID,
+LLM.AddressID,OA.Location
+--,IDM.DeptName, 
+--LDM.DeptID 
+,'N' 
+--select distinct U.USERID,LR.LoginRoleID, LR.LoginID,LR.RoleID,LLM.OrgID,LLM.AddressID,IDM.DeptName, RDM.DeptID,OA.Location 
+FROM #Temp_Users T
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId
+
+
+
+INNER JOIN LOGINROLE LR WITH(NOLOCK)ON LR.LOGINID=U.LOGINID
+INNER JOIN LOGINDEPTMAP LDM WITH(NOLOCK) ON LDM.LOGINID=LR.LOGINID
+--INNER JOIN ROLEDEPTMAP RDM WITH(NOLOCK) ON RDM.ROLEDETPID=LDM.ROLEDETPID
+
+--INNER JOIN  InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID=RDM.DeptID   and IDM.LangCode='en-GB'
+INNER JOIN LoginLocationMapping LLM WITH(NOLOCK) ON LLM.LoginRoleId=LR.LoginRoleID
+INNER JOIN OrganizationAddress OA WITH(NOLOCK) ON OA.AddressID=LLM.AddressID
+
+
+INNER JOIN ROLE R WITH(NOLOCK) ON R.ROLEID=LR.ROLEID and R.LangCode='en-GB'
+WHERE LLM.Orgid=@pOrgID --and LR.loginid=374227
+order by LR.RoleID
+
+--select * from #tempLocation where RoleID in (6645,6644)
+
+
+UPDATE T SET T.Comments='Y' FROM #tempLocation T 
+
+
+
+
+INNER JOIN  LoginLocationMapping IDM ON IDM.AddressID=T.LocationID     
+INNER JOIN LoginRole RDM ON RDm.LoginRoleID=IDM.LoginRoleID     
+AND IDM.OrgID=@pOrgID  INNER JOIN Role LDM ON LDM.RoleID=RDM.RoleID 
+and ISNULL(LDM.LangCode,'en-GB')='en-GB'  
+ where IDM.OrgID=@pOrgID
+--WHERE RDM.RoleID=@pRoleID  AND RDM.LoginID =@loginID  
+    
+     
+    
+
+
+  IF NOT EXISTS(SELECT 1 FROM #tempLocation where Comments='Y')
+BEGIN
+UPDATE #tempLocation SET Comments='Y'
+END
+
+
+select distinct LoginID,RoleID,LocationID,LocationName FROM #tempLocation  group by RoleID,LoginID,LocationID,LocationName
+  end
+ else
+ begin
+    SELECT distinct T.LoginID,T.LoginName,T.RoleID,T.RoleName,T.Status
+  ,T.City,T.State,T.Country
+   
+   --,TD.Location,TD.Comments,TD.AddressID
+ FROM #TempLoginsRole T where T.RoleName=@pRoleName
+
+
+ /** Dept **/
+  CREATE TABLE #tempDept1
+--DECLARE @tempDept AS TABLE
+(UserID NVARCHAR(200),DeptName NVARCHAR(300),DeptID INT,DeptCode NVARCHAR,RoleID bigint,LoginID NVARCHAR(200),OrgID bigint)     
+INSERT INTO #tempDept1(USERID,DeptName, DeptID,RoleID,LoginID,DeptCode,OrgID)    
+--SELECT U.USERID,LR.LOGINID,LDM.rOLEDETPID,RDM.ROLEDETPID,R.ROLEID,RDM.DEPTID
+--FROM USERS U
+SELECT U.USERID,IDM.DeptName, RDM.DeptID ,RDM.RoleID,LDM.loginID,'N',IDM.OrgID 
+FROM #Temp_Users T
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId
+INNER JOIN LOGINROLE   LR WITH(NOLOCK) ON LR.LOGINID=U.LOGINID
+INNER JOIN LOGINDEPTMAP  LDM WITH(NOLOCK) ON  LDM.LOGINID=LR.LOGINID
+INNER JOIN ROLEDEPTMAP RDM WITH(NOLOCK) ON RDM.ROLEDETPID=LDM.ROLEDETPID
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID=RDM.DeptID   and IDM.LangCode='en-GB'
+INNER JOIN ROLE R WITH(NOLOCK)  ON R.ROLEID=RDM.ROLEID and R.LangCode='en-GB'
+
+
+
+
+WHERE IDM.OrgID=@pOrgID   and R.RoleName=@pRoleName
+
+IF NOT EXISTS(SELECT 1 FROM #tempDept1 where DeptCode='Y')
+BEGIN
+UPDATE #tempDept1 SET DeptCode='Y'
+END
+
+
+
+
+
+
+SELECT distinct LoginID,RoleID,DeptID,DeptName,Orgid FROM #tempDept1 where OrgID=@pOrgID --and RoleID=@RoleID
+
+CREATE TABLE #tempLocation1
+(UserID bigint,LoginID bigint,RoleID bigint,OrgID bigint,LocationID INT,LocationName NVARCHAR(300),DeptName NVARCHAR(200),DeptID bigint,Comments NVARCHAR) 
+--DECLARE @tempLocation AS TABLE(UserID bigint,LoginID bigint,RoleID bigint,OrgID bigint,LocationID INT,LocationName NVARCHAR(300),DeptName NVARCHAR(200),DeptID bigint,Comments NVARCHAR)  
+
+--INSERT INTO #tempLocation(UserID,LoginID,RoleID,OrgID,LocationID,LocationName,DeptName,DeptID,Comments) 
+INSERT INTO #tempLocation1(UserID,LoginID,RoleID,OrgID,LocationID,LocationName,Comments) 
+SELECT distinct U.USERID,LDM.loginID,
+LR.RoleID,LLM.OrgID,
+LLM.AddressID,OA.Location
+--,IDM.DeptName, 
+--LDM.DeptID 
+,'N' 
+--select distinct U.USERID,LR.LoginRoleID, LR.LoginID,LR.RoleID,LLM.OrgID,LLM.AddressID,IDM.DeptName, RDM.DeptID,OA.Location 
+FROM #Temp_Users T
+INNER JOIN USERS U WITH(NOLOCK) ON U.LoginId=T.LoginId
+
+
+
+INNER JOIN LOGINROLE LR WITH(NOLOCK)ON LR.LOGINID=U.LOGINID
+INNER JOIN LOGINDEPTMAP LDM WITH(NOLOCK) ON LDM.LOGINID=LR.LOGINID
+--INNER JOIN ROLEDEPTMAP RDM WITH(NOLOCK) ON RDM.ROLEDETPID=LDM.ROLEDETPID
+
+--INNER JOIN  InvDeptMaster IDM WITH (NOLOCK) ON IDM.DeptID=RDM.DeptID   and IDM.LangCode='en-GB'
+INNER JOIN LoginLocationMapping LLM WITH(NOLOCK) ON LLM.LoginRoleId=LR.LoginRoleID
+INNER JOIN OrganizationAddress OA WITH(NOLOCK) ON OA.AddressID=LLM.AddressID
+
+
+INNER JOIN ROLE R WITH(NOLOCK) ON R.ROLEID=LR.ROLEID and R.LangCode='en-GB'
+WHERE LLM.Orgid=@pOrgID and R.RoleID=@RoleID--and LR.loginid=374227
+order by LR.RoleID
+
+--select * from #tempLocation where RoleID in (6645,6644)
+
+
+UPDATE T SET T.Comments='Y' FROM #tempLocation1 T 
+
+
+
+INNER JOIN  LoginLocationMapping IDM ON IDM.AddressID=T.LocationID     
+INNER JOIN LoginRole RDM ON RDm.LoginRoleID=IDM.LoginRoleID     
+AND IDM.OrgID=@pOrgID  INNER JOIN Role LDM ON LDM.RoleID=RDM.RoleID 
+and ISNULL(LDM.LangCode,'en-GB')='en-GB'  
+ where IDM.OrgID=@pOrgID and RDM.RoleID=@RoleID 
+--WHERE RDM.RoleID=@pRoleID  AND RDM.LoginID =@loginID  
+    
+     
+    
+
+
+  IF NOT EXISTS(SELECT 1 FROM #tempLocation1 where Comments='Y')
+BEGIN
+UPDATE #tempLocation1 SET Comments='Y'
+END 
+ 
+
+
+
+select distinct LoginID,RoleID,LocationID,LocationName FROM #tempLocation1 where RoleID=@RoleID group by RoleID,LoginID,LocationID,LocationName 
+
+
+
+
+
+
+
+
+end
+
+ 
+	
+	
+ SELECT @TotalRecords as TotalRecords,cast(CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as int) as TotalPages, 
+ @MaxRecordCount as AllowableRecordCount
+
+
+ drop table #Temp_Users
+ drop table #TempLogins
+ drop table #tempLocation
+ drop table #tempDept
+END
+
+
+

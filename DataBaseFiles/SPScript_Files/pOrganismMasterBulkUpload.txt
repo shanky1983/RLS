@@ -1,0 +1,86 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO  
+create PROCEDURE [dbo].[pOrganismMasterBulkUpload]  
+       @pOrgID INT,   
+       @pUploadXLMasterType [VARCHAR](50),  
+       @pUploadXLMasterCode [VARCHAR](50),  
+       @pUDTOrganismBulkUpload  [dbo].[UDTOrganismBulkUploadFamily] READONLY,  
+       @ContextInfo [UDT_Context] READONLY   
+WITH EXECUTE AS OWNER  AS   
+BEGIN  
+BEGIN TRY  
+      DECLARE @CreatedAt DATETIME=GETDATE(),@LanguageCode nvarchar(5), @CreatedBy BIGINT      
+      SELECT @CreatedBy = LoginID,@LanguageCode=LanguageCode  
+      FROM   @ContextInfo   
+  
+IF(@pUploadXLMasterType='FM')  
+BEGIN   
+  
+CREATE TABLE #OrganismBulkUploadFamily  
+        (   
+           FamilyName  VARCHAR(100),   
+           FamilyCode  VARCHAR(100),   
+           OrgID   INT,  
+     FamilyId   BIGINT DEFAULT 0,  
+     IsValid   VARCHAR(10) DEFAULT 'YES',   
+     ErrorDescription NVARCHAR(250) NULL  
+        )   
+  
+      INSERT INTO #OrganismBulkUploadFamily(FamilyName,FamilyCode,OrgID)  
+      SELECT T.FamilyName,   
+             T.FamilyCode,   
+             @pOrgID   
+      FROM   @pUDTOrganismBulkUpload T   
+  
+   UPDATE T SET T.FamilyId=IDFM.FamilyId  
+          FROM #OrganismBulkUploadFamily T  
+             INNER JOIN InvestigationDrugFamilyMaster IDFM   
+                    ON IDFM.familyname = T.FamilyName OR  IDFM.Familycode=T.FamilyCode AND IDFM.OrgID = @pOrgID   
+  
+      DELETE from #OrganismBulkUploadFamily   
+      WHERE  ( FamilyName = ''   
+                OR FamilyName Is Null )   
+             and ( FamilyCode = ''   
+                    OR FamilyCode Is Null )   
+        
+   UPDATE T1    
+      SET    T1.IsValid = 'NO',  
+          ErrorDescription=(CASE WHEN (T1.FamilyId IS NOT NULL  AND T1.FamilyId > 0 ) THEN 'FAMILY NAME OR FAMILY CODE ALREADY EXISTS' END)  
+      FROM   #OrganismBulkUploadFamily T1 with(NOLOCK)    
+      WHERE  FamilyId <> 0  AND FamilyId IS NOT NULL   
+  
+  
+   INSERT INTO InvestigationDrugFamilyMaster  
+     (familyname,  
+     Familycode,  
+     orgid,  
+     createdat,  
+     createdby,  
+     LangCode)  
+       SELECT T.FamilyName,  
+           T.FamilyCode,   
+     @pOrgID,  
+     @CreatedAt,  
+     @CreatedBy,  
+     @LanguageCode  
+           FROM #OrganismBulkUploadFamily T WHERE ISNULL (T.IsValid,'')<> 'NO' --AND ISNULL(T.FamilyId,0)=0  
+       
+   SELECT FamilyName, FamilyCode,ErrorDescription  
+      FROM   #OrganismBulkUploadFamily    
+      WHERE  IsValid = 'NO'    
+  
+      DROP TABLE #OrganismBulkUploadFamily    
+     
+        
+                   
+     
+        
+END   
+END TRY  
+BEGIN CATCH  
+END CATCH  
+END  
+  
+  

@@ -1,0 +1,147 @@
+    
+CREATE Proc DepartmentAlert                 
+As                  
+BEGIN                  
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED                   
+  SET NOCOUNT ON            
+DECLARE                   
+@pFDate DATETIME= CONVERT(DATETIME, CONVERT(NVARCHAR, GETDATE(), 101) + ' 00:00:00'),                  
+@pTDate DATETIME= CONVERT(DATETIME, CONVERT(NVARCHAR, GETDATE(), 101) + ' 23:59:59')    
+  
+DECLARE @Curdate DATE = Getdate()            
+              
+Create Table #temp (Center Nvarchar(250),VisitID Bigint,ID Bigint,DeptName Nvarchar(250),Type nvarchar(250),LocRateID Int)            
+Create table #temlp (Center Nvarchar(250),Counts int, DeptName Nvarchar(250),LocRateID Int)            
+            
+Insert Into #temp (Center, VisitID, ID, DeptName, Type,LocRateID)            
+Select Distinct OA.Location as Center,OI.VisitID,OI.ID,'Lab' AS DeptName,OI.Type,OA.LocRateID from PatientVisit PV (NOLOCK)            
+Inner join OrderedInvestigations OI (NOLOCK) ON OI.VisitID=PV.PatientVisitID AND OI.OrgID=PV.OrgID            
+Inner join PatientInvestigation PI (NOLOCK) ON PI.AccessionNumber=OI.AccessionNumber AND PI.OrgID=OI.OrgID            
+Inner join InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID=PI.OrgID            
+Inner join Invdeptmaster IDM ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID            
+Inner join Organization O ON O.OrgID=PV.OrgID             
+Inner join OrganizationAddress OA ON OA.AddressID=PV.OrgAddressID            
+where PV.OrgID in (220) AND OI.Status not in ('Cancel') AND IDM.DeptID in (15,17,20,34,6,1,2,3,4,11,19)             
+AND PV.Createdat BETWEEN @pFDate AND @pTDate AND OA.Status='A'        
+Union all            
+Select Distinct OA.Location as Center,OI.VisitID,OI.ID,'Lab' AS DeptName,OI.Type,OA.LocRateID from PatientVisit PV (NOLOCK)            
+Inner join OrderedInvestigations OI (NOLOCK) ON OI.VisitID=PV.PatientVisitID AND OI.OrgID=PV.OrgID            
+Inner join PatientInvestigation PI (NOLOCK) ON PI.AccessionNumber=OI.AccessionNumber AND PI.OrgID=OI.OrgID            
+Inner join InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID=PI.OrgID            
+Inner join Invdeptmaster IDM ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID            
+Inner join Organization O ON O.OrgID=PV.OrgID             
+Inner join OrganizationAddress OA ON OA.AddressID=PV.OrgAddressID            
+where PV.OrgID in (245,246,247,248) AND OI.Status not in ('Cancel') AND IDM.DeptID in (2674,2675,2676,2677,2679,2684,2688,2689,2690,2691,2698,2699,2700,            
+2701,2703,2708,2712,2713,2714,2715,2723,2724,2725,2726,2728,2733,2737,2738,2739,2740,            
+2748,2749,2750,2751,2753,2758,2762,2763,2764,2765) AND PV.Createdat BETWEEN @pFDate AND @pTDate AND OA.Status='A'        
+Union all            
+Select Distinct OA.Location as Center,OI.VisitID,OI.ID,IDM.DeptName AS DeptName,OI.Type,OA.LocRateID from PatientVisit PV (NOLOCK)            
+Inner join OrderedInvestigations OI (NOLOCK) ON OI.VisitID=PV.PatientVisitID AND OI.OrgID=PV.OrgID            
+Inner join PatientInvestigation PI (NOLOCK) ON PI.AccessionNumber=OI.AccessionNumber AND PI.OrgID=OI.OrgID            
+Inner join InvestigationOrgMapping IOM (NOLOCK) ON IOM.InvestigationID=PI.InvestigationID AND IOM.OrgID=PI.OrgID            
+Inner join Invdeptmaster IDM ON IDM.DeptID=IOM.DeptID AND IDM.OrgID=IOM.OrgID            
+Inner join Organization O ON O.OrgID=PV.OrgID             
+Inner join OrganizationAddress OA ON OA.AddressID=PV.OrgAddressID            
+where PV.OrgID in (220,245,246,247,248) AND OI.Status not in ('Cancel') AND IDM.DeptID in (5,8,7,9,10,12,13,27,30,2678,2680,2681,2682,2683,2685,2686,2695,2702,2704,2705,2706,2707,2709,2710,            
+2719,2722,2727,2729,2730,2731,2732,2734,2735,2744,2747,2752,2754,2755,2756,2757,2759,2760,2769,2772)            
+AND PV.Createdat  BETWEEN @pFDate AND @pTDate  AND OA.Status='A'          
+            
+delete from #temp where isnull(locrateid,0)=0            
+Insert Into #temlp (Center,Counts,DeptName,LocRateID)            
+Select Center,Count(ID),DeptName,LocRateID from #temp group by Center,DeptName,LocRateID            
+union all            
+Select 'Grand Total' AS Center,Count(ID) as ID,DeptName,250 as LocRateID from #temp group by DeptName            
+Union all            
+select OD.Location as Center,0 as Counts,ISM.DeptName as DeptName,OD.LocRateID from Invdeptmaster ISM (NOLOCK)            
+Inner join Organization O (NOLOCK) On O.OrgID=ISM.OrgID            
+Inner join OrganizationAddress OD ON OD.OrgID=O.OrgID            
+where O.OrgID in (220,245,246,247,248) AND OD.Status='A' AND ISM.deptname in ('Lab','Radiology','USG','MRI','CT','CR','BMD','Physiotherapy','DOPLER USG','DOPLER','GENERAL') and ISM.DeptName not in (select Distinct Deptname from #temp)            
+--'Physiotherapy',            
+If Exists (select 1 from #temlp where deptname='DOPLER USG')            
+Begin            
+update #temlp set DeptName='DOPLER' where DeptName='DOPLER USG'            
+END            
+delete from #temlp where isnull(locrateid,0)=0            
+--select Distinct  from #temlp            
+IF EXISTS (select 1 from #temlp)            
+BEGIN            
+DECLARE @DynamicPivotQuery AS NVARCHAR(MAX)            
+DECLARE @ColumnName AS NVARCHAR(MAX)            
+             
+            
+SELECT @ColumnName= ISNULL(@ColumnName + ',','')             
+       + QUOTENAME(DeptName)            
+FROM (SELECT DISTINCT DeptName FROM #temlp) AS Courses            
+              
+SET @DynamicPivotQuery =             
+  N'SELECT distinct Center,LocRateID,  ' + @ColumnName + ' Into ##Tempfinal            
+    FROM #temlp             
+            
+    PIVOT(max(Counts)             
+          FOR DeptName IN (' + @ColumnName + ')) AS PVTTable'            
+            
+EXEC sp_executesql @DynamicPivotQuery            
+            
+            
+update ##Tempfinal set Lab=Isnull(Lab,0),BMD=Isnull(BMD,0),CR=Isnull(CR,0),CT=Isnull(CT,0),DOPLER=Isnull(DOPLER,0),            
+GENERAL=Isnull(GENERAL,0),MRI=Isnull(MRI,0),Physiotherapy=Isnull(Physiotherapy,0),Radiology=Isnull(Radiology,0),USG=Isnull(USG,0) where isnull(Center,'')!=''--Physiotherapy=Isnull(Physiotherapy,0),            
+select Center,Lab,BMD,CR,CT,DOPLER,GENERAL,MRI,Physiotherapy,Radiology,USG,LocRateID into #finaldata from ##tempfinal order by LocRateID--Physiotherapy,OrgName,            
+            
+--END            
+            
+--if exists(select 1 from #finaldata)                  
+-- begin                  
+                  
+ DECLARE @xml NVARCHAR(MAX)                  
+DECLARE @body NVARCHAR(MAX)                  
+declare @Subject varchar(max);                  
+                  
+     --OrgName AS 'td','',               
+SET @xml = CAST((                   
+SELECT Center AS 'td','',Lab AS 'td','', BMD AS 'td','', CR AS 'td','',CT AS 'td','',DOPLER AS 'td','',MRI AS 'td','',Physiotherapy AS 'td','',Radiology AS 'td','',USG AS 'td','',GENERAL AS 'td',''                   
+ FROM #finaldata order by locRateID              
+FOR XML PATH('tr'), ELEMENTS ) AS NVARCHAR(MAX))                  
+      --Physiotherapy AS 'td','',--<th> OrgName </th>              
+-------------------------------------------------------------------------------------------                  
+SET @body =N'<P>Dear All<br>The following are Department count Alert for Prima '  + '-' + convert(VARCHAR(11), @Curdate, 6) + '<html>                  
+<head>                  
+<style type="text/css">table{font-family:Verdana;font-size:12px;width:80%;border-width: 1px;border-color: #EE6555;border-collapse:collapse;}                  
+        tr{background-color:#EE6555;color:#fff;}                  
+        th{font-size:12px;background-color:#EE6555;color:#fff;border-width: 1px;padding: 8px;border-style:solid;border-color: #EE6555;text-align:left;}                  
+        td{font-size:12px;background-color:#E3DED8;color:#000;border-width: 1px;padding: 8px;border-style:solid;border-color: #EE6555;text-align:left;}</style>                  
+</head>           
+<body>                  
+<table border = "1">                   
+<tr>                  
+<th> Center </th> <th> Lab </th> <th> BMD </th><th> CR </th><th> CT </th> <th> DOPLER </th> <th> MRI </th> <th> Physiotherapy </th> <th> Radiology </th>             
+<th> USG </th> <th> GENERAL </th>  </tr>';                      
+SET @body = @body + @xml +'</table></body></html>';                  
+      --<th> Physiotherapy </th>             
+set @Subject='Department details For Prima';                  
+             
+EXEC msdb.dbo.sp_send_dbmail                  
+@profile_name = 'Databasemail',                   
+@body = @body,                  
+@body_format ='HTML',                  
+@recipients = 'janarthanan.t@attunelive.com;javith.a@primadiagnostics.com;revenue.prima@primadiagnostics.com',                   
+               
+@subject = @Subject     
+  
+Drop table ##Tempfinal            
+Drop table #finaldata  
+END     
+ELSE  
+BEGIN  
+EXEC msdb.dbo.sp_send_dbmail                  
+@profile_name = 'Databasemail',                   
+@body = 'Mo data available',                  
+@body_format ='HTML',                  
+@recipients = 'janarthanan.t@attunelive.com;javith.a@primadiagnostics.com;revenue.prima@primadiagnostics.com',  
+@subject = 'Department details For Prima'  
+END  
+            
+drop table #temp            
+drop table #temlp            
+            
+            
+END 

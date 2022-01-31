@@ -1,0 +1,37 @@
+
+CREATE PROCEDURE [dbo].[pGetTestDetails_API]  
+ @dtTestCodes [dbo].[InvestigationDetail] READONLY,  
+ @orgid [bigint] 
+WITH EXECUTE AS OWNER  
+AS  
+BEGIN       
+--Declare @dtTestCodes [InvestigationDetail]
+--insert into @dtTestCodes (Type) 
+--Select 'PBC0051' union
+--Select 'PGRP001'
+--declare @orgid [bigint]=220 
+
+    declare   @tblInvs    [dbo].[InvestigationDetail]
+  
+  insert into @tblInvs(ID,Type,Name)
+  select Convert(varchar,IOG.AttGroupID) ,CP.identifyingtype,CM.CodeDesc as Name from Invorggroup IOG
+Inner join Codemapper CP on CP.identifyingid=IOG.orggroupid
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+inner join @dtTestCodes p on CM.codename=P.Type
+ where IOG.orgid=@orgid and CSM.OrgID=@orgid
+ union
+ select Convert(varchar,IOM.investigationid),'INV',CM.CodeDesc as Name from investigationorgmapping IOM
+Inner join Codemapper CP on CP.identifyingid=IOM.investigationid 
+and identifyingtype='investigations'
+inner join Codemaster CM on Cm.codemasterid=CP.codemasterid
+inner join CodingSchemeOrgMapping CSM on CSM.CodeTypeID=Cm.CodeSchemeID
+inner join @dtTestCodes p on CM.codename=P.Type
+ where IOM.orgid=@orgid and CSM.OrgID=@orgid
+         
+	select ID,Name,Type,HistoryDetails,VisitID,TestSequenceOrder from @tblInvs 
+ END  
+  
+  
+
+

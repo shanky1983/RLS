@@ -1,0 +1,25 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+Create PROCEDURE [dbo].[pGetOrganismByStaintype]     
+@pCultureStainTypeId [int],   
+ @pResultID [bigint],                       
+ @pOrgID [int],            
+ @pResultTemplateType [nvarchar](25)                      
+WITH EXECUTE AS OWNER                        
+AS                        
+BEGIN                            
+   Declare @StainType nvarchar(100)         
+   select @StainType=Value from InvestigationBulkData where id=@pCultureStainTypeId   
+  
+  SELECT @pResultID,ResultValues,ResultName,RowID as DeptID                                                  
+  FROM InvResultTemplateMaster                             
+  WHERE  ResultTemplateType = @pResultTemplateType and CultureStainType=@StainType   order by  ResultName                  
+  
+ END     
+  
+  
+  
+  
+  

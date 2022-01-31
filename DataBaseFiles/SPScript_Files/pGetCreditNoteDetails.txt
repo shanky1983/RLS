@@ -1,0 +1,139 @@
+CREATE PROCEDURE [dbo].[pGetCreditNoteDetails]     
+@pCreditNoteNumber NVARCHAR(100),
+@pClientID bigint,    
+@pOrgID bigint,    
+@pFDate datetime,    
+@pTDate datetime,
+@PageCount [int] OUTPUT,
+@PageIndex [int] = 1,
+@PageSize [int] = 10,
+@ContextInfo [UDT_Context] READONLY
+  
+AS    
+BEGIN     
+
+DECLARE @RecordCount INT,@CreditNoType NVARCHAR(100)
+DECLARE @MinDate NVARCHAR(20)
+SELECT @CreditNoType=AdditionalInfo FROM @ContextInfo
+
+SET @MinDate = (select YEAR (@pFDate))
+--select @MinDate '@MinDate'
+
+DECLARE @tblRates TABLE (
+RowNumber INT IDENTITY(1, 1),
+FinalbillId INT,
+BillingDetailsId INT,
+PatientVisitId INT,
+ServiceId INT,
+ClientId INT,
+ClientCode NVARCHAR(50),
+ClientName NVARCHAR(200),
+VisitNumber NVARCHAR(100),
+CancelledDate DATETIME,
+BillSupplyNumber NVARCHAR(200),
+AmountCharged DECIMAL(18,2),
+TestCode NVARCHAR(100),
+TestName NVARCHAR(300),
+CreditNote NVARCHAR(300),
+InvoiceNumber NVARCHAR(100),
+InvoiceId INT
+)
+-- Credit note no issued
+IF @CreditNoType='CNI' 
+BEGIN  
+	INSERT INTO @tblRates
+	SELECT
+		ARD.FinalBillId,ARD.BillingDetailsId,PV.PatientVisitId,BD.FeeId AS ServiceId,
+		CM.ClientId,CM.Clientcode as ClientCode,CM.ClientName,PV.VisitNumber,ARD.Createdat AS CancelledDate,IV.BillSupplyNumber AS BillSupplyNumber,BD.Amount AS AmountCharged,
+		CASE WHEN BD.Feetype = 'INV' THEN ISNULL(INV.TestCode,'') 
+		WHEN BD.Feetype ='GRP' THEN ISNULL(ING.Testcode,'')
+		WHEN BD.Feetype ='PKG' THEN ISNULL(INP.Testcode,'')
+		ELSE '' END TestCode ,BD.FeeDescription TestName,ISNULL(ARD.CreditNote,'') CreditNote,IV.InvoiceNumber  InvoiceNumber,IV.InvoiceId InvoiceId 
+	FROM amountrefunddetails ARD 
+	INNER JOIN Billingdetails BD ON BD.Finalbillid = ARD.Finalbillid AND BD.BillingDetailsid = ARD.BillingDetailsid AND BD.Orgid = ARD.Orgid
+	INNER JOIN Finalbill FB ON FB.Finalbillid = BD.FinalbillId AND FB.Orgid = BD.Orgid
+	INNER JOIN PatientVisit PV ON PV.Patientvisitid = FB.Visitid AND PV.Patientid = FB.PatientId AND PV.Orgid = FB.Orgid  
+	INNER JOIN InvoiceDetails  ID ON ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+	INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = BD.ClientId AND IV.Orgid = BD.Orgid 
+	INNER JOIN clientmaster CM ON CM.ClientId =BD.ClientId AND CM.Orgid = BD.Orgid
+	LEFT JOIN investigationorgmapping INV ON INV.InvestigationId = BD.FeeId AND INV.Orgid = BD.Orgid AND BD.FeeType ='INV'
+	LEFT JOIN InvOrgGroup ING ON ING.AttGroupID = BD.FeeId AND ING.Orgid= BD.Orgid AND BD.FeeType ='GRP'
+	LEFT JOIN InvOrgGroup INP ON INP.AttGroupID = BD.FeeId AND INP.Orgid= BD.Orgid AND BD.FeeType ='PKG'
+	WHERE  ((ISNULL(@pCreditNoteNumber,'') <> '' AND ARD.CreditNote = @pCreditNoteNumber) OR(ISNULL(@pCreditNoteNumber,'')=''))
+		AND ((ISNULL(@pClientID,0) <> 0 AND BD.ClientId = @pClientID) OR(ISNULL(@pClientID,0)=0)) 
+		AND ((ISNULL(@MinDate,'') = '1753' OR ISNULL(@MinDate,'') = '9999') OR(Convert(nvarchar,BD.CreatedAt,103) BETWEEN @pFDate AND @pTDate)) 
+		AND ARD.Orgid = @pOrgID AND IV.CreatedAt < ARD.CreatedAt AND ISNULL(ARD.CreditNote,'')!=''
+END
+-- Credit note no not issued
+ELSE IF @CreditNoType='CNNI'
+BEGIN  
+	INSERT INTO @tblRates
+	SELECT
+		ARD.FinalBillId,ARD.BillingDetailsId,PV.PatientVisitId,BD.FeeId AS ServiceId,
+		CM.ClientId,CM.Clientcode as ClientCode,CM.ClientName,PV.VisitNumber,ARD.Createdat AS CancelledDate,IV.BillSupplyNumber AS BillSupplyNumber,BD.Amount AS AmountCharged,
+		CASE WHEN BD.Feetype = 'INV' THEN ISNULL(INV.TestCode,'') 
+		WHEN BD.Feetype ='GRP' THEN ISNULL(ING.Testcode,'')
+		WHEN BD.Feetype ='PKG' THEN ISNULL(INP.Testcode,'')
+		ELSE '' END TestCode ,BD.FeeDescription TestName,ISNULL(ARD.CreditNote,'') CreditNote,IV.InvoiceNumber  InvoiceNumber,IV.InvoiceId InvoiceId 
+	FROM amountrefunddetails ARD 
+	INNER JOIN Billingdetails BD ON BD.Finalbillid = ARD.Finalbillid AND BD.BillingDetailsid = ARD.BillingDetailsid AND BD.Orgid = ARD.Orgid
+	INNER JOIN Finalbill FB ON FB.Finalbillid = BD.FinalbillId AND FB.Orgid = BD.Orgid
+	INNER JOIN PatientVisit PV ON PV.Patientvisitid = FB.Visitid AND PV.Patientid = FB.PatientId AND PV.Orgid = FB.Orgid  
+	INNER JOIN InvoiceDetails  ID ON ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+	INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = BD.ClientId AND IV.Orgid = BD.Orgid 
+	INNER JOIN clientmaster CM ON CM.ClientId =BD.ClientId AND CM.Orgid = BD.Orgid
+	LEFT JOIN investigationorgmapping INV ON INV.InvestigationId = BD.FeeId AND INV.Orgid = BD.Orgid AND BD.FeeType ='INV'
+	LEFT JOIN InvOrgGroup ING ON ING.AttGroupID = BD.FeeId AND ING.Orgid= BD.Orgid AND BD.FeeType ='GRP'
+	LEFT JOIN InvOrgGroup INP ON INP.AttGroupID = BD.FeeId AND INP.Orgid= BD.Orgid AND BD.FeeType ='PKG'
+	WHERE  ((ISNULL(@pCreditNoteNumber,'') <> '' AND ARD.CreditNote = @pCreditNoteNumber) OR(ISNULL(@pCreditNoteNumber,'')=''))
+		AND ((ISNULL(@pClientID,0) <> 0 AND BD.ClientId = @pClientID) OR(ISNULL(@pClientID,0)=0)) 
+		AND ((ISNULL(@MinDate,'') = '1753' OR ISNULL(@MinDate,'') = '9999') OR(Convert(nvarchar,BD.CreatedAt,103) BETWEEN @pFDate AND @pTDate)) 
+		AND ARD.Orgid = @pOrgID AND IV.CreatedAt < ARD.CreatedAt AND ISNULL(ARD.CreditNote,'')=''
+END
+ELSE
+BEGIN  
+	INSERT INTO @tblRates
+	SELECT
+		ARD.FinalBillId,ARD.BillingDetailsId,PV.PatientVisitId,BD.FeeId AS ServiceId,
+		CM.ClientId,CM.Clientcode as ClientCode,CM.ClientName,PV.VisitNumber,ARD.Createdat AS CancelledDate,IV.BillSupplyNumber AS BillSupplyNumber,BD.Amount AS AmountCharged,
+		CASE WHEN BD.Feetype = 'INV' THEN ISNULL(INV.TestCode,'') 
+		WHEN BD.Feetype ='GRP' THEN ISNULL(ING.Testcode,'')
+		WHEN BD.Feetype ='PKG' THEN ISNULL(INP.Testcode,'')
+		ELSE '' END TestCode ,BD.FeeDescription TestName,ISNULL(ARD.CreditNote,'') CreditNote,IV.InvoiceNumber  InvoiceNumber,IV.InvoiceId InvoiceId 
+	FROM amountrefunddetails ARD 
+	INNER JOIN Billingdetails BD ON BD.Finalbillid = ARD.Finalbillid AND BD.BillingDetailsid = ARD.BillingDetailsid AND BD.Orgid = ARD.Orgid
+	INNER JOIN Finalbill FB ON FB.Finalbillid = BD.FinalbillId AND FB.Orgid = BD.Orgid
+	INNER JOIN PatientVisit PV ON PV.Patientvisitid = FB.Visitid AND PV.Patientid = FB.PatientId AND PV.Orgid = FB.Orgid  
+	INNER JOIN InvoiceDetails  ID ON ID.Finalbillid = BD.Finalbillid AND ID.Clientid = BD.CLientId 
+	INNER JOIN Invoice IV ON IV.InvoiceID = ID.InvoiceId AND IV.ClientId = BD.ClientId AND IV.Orgid = BD.Orgid 
+	INNER JOIN clientmaster CM ON CM.ClientId =BD.ClientId AND CM.Orgid = BD.Orgid
+	LEFT JOIN investigationorgmapping INV ON INV.InvestigationId = BD.FeeId AND INV.Orgid = BD.Orgid AND BD.FeeType ='INV'
+	LEFT JOIN InvOrgGroup ING ON ING.AttGroupID = BD.FeeId AND ING.Orgid= BD.Orgid AND BD.FeeType ='GRP'
+	LEFT JOIN InvOrgGroup INP ON INP.AttGroupID = BD.FeeId AND INP.Orgid= BD.Orgid AND BD.FeeType ='PKG'
+	WHERE  ((ISNULL(@pCreditNoteNumber,'') <> '' AND ARD.CreditNote = @pCreditNoteNumber) OR(ISNULL(@pCreditNoteNumber,'')=''))
+		AND ((ISNULL(@pClientID,0) <> 0 AND BD.ClientId = @pClientID) OR(ISNULL(@pClientID,0)=0)) 
+		AND ((ISNULL(@MinDate,'') = '1753' OR ISNULL(@MinDate,'') = '9999') OR(Convert(nvarchar,BD.CreatedAt,103) BETWEEN @pFDate AND @pTDate)) 
+		AND ARD.Orgid = @pOrgID AND IV.CreatedAt < ARD.CreatedAt
+END
+
+SELECT @RecordCount = COUNT(*)
+
+FROM @tblRates
+
+SET @PageCount = CEILING(CAST(@RecordCount AS DECIMAL(10, 2)) / CAST(@PageSize AS DECIMAL(10, 2)))
+
+
+SELECT * FROM @tblRates WHERE RowNumber BETWEEN (@PageIndex - 1) * @PageSize + 1
+
+AND (((@PageIndex - 1) * @PageSize + 1) + @PageSize) - 1
+
+--select @PageCount 
+
+
+
+END
+
+
+
+
+

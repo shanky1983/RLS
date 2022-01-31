@@ -1,0 +1,30 @@
+/****** Object:  StoredProcedure [dbo].[pActiveInactiveInvestigationDrugBrand]    Script Date: 6/25/2018 11:18:56 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE procedure [dbo].[pActiveInactiveInvestigationDrugBrand](@Id int, @DrugId bigint out,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+declare @IsActive bit
+declare @OrgId int
+
+select @OrgId=Orgid from  @ContextInfo
+select @IsActive=isnull(isactive,1) from InvestigationDrugBrand where OrgID=@OrgId and DrugID=@Id
+
+update InvestigationDrugBrand set IsActive=case when @IsActive=1 then 0 else 1 end where OrgID=@OrgId and DrugID=@Id 
+
+--insert into InvestigationDrugBrandHistory(GenericID,BrandName,Strength,AvailableDose,FMID,IsApproved,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,OrgID,Code,LangCode,IsActive)
+--select GenericID,BrandName,Strength,AvailableDose,FMID,IsApproved,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,OrgID,Code,LangCode,IsActive from InvestigationDrugBrandHistory
+-- where OrgID=@OrgId and drugid=@Id
+
+select @DrugId=isactive from InvestigationDrugBrand where OrgID=@OrgId and DrugID=@Id
+end 
+
+
+
+GO
+

@@ -1,0 +1,1243 @@
+CREATE PROCEDURE [dbo].[pInsertSampleRegistrationDetails_IAPI] @pOrgID                 [INT],                            
+@pPatientName           [NVARCHAR](50),                            
+@pTitleCode             [TINYINT],                            
+@pAge                   [NVARCHAR](30),                            
+@pSex                   [NCHAR](1),                            
+@pCreatedBy             [BIGINT],                            
+@pPriorityID            [INT],                            
+@pReferingPhysicianID   [INT],                            
+@pReferingPhysicianName [NVARCHAR](100),         
+@pReferringDoctorContactNo     [NVARCHAR](100),        
+@pReferringDoctorCode     [NVARCHAR](100),                
+@pHospitalID            [INT],                            
+@pHospitalName          [NVARCHAR](100),                            
+@pOrgAddID              [BIGINT],                            
+@pCollectionCentreID    [INT],                            
+@pCollectionCentreName  [NVARCHAR](100),                            
+@pURNo                  [NVARCHAR](50),                            
+@pURNof                 [BIGINT],                            
+@pURNType               [BIGINT],                            
+@pRace                  [NVARCHAR](50),                            
+@pNationality           [BIGINT],                            
+@pVisitID               [BIGINT] OUTPUT,                            
+@pPatientID             [BIGINT] OUTPUT,                            
+@pVisitNumber           [nvarchar](30) OUTPUT,                            
+@pOrderID               [nvarchar](30),                           
+@pHPatientID            [nvarchar](30),                           
+@pAgeValue              [INT],                            
+@pAgeUnits              [NCHAR](1),                            
+@pDOB                   [DATETIME],                            
+@pPayerTypeID           [INT],                            
+@pPayerName             [NVARCHAR](255),                            
+@patientNumber          [NVARCHAR](50),                            
+@ExternalVisitID        [NVARCHAR](255),                            
+@pWardNo                [NVARCHAR](400),                                
+@pVisitType             [INT],                            
+@pReferVisitId          [BIGINT],                            
+@pTPAAttributes         [NVARCHAR](max),                            
+@pTPAType               [NCHAR](3),                            
+@PreviousName           [NVARCHAR](255),                            
+@Aliasname              [NVARCHAR](255),                            
+@Relationanme           [NVARCHAR](255),                            
+@Relationtype           [BIGINT],                            
+@pIsNotify              [INT],                            
+@pEMail                 [NVARCHAR](100),                            
+@pIsDueBill             [INT],                        
+@pClientName            [NVARCHAR](200),                        
+@pConsultingPhysicianName [NVARCHAR](100),                          
+@pTreatingPhysicianName [NVARCHAR](100),                         
+@pConsentFlag           [bit],                        
+@pDiagnosisCode         [nvarchar](20),                        
+@pDiagnosisName         [nvarchar](500),                        
+@pDiagnosisDescription [nvarchar](500),                        
+@pPatientSpecialty [nvarchar](500),                        
+@pRemarks [varchar](250),                      
+@IsSTAT VARCHAR(10) ,                  
+@pVisitDate   DATETIME,                   
+@ContextInfo            [UDT_CONTEXT] READONLY,                            
+@VisitClientMapping     VISITCLIENTMAPPING READONLY                            
+WITH EXECUTE AS OWNER                            
+AS                            
+set transaction isolation level serializable                         
+DECLARE @pCreatedAt DATETIME                            
+--DECLARE @pVisitDate DATETIME                            
+DECLARE @ret BIGINT                            
+DECLARE @pNextID NVARCHAR(30)                            
+DECLARE @configValue NVARCHAR(50)                            
+DECLARE @pPatientNumber NVARCHAR(50)                            
+DECLARE @NewAge NVARCHAR(20)                            
+DECLARE @Ratingid INT         
+DECLARE @ReportMode varchar(10)                            
+--DECLARE @pDOB DATETIME                                                                                              
+DECLARE @GenClientid BIGINT                            
+SELECT @pCreatedBy = LoginId                            
+FROM   @ContextInfo                            
+                            
+BEGIN                            
+DECLARE @ServerDate DATETIME                            
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))                            
+IF( @pDOB = '01 Jan 1800' )                     
+BEGIN                            
+SET @pDOB = dbo.Fn_getdob(@pAgeValue, @pAgeUnits)                            
+SET @NewAge = dbo.Fn_getage(@pDOB)                            
+SET @pAge=@NewAge                            
+END                            
+--IF(@pAgeValue<>0 )                                                                                          
+-- BEGIN                                                             
+--  SET @pDOB = dbo.fn_getDOB(@pAgeValue, @pAgeUnits)                                                                                           
+-- END                                                                                   
+SELECT @ReportMode=isNull(ConfigValue,'') FROM ConfigOrgMaster  WHERE OrgID= @pOrgID --Commented by mohan                                                  
+AND ConfigKeyID = (SELECT ConfigKeyID from ConfigKeyMaster where ConfigKey='ReportMode')                         
+                                  
+IF( @pURNo = '' )                            
+BEGIN                       
+SET @pURNo=NULL                            
+END                            
+IF( @patientNumber = '' )                            
+BEGIN                            
+--IF(@configValue='' OR @configValue='N')                          
+--BEGIN                             
+EXEC Pgetnextid                            
+@pOrgID,                            
+'PAT',                           
+@pNextID OUT                            
+SET @pPatientNumber=CONVERT(NVARCHAR, @pNextID)                            
+--END                                         
+END                            
+ELSE                            
+BEGIN                            
+SET @pPatientNumber = @patientNumber                            
+END                            
+SET @pCreatedAt=@ServerDate                            
+--SET @pVisitDate=@ServerDate                            
+SET @ret = -1                            
+--DECLARE @pVisitNumber AS NVARCHAR(30)                            
+if(isnull(@pVisitNumber,'')='' or @pVisitNumber = '')                        
+Begin                        
+EXEC Pgetnextid                            
+  @pOrgID,                            
+  'PVN',                            
+@pVisitNumber OUT,                            
+  @pOrgAddID                         
+End                        
+--Else                        
+--Begin                           
+--SELECT @pVisitNumber = VisitNumber                                           
+--FROM   PatientVisit                                           
+--WHERE  PatientVisitID =@pReferVisitId                          
+--End                        
+ Declare @patienttype varchar(20)            
+ select @patienttype=RegistrationType from clientmaster where clientid=(select clientid from @VisitClientMapping  )                                     
+DECLARE @ExtVisitID NVARCHAR(10)                            
+--DECLARE @IsSTAT NVARCHAR(10)                            
+DECLARE @VisitPurposeID AS INT                            
+SELECT @VisitPurposeID = VisitPurposeID                            
+FROM   VisitPurpose                            
+WHERE  VisitPurposeName = 'Lab Investigation'                            
+INSERT INTO Patient                            
+(Name,                            
+OrgID,                            
+SEX,                            
+TITLECode,                            
+Age,                            
+CreatedBy,                            
+CreatedAt,                            
+URNO,                            
+URNofId,                            
+URNTypeId,                            
+Status,                            
+RegistrationDTTM,                            
+DOB,                            
+PatientNumber,                            
+Race,                            
+Nationality,                            
+PreviousKnownName,                            
+RelationName,                            
+AliasName,                            
+RelationTypeId,                            
+NotifyType,                            
+EMail,                        
+HPatientID  ,                    
+--,                        
+--HOrderID             
+patientstatus                      
+)                            
+VALUES      ( @pPatientName,                            
+@pOrgID,                            
+@pSex,                            
+@pTitleCode,                            
+@pAge,                            
+@pCreatedBy,                            
+@pCreatedAt,                            
+@pURNo,                            
+@pURNof,                            
+@pURNType,                            
+'A',            
+@pVisitDate,                            
+@pDOB,                            
+@pPatientNumber,                            
+@pRace,                            
+@pNationality,                            
+@PreviousName,                            
+@Relationanme,                            
+@Aliasname,                            
+@Relationtype,                            
+@pIsNotify,                            
+@pEMail,                        
+@pHPatientID  ,                 
+--,                        
+--@pOrderID                        
+      @patienttype                  
+                        
+)                            
+SET @pPatientID = Scope_identity()                            
+INSERT INTO PatientVisit                            
+(PatientID,                            
+OrgID,                            
+VisitDate,                            
+PriorityID,                            
+ReferingPhysicianID,                            
+ReferingPhysicianName,                            
+HospitalID,                            
+HospitalName,                            
+--ClientID,ClientName,                               
+CollectionCentreID,                            
+CollectionCentreName,                            
+CreatedBy,                           
+CreatedAt,                            
+VisitType,                      
+LabVisitType,                      
+ReferOrgID,                            
+VisitPurposeID,                            
+OrgAddressID,                            
+payerID,                            
+--TPAID, TPAName,                               
+ExternalVisitID,                            
+WardNo,                            
+ReferVisitID,                            
+VisitNumber,--RateID   ,                                        
+creditlimit,                            
+IsDueBill,                        
+ClientName,                        
+ReportMode,                      
+PreviousLabNumber,TPAName,ICDCodeStatus)                                      
+VALUES      ( @pPatientID,                            
+@pOrgID,                            
+@pVisitDate,                            
+@pPriorityID,                            
+@pReferingPhysicianID,                            
+@pReferingPhysicianName,                            
+@pHospitalID,                            
+@pHospitalName,                            
+--@pClientID,@pClientName,                               
+@pCollectionCentreID,                            
+@pCollectionCentreName,                            
+@pCreatedBy,                            
+@pCreatedAt,                            
+@pVisitType,        @pVisitType,                       
+-1,                         
+@VisitPurposeID,                            
+@pOrgAddID,                            
+@pPayerTypeID,                            
+--@pTPAID, @pTPAName,                               
+@ExternalVisitID,                            
+@pWardNo,                            
+@pReferVisitId,                            
+@pVisitNumber,--@pRateID                                          
+-1,                            
+@pIsDueBill ,                        
+@pClientName,                        
+@ReportMode,                      
+@pOrderID ,@pPatientSpecialty ,@pDiagnosisDescription)                                      
+SET @pVisitID =Scope_identity()                          
+                 
+  
+      update   PatientVisit     set TPAName=  case when isnull(@pPatientSpecialty,'')='' then 'Self'  else @pPatientSpecialty end  
+     Where Orgid=@pOrgID  and PatientID=@pPatientID and PreviousLabNumber=@pOrderID  
+               
+IF NOT EXISTS (                        
+      SELECT 1                        
+      FROM AdditionalVisitDetails                        
+      WHERE PatientVisitID = @pVisitID                        
+      )                        
+    BEGIN        
+     INSERT INTO AdditionalVisitDetails (                        
+      PatientVisitID,                        
+      ConsultingDoctor,                        
+      TreatingDoctor,                        
+      ConsentFlag,                        
+      DiagnosisCode,                        
+      DiagnosisName,                        
+      DiagnosisDescription,                        
+      PatientSpecialty)                        
+      select @pVisitID,                        
+      @pConsultingPhysicianName,                        
+      @pTreatingPhysicianName,                        
+      @pConsentFlag,                        @pDiagnosisCode,                        
+      @pDiagnosisName,                        
+      @pDiagnosisDescription,                        
+      @pPatientSpecialty                        
+     End                        
+                          
+INSERT INTO PatientHistoryExt                            
+(                      
+--DetailHistory,                            
+PatientVisitId,                            
+PatientID,                            
+OrgID,                            
+CreatedAt,                            
+CreatedBy,                            
+Remarks)                            
+values(                       
+--DetailHistory,                            
+@pVisitID,            
+@pPatientID,                            
+@pOrgID,                            
+@pCreatedAt,                            
+@pCreatedBy,                            
+@pRemarks)                            
+--FROM   PatientVisit                            
+--WHERE  PatientVisitId = @pVisitID                            
+SELECT @ExtVisitID = ExternalVisitID                            
+FROM   PatientVisit                            
+WHERE  PatientVisitId = @pVisitID                         
+--set @IsSTAT='N'                           
+--SELECT @IsSTAT = IsSTAT                            
+--FROM   PatientVisit                            
+--WHERE  PatientVisitId = @ExtVisitID                            
+UPDATE PatientVisit                            
+SET    IsSTAT = @IsSTAT                            
+WHERE  PatientVisitId = @pVisitID                            
+/*****Sathish.E*****Commercial Changes for Org to Org transfer*********/                            
+DECLARE @NewClientID    BIGINT,                            
+@ReferVisitID   BIGINT,                            
+@OldFinalBillID BIGINT,                            
+@OldOrgID       INT,                            
+@NewPatientID   BIGINT                            
+SELECT @ReferVisitID = ReferVisitID,                            
+@NewPatientID = PatientID                            
+FROM   PatientVisit (NOLOCK)                            
+WHERE  OrgID = @pOrgID                            
+AND PatientVisitId = @pVisitID                            
+SELECT @OldFinalBillID = FinalbillID,                            
+@OldOrgID = OrgID                            
+FROM   Finalbill (NOLOCK)                            
+WHERE  VisitId = @ReferVisitID                          
+                      
+set @OldOrgID = @pOrgID                      
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))                            
+                      
+select @NewClientID=clientID from @VisitClientMapping                      
+SELECT @NewClientID = ClientID                            
+FROM   OrgTransferClientMapping (NOLOCK)                            
+WHERE  RegisteredOrgID = @OldOrgID                            
+AND ProcessingOrgID = @pOrgID                       
+select @NewClientID=clientID from @VisitClientMapping                           
+IF( @NewClientID IS NULL                            
+OR @NewClientID = '' or @NewClientID=0 )                            
+BEGIN                            
+SELECT @NewClientID = ClientID              FROM   ClientMaster (NOLOCK)                            
+WHERE  OrgId = @pOrgID                            
+AND ClientName = 'GENERAL'                            
+END                            
+DECLARE @BillingItems AS TABLE                            
+(                            
+FeeID     BIGINT,                            
+Type           NVARCHAR (50),                            
+OrgGroupID     BIGINT,                            
+NewVisitID     BIGINT,                            
+ReportDateTime DATETIME,                            
+TatDateTime    DATETIME,                            
+PkgId          BIGINT                            
+)                            
+INSERT INTO @BillingItems                            
+(FeeID,                            
+Type,                            
+OrgGroupID,                            
+NewVisitID,                            
+ReportDateTime,                            
+TatDateTime)                            
+SELECT DISTINCT FeeID,                            
+FeeType,                            
+FeeID,                            
+@pVisitID,                            
+ReportDateTime,                            
+TatDateTime                            
+FROM   BillingDetails (NOLOCK)                            
+WHERE  FinalBillID = @OldFinalBillID                            
+AND FeeType <> 'PKG'                            
+/* PKG */          
+INSERT INTO @BillingItems                            
+(FeeID,                            
+Type,                            
+OrgGroupID,                            
+NewVisitID,                            
+ReportDateTime,                            
+TatDateTime,                            
+PkgId)                            
+SELECT DISTINCT OI.ID,                            
+OI.Type,                            
+OI.ID,                            
+@pVisitID,                            
+BD.ReportDateTime,                            
+BD.TatDateTime,                            
+OI.PkgID                            
+FROM   BillingDetails BD (NOLOCK)                            
+INNER JOIN FinalBill FB WITH(NOLOCK)                            
+ON FB.FinalBillID = BD.FinalBillID                            
+INNER JOIN OrderedInvestigations OI WITH(NOLOCK)                            
+ON OI.VisitID = FB.VisitID                            
+AND BD.FeeID = OI.PkgID                            
+WHERE  BD.FinalBillID = @OldFinalBillID                            
+AND FeeType = 'PKG'                            
+/******========= For Pkg Transfer==========*******/                            
+DECLARE @PKGDetails AS TABLE                            
+(                            
+VisitID    BIGINT,                            
+PkgID      BIGINT,                            
+OrgID      INT,                            
+IsPkgLevel BIT DEFAULT 0                            
+)                            
+INSERT INTO @PKGDetails                            
+(VisitID,                            
+PkgID,                            
+OrgID)                      
+SELECT DISTINCT TT.NewVisitID,                            
+TT.PkgID,                            
+@pOrgID                            
+FROM   @BillingItems TT                            
+WHERE  Isnull(TT.PkgID, 0) > 0                            
+DECLARE @PkgIsNonOrderable AS TABLE                            
+(                            
+PkgID BIGINT,                            
+IsNonOrderable BIT DEFAULT 0                            
+)                            
+INSERT INTO @PkgIsNonOrderable                            
+(PkgID,                            
+IsNonOrderable)                            
+SELECT DISTINCT PD.PkgID,                            
+1                            
+FROM   @PKGDetails PD                            
+INNER JOIN InvGroupMaster IGM (NOLOCK)                            
+ON PD.PkgID = IGM.GroupID                            
+AND IGM.Type = 'PKG'                            
+INNER JOIN InvOrgGroup IOG (NOLOCK)                            
+ON PD.PkgID = IOG.AttGroupID                            
+AND IOG.OrgID = PD.OrgID                
+WHERE  Isnull(IOG.IsPkgTransfer, 1) = 1                         
+--SELECT DISTINCT PD.PkgID,                              
+--                1                              
+--FROM   @PKGDetails PD                              
+--       INNER JOIN InvGroupMaster IGM (NOLOCK)                              
+--               ON PD.PkgID = IGM.GroupID                              
+--                  AND IGM.Type = 'PKG'                              
+--       INNER JOIN InvOrgGroup IOG (NOLOCK)                              
+--               ON PD.PkgID = IOG.AttGroupID                              
+--                  AND IOG.OrgID = PD.OrgID                              
+--  INNER JOIN InvPackageMapping IPM (NOLOCK)                              
+--               ON IOG.OrgGroupID = IPM.PackageID                              
+--                  AND IPM.active = 'A'                              
+--                  AND IPM.Type = 'INV'                              
+--       INNER JOIN InvestigationOrgMapping IOM (NOLOCK)                              
+--               ON IPM.ID = IOM.InvestigationID                              
+--                  AND IOM.OrgID = IOG.OrgID                              
+--WHERE  Isnull(IOM.Display, 'N') = 'N'                              
+--UNION ALL        --SELECT DISTINCT PD.PkgID,                          
+--        1                              
+--FROM   @PKGDetails PD                              
+--       INNER JOIN InvGroupMaster IGM (NOLOCK)                              
+--               ON PD.PkgID = IGM.GroupID                              
+--                  AND IGM.Type = 'PKG'                              
+--       INNER JOIN InvOrgGroup IOG (NOLOCK)                              
+--               ON PD.PkgID = IOG.AttGroupID                              
+--       AND IOG.OrgID = PD.OrgID                              
+--       INNER JOIN InvPackageMapping IPM (NOLOCK)                              
+--               ON IOG.OrgGroupID = IPM.PackageID                              
+--                  AND IPM.active = 'A'                              
+--                  AND IPM.Type = 'GRP'                              
+--       INNER JOIN InvOrgGroup IOG1 (NOLOCK)                              
+--               ON IPM.ID = IOG1.OrgGroupID                              
+--                  AND IOG.OrgID = IOG1.OrgID                              
+--WHERE  Isnull(IOG1.IsNonOrderable, 'N') = 'Y'                              
+UPDATE PD                            
+SET    PD.IsPkgLevel = 1                            
+FROM   @PKGDetails PD                            
+INNER JOIN @PkgIsNonOrderable PN                            
+ON PD.PkgID = PN.PkgID                            
+WHERE  PN.IsNonOrderable = 1                            
+DELETE TT                         
+FROM   @BillingItems TT                  
+INNER JOIN @PKGDetails PD                          
+ON TT.PkgID = PD.PkgID                   
+WHERE  PD.IsPkgLevel = 1                            
+INSERT INTO @BillingItems                            
+(FeeID,                            
+Type,                            
+OrgGroupID,                            
+NewVisitID,                            
+ReportDateTime,                            
+TatDateTime)                            
+SELECT FeeID,                            
+FeeType,                            
+FeeID,                            
+@pVisitID,                            
+ReportDateTime,                            
+TatDateTime                            
+FROM   @PKGDetails PD                            
+INNER JOIN BillingDetails BD (NOLOCK)                            
+ON PD.PkgID = BD.FeeId                            
+WHERE  FinalBillID = @OldFinalBillID                            
+AND BD.FeeType = 'PKG'                            
+AND PD.IsPkgLevel = 1                            
+/******========= For Pkg Transfer==========*******/                            
+UPDATE CC                            
+SET    CC.OrgGroupID = IOG.OrgGroupId                            
+FROM   @BillingItems CC                            
+INNER JOIN InvOrgGroup IOg (NOLOCK)          
+ON CC.FeeID = IOG.AttGroupID                            
+WHERE  CC.Type IN ( 'GRP', 'PKG' )                            
+AND IOG.OrgID = @pOrgID                         
+DELETE BT                            
+FROM   @BillingItems BT                            
+INNER JOIN OrderedInvestigations OI (NOLOCK)                            
+ON OI.ID = BT.FeeID                            
+AND OI.OrgID = @OldOrgID                            
+WHERE  OI.VisitID = @ReferVisitID                            
+AND OI.Type IN( 'INV', 'GRP' )                            
+AND OI.RescaptureLoc <> @pOrgAddID                            
+AND OI.Status NOT IN( 'SampleTransferred' )                            
+--and OI.PkgID IS NULL                               
+DELETE BT                            
+FROM   @BillingItems BT                            
+INNER JOIN OrderedInvestigations OI (NOLOCK)                            
+ON OI.ID = BT.FeeID                            
+AND OI.OrgID = @OldOrgID                            
+WHERE  OI.VisitID = @ReferVisitID                            
+AND OI.Type IN( 'INV', 'GRP' )                            
+AND OI.RescaptureLoc = @pOrgAddID                            
+AND OI.Status NOT IN( 'SampleTransferred' )                            
+--and OI.PkgID IS NULL                               
+--DELETE BT                              
+--FROM @BillingItems BT                              
+--INNER JOIN OrderedInvestigations OI (NOLOCK) on OI.PkgID = BT.FeeID and OI.OrgID =@OldOrgID                               
+--Where OI.VisitID =  @ReferVisitID AND OI.Type in('INV','GRP') AND OI.RescaptureLoc <> @pOrgAddID                              
+-- AND OI.Status not in('SampleTransferred')  And OI.PkgID IS NOT NULL                               
+--DELETE BT                              
+--FROM @BillingItems BT                              
+--INNER JOIN OrderedInvestigations OI (NOLOCK) on OI.PkgID = BT.FeeID and OI.OrgID =@OldOrgID                               
+--Where OI.VisitID =  @ReferVisitID AND OI.Type in('INV','GRP') AND OI.RescaptureLoc = @pOrgAddID                              
+-- AND OI.Status not in('SampleTransferred')  And OI.PkgID IS NOT NULL                               
+DELETE BT                            
+FROM   @BillingItems BT                            
+WHERE  Type = 'GEN'                            
+DELETE T                            
+FROM   @BillingItems T                            
+INNER JOIN finalBill FB WITH(NOLOCK)                            
+ON FB.VisitiD = T.NewVisitID                            
+INNER JOIN BillingDetails BD WITH(NOLOCK)                            
+ON BD.FinalBillID = FB.FinalBillID                            
+AND T.FeeID = BD.FeeID                            
+AND T.Type = BD.FeeType                            
+CREATE TABLE #BillingDetails   
+(                            
+PatientID          BIGINT,                            
+VisitID            BIGINT,                            
+FeeId              BIGINT,                            
+FeeDescription     NVARCHAR(MAX),                            
+FeeType            NVARCHAR(100),                            
+Amount             DECIMAL(18, 2),                            
+Rate               DECIMAL(18, 2),                            
+RateID             BIGINT,                            
+ActualAmount       DECIMAL(18, 2),                  
+BaseRateID         BIGINT,                            
+CategoryCode       NVARCHAR(20),                            
+DiscountPolicyID   BIGINT,                            
+DiscountPercentage DECIMAL(18, 2),                            
+IsCreditBill       NVARCHAR(1),                            
+ClientID           BIGINT,                            
+DiscountType       NVARCHAR(20),                            
+DiscountedAmount   DECIMAL(18, 2),                            
+CreatedBy          BIGINT,                            
+IsTaxable          NCHAR,                            
+IsDiscountable     NCHAR,                            
+OrgGroupID         BIGINT,                            
+ReportDateTime     DATETIME,                            
+TatDateTime        DATETIME                    
+)                            
+CREATE TABLE #BaseRate                            
+(                            
+VisitID       BIGINT,                            
+TestID        BIGINT,                            
+TestType      NVARCHAR(100),                            
+baseRateID    BIGINT,                            
+BaseRate      DECIMAL(18, 2),                            
+MBaseRatecard NVARCHAR(20)                            
+)                         
+CREATE TABLE #SPlRate                            
+(                            
+VisitID   BIGINT,                            
+TestID    BIGINT,                            
+TestType  NVARCHAR(100),                           
+SplRateID BIGINT,                            
+SplRate   DECIMAL(18, 2),                            
+MRateCard NVARCHAR(20)                            
+)                            
+INSERT INTO #BaseRate                            
+(VisitID,                            
+TestID,                            
+baseRateID,                            
+BaseRate,                            
+TestType)                            
+SELECT @pVisitID,                            
+FR.FeeID,                            
+tmp2.RateID baserateid,                            
+tmp2.Rate   AS baserate,                            
+tmp2.Type   AS feetype                            
+FROM   @BillingItems FR                            
+CROSS APPLY (SELECT TOP 1 Rate,                            
+Priority,                         
+IR.RateID,                            
+RM.RateCode,                            
+IR.Type                            
+FROM   InvRateMaster IR WITH(NOLOCK)                            
+INNER JOIN InvClientMaster IC WITH(NOLOCK)                            
+ON IC.ClientID = @NewClientID                            
+AND IR.RateID = IC.RateId                            
+INNER JOIN RateMaster RM WITH (NOLOCK)                            
+ON RM.RateId = IR.RateID                       
+WHERE  FR.OrgGroupID = IR.ID                            
+AND FR.Type = IR.Type                            
+AND RM.orgid = @pOrgID                            
+AND IC.OrgID = @pOrgID                            
+AND IC.BaseRate = 'Y'                            
+ORDER  BY Priority DESC) tmp2                            
+INSERT INTO #SPlRate                            
+(VisitID,                            
+TestID,                            
+SplRateID,                            
+SplRate,               
+TestType)                            
+SELECT @pVisitID,                            
+FR.FeeID,                      tmp.RateID AS 'SplRateID',                            
+tmp.Rate   AS 'SplRate',                            
+tmp.Type   AS 'FeeType'                 
+FROM   @BillingItems FR                            
+CROSS APPLY (SELECT TOP 1 Rate,                            
+Priority,                            
+IR.RateID,                            
+RM.RateCode,                            
+FR.Type                            
+FROM   InvRateMaster IR WITH(NOLOCK)                            
+INNER JOIN InvClientMaster IC WITH(NOLOCK)                            
+ON IC.ClientID = @NewClientID                            
+AND IR.RateID = IC.RateId                            
+INNER JOIN RateMaster RM WITH (NOLOCK)                            
+ON RM.RateId = IR.RateID                            
+WHERE  FR.OrgGroupID = IR.ID                            
+AND FR.Type = IR.Type                            
+AND RM.orgid = @pOrgID                            
+AND IC.OrgID = @pOrgID                            
+AND ValidTo + ' 23:59:59' >= @ServerDate                            
+AND ValidFrom <= @ServerDate                            
+ORDER  BY Priority) tmp                            
+INSERT INTO #BillingDetails                            
+(VisitID,                            
+FeeId,                            
+FeeType,                            
+Amount,                       
+Rate,                            
+RateID,                            
+ActualAmount,                          
+BaseRateID,                            
+CreatedBy,                            
+OrgGroupID,                            
+ReportDateTime,                            
+TatDateTime)                       
+SELECT @pVisitID,                            
+FR.FeeID,                            
+FR.Type,                            
+SPL.SplRate,                            
+SPL.SplRate,                            
+SPL.SplRateID,                            
+BSE.BaseRate,                            
+BSE.baseRateID,                            
+@pCreatedBy,                            
+FR.OrgGroupID,                            
+FR.ReportDateTime,                            
+FR.TatDateTime                            
+FROM   @BillingItems FR                            
+LEFT JOIN #SPlRate SPL                            
+ON SPL.VisitID = @pVisitID                            
+AND SPL.TestID = FR.FeeID                            
+AND SPL.TestType = FR.Type                            
+LEFT JOIN #BaseRate BSE                            
+ON BSE.VisitID = @pVisitID                            
+AND BSE.TestID = FR.FeeID                            
+AND BSE.TestType = FR.Type                            
+IF EXISTS (SELECT 1                            
+FROM   #BillingDetails                            
+WHERE  Isnull(RateID, 0) = 0)                            
+BEGIN                            
+-- DECLARE @GenClientID BIGINT                                  
+SELECT @GenClientID = ClientID                            
+FROM   ClientMaster (NOLOCK)                            
+WHERE  ClientCode = 'GENERAL'                            
+AND OrgID = @pOrgID                            
+UPDATE FR                            
+SET    FR.BaseRateID = tmp2.RateID,                            
+FR.ActualAmount = tmp2.Rate                            
+FROM   #BillingDetails FR                            
+CROSS APPLY (SELECT TOP 1 Rate,                            
+Priority,                            
+IR.RateID,                            
+RM.RateCode,                            
+IR.Type                            
+FROM   InvRateMaster IR WITH(NOLOCK)                            
+INNER JOIN InvClientMaster IC WITH(NOLOCK)                            
+ON IC.ClientID = @GenClientID                            
+AND IR.RateID = IC.RateId                            
+INNER JOIN RateMaster RM WITH (NOLOCK)                            
+ON RM.RateId = IR.RateID                            
+WHERE  FR.OrgGroupID = IR.ID                            
+AND FR.FeeType = IR.Type                            
+AND RM.orgid = @pOrgID                            
+AND IC.OrgID = @pOrgID                            
+AND IC.BaseRate = 'Y'                            
+ORDER  BY Priority DESC) tmp2                            
+WHERE  Isnull(FR.RateID, 0) = 0                          
+UPDATE FR                            
+SET    FR.RateID = tmp.RateID,                            
+FR.Rate = tmp.Rate,                            
+FR.Amount = tmp.Rate                            
+FROM   #BillingDetails FR                            
+CROSS APPLY (SELECT TOP 1 Rate,                            
+Priority,                      
+IR.RateID,                            
+RM.RateCode,                            
+IR.Type                            
+FROM   InvRateMaster IR WITH(NOLOCK)                            
+INNER JOIN InvClientMaster IC WITH(NOLOCK)                            
+ON IC.ClientID = @GenClientID                            
+AND IR.RateID = IC.RateId                            
+INNER JOIN RateMaster RM WITH (NOLOCK)                            
+ON RM.RateId = IR.RateID                            
+WHERE  FR.OrgGroupID = IR.ID                            
+AND FR.FeeType = IR.Type                            
+AND RM.orgid = @pOrgID                            
+AND IC.OrgID = @pOrgID                            
+AND ValidTo + ' 23:59:59' >= @ServerDate                            
+AND ValidFrom <= @ServerDate                            
+ORDER  BY Priority) tmp                            
+WHERE  Isnull(FR.RateID, 0) = 0                            
+END                            
+UPDATE BR                            
+SET    FeeDescription = IOG.displaytext,                            
+IsDiscountable = iog.IsDiscountable,                         
+IsTaxable = iog.IsServicetaxable,                            
+CategoryCode = IOG.SubCategory             
+FROM   #BillingDetails BR                            
+INNER JOIN InvOrgGroup IOG WITH(NOLOCK)                            
+ON IOG.AttGroupID = br.FeeId                          
+INNER JOIN InvGroupMaster IGM WITH(NOLOCK)                            
+ON IGM.GroupID = IOG.AttGroupID                            
+AND IGM.Type = BR.FeeType                            
+WHERE  BR.FeeType IN( 'GRP', 'PKG' )                         
+UPDATE BR                            
+SET    FeeDescription = IOM.displaytext,                            
+IsDiscountable = IOA.IsDiscountable,                            
+IsTaxable = ioa.IsServiceTax,                            
+CategoryCode = IOA.Category                            
+FROM   #BillingDetails BR                            
+INNER JOIN InvestigationOrgMapping IOM WITH(NOLOCK)                            
+ON BR.FeeId = IOM.InvestigationID                            
+AND IOM.OrgID = @pOrgID                            
+Left JOIN InvestigationOrgAttributes IOA WITH(NOLOCK)                            
+ON IOA.InvestigationID = IOM.InvestigationID                            
+AND IOM.OrgID = IOA.OrgID                            
+WHERE  BR.FeeType = 'INV'                            
+AND IOM.OrgID = @pOrgID                            
+DECLARE @IsCreditBill NVARCHAR(1)                            
+SELECT @IsCreditBill = CASE                            
+WHEN ISCash = 'N' THEN 'Y'                            
+ELSE 'N'                            
+END                            
+FROM   ClientMaster (NOLOCK)                    
+WHERE  ClientID = @NewClientID                            
+UPDATE #BillingDetails                            
+SET    ClientID = @NewClientID,                            
+IsCreditBill = @IsCreditBill,                            
+PatientID = @NewPatientID                            
+UPDATE CFR                            
+SET CFR.DiscountPolicyID = PM.PolicyID,                            
+CFR.DiscountPercentage = DPM.DiscountPercentage                            
+FROM   ClientMaster CM WITH (NOLOCK)                            
+INNER JOIN #BillingDetails CFR WITH (NOLOCK)                            
+ON CFR.ClientID = Cm.ClientID                         
+LEFT JOIN DiscountPolicyMapping DPM WITH(NOLOCK)                            
+ON CM.DiscountPolicyID = DPM.PolicyID                            
+AND CFR.CategoryCode = DPM.CategoryCode                          
+LEFT JOIN PolicyMaster PM WITH(NOLOCK)                            
+ON DPM.PolicyID = PM.PolicyID                            
+AND DPM.FeeTypeCode = CFR.FeeType                            
+INNER JOIN Ratemaster RM WITH (NOLOCK)                            
+ON RM.RateID = CFR.rateID                            
+WHERE  PM.OrgID = @pOrgID                            
+AND CFR.FeeType IN ( 'GRP', 'PKG', 'INV' )                            
+AND ISNULL(RM.Type, 'Normal') != 'Special'                            
+AND CM.OrgID = @pOrgID                            
+UPDATE T                            
+SET    T.Amount = CASE                            
+WHEN T.DiscountType = 'DIS' THEN ( T.Amount - ( T.Amount * Isnull(T.DiscountPercentage, 0.00) / 100 ) )                            
+WHEN T.DiscountType = 'PRE' THEN ( T.Amount + ( T.Amount * Isnull(T.DiscountPercentage, 0.00) / 100 ) )                            
+ELSE T.Amount                          
+END                            
+FROM   #BillingDetails T                            
+INNER JOIN RateMaster RM                            
+ON RM.RateId = T.RateID                            
+WHERE  ISNULL(RM.Type, 'Normal') != 'Special'                            
+DECLARE @pRoleID BIGINT                            
+DECLARE @pDeptID BIGINT                            
+DECLARE @pOrgAddressID BIGINT                            
+SELECT @pRoleID = RoleID,                            
+@pDeptID = -1,                            
+@pOrgAddressID = LocationID                            
+FROM   @ContextInfo                            
+--SELECT @pOrgAddressID = AddressID                               
+--FROM   LoginLocationMapping                               
+--WHERE  LoginRoleID = @pRoleID                               
+--      AND OrgID = @pOrgID                              
+DECLARE @pBillNumber NVARCHAR(30)                            
+EXEC dbo.Pgetnextid                            
+@pOrgID,                            
+'BLN',                            
+@pBillNumber OUTPUT,                @pOrgAddressID                          
+                         
+IF( ISNULL(@IsCreditBill, 'Y') != 'N' )                            
+BEGIN                            
+INSERT INTO FinalBill                            
+(OrgID,                            
+PatientID,                            
+VisitID,                            
+GrossBillValue,                            
+NetValue,                            
+DiscountAmount,                            
+AmountReceived,                         
+Due,                            
+CurrentDue,                            
+StdDedID,                            
+IsCreditBill,                            
+CreatedBy,                            
+CreatedAt,                            
+OrgAddressID,                            
+BillNumber,                            
+TPAPaymentStatus,                            
+TATDate,                            
+ReportDateTime,                            
+Type)                          
+SELECT DISTINCT @pOrgID,                            
+BD.PatientID,                            
+BD.VisitID,                            
+Sum(BD.Amount) AS grossbillvalue,                            
+Sum(BD.Amount) AS netvalue,                            
+0.00           AS discountamount,                            
+0.00           AS amountreceived,                            
+0.00           AS due,                            
+0.00           AS currentdue,                            
+0              AS stddedid,                            
+BD.IsCreditBill,                            
+BD.CreatedBy,                            
+@ServerDate,                            
+@pOrgAddressID,                            
+@pBillNumber,                            
+'Pending',                            
+'31-12-9999 23:59:59',                            
+'01-01-1753 00:00:00',                            
+''                            
+FROM   #BillingDetails BD                            
+WHERE  BD.VisitID = @pVisitID            
+GROUP  BY BD.PatientID,                            
+BD.VisitID,                            
+BD.IsCreditBill,                            
+BD.CreatedBy                            
+DECLARE @NewFinalBillID BIGINT                            
+SELECT @NewFinalBillID = ISNULL(Scope_identity(), 0)                            
+DECLARE @ClientID BIGINT                              
+                          
+          if exists (select 1 from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID)                        
+Begin                        
+                      
+select @ClientID=ClientID from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID                        
+End                        
+Else                        
+Begin                        
+SELECT @ClientID = ClientID                              
+FROM   @VisitClientMapping                        
+End                       
+                      
+select  @ClientID                      
+INSERT VisitClientMapping                            
+(VisitID,                            
+ClientID,                            
+FinalBillID,                            
+RateID,                            
+OrgID,                            
+CreatedBy,                            
+CreatedAt,                            
+ModifiedBy,                            
+ModifiedAt)                            
+SELECT DISTINCT IQ.VisitID,                            
+@ClientID,                            
+0,                            
+0,                            
+@pOrgID,                            
+IQ.CreatedBy,                            
+@ServerDate,                            
+IQ.CreatedBy,                            
+@ServerDate                            
+FROM   #BillingDetails IQ                            
+WHERE  IQ.VisitID = @pVisitID                            
+INSERT INTO BillingDetails                            
+(FinalBillID,                            
+FeeId,                            
+FeeType,                            
+FeeDescription,                            
+Amount,                            
+CreatedBy,                            
+CreatedAt,                            
+Status,                            
+Quantity,                            
+IsCreditBill,                            
+Rate,                            
+RoleID,                            
+DeptID,                            
+OrgID,                            
+ActualAmount,                            
+RateID,                            
+IsDiscountable,                            
+IsTaxable,                            
+IsNABL,                            
+IsOutSource,                        
+IsSTAT,                            
+ClientID,                            
+LocationID,                            
+BaseRateID,                            
+DiscountPolicyID,                            
+ReportDateTime,                            
+TatDateTime)                            
+SELECT DISTINCT @NewFinalBillID,                            
+BT.FeeId,                           
+BT.FeeType,                            
+BT.FeeDescription,                            
+BT.Amount,                            
+BT.CreatedBy,                            
+@ServerDate,                            
+'Paid',                            
+'1.00',                            
+@IsCreditBill,                            
+BT.Amount,                            
+@pRoleID,                            
+@pDeptID,                            
+@pOrgID,                            
+BT.ActualAmount,                            
+BT.RateID,                            
+BT.IsDiscountable,                        
+BT.IsTaxable,                            
+'Y',                            
+'N',                            
+'N',                            
+@NewClientID,                            
+@pOrgAddressID,                            
+BT.BaseRateID,                            
+BT.DiscountPolicyID,                      
+BT.ReportDateTime,                            
+BT.TatDateTime                  
+FROM   #BillingDetails BT                            
+WHERE  BT.VisitID = @pVisitID                            
+INSERT INTO InvoiceLookup                            
+(BillNo,                            
+Type,                            
+RaisedToClient,                            
+InvoiceStatus,                            
+CreatedBy,                            
+CreatedAt,                            
+OrgID)                            
+SELECT DISTINCT @NewFinalBillID,                            
+'Bill',                            
+@NewClientID,                            
+'Pending',                            
+@pCreatedBy,                            
+@ServerDate,                            
+@pOrgID                            
+DECLARE @MaxTatDatetime DATETIME                            
+SELECT @MaxTatDatetime = Max(ReportDateTime)                            
+FROM   Billingdetails                            
+WHERE  FinalBillID = @NewFinalBillID                            
+UPDATE FB                            
+SET    FB.TatDate = @MaxTatDatetime,                            
+FB.ReportDateTime = @MaxTatDatetime                            
+FROM   FinalBill FB (NOLOCK)                            
+WHERE  FinalBillId = @NewFinalBillID                            
+END                            
+ELSE                            
+BEGIN                            
+INSERT INTO FinalBill                            
+(OrgID,                            
+PatientID,                            
+VisitID,                            
+GrossBillValue,                            
+NetValue,                            
+DiscountAmount,                            
+AmountReceived,                            
+Due,                            
+CurrentDue,                            
+StdDedID,                            
+IsCreditBill,                            
+CreatedBy,                            
+CreatedAt,                            
+OrgAddressID,                            
+BillNumber,                            
+TPAPaymentStatus,                            
+TATDate,                            
+ReportDateTime,          
+Type)                            
+SELECT DISTINCT @pOrgID,           
+BD.PatientID,                            
+BD.VisitID,                            
+Sum(BD.Amount) AS grossbillvalue,                            
+Sum(BD.Amount) AS netvalue,                 
+0.00  AS discountamount,                            
+0.00           AS amountreceived,                            
+0.00           AS due,                            
+0.00           AS currentdue,                            
+0              AS stddedid,                            
+BD.IsCreditBill,                            
+BD.CreatedBy,                            
+@ServerDate,                            
+@pOrgAddressID,                            
+@pBillNumber,                            
+'Pending',                            
+'31-12-9999 23:59:59',                            
+'01-01-1753 00:00:00',                            
+''                            
+FROM   #BillingDetails BD                            
+WHERE  BD.VisitID = @pVisitID                            
+GROUP  BY BD.PatientID,                            
+BD.VisitID,                            
+BD.IsCreditBill,                            
+BD.CreatedBy                            
+DECLARE @NewFinalBillID2 BIGINT                            
+SELECT @NewFinalBillID2 = ISNULL(Scope_identity(), 0)                            
+----------------IF ClientID is empty we will take from General-----------------------------                            
+  if exists (select 1 from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID)                        
+Begin                        
+select @ClientID=ClientID from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID                        
+End                        
+Else                        
+Begin                        
+SELECT @ClientID = ClientID                            
+FROM   ClientMaster                            
+WHERE  OrgID = @pOrgID                            
+AND ClientName = 'GENERAL'                            
+END                            
+----------------IF ClientID is empty we will take from General-----------------------------                            
+INSERT VisitClientMapping                            
+(VisitID,                            
+ClientID,             
+FinalBillID,                            
+RateID,                            
+OrgID,                            
+CreatedBy,                            
+CreatedAt,                            
+ModifiedBy,                            
+ModifiedAt)                            
+SELECT DISTINCT IQ.VisitID,                            
+@ClientID,                            
+0,                            
+0,                            
+@pOrgID,                            
+IQ.CreatedBy,                            
+@ServerDate,                            
+IQ.CreatedBy,                       
+@ServerDate                            
+FROM   #BillingDetails IQ                            
+WHERE  IQ.VisitID = @pVisitID                            
+INSERT INTO BillingDetails                            
+(FinalBillID,                            
+FeeId,                            
+FeeType,                            
+FeeDescription,                            
+Amount,                            
+CreatedBy,                            
+CreatedAt,                            
+Status,                            
+Quantity,                            
+IsCreditBill,                            
+Rate,                            
+RoleID,                            
+DeptID,                            
+OrgID,                            
+ActualAmount,                            
+RateID,                            
+IsDiscountable,                            
+IsTaxable,                            
+IsNABL,                            
+IsOutSource,                            
+IsSTAT,                            
+ClientID,                            
+LocationID,                            
+BaseRateID,                            
+DiscountPolicyID,                            
+ReportDateTime,                            
+TatDateTime)                         
+SELECT DISTINCT @NewFinalBillID2,                            
+BT.FeeId,                            
+BT.FeeType,                            
+BT.FeeDescription,                            
+BT.Amount,                            
+BT.CreatedBy,                            
+@ServerDate,                            
+'Paid',                            
+'1.00',                            
+@IsCreditBill,                            
+BT.Amount,                            
+@pRoleID,                            
+@pDeptID,                            
+@pOrgID,                            
+BT.ActualAmount,                            
+BT.RateID,                            
+BT.IsDiscountable,                            
+BT.IsTaxable,                            
+'Y',                            
+'N',                            
+'N',                            
+@NewClientID,                            
+@pOrgAddressID,                            
+BT.BaseRateID,                            
+BT.DiscountPolicyID,                            
+BT.ReportDateTime,                            
+BT.TatDateTime                  
+FROM   #BillingDetails BT                            
+WHERE  BT.VisitID = @pVisitID                            
+INSERT INTO InvoiceLookup                            
+(BillNo,                            
+Type,                            
+RaisedToClient,                            
+InvoiceStatus,                            
+CreatedBy,                            
+CreatedAt,                            
+OrgID)                            
+SELECT DISTINCT @NewFinalBillID2,                            
+'Bill',                            
+@NewClientID,                            
+'Pending',                            
+@pCreatedBy,                            
+@ServerDate,                            
+@pOrgID                            
+DECLARE @MaxTatDatetime1 DATETIME                            
+SELECT @MaxTatDatetime1 = Max(ReportDateTime)                            
+FROM   Billingdetails                            
+WHERE  FinalBillID = @NewFinalBillID2                            
+UPDATE FB                            
+SET    FB.TatDate = @MaxTatDatetime1,                            
+FB.ReportDateTime = @MaxTatDatetime1                            
+FROM   FinalBill FB (NOLOCK)                            
+WHERE  FinalBillId = @NewFinalBillID2                            
+END                            
+--  INSERT VisitClientMapping(VisitID,ClientID,FinalBillID,RateID,OrgID,PreAuthAmount,PreAuthApprovalNumber,ClaimAmount,ClaimLogic,                              
+--CoPayment,CopaymentPercent,CoPaymentLogic,NonMedicalAmount,ClientAttributes,IsAllMedical,PaymentStatus,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt                              
+--   )                               
+--   select @pVisitId,@OldClientID,FinalBillID,RateID,@pOrgID,PreAuthAmount,PreAuthApprovalNumber,ClaimAmount,ClaimLogic,                              
+--CoPayment,CopaymentPercent,CoPaymentLogic,NonMedicalAmount,ClientAttributes,IsAllMedical,PaymentStatus,@pCreatedBy,@pCreatedAt,@pCreatedBy,@pCreatedAt                              
+--FROM @VisitClientMappingSET @ret = 0RETURN @ret                                   
+--------------//Vijayalakshmi.M Changes//-----------------------                                
+IF NOT EXISTS(SELECT VisitID                            
+FROM   PatientDisPatchDetails                            
+WHERE  VisitID = @pvisitID                            
+AND OrgID = @pOrgID)                            
+BEGIN                            
+INSERT PatientDisPatchDetails                            
+(PatientID,                            
+VisitID,                            
+OrgID,                            
+DispatchType,                            
+DispatchValue)                            
+SELECT @pPatientID,                            
+@pvisitID,                          
+@pOrgID,                            
+'M',                            
+1 --from @pDespatchMode                                   
+INSERT PatientDisPatchDetails                            
+(PatientID,                            
+VisitID,                            
+OrgID,                            
+DispatchType,                            
+DispatchValue)                            
+SELECT @pPatientID,                            
+@pvisitID,                            
+@pOrgID,                  
+'M',                            
+3                            
+INSERT PatientDisPatchDetails                            
+(PatientID,                            
+VisitID,                            
+OrgID,                            
+DispatchType,                            
+DispatchValue)                            
+SELECT @pPatientID,                            
+@pvisitID,                            
+@pOrgID,                            
+'N',                            
+11                            
+END                            
+-----------------//END//------------------------------------------------                                    
+-----------------Included for Visit Search while order investigation data transferred from Third party billing(Device) integration------------------------                                
+IF NOT EXISTS (SELECT 1                            
+FROM   Visitclientmapping                            
+WHERE  orgID = @pOrgID                            
+AND VisitID = @pVisitID)                            
+BEGIN                            
+IF @ClientID <= 0                            
+BEGIN                            
+                        
+if exists (select 1 from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID)                        
+Begin                        
+select @GenClientid=ClientID from OrgTransferClientMapping where processingOrgid=@pOrgID and registeredorgid=@OldOrgID                        
+End                        
+Else                        
+Begin                        
+SET @GenClientid=(SELECT ClientID                            
+FROM   ClientMaster                            
+WHERE  ClientCode LIKE '%GENERAL%'                            
+AND OrgID = @pOrgID)                         
+End                        
+                           
+INSERT INTO VisitClientMapping                            
+(VisitID,                            
+ClientID,                            
+FinalBillID,                            
+OrgID,                            
+RateID)                            
+SELECT @pVisitID,                            
+@GenClientid,                            
+0,                            
+@pOrgID,                            
+0                            
+END                            
+ELSE                            
+BEGIN                            
+INSERT INTO VisitClientMapping                            
+(VisitID,                            
+ClientID,                            
+FinalBillID,             
+OrgID,                            
+RateID)                            
+SELECT @pVisitID,                            
+@ClientID,                            
+0,                            
+@pOrgID,                            
+0                            
+END                            
+END                            
+                        
+------------------------------------------End------------------------------------------------                                  
+END 

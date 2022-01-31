@@ -1,0 +1,29 @@
+  
+CREATE PROCEDURE [dbo].[pEditPatientBillingByID]
+ @pOrgID [INT]  
+ ,@pFinalbillID bigint
+ ,@pGrossValue [DECIMAL] (18   ,2   )  
+ ,@pDiscount [DECIMAL] (18   ,2   )  
+ ,@pNetValue [DECIMAL] (18   ,2   )  
+ ,@pAmountReceived [DECIMAL](18,2)
+ ,@pBillingTable [dbo].[UDTPATIENTDUECHART] READONLY  
+   
+ 
+AS  
+BEGIN  
+
+
+ Update T set T.AmountReceived=@pAmountReceived,T.NetValue=@pNetValue,T.DiscountAmount=@pDiscount,T.GrossBillValue=@pGrossValue
+ from FinalBill T where FinalBillID=@pFinalbillID and OrgID=@pOrgID;
+
+
+ update t SET t.Amount=s.Amount,t.Rate=t.Rate FROM BillingDetails T inner join @pBillingTable S on s.DetailsID=T.BillingDetailsID
+ where FinalBillID=@pFinalbillID and OrgID=@pOrgID;
+ 
+
+ Update T set T.AmtReceived=@pAmountReceived, T.OtherCurrencyAmount = @pAmountReceived  from AmountReceivedDetails T where FinalBillID=@pFinalbillID and OrgID=@pOrgID;
+
+
+
+END  
+  

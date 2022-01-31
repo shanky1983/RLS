@@ -1,0 +1,99 @@
+ 
+/****** Object:  StoredProcedure [dbo].[pGetInvIntegrationDetailforExBarcode]    Script Date: 7/24/2020 6:45:11 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetInvIntegrationDetailforExBarcode]                
+(                
+ @sampleInstanceID nvarchar(250),  
+ @DeviceID nvarchar(250),
+ @AssayCode nvarchar(200),              
+ @OrgID int OUT,                
+ @VisitID bigint OUT,                
+ @VisitCount int OUT,                
+ @UID nvarchar(255) OUT,    
+ @ContextInfo [UDT_Context] READONLY                 
+)                
+AS     
+ BEGIN  
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON; 
+BEGIN TRY
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+	   
+declare @PatientVisitID bigint                
+declare @InvValuesCount int        
+declare @pOrgid int              
+       
+DECLARE @tblsplit Table (rowid int identity(1,1), item nvarchar(20))                               
+INSERT INTO @tblsplit (item)                                                                                                   
+SELECT item from fnSplit(@sampleInstanceID,'#')      
+      
+select @sampleInstanceID=convert(nvarchar(250),item) from @tblsplit where rowid=1      
+select @pOrgid=convert(int,item) from @tblsplit where rowid=2           
+      
+--select * from @tblsplit        
+      
+IF EXIsts(select 1 from PatientInvSample                 
+  where BarcodeNumber=@sampleInstanceID        
+  and OrgID=@pOrgid)      
+   BEGIN          
+  Create Table #tblVisitList (PatientVistID BigInt, OrgID Int,AccessionNumber BigInt,UID nvarchar(MAX))
+  Insert Into #tblVisitList
+  select VisitID,OrgID,AccessionNumber,UID from PatientInvSampleMapping WITH(NOLOCK)                 
+  where Barcode=@sampleInstanceID        
+  and OrgID=@pOrgid
+  Union All
+   select VisitID,OrgID,AccessionNumber,UID from PatientInvSampleMapping WITH(NOLOCK)                
+  where ExternalBarcode=@sampleInstanceID        
+  and OrgID=@pOrgid
+
+  Select @VisitID=PI.PatientVisitID              
+     ,@UID=PI.UID              
+     ,@OrgID=PI.OrgID from #tblVisitList T
+  Inner Join DeviceIntegrationOrgMapping DOM ON DOM.OrgID=T.OrgID and DOM.DeviceID=@DeviceID and DOM.TestCode=@AssayCode
+  Inner Join PatientInvestigation PI WITH(NOLOCK) ON PI.AccessionNumber=T.AccessionNumber
+  Where PI.Status in ('SampleReceived','Pending') and DOM.DeviceID=@DeviceID and DOM.TestCode=@AssayCode
+  Order by T.PatientVistID Asc
+
+  Drop Table  #tblVisitList
+  END      
+  ELSE      
+  BEGIN      
+        
+    set rowcount 1               
+   select   @VisitID=PatientVisitID              
+     ,@UID=UID              
+     ,@OrgID=OrgID               
+   from PatientInvSample                 
+   where BarcodeNumber=@sampleInstanceID        
+     order by CreatedAt desc           
+   set rowcount 0        
+        
+  END           
+                
+   Select @VisitCount=COUNT(PatientVisitID)               
+   from PatientInvestigation               
+   where PatientVisitID = @VisitID and  OrgID=  @OrgID         
+  SET @VisitCount = 0;
+END TRY
+
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetInvIntegrationDetailforExBarcode @sampleInstanceID = '+@sampleInstanceID+'@OrgID = '+CAST(@OrgID AS VARCHAR) +'@VisitID = '+CAST(@VisitID AS VARCHAR) +'@VisitCount= '+CAST(@VisitCount AS VARCHAR) + '@UID = '+@UID   
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH     
+END
+
+
+
+
+
+
+GO
+
+

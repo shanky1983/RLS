@@ -1,0 +1,924 @@
+
+  
+  
+CREATE PROCEDURE [dbo].[pGetRateCardForBilling_Franchisee] @prefixText  [nvarchar](30),    
+@pOrgId      [BIGINT],    
+@pType       [nvarchar](10),    
+@prefhospid  [BIGINT],    
+@ContextInfo [UDT_CONTEXT] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN    
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED       
+   SET NOCOUNT ON;    
+   SET XACT_ABORT ON;     
+BEGIN TRY    
+       DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)    
+DECLARE @LangCode NVARCHAR(30)    
+set QUOTED_IDENTIFIER on;    
+
+Declare @LoginID bigint 
+Declare @FraClientID bigint
+Select @LoginID = LoginID from @ContextInfo
+Select @FraClientID = ClientID from Login where LoginId=@LoginID
+SELECT @LangCode = LanguageCode    
+FROM   @ContextInfo    
+DECLARE @ServerDate DATETIME    
+DECLARE @ClientCode nvarchar(50)    
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))    
+IF( @prefhospid = 0    
+OR @prefhospid = -1 )    
+BEGIN    
+SET @ClientCode=NULL    
+END    
+ELSE    
+BEGIN    
+SELECT @ClientCode = Code    
+FROM   LAbReferenceOrg    
+WHERE  LabRefOrgID = Isnull(@prefhospid, LabRefOrgID)    
+PRINT @ClientCode    
+END    
+IF( @prefhospid = 0 )    
+BEGIN    
+SET @prefhospid = NULL    
+END    
+DECLARE @OrgAddressId INT    
+SELECT @OrgAddressId = LocationID    
+FROM   @ContextInfo    
+IF EXISTS(SELECT COM.ConfigKeyID FROM ConfigOrgMaster COM                                                                                                                                                       
+INNER JOIN ConfigKeyMaster CKM  ON CKM.ConfigKeyID=COM.ConfigKeyID                                                                                                
+WHERE CKM.ConfigKey='ClientHospitalDoctorMapping' and COM.OrgID=@pOrgId and @pType='RPH')              
+BEGIN                     
+IF LEN(@prefixText) > 2                                                                                                                                                
+SET @prefixText =   '%'+ @prefixText + '%'                                                                                                   
+else                                                                                                
+SET @prefixText =   @prefixText + '%'                      
+--select 1                                                                                                       
+SELECT '' + RF.PhysicianName AS ClientName ,                                                                                                                                  
+ISNULL(ISNULL(convert(nvarchar,RF.RegistrationType),'T') + '^' + convert(nvarchar,RF.ReferingPhysicianID) +'^'+ convert(nvarchar,RF.PhysicianName) + '^' + ISNULL(convert(nvarchar,RF.PhysicianCode),0)               
++ '^' + 'EX','')as Value                                                                                                                      
+FROM   ReferingPhysician RF                                                                                                               
+--INNER JOIN SalutationOrgMapping S1   ON S1.TitleID=RF.Salutation                                                  
+--inner join @ContextInfo ctx2 on ctx2.OrgID=S1.OrgID and ctx2.LanguageCode=S1.LanguageCode                                                                                                 
+inner join PhysicianOrgMapping pom   ON pom.PhysicianID=RF.ReferingPhysicianID   AND pom.HospitalID=@prefhospid                                        
+WHERE                                         
+RF.OrgID=@pOrgId AND RF.PhysicianName LIKE  '%' +@prefixText+'%' AND RF.IsActive='Y'  --AND RF.ParentReferingPhysicianID=@prefhospid                         
+-- UNION ALL                        
+-- SELECT  S.DisplayText + P.PhysicianName AS ClientName,                                                                                                           
+--   convert(nvarchar,P.PhysicianID) + '^' + isnull(P.PhysicianName,'') + '^' + isnull(P.PhysicianCode,'') + '^' + 'IN' + '^' +''  as Value                                                     
+-- FROM    Physician P   
+--   LEFT JOIN PhysicianOrganization PO  ON P.PhysicianID = PO.PhysicianID AND PO.OrgID = @pOrgId                                                                
+--   INNER JOIN SalutationOrgMapping S   ON S.TitleID=P.TitleCode                              
+-- inner join @ContextInfo ctx3 on ctx3.OrgID=S.OrgID and ctx3.LanguageCode=S.LanguageCode                                                                                                                                                   
+--WHERE P.OrgID = @pOrgId                  
+END                 
+else IF(@pType='RPH')    
+BEGIN    
+IF Len(@prefixText) > 2    
+SET @prefixText = '%' + @prefixText + '%'    
+ELSE    
+SET @prefixText = @prefixText + '%'    
+SELECT DISTINCT ISNULL(S1.DisplayText,'') + ' '+ +Ltrim(Rtrim(Replace(ISNULL((RF.PhysicianName),''),'Dr.','')))-- ISNULL(RF.PhysicianName,'')    
+--+ CASE WHEN ISNULL(RF.PhysicianCode,'')<>'' then ' ('      
+--   + ISNULL(RF.PhysicianCode,'') + ')'  else ''  END        
+AS ClientName,            
+Isnull(Isnull(CONVERT(nvarchar, RF.RegistrationType), 'T')    
++ '^'    
++ CONVERT(nvarchar, RF.ReferingPhysicianID)    
++ '^' + CONVERT(nvarchar, RF.PhysicianName) + '^'    
++ Isnull(CONVERT(nvarchar, RF.PhysicianCode), 0)    
++ '^' + 'EX', '') AS Value    
+FROM   ReferingPhysician RF     
+INNER JOIN SalutationOrgMapping S1     
+ON S1.TitleID = RF.Salutation    
+AND s1.OrgID = @pOrgId    
+--INNER JOIN @ContextInfo ctx2    
+--        ON ctx2.OrgID = S1.OrgID    
+--           AND ctx2.LanguageCode = S1.LanguageCode    
+--INNER JOIN PhysicianOrgMapping pom     
+--        ON pom.PhysicianID = RF.ReferingPhysicianID    
+--           AND pom.HospitalID = Isnull(@prefhospid, pom.HospitalID)    
+LEFT JOIN LAbReferenceOrg LRO    
+ON --LRO.LabRefOrgId = POM.HospitalId AND     
+LRO.Code = Isnull(@ClientCode, LRO.Code)    
+LEFT JOIN ClientMaster CM    
+ON CM.ReferingID = LRO.LabRefOrgId    
+AND CM.ClientCode = LRO.Code    
+WHERE  RF.OrgID = @pOrgId    
+AND ( RF.PhysicianName LIKE @prefixText + '%'    
+OR RF.PhysicianCode LIKE @prefixText + '%' )    
+AND RF.IsActive = 'Y'    
+AND ( RF.ParentReferingPhysicianID IS NULL    
+OR RF.ParentReferingPhysicianID = 0 )    
+AND Isnull(S1.LanguageCode, 'en-GB') = @LangCode    
+UNION ALL    
+SELECT DISTINCT S.DisplayText + P.PhysicianName                       AS ClientName,    
+CONVERT(nvarchar, P.PhysicianID) + '^'    
++ Isnull(P.PhysicianName, '') + '^'    
++ Isnull(P.PhysicianCode, '') + '^' + 'IN' + '^' + '' AS Value    
+FROM   Physician P     
+LEFT JOIN PhysicianOrganization PO     
+ON P.PhysicianID = PO.PhysicianID    
+AND PO.OrgID = @pOrgId    
+INNER JOIN SalutationOrgMapping S     
+ON S.TitleID = P.TitleCode    
+--INNER JOIN @ContextInfo ctx3    
+-- ON ctx3.OrgID = S.OrgID    
+--           AND ctx3.LanguageCode = S.LanguageCode    
+WHERE  P.OrgID = @pOrgId    
+AND Isnull(S.LanguageCode, 'en-GB') = @LangCode    
+END    
+ELSE IF( @pType = 'CLI' )    
+BEGIN    
+    
+IF Len(@prefixText) > 2    
+SET @prefixText = '%' + @prefixText + '%'    
+ELSE    
+SET @prefixText = @prefixText + '%'    
+DECLARE @GeneralRate AS TABLE    
+(    
+PhysicianID            BIGINT,    
+ClientName             nvarchar(255),    
+NAME                   nvarchar(255),    
+ClientCode             nvarchar(32),    
+RateID                 BIGINT,    
+ClientID               BIGINT,    
+ClientMappingDetailsID BIGINT,    
+Type                   nchar(5),    
+Priority               nvarchar(10),    
+Rate                   nvarchar(255),    
+IsMappedItem           nchar(1),    
+IsDiscount             nchar(1),    
+ClientTypeName         nvarchar(50),    
+ReferingID             INT,    
+ClientStatus           nchar(3),    
+Reason                 nvarchar(50),    
+BlockFrom              nvarchar(20),    
+BlockTo                nvarchar(20),    
+IsCashClient nchar(1),  
+Attributes             NVARCHAR(1),    
+IsAllAreMedical        nchar(1),    
+RateCode               nvarchar(MAX),    
+RateType               nvarchar(50),    
+ExAutoAuthorization    nchar(1),    
+IsDefaultClient        nvarchar(50),    
+CoPayment          nvarchar(1),    
+Hashealthcoupon        nchar(1),    
+HospitalName           nvarchar(50),    
+Address1               nvarchar(max),    
+RefHospitalName        nvarchar(155),    
+ParentClientID         BIGINT,    
+FaxNumber              nvarchar(20) ,    
+CollectionID           BIGINT,    
+TotalDepositAmount     DECIMAL(18, 2),    
+TotalDepositUsed       DECIMAL(18, 2),     
+AmtRefund DECIMAL(18, 2),      
+ThresholdType        nvarchar(20),    
+ThresholdValue        DECIMAL(18, 2),    
+ThresholdValue2         DECIMAL(18, 2),    
+ThresholdValue3         DECIMAL(18, 2),    
+VirtualCreditType      nvarchar(10),    
+VirtualCreditValue     DECIMAL(18, 2),    
+MinimumAdvanceAmt      DECIMAL(18, 2),    
+MaximumAdvanceAmt      DECIMAL(18, 2),    
+IsAdvanceClient        BIT     
+,BillType VARCHAR(max) ,    
+EnableAttributes CHAR  ,            
+CreditLimit  DECIMAL(18, 2),        
+PendingCreditLimit     DECIMAL(18, 2) ,     
+NotInvoicedAmt      DECIMAL(18, 2),    
+CreditExpires BIGINT  ,    
+IsBlockReg  nchar(1)    
+)    
+DECLARE @ClientID BIGINT,    
+@RateId   BIGINT    
+SELECT @ClientID = c.ClientID,    
+@RateId = RateId    
+FROM   InvClientMaster IC     
+INNER JOIN ClientMaster C     
+ON IC.ClientID = C.ClientID    
+AND IC.OrgID = C.OrgID    
+WHERE  c.OrgID = @pOrgId    
+AND c.ClientCode = 'GENERAL'    
+BEGIN    
+DECLARE @OrgAddID INT    
+SELECT @OrgAddID = OrgAddressID    
+FROM   @ContextInfo    
+IF EXISTS(SELECT IsMappedClients    
+FROM   OrganizationAddress     
+WHERE  AddressID = @OrgAddID    
+AND OrgID = @pOrgId    
+AND IsMappedClients = 'Y')    
+BEGIN    
+INSERT @GeneralRate    
+(PhysicianID,    
+ClientName,    
+NAME,    
+ClientCode,    
+RateID,    
+ClientID,    
+Type,    
+ClientMappingDetailsID,    
+Priority,    
+Rate,    
+IsMappedItem,    
+IsDiscount,    
+ClientTypeName,    
+ReferingID,    
+ClientStatus,    
+Reason,    
+BlockFrom,    
+BlockTo,    
+IsCashClient,    
+Attributes,    
+IsAllAreMedical,    
+RateCode,    
+RateType,    
+ExAutoAuthorization,    
+IsDefaultClient,    
+CoPayment,    
+Hashealthcoupon,    
+HospitalName,    
+Address1,    
+FaxNumber, CollectionID,    
+TotalDepositAmount,    
+TotalDepositUsed,    
+AmtRefund,       
+ThresholdType,    
+ThresholdValue,    
+ThresholdValue2,    
+ThresholdValue3,    
+VirtualCreditType,    
+VirtualCreditValue,    
+MinimumAdvanceAmt,    
+MaximumAdvanceAmt,    
+IsAdvanceClient    
+,BillType,EnableAttributes,CreditLimit)      
+SELECT  DISTINCT TOP 50 ICM.ClientMappingDetailsID,    
+CM.ClientName,    
+CM.ClientName,    
+CM.ClientCode,    
+ICM.RateId,    
+ICM.ClientID,    
+ICT.ClientTypeCode,    
+ICM.ClientMappingDetailsID,    
+Isnull(ICM.Priority, 1)             Priority,    
+RateName                            Rate,    
+Isnull(CM.IsMappedItem, 'N'),    
+Isnull(CM.IsDiscount, 'N'),    
+ICT.ClientTypeName,    
+CM.ReferingID,    
+CASE    
+WHEN Ltrim(Rtrim(CM.Status)) = 'S' THEN    
+CASE    
+WHEN CONVERT(nvarchar, @ServerDate, 103) BETWEEN CONVERT(nvarchar, CM.BlockFrom, 103) AND CONVERT(nvarchar, CM.BlockTO, 103) THEN 'S'    
+ELSE 'A'    
+END    
+ELSE CM.Status    
+END,    
+Isnull(CM.Reason, ''),    
+Isnull(CONVERT(nvarchar, CM.BlockFrom, 103), ''),    
+Isnull(CONVERT(nvarchar, CM.BlockTo, 103), ''),    
+Isnull(CM.ISCash, 'N'),    
+CASE    
+WHEN Isnull(CM.Attributes, '<ClientAttributes></ClientAttributes>') != '<ClientAttributes></ClientAttributes>' THEN 'Y'    
+ELSE 'N'    
+END,    
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s     
+INNER JOIN ClientAttributes a     
+ON s.AttributesID = a.AttributeID    
+WHERE  a.AttributeCode = 'AMI'    
+AND s.ClientID = cm.ClientID) > 0 THEN 'Y'  
+ELSE 'N'    
+END,    
+RateCode,    
+Isnull(R.Type, 'Normal'),    
+CM.ExAutoAuthorization,    
+Isnull(LCM.IsDefaultLocClient, 'N') AS IsDefaultClient,    
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s     
+INNER JOIN ClientAttributes a     
+ON s.AttributesID = a.AttributeID    
+WHERE  s.value = 'Y'    
+AND s.ClientID = cm.ClientID    
+AND a.AttributeCode = 'IsCoPay') > 0 THEN 'Y'    
+ELSE 'N'    
+END,    
+CM.Hashealthcoupon,    
+LRO.RefOrgName,    
+Ad.Address1,    
+Ad.FaxNumber ,    
+COM.CollectionID,    
+COM.TotalDepositAmount - Isnull(COM.AmtRefund, 0),    
+COM.TotalDepositUsed ,--- Isnull(COM.Billrefund, 0),    
+com.AmtRefund,        
+CM.ThresholdType,    
+CM.ThresholdValue,    
+CM.ThresholdValue2,    
+CM.ThresholdValue3,    
+CM.VirtualCreditType,    
+CM.VirtualCreditValue,    
+CM.MinimumAdvanceAmt,    
+CM.MaximumAdvanceAmt,    
+CM.IsAdvanceClient     
+,CM.BillType  ,CM.EnableAttributes ,CM.CreditLimit          
+FROM   ClientMaster CM     
+INNER JOIN InvClientMaster ICM     
+ON CM.ClientID = ICM.ClientID    
+AND CM.OrgID = ICM.OrgID    
+INNER JOIN InvClientType ICT     
+ON ICT.ClientTypeID = ICM.ClientTypeID    
+LEFT JOIN LabreferenceOrg LRO    
+ON LRO.Code = CM.ClientCode    
+LEFT JOIN AddressDetails Ad     
+ON CM.ClientID = Ad.ReferenceID    
+AND ad.OrgID = @pOrgId    
+INNER JOIN RateMaster R     
+ON R.RateId = ICM.RateId    
+AND CM.OrgID = R.OrgID    
+INNER JOIN LocationClientMapping LCM     
+ON LCM.ClientID = CM.ClientID    
+AND LCM.OrgID = CM.OrgID    
+AND LCM.OrgAddressID = @OrgAddressId    
+--and CONVERT(DATE,@ServerDate) BETWEEN CONVERT(nvarchar, ValidFrom, 103)  and CONVERT(nvarchar, ValidTo, 103)     
+--and (RIGHT(CONVERT(VARCHAR, @ServerDate, 121),12) between     
+--left(ValidFromTime,12)    
+--and left(ValidToTime,12))    
+LEFT JOIN CollectionsMaster COM     
+ON CM.ClientID = COM.Identificationid    
+AND CM.OrgID = COM.OrgID      
+WHERE  CM.OrgID = @pOrgID    
+AND ActiveYN = 'Y'    
+AND ( CM.ClientName LIKE @prefixText + '%'    
+OR CM.ClientCode LIKE @prefixText + '%' )    
+AND Isnull(R.Type, '') != 'Vendor'    
+AND Isnull(ICM.Priority, 1) = 1    
+--AND IsNull(CM.IsAdvanceClient,0)<>1    
+AND Isnull(ICT.LangCode, 'en-GB') = @LangCode    
+and CM.Status not in ('D','N','S','T')
+ORDER  BY CM.ClientName    
+              
+Update g set g.PendingCreditLimit=ccd.PendingCreditLimit , g.NotInvoicedAmt=ccd.NotInvoiced,     
+g.CreditExpires= DATEDIFF(DAY, ccd.ModifiedAt, ccd.BlockedDate )    
+ from @GeneralRate g    
+inner join clientmaster cm on cm.clientid=g.ClientID    
+inner join ClientCreditDetails ccd on ccd.clientid=cm.clientid    
+    
+    
+Update g set g.IsBlockReg= CAD.Value From @GeneralRate g    
+inner join ClientAttributesDetails CAD on CAD.ClientID=g.Clientid    
+inner join ClientAttributes CA on CAD.AttributesID=CA.AttributeID    
+Where CAD.Clientid=g.Clientid and CA.AttributeCode='TRB'    
+END    
+ELSE    
+BEGIN    
+    
+INSERT @GeneralRate    
+(PhysicianID,    
+ClientName,    
+NAME,    
+ClientCode,    
+RateID,    
+ClientID,    
+Type,    
+ClientMappingDetailsID,    
+Priority,    
+Rate,    
+IsMappedItem,    
+IsDiscount,    
+ClientTypeName,    
+ReferingID,    
+ClientStatus,    
+Reason,    
+BlockFrom,    
+BlockTo,    
+IsCashClient,    
+Attributes,    
+IsAllAreMedical,    
+RateCode,    
+RateType,    
+ExAutoAuthorization,    
+IsDefaultClient,    
+CoPayment,    
+Hashealthcoupon,    
+HospitalName,    
+Address1,    
+FaxNumber, CollectionID,    
+TotalDepositAmount,    
+TotalDepositUsed,    
+AmtRefund,        
+ThresholdType,    
+ThresholdValue,    
+ThresholdValue2,    
+ThresholdValue3,    
+VirtualCreditType,    
+VirtualCreditValue,    
+MinimumAdvanceAmt,    
+MaximumAdvanceAmt,    
+IsAdvanceClient    
+,BillType,EnableAttributes,CreditLimit)      
+SELECT Distinct TOP 50 ICM.ClientMappingDetailsID,    
+CM.ClientName,    
+CM.ClientName,    
+CM.ClientCode,    
+ICM.RateId,  
+ICM.ClientID,    
+ICT.ClientTypeCode,    
+ICM.ClientMappingDetailsID,    
+Isnull(ICM.Priority, 1) Priority,    
+RateName                Rate,    
+Isnull(CM.IsMappedItem, 'N'),    
+Isnull(CM.IsDiscount, 'N'),    
+ICT.ClientTypeName,    
+CM.ReferingID,    
+CASE    
+WHEN Ltrim(Rtrim(CM.Status)) = 'S' THEN    
+CASE    
+WHEN CONVERT(nvarchar, @ServerDate, 103) BETWEEN CONVERT(nvarchar, CM.BlockFrom, 103) AND CONVERT(nvarchar, CM.BlockTO, 103) THEN 'S'    
+ELSE 'A'    
+END    
+ELSE CM.Status    
+END,    
+Isnull(CM.Reason, ''),    
+Isnull(CONVERT(nvarchar, CM.BlockFrom, 103), ''),    
+Isnull(CONVERT(nvarchar, CM.BlockTo, 103), ''),    
+Isnull(CM.ISCash, 'N'),    
+CASE    
+WHEN Isnull(CM.Attributes, '<ClientAttributes></ClientAttributes>') != '<ClientAttributes></ClientAttributes>' THEN 'Y'    
+ELSE 'N'    
+END,    
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s    
+INNER JOIN ClientAttributes a    
+ON s.AttributesID = a.AttributeID    
+WHERE  a.AttributeCode = 'AMI'    
+AND s.ClientID = cm.ClientID) > 0 THEN 'Y'    
+ELSE 'N'    
+END,    
+RateCode,    
+Isnull(R.Type, 'Normal'),    
+CM.ExAutoAuthorization,    
+'N'                     AS IsDefaultClient,    
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s     
+INNER JOIN ClientAttributes a     
+ON s.AttributesID = a.AttributeID    
+WHERE  s.value = 'Y'    
+AND s.ClientID = cm.ClientID    
+AND a.AttributeCode = 'IsCoPay') > 0 THEN 'Y'    
+ELSE 'N'    
+END,    
+CM.Hashealthcoupon,    
+LRO.RefOrgName,    
+Ad.Address1,    
+Ad.FaxNumber,COM.CollectionID,    
+COM.TotalDepositAmount - Isnull(COM.AmtRefund, 0),    
+Isnull(COM.TotalDepositUsed, 0) ,--- Isnull(COM.Billrefund, 0),    
+com.AmtRefund,        
+CM.ThresholdType,    
+CM.ThresholdValue,    
+CM.ThresholdValue2,    
+CM.ThresholdValue3,    
+CM.VirtualCreditType,    
+CM.VirtualCreditValue,    
+CM.MinimumAdvanceAmt,    
+CM.MaximumAdvanceAmt,    
+CM.IsAdvanceClient      
+,ISnull(CM.BillType, ''),    
+    
+CM.EnableAttributes  , CM.CreditLimit     
+FROM   ClientMaster CM     
+INNER JOIN InvClientMaster ICM     
+ON CM.ClientID = ICM.ClientID    
+AND CM.OrgID = ICM.OrgID    
+INNER JOIN InvClientType ICT     
+ON ICT.ClientTypeID = ICM.ClientTypeID    
+LEFT JOIN LabreferenceOrg LRO    
+ON LRO.Code = CM.ClientCode    
+LEFT JOIN AddressDetails Ad     
+ON CM.ClientID = Ad.ReferenceID    
+AND Ad.OrgID = @pOrgId    
+INNER JOIN RateMaster R     
+ON R.RateId = ICM.RateId    
+AND CM.OrgID = R.OrgID    
+--and CONVERT(DATE,@ServerDate) BETWEEN CONVERT(nvarchar, ValidFrom, 103)  and CONVERT(nvarchar, ValidTo, 103)     
+--and (RIGHT(CONVERT(VARCHAR, @ServerDate, 121),12) between     
+--left(ValidFromTime,12)    
+--and left(ValidToTime,12))    
+LEFT JOIN CollectionsMaster COM     
+ON CM.ClientID = COM.Identificationid    
+AND CM.OrgID = COM.OrgID    
+WHERE  CM.OrgID = @pOrgID    
+AND ActiveYN = 'Y'    
+AND ( CM.ClientName LIKE @prefixText + '%'    
+OR CM.ClientCode LIKE @prefixText + '%' )    
+AND Isnull(R.Type, '') != 'Vendor'    
+AND Isnull(ICM.Priority, 1) = 1    
+
+--AND IsNull(CM.IsAdvanceClient,0)<>1    
+AND Isnull(ICT.LangCode, 'en-GB') = @LangCode    
+and CM.Status not in ('D','N','S','T') and CM.ClientID=@FraClientID
+ORDER  BY CM.ClientName  
+
+
+UPDATE g    
+SET g.ThresholdValue = cm.ThresholdValue    
+,g.ThresholdValue2 = cm.ThresholdValue2    
+,g.ThresholdValue3 =  cm.ThresholdValue3    
+,g.CollectionID = com.CollectionID    
+,g.TotalDepositAmount = com.TotalDepositAmount    
+,g.TotalDepositUsed = com.TotalDepositUsed    
+,g.AmtRefund = com.AmtRefund    
+,g.ThresholdType =  cm.ThresholdType    
+FROM @GeneralRate g    
+INNER JOIN Clientmaster cm ON cm.ClientID = g.ParentClientID    
+INNER JOIN CollectionsMaster com ON com.Identificationid = cm.ClientID    
+--WHERE g.IsParentPayer = 'Y'    
+Update g set g.PendingCreditLimit=ccd.PendingCreditLimit,g.NotInvoicedAmt=ccd.NotInvoiced,     
+g.CreditExpires= DATEDIFF(DAY, ccd.ModifiedAt, ccd.BlockedDate )     
+from @GeneralRate g    
+inner join clientmaster cm on cm.clientid=g.ClientID    
+inner join ClientCreditDetails ccd on ccd.clientid=cm.clientid    
+    
+Update g set g.IsBlockReg= CAD.Value From @GeneralRate g    
+inner join ClientAttributesDetails CAD on CAD.ClientID=g.Clientid    
+inner join ClientAttributes CA on CAD.AttributesID=CA.AttributeID    
+Where CAD.Clientid=g.Clientid and CA.AttributeCode='TRB'    
+    
+END    
+END    
+-------------------------------------------------------        
+UPDATE T    
+SET    T.ParentClientID = CM.ParentClientID    
+FROM   @GeneralRate T    
+INNER JOIN ClientMaster CM    
+ON CM.ClientID = T.ClientID    
+WHERE  CM.OrgID = @pOrgId    
+UPDATE T    
+SET    T.RefHospitalName = LB.RefOrgName    
+FROM   @GeneralRate T    
+INNER JOIN LabReferenceOrg LB    
+ON LB.LabRefOrgID = T.ReferingID    
+WHERE  LB.OrgID = @pOrgId    
+--select * from @GeneralRate            
+UPDATE T    
+SET    T.RefHospitalName = CASE    
+WHEN Isnull(T.RefHospitalName, '') = '' THEN Isnull(LB.RefOrgName, '')    
+ELSE T.RefHospitalName    
+END,    
+T.ReferingID = CASE    
+WHEN T.ReferingID = 0 THEN LB.LabRefOrgID    
+ELSE T.ReferingID    
+END,    
+T.Type = ICT.ClientTypeCode    
+FROM   @GeneralRate T    
+INNER JOIN ClientMaster CM    
+ON CM.ClientID = T.ParentClientID    
+INNER JOIN LabReferenceOrg LB    
+ON LB.LabRefOrgID = CM.ReferingID    
+INNER JOIN InvClientType ICT    
+ON ICT.ClientTypeID = Cm.ClientTypeID    
+WHERE  LB.OrgID = @pOrgId    
+----------------------------------------------------------------  
+    
+SELECT DISTINCT ClientName + ' (' + ClientCode + ')'                                              ClientName,    
+(SELECT CONVERT(nvarchar, Isnull(PhysicianID, 0))    
++ '^' + CONVERT(nvarchar, Isnull(ClientName, 0))    
++ '^' + CONVERT(nvarchar, Isnull(NAME, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(ClientCode, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(RateID, 0)) + '~'    
++ CONVERT(nvarchar, Isnull(Rate, '')) + '~'    
++ Isnull(RateCode, rate) + '^'    
++ CONVERT(nvarchar, Isnull(ClientID, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(ClientMappingDetailsID, 0))    
++ '^' + CONVERT(nvarchar, Isnull(Type, '')) + '^'    
++ CONVERT(nvarchar, Isnull(Priority, '')) + '^'    
++ IsMappedItem + '^' + IsDiscount + '^'    
++ ClientTypeName + '^'    
++ CONVERT(nvarchar, Isnull(ReferingID, 0)) + '^'    
++ Isnull(ClientStatus, '') + ' ^'    
++ Isnull(Reason, '') + '^' + Isnull(BlockFrom, '')    
++ '^' + Isnull(BlockTo, '') + '^'    
++ Isnull(IsCashClient, '') + '^' + Attributes + '^'    
++ IsAllAreMedical + '^' + RateType + '^'    
++ IsDefaultClient + '^'       
++ CoPayment + '^'    
++ Isnull(Hashealthcoupon, '') + '^'    
++ CONVERT(nvarchar, Isnull(CollectionID, 0))    
++ '^'    
++ CONVERT(nvarchar, Isnull(TotalDepositAmount, 0))    
++ '^'    
++ CONVERT(nvarchar, Isnull(TotalDepositUsed, 0))    
++ '^' + CONVERT(nvarchar, Isnull(AmtRefund, 0))       
++ '^' + Isnull(ThresholdType, '') + '^'    
++ CONVERT(nvarchar, Isnull(ThresholdValue, 0))    
++'^'+ CONVERT(nvarchar, Isnull(ThresholdValue2, 0))    
++'^'+ CONVERT(nvarchar, Isnull(ThresholdValue3, 0))    
++ '^' + Isnull(VirtualCreditType, '') + '^'    
++ CONVERT(nvarchar, Isnull(VirtualCreditValue, 0))    
++ '^'    
++ CONVERT(nvarchar, Isnull(MinimumAdvanceAmt, 0))    
++ '^'    
++ CONVERT(nvarchar, Isnull(MaximumAdvanceAmt, 0))    
++ '^'    
++ CONVERT(nvarchar, Isnull(IsAdvanceClient, 0))    
++ '^' + isnull(BillType, '')       
++ '^'        
++'^'    
++'^'    
++'^'    
++ isnull(EnableAttributes, '')       
++ '^'     
++ CONVERT(NVARCHAR, Isnull(CreditLimit, 0))      
++ '^'     
++ CONVERT(NVARCHAR, Isnull(PendingCreditLimit, 0))      
++ '^'     
++ CONVERT(NVARCHAR, Isnull(NotInvoicedAmt, 0))      
++ '^'     
++ CONVERT(NVARCHAR, Isnull(CreditExpires, 0))      
++'^'    
++ CONVERT(NVARCHAR, Isnull(IsBlockReg, 'N'))      
++ '^' + '###'    
+FROM   @GeneralRate S  
+--WHERE  S.ClientID = T.ClientID --AND ClientName  like @prefixText +'%' -- ORDER BY ClientName ASC                                                                                                                            
+--FOR XML PATH(''))                   AS Value,        
+WHERE  S.ClientID = T.ClientID  
+AND ( ClientName LIKE @prefixText + '%'    
+OR ClientCode LIKE @prefixText + '%' ) -- ORDER BY ClientName ASC                                       
+FOR XML PATH(''), root('MyString'), type). value('/MyString[1]', 'nvarchar(MAX)') AS Value,    
+ClientCode,    
+RateType,    
+IsDefaultClient,    
+ClientID    
+FROM   @GeneralRate T    
+WHERE  ( Isnull(T.RateType, '') NOT IN ( 'vendor' ) )  
+ORDER  BY IsDefaultClient DESC    
+END    
+ELSE IF( @pType = 'CLP' )    
+BEGIN    
+IF Len(@prefixText) > 2    
+SET @prefixText = '%' + @prefixText + '%'    
+ELSE    
+SET @prefixText = @prefixText + '%'    
+DECLARE @GeneralRateForClient AS TABLE    
+(    
+PhysicianID            BIGINT,    
+ClientName             nvarchar(255),    
+NAME                   nvarchar(255),    
+ClientCode             nvarchar(32),    
+RateID                 BIGINT,    
+ClientID               BIGINT,    
+ClientMappingDetailsID BIGINT,    
+Type                   nchar(5),    
+Priority               nvarchar(10),    
+Rate         nvarchar(255),    
+IsMappedItem           nchar(1),    
+IsDiscount             nchar(1),    
+ClientTypeName         nvarchar(50),    
+ReferingID             INT,    
+ClientStatus           nchar(3),    
+Reason                 nvarchar(50),    
+BlockFrom              nvarchar(20),    
+BlockTo                nvarchar(20),    
+IsCashClient           nchar(1),    
+Attributes             NVARCHAR(1),    
+IsAllAreMedical        nchar(1),    
+RateCode               nvarchar(32),    
+RateType               nvarchar(50),    
+IsDefaultClient        nvarchar(50),    
+CollectionID           BIGINT,            
+TotalDepositAmount     DECIMAL(18, 2),            
+TotalDepositUsed       DECIMAL(18, 2),            
+AmtRefund DECIMAL(18, 2),            
+ThresholdType          nvarchar(10),            
+ThresholdValue         DECIMAL(18, 2),            
+ThresholdValue2         DECIMAL(18, 2),           
+ThresholdValue3         DECIMAL(18, 2),           
+VirtualCreditType      nvarchar(10),            
+VirtualCreditValue     DECIMAL(18, 2),            
+MinimumAdvanceAmt      DECIMAL(18, 2),            
+MaximumAdvanceAmt      DECIMAL(18, 2),            
+IsAdvanceClient        BIT ,      
+CoPayment              VARCHAR(1),    
+ParentClientID    BIGINT,    
+IsParentPayer       NVARCHAR(10)     
+)    
+INSERT @GeneralRateForClient    
+(PhysicianID,    
+ClientName,    
+NAME,    
+ClientCode,    
+RateID,    
+ClientID,    
+Type,    
+ClientMappingDetailsID,    
+Priority,    
+Rate,    
+IsMappedItem,    
+IsDiscount,    
+ClientTypeName,    
+ReferingID,    
+ClientStatus,    
+Reason,    
+BlockFrom,    
+BlockTo,    
+IsCashClient,    
+Attributes,    
+IsAllAreMedical,    
+RateCode,    
+RateType,    
+IsDefaultClient,    
+CollectionID,            
+TotalDepositAmount,            
+TotalDepositUsed,            
+AmtRefund,            
+ThresholdType,            
+ThresholdValue,          
+ThresholdValue2,          
+ThresholdValue3,            
+VirtualCreditType,            
+VirtualCreditValue,            
+MinimumAdvanceAmt,            
+MaximumAdvanceAmt,            
+IsAdvanceClient,      
+CoPayment,    
+ParentClientID,    
+IsParentPayer )    
+SELECT TOP 30 ICM.ClientMappingDetailsID,    
+CM.ClientName,    
+CM.ClientName,    
+CM.ClientCode,    
+ICM.RateId,    
+ICM.ClientID,    
+ICT.ClientTypeCode,    
+ICM.ClientMappingDetailsID,    
+Isnull(ICM.Priority, 1) Priority,    
+RateName                Rate,    
+Isnull(CM.IsMappedItem, 'N'),    
+Isnull(CM.IsDiscount, 'N'),    
+ICT.ClientTypeName,    
+CM.ReferingID,    
+CASE    
+WHEN Ltrim(Rtrim(CM.Status)) = 'S' THEN    
+CASE    
+WHEN CONVERT(nvarchar, @ServerDate, 103) BETWEEN CONVERT(nvarchar, CM.BlockFrom, 103) AND CONVERT(nvarchar, CM.BlockTO, 103) THEN 'S'    
+ELSE 'A'    
+END    
+ELSE CM.Status    
+END,    
+Isnull(CM.Reason, ''),    
+Isnull(CONVERT(nvarchar, CM.BlockFrom, 103), ''),    
+Isnull(CONVERT(nvarchar, CM.BlockTo, 103), ''),    
+Isnull(CM.ISCash, 'N'),    
+CASE    
+WHEN Isnull(CM.Attributes, '<ClientAttributes></ClientAttributes>') != '<ClientAttributes></ClientAttributes>' THEN 'Y'    
+ELSE 'N'    
+END,    
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s    
+INNER JOIN ClientAttributes a    
+ON s.AttributesID = a.AttributeID    
+WHERE  a.AttributeCode = 'AMI'    
+AND s.ClientID = cm.ClientID) > 0 THEN 'Y'    
+ELSE 'N'    
+END,    
+RateCode,    
+Isnull(R.Type, 'Normal'),    
+'N'                     AS IsDefaultClient,    
+COM.CollectionID,            
+COM.TotalDepositAmount,            
+COM.TotalDepositUsed,            
+com.AmtRefund,            
+CM.ThresholdType,            
+CM.ThresholdValue,          
+cm.ThresholdValue2,          
+cm.ThresholdValue3,            
+CM.VirtualCreditType,            
+CM.VirtualCreditValue,            
+CM.MinimumAdvanceAmt,            
+CM.MaximumAdvanceAmt,            
+CM.IsAdvanceClient ,      
+CASE    
+WHEN (SELECT Count(1)    
+FROM   ClientAttributesDetails s     
+INNER JOIN ClientAttributes a     
+ON s.AttributesID = a.AttributeID    
+WHERE  s.value = 'Y'    
+AND s.ClientID = cm.ClientID    
+AND a.AttributeCode = 'IsCoPay') > 0 THEN 'Y'    
+ELSE 'N'    
+END,    
+CM.ParentClientID,    
+CM.IsParentPayer    
+FROM   ClientMaster CM     
+INNER JOIN InvClientMaster ICM     
+ON CM.ClientID = ICM.ClientID    
+AND CM.OrgID = ICM.OrgID    
+INNER JOIN InvClientType ICT     
+ON ICT.ClientTypeID = ICM.ClientTypeID    
+INNER JOIN RateMaster R     
+ON R.RateId = ICM.RateId    
+AND CM.OrgID = R.OrgID    
+--AND CONVERT(DATE, @ServerDate) BETWEEN CONVERT(nvarchar, ICM.ValidFrom, 103) AND CONVERT(nvarchar, ICM.ValidTo, 103)    
+left JOIN CollectionsMaster COM             
+ON CM.ClientID = COM.Identificationid            
+AND CM.OrgID = COM.OrgID       
+WHERE  CM.OrgID = @pOrgID    
+AND ActiveYN = 'Y'    
+AND ( CM.ClientName LIKE @prefixText + '%'    
+OR CM.ClientCode LIKE @prefixText + '%' )    
+AND Isnull(R.Type, '') != 'Vendor'    
+AND Isnull(ICM.Priority, 1) = 1    
+AND CM.ClientID = @prefhospid --- [@prefhospid == ClientID]            
+AND Isnull(ICT.LangCode, 'en-GB') = @LangCode    
+ORDER  BY CM.ClientName    
+UPDATE g    
+SET g.ThresholdValue = cm.ThresholdValue    
+,g.ThresholdValue2 = cm.ThresholdValue2    
+,g.ThresholdValue3 =  cm.ThresholdValue3    
+,g.CollectionID = com.CollectionID    
+,g.TotalDepositAmount = com.TotalDepositAmount    
+,g.TotalDepositUsed = com.TotalDepositUsed    
+,g.AmtRefund = com.AmtRefund    
+,g.ThresholdType =  cm.ThresholdType    
+FROM @GeneralRateForClient g    
+INNER JOIN Clientmaster cm ON cm.ClientID = g.ParentClientID    
+INNER JOIN CollectionsMaster com ON com.Identificationid = cm.ClientID    
+WHERE g.IsParentPayer = 'Y'    
+
+SELECT DISTINCT ClientName + ' (' + ClientCode + ')' ClientName,    
+(SELECT CONVERT(nvarchar, Isnull(PhysicianID, 0))    
++ '^' + CONVERT(nvarchar, Isnull(ClientName, 0))    
++ '^' + CONVERT(nvarchar, Isnull(NAME, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(ClientCode, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(RateID, 0)) + '~'    
++ CONVERT(nvarchar, Isnull(Rate, '')) + '~'    
++ Isnull(RateCode, rate) + '^'    
++ CONVERT(nvarchar, Isnull(ClientID, 0)) + '^'    
++ CONVERT(nvarchar, Isnull(ClientMappingDetailsID, 0))    
++ '^' + CONVERT(nvarchar, Isnull(Type, '')) + '^'    
++ CONVERT(nvarchar, Isnull(Priority, '')) + '^'    
++ IsMappedItem + '^' + IsDiscount + '^'    
++ ClientTypeName + '^'    
++ CONVERT(nvarchar, Isnull(ReferingID, 0)) + '^'    
++ Isnull(ClientStatus, '') + ' ^'    
++ Isnull(Reason, '') + '^' + Isnull(BlockFrom, '')    
++ '^' + Isnull(BlockTo, '') + '^'    
++ Isnull(IsCashClient, '') + '^' + Attributes + '^'    
++ IsAllAreMedical + '^' + RateType + '^'    
++ IsDefaultClient    + '^'    
++ CONVERT(nvarchar, Isnull(CollectionID, 0))            
++ '^'            
++ CONVERT(nvarchar, Isnull(TotalDepositAmount, 0))            
++ '^'            
++ CONVERT(nvarchar, Isnull(TotalDepositUsed, 0))            
++ '^' +CONVERT(nvarchar, Isnull(AmtRefund, 0))            
++ '^' + Isnull(ThresholdType, '') + '^'            
++ CONVERT(nvarchar, Isnull(ThresholdValue, 0))            
++ '^' + CONVERT(nvarchar, Isnull(ThresholdValue2, 0))           
++ '^' + CONVERT(nvarchar, Isnull(ThresholdValue3, 0))           
++ '^' + Isnull(VirtualCreditType, '') + '^'          
++ CONVERT(nvarchar, Isnull(VirtualCreditValue, 0))            
++ '^'            
++ CONVERT(nvarchar, Isnull(MinimumAdvanceAmt, 0))            
++ '^'            
++ CONVERT(nvarchar, Isnull(MaximumAdvanceAmt, 0))            
++ '^'            
++ CONVERT(nvarchar, Isnull(IsAdvanceClient, 0))          
++ '^' + CoPayment     
++ '^' + CONVERT(VARCHAR, Isnull(ParentClientID, 0))    
++ '^' + CONVERT(VARCHAR, Isnull(IsParentPayer, 0))    
++ '^' + '###'    
+FROM   @GeneralRateForClient S    
+WHERE  S.ClientID = T.ClientID  
+--AND ClientName  like @prefixText +'%' -- ORDER BY ClientName ASC                                                                                                                                
+FOR XML PATH(''))                   AS Value,    
+ClientCode,    
+RateType,    
+IsDefaultClient,    
+ClientID    
+FROM   @GeneralRateForClient T    
+WHERE  ( Isnull(T.RateType, '') NOT IN ( 'vendor' )  )    
+ORDER  BY IsDefaultClient DESC    
+END    
+END TRY    
+BEGIN CATCH     
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetRateCardForBilling @pOrgId = '+CAST(@pOrgId AS VARCHAR) +'@prefhospid = '+CAST(@prefhospid AS VARCHAR)     
+      
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;     
+END CATCH         
+END    
+    
+    
+    
+    
+
+
+
+

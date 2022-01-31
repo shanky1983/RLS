@@ -1,0 +1,36 @@
+Create PROCEDURE [dbo].[pGetInventoryStockQtyDetails]  
+ @pOrgId [BIGINT] 
+ ,@PparamType VARCHAR(20) = NULL
+ ,@Pparamvalue SMALLINT = NULL
+ ,@Debugflag BIT = 0
+
+ As
+ begin
+--Declare @Orgid int =98
+--Declare @LocationID int =7
+select 
+distinct '123' Empty,PO.ProductID,LocationName,PO.ProductName,PO.ProductCode,PC.CategoryName,PO.LSU,SH.BatchNo,SH.CostPrice,StokcInQTY
+,SH.ReceivedUniqueNumber,SH.CreatedAt ,SH.SellingPrice,SH.MRP,SH.StockInHandid
+from products PO with(NOLOCK)						
+inner join ProductCategories PC with (NOLOCK) ON PO.Categoryid=PC.CategoryID and PO.OrgID=PC.OrgID					
+--inner join ProductUOMMapping PUM with(NOLOCK) ON PUM.ProductID=PO.ProductID and IsBaseunit=1 AND Status <>'D'
+
+CROSS APPLY  (
+                  SELECT  
+				       Productid,S.LocationID, LocationName,S.OrgID, S.BatchNo, S.CostPrice as CostPrice , Sum(
+                      (TotalStockReceived - 						
+						 (TotalStockIssued+TotalStockReturn+TotalStockDamage+TotalLocationIssued+ISNULL(SubstoreReturnqty,0))
+		               ) ) as StokcInQTY ,S.ReceivedUniqueNumber,S.CreatedAt,S.SellingPrice,S.MRP,S.StockInHandid
+				  FROM StockInHand S with(NOLOCK) 
+					   INNER JOIN Locations L  with(NOLOCK) ON S.LocationID=L.LocationID
+				  WHERE S.OrgID=@pOrgId  AND S.ProductID=PO.ProductID	-- AND S.LocationID=@LocationID 
+				  GROUP BY Productid,LocationName,S.OrgID,S.BatchNo,S.LocationID,S.ReceivedUniqueNumber,S.CostPrice,S.CreatedAt,S.SellingPrice,S.MRP,S.StockInHandid
+       )SH 					
+where PO.OrgID=@pOrgId		--and SH.LocationID=7	--and StokcInQTY>0		
+order by LocationName,ProductName
+End			
+ 
+
+  
+
+

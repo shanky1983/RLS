@@ -1,0 +1,60 @@
+CREATE PROCEDURE pUpdateTripStatus_LIMSAPI
+(
+	@pOrgCode NVARCHAR(150),
+	@pType NVARCHAR(150),
+	@pTripStatusInfo [dbo].[TripStatusInfo] READONLY
+)
+AS
+BEGIN   
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50) 
+
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+  
+  IF (@pType = 'TS' OR @pType = 'IP' OR @pType = 'RD' OR @pType = 'TC' OR @pType = 'C')
+     BEGIN
+
+	 IF(EXISTS(SELECT 1 FROM ERPHCBookingInBound B WITH(NOLOCK)      
+								INNER JOIN @pTripStatusInfo TS ON B.BookingID = TS.BookingID AND B.OrgID = TS.OrgID))      
+		 BEGIN 
+
+		INSERT INTO [LIS_PDT_Integration].[dbo].[HCBookingInBound_HIST]
+      ([BookingID]      ,[BookingDTTM]      ,[TRFFile]      ,[DispatchType]      ,[Status]      ,[Salutation]      ,[FirstName]      ,[MiddleName]      ,[LastName]
+      ,[Age]      ,[DateofBirth]      ,[Gender]      ,[MobileNumber]      ,[Email]      ,[LISPatientID]      ,[ExternalPatientNo]      ,[FullName]      ,[AddressType]
+      ,[Address]      ,[City]      ,[State]      ,[Country]      ,[PostalCode]      ,[URNType]      ,[URNNo]      ,[OrderedFrom]      ,[OrgID]      ,[LocationID]
+      ,[LoginID]      ,[SourceType]      ,[ExternalRefNo]      ,[TotalGrossAmount]      ,[DiscountAmount]      ,[NetAmount]      ,[DiscountID]      ,[ClientID]
+      ,[ClientCode]      ,[CreatedBy]      ,[CreatedAt]      ,[ModifiedBy]      ,[ModifiedAt]      ,[ISProcessed]      ,[Error]      ,[Remarks]
+      ,[JsonValue]      ,[JsonString]      ,[UserID]      ,[TripStatus]      ,[TripReason])
+ 
+ SELECT HCB.[BookingID]      ,[BookingDTTM]      ,[TRFFile]      ,[DispatchType]      ,[Status]      ,[Salutation]      ,[FirstName]      ,[MiddleName]      ,[LastName]
+      ,[Age]      ,[DateofBirth]      ,[Gender]      ,[MobileNumber]      ,[Email]      ,[LISPatientID]      ,[ExternalPatientNo]      ,[FullName]      ,[AddressType]
+      ,[Address]      ,[City]      ,[State]      ,[Country]      ,[PostalCode]      ,[URNType]      ,[URNNo]      ,[OrderedFrom]      ,HCB.[OrgID]      ,HCB.[LocationID]
+      ,HCB.[LoginID]      ,[SourceType]      ,[ExternalRefNo]      ,[TotalGrossAmount]      ,[DiscountAmount]      ,[NetAmount]      ,[DiscountID]      ,[ClientID]
+      ,[ClientCode]      ,[CreatedBy]      ,[CreatedAt]      ,HCB.[ModifiedBy]      ,HCB.[ModifiedAt]      ,[ISProcessed]      ,[Error]      ,[Remarks]     
+	   ,[JsonValue]      ,[JsonString]      ,[UserID]      ,HCB.[TripStatus]      ,HCB.[TripReason]
+  FROM [LIS_PDT_Integration].[dbo].[HCBookingInBound] HCB
+  inner join  @pTripStatusInfo TS on  HCB.BookingID = TS.BookingID and HCB.OrgID = TS.OrgID
+
+			
+
+			  UPDATE B SET B.LoginID = TS.LoginID,   B.TripStatus = TS.TripStatus, B.TripReason = TS.TripReason, B.ModifiedBy = TS.ModifiedBy, 
+				             B.ModifiedAt = CASE YEAR(TS.ModifiedAt) WHEN 9999 THEN NULL ELSE TS.ModifiedAt END,     	 B.IsProcessed = 'N',
+							 B.LocationID = TS.LocationID
+			  FROM @pTripStatusInfo TS
+			  INNER JOIN ERPHCBookingInBound B ON B.BookingID = TS.BookingID and B.OrgID = TS.OrgID
+	     END
+     ELSE 
+	    BEGIN
+		   INSERT INTO ERPHCBookingInBound (BookingID, TripStatus, TripReason, LoginID, IsProcessed, ModifiedBy, ModifiedAt, OrgID, LocationID)
+		   SELECT BookingID, TripStatus, TripReason, LoginID, 'N', ModifiedBy, CASE YEAR(ModifiedAt) WHEN 9999 THEN NULL ELSE ModifiedAt END, OrgID, LocationID
+		   FROM @pTripStatusInfo
+		END
+	END
+END

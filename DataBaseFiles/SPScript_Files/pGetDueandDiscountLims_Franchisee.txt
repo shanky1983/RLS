@@ -1,0 +1,654 @@
+CREATE  PROCEDURE [dbo].[pGetDueandDiscountLims_Franchisee] @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgID [int]
+,@pUserWise NVARCHAR(100)
+,@pAuthorizedBy NVARCHAR(100)
+,@pVisitType [int]
+,@preporttype [int]
+,@pRequestType [nvarchar] (15)
+,@PatientName [nvarchar] (50)
+,@PatientNo [nvarchar] (50)
+,@pLocationId [int]
+,@pClientID [bigint]
+,@pClientType [int]
+,@pTotalDiscount [decimal] (
+18
+,2
+) OUTPUT
+,@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+--DECLARE @pFDate DATETIME                                                                       
+--DECLARE @pTDate DATETIME                                                                       
+--DECLARE @pOrgID INT                                                                       
+--DECLARE @pVisitType INT                                                                       
+--DECLARE @pRequestType nvarchar(15)                                                                       
+--DECLARE @pTotalDiscount DECIMAL(18,2)                                                                       
+--SET @pFDate = '01/10/2012 00:00:00'                                                                       
+--SET @pTDate = '03/12/2012 00:00:00'                                                                       
+--SET @pOrgID = 67                                                                       
+--SET @pVisitType = ''                                                                      
+--SET @pRequestType = 'DUE'                                                                       
+--EXEC pGetDueandDiscountLims @pFDate, @pTDate, @pOrgID,null, @pVisitType, @pRequestType,null,null,null,null, @pTotalDiscount OUT                                                                       
+BEGIN
+DECLARE @LoginID BIGINT,@ClinetID BIGINT
+select @LoginID =LoginID from @ContextInfo
+select @ClinetID =ClientId from Clientloginmapping where loginid=@LoginID and LoginType='F'
+DECLARE @discount DECIMAL
+SET @pFDate = CONVERT(DATETIME, CONVERT(NVARCHAR, @pFDate, 103) + ' 00:00:00')
+SET @pTDate = CONVERT(DATETIME, CONVERT(NVARCHAR, @pTDate, 103) + ' 23:59:59')
+DECLARE @LangCode AS NVARCHAR(80)
+DECLARE @tbl AS TABLE 
+( 
+mddomain NVARCHAR(255), 
+mdkey    NVARCHAR(255), 
+mdvalue  NVARCHAR(255) 
+) 
+DECLARE @p1 dbo.UDTMETADATA 
+INSERT INTO @p1 
+VALUES      (0, 
+N'VisitType', 
+N'', 
+N'', 
+N'') 
+INSERT INTO @tbl 
+SELECT DISTINCT MD.domain, 
+MD.displaytext, 
+MDM.displaytext 
+FROM   metadataorgmapping MDM WITH(nolock) 
+INNER JOIN metadata MD WITH(nolock) 
+ON MDM.metadataid = MD.metadataid 
+INNER JOIN @p1 UMD 
+ON MD.domain = UMD.domain 
+INNER JOIN @ContextInfo Ctx 
+ON Ctx.languagecode = Isnull(MDM.langcode, 'en-GB') 
+AND MDM.orgid = @pOrgID        
+SELECT @LangCode = languageCode
+FROM @ContextInfo
+PRINT @pFDate
+PRINT @pFDate
+IF (@PatientName = '')
+SET @PatientName = NULL
+IF (@PatientNo = '')
+SET @PatientNo = NULL
+IF (@pClientID = 0)
+SET @pClientID = NULL
+IF (@pClientType = 0)
+SET @pClientType = NULL
+IF (
+@pLocationId = 0
+OR @pLocationId = ''
+OR @pLocationId = - 1
+)
+SET @pLocationId = NULL
+IF (
+@pVisitType = - 1
+OR @pVisitType = ''
+)
+SET @pVisitType = 0
+IF (@pUserWise = '-1')
+SET @pUserWise = NULL
+IF (@pAuthorizedBy = '-1')
+SET @pAuthorizedBy = NULL
+DECLARE @TempTable1 AS TABLE (
+PatientNumber NVARCHAR(16)
+,PatientName NVARCHAR(255)
+,Age NVARCHAR(25)
+,VisitID BIGINT
+,VisitType NCHAR(3)
+,VisitDate DATETIME
+,BillNumber NVARCHAR(30)
+,TotalAmount DECIMAL(18, 2)
+,RowNUM BIGINT
+,DiscountReason NVARCHAR(255)
+,LabVisitType INT
+,IsCreditBill NCHAR(1)
+,NetAmount DECIMAL(18, 2)
+,Discount DECIMAL(18, 2)
+,ClientName NVARCHAR(255)
+,ClientType NVARCHAR(50)
+,ClientId BIGINT
+,CreatedBy BIGINT
+,OrgId BIGINT
+,OrgAddId BIGINT
+,UserName NVARCHAR(255)
+,Location NVARCHAR(500)
+,OrgName NVARCHAR(255)
+,FinalBillID BIGINT
+,VisitNumber NVARCHAR(50)
+,DiscountApprovedby INT
+,PaidAmount DECIMAL(18, 2)
+,Userwise NVARCHAR(255)
+,ReferingPhysicianName VARCHAR(255)
+,History Varchar(max)
+,Remarks nvarchar(max)
+)
+DECLARE @TempTable AS TABLE (
+PatientNumber NVARCHAR(16)
+,PatientName NVARCHAR(255)
+,Age NVARCHAR(25)
+,VisitID BIGINT
+,VisitType NCHAR(3)
+,VisitDate DATETIME
+,BillNumber NVARCHAR(30)
+,TotalAmount DECIMAL(18, 2)
+,RowNUM BIGINT
+,DiscountReason NVARCHAR(255)
+,LabVisitType INT
+,IsCreditBill NCHAR(1)
+,NetAmount DECIMAL(18, 2)
+,Discount DECIMAL(18, 2)
+,ClientName NVARCHAR(255)
+,ClientType NVARCHAR(50)
+,CreatedBy BIGINT
+,UserName NVARCHAR(255)
+,Location NVARCHAR(500)
+,OrgName NVARCHAR(255)
+,Due DECIMAL(18, 2)
+,VisitNumber NVARCHAR(50)
+,PaidAmount DECIMAL(18, 2)
+,Userwise NVARCHAR(255)
+,ReferingPhysicianName VARCHAR(255)
+,History Varchar(max)
+,Remarks nvarchar(max)
+)
+/*SHARING ORG */
+DECLARE @ORGTAB TABLE (
+ORGNAME NVARCHAR(100)
+,ORGID INT
+)
+INSERT INTO @ORGTAB
+EXEC pGetSharingOrganizations @pOrgID
+/* Insert patient details into temp*/
+/* Discount/Due details inserted in temp table from temptable populated */
+IF (@pRequestType = 'DISCOUNT')
+BEGIN
+INSERT INTO @TempTable1 (
+RowNUM
+,PatientNumber
+,PatientName
+,Age
+,VisitID
+,VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,NetAmount
+,Discount
+,DiscountReason
+,LabVisitType
+,IsCreditBill
+,ClientId
+,CreatedBy
+,OrgId
+,OrgAddId
+,OrgName
+,FinalBillID
+,VisitNumber
+,DiscountApprovedby
+,Userwise
+,ReferingPhysicianName
+,History
+,Remarks
+)
+SELECT DISTINCT 1
+,P.PatientNumber
+,S.DisplayText + P.NAME AS PatientName
+,CONVERT(NVARCHAR, DATEDIFF(YY, P.DOB, dbo.Fn_getserverdate(@ContextInfo))) + ' / ' + P.SEX AS Age
+,FB.VISITID
+,'OP' AS VisitType
+,FB.CreatedAt AS VisitDate
+,FB.BillNumber
+,FBF.GroSSBillValue
+,FBF.NetValue
+,FBF.DiscountAmount
+,FBF.DiscountReason AS DiscountReason
+,ISNULL(PV.LabVisitType, 0)
+,ISNULL(FB.IsCreditBill, 'N')
+,VCM.ClientID
+,FB.CreatedBy
+,FB.OrgID
+,FB.OrgAddreSSID
+,ORG.ORGNAME
+,FB.FinalBillID
+,Pv.VisitNumber
+,FBF.DiscountApprovedBy
+,ARL.LoginName
+,PV.ReferingPhysicianName 
+,'' as History
+,''
+FROM FinalBill FB WITH (NOLOCK)
+INNER JOIN FinalBill_Franchisee FBF WITH (NOLOCK) ON FB.FinalBillID=FBF.FinalBillID
+INNER JOIN VisitClientMapping VCM (NOLOCK) ON VCM.RateID = VCM.RateID
+AND VCM.OrgID = FB.OrgID
+AND VCM.FinalBillID = FB.FinalBillID AND VCM.ClientID=@ClinetID
+INNER JOIN AmountReceivedDetails ARD (NOLOCK) ON FB.FinalBillID = ARD.FinalBillID
+AND ARD.OrgID = FB.OrgID
+inner join login ARL (NOLOCK) ON ARD.ReceivedBy=ARL.LoginID
+left join login U (NOLOCK) on FB.DiscountApprovedBy=U.LoginID AND U.OrgID=@pOrgID ANd U.LoginName=ISNULL(@pAuthorizedBy, U.LoginName)  
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON FB.VisitID = PV.PatientVisitId AND PV.OrgID = FB.OrgID
+INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID = FB.PatientID AND P.OrgID = FB.OrgID
+--Inner Join PatientHistoryExt PH With (Nolock) On PH.PatientVisitId=Pv.PatientVisitId and PH.OrgID=Pv.OrgID
+INNER JOIN SalutationOrgMapping S WITH (NOLOCK) ON P.TITLECode = S.TitleID
+INNER JOIN @ContextInfo ctx1 ON ctx1.OrgID = S.OrgID
+AND ctx1.LanguageCode = S.LanguageCode
+INNER JOIN @ORGTAB ORG ON ORG.ORGID = FB.OrgID
+WHERE FB.CreatedAt BETWEEN @pFDate
+AND @pTDate
+--AND (P.Name LIKE COALESCE( '%' + @PatientName + '%',P.Name))                                                                
+AND (P.PatientNumber = COALESCE(@PatientNo, P.PatientNumber))
+AND (FB.OrgAddressID = COALESCE(@pLocationId, FB.OrgAddressID))
+AND PV.VisitType = @pVisitType 
+AND ISnull(VCM.ClientID, - 2) = COALESCE(@pClientID, Isnull(VCM.clientID, - 2))
+--AND ISNULL(ARL.LoginName,'')=ISNULL(@pUserWise,ISNULL(ARL.LoginName,'') )  
+UNION
+SELECT DISTINCT 1
+,P.PatientNumber
+,S.DisplayText + P.NAME AS PatientName
+,CONVERT(NVARCHAR, DATEDIFF(YY, P.DOB, dbo.Fn_getserverdate(@ContextInfo))) + ' / ' + P.SEX AS Age
+,FB.VISITID
+,'OP' AS VisitType
+,FB.CreatedAt AS VisitDate
+,FB.BillNumber
+,FBF.GroSSBillValue
+,FBF.NetValue
+,DPA.DiscountAmt
+,DPA.DiscountReason AS DiscountReason
+,ISNULL(PV.LabVisitType, 0)
+,ISNULL(FB.IsCreditBill, 'N')
+,VCM.ClientID
+,FB.CreatedBy
+,FB.OrgID
+,FB.OrgAddreSSID
+,ORG.ORGNAME
+,FB.FinalBillID
+,Pv.VisitNumber
+,DPA.DiscountApprovedBy
+,(
+SELECT LoginName
+FROM LOGIN
+WHERE loginID = DPA.DueCollectedBy
+) AS Userwise
+,PV.ReferingPhysicianName
+,'' as History
+,''
+FROM DuePaidDetail DPA
+INNER JOIN FinalBill FB WITH (NOLOCK) ON FB.FinalBillID = DPA.DueBillNo
+INNER JOIN FinalBill_Franchisee FBF WITH (NOLOCK) ON FB.FinalBillID=FBF.FinalBillID
+AND FB.OrgID = @pOrgID
+INNER JOIN VisitClientMapping VCM ON VCM.RateID = VCM.RateID
+AND VCM.OrgID = FB.OrgID
+AND VCM.FinalBillID = FB.FinalBillID AND VCM.ClientID=@ClinetID
+--INNER JOIN AmountReceivedDetails ARD ON FB.FinalBillID = ARD.FinalBillID AND ARD.OrgID = FB.OrgID    
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON FB.VisitID = PV.PatientVisitId AND PV.OrgID = FB.OrgID
+INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID = FB.PatientID AND P.OrgID = FB.OrgID
+--Inner Join PatientHistoryExt PH With (Nolock) On PH.PatientVisitId=Pv.PatientVisitId and PH.OrgID=Pv.OrgID
+INNER JOIN SalutationOrgMapping S WITH (NOLOCK) ON P.TITLECode = S.TitleID
+INNER JOIN @ContextInfo ctx1 ON ctx1.OrgID = S.OrgID
+AND ctx1.LanguageCode = S.LanguageCode
+INNER JOIN @ORGTAB ORG ON ORG.ORGID = FB.OrgID
+WHERE DPA.PaidDate BETWEEN @pFDate
+AND @pTDate
+--AND (P.Name LIKE COALESCE( '%' + @PatientName + '%',P.Name))                                                                  
+AND (P.PatientNumber = COALESCE(@PatientNo, P.PatientNumber))
+AND (FB.OrgAddressID = COALESCE(@pLocationId, FB.OrgAddressID))
+AND PV.VisitType = @pVisitType
+AND ISnull(VCM.ClientID, - 2) = COALESCE(@pClientID, Isnull(VCM.clientID, - 2))
+
+update T set History=PH.DetailHistory,Remarks=PH.Remarks  
+from @TempTable1 T
+Inner Join PatientHistoryExt PH With (Nolock) On PH.PatientVisitId=T.VisitId and PH.OrgID=@pOrgID
+
+INSERT INTO @TempTable (
+PatientNumber
+,PatientName
+,Age
+,VisitID
+,VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,LabVisitType
+,IsCreditBill
+,NetAmount
+,Discount
+,DiscountReason
+,ClientName
+,ClientType
+,UserName
+,OrgName
+,Location
+,VisitNumber
+,Userwise
+,ReferingPhysicianName
+,History
+,Remarks
+)
+SELECT T.PatientNumber
+,T.PatientName
+,T.Age
+,T.VisitID
+,T.VisitType
+,CONVERT(NVARCHAR(10), T.VisitDate, 103)
+,T.BillNumber
+,T.TotalAmount
+,T.LabVisitType
+,T.IsCreditBill
+,T.NetAmount
+,T.Discount
+,T.DiscountReason
+,CM.ClientName
+,CT.ClientTypeName
+,ISNULL(L.LoginName, '') AS USERNAME
+,T.OrgName
+,OA.Add1
+,T.VisitNumber
+,T.Userwise
+,T.ReferingPhysicianName
+,T.History
+,T.Remarks
+FROM @TempTable1 T
+LEFT JOIN ClientMaster CM WITH (NOLOCK) ON CM.ClientID = T.ClientID
+AND CM.OrgID = CM.OrgID
+LEFT JOIN InvClientType CT WITH (NOLOCK) ON CT.ClientTypeID = CM.ClientTypeID
+LEFT JOIN [Login] L WITH (NOLOCK) ON L.loginID = T.DiscountApprovedby
+INNER JOIN OrganizationAddreSS OA WITH (NOLOCK) ON OA.AddreSSID = Isnull(@pLocationId, T.OrgAddId)
+WHERE ISNULL(CT.ClientTypeID, - 2) = ISNULL(@pClientType, ISNULL(CT.ClientTypeID, - 2))
+AND T.Discount > 0
+AND ISNULL(CT.LangCode, 'en-GB') = @LangCode
+--ANd T.Userwise=ISNULL(@pUserWise,T.Userwise)                      
+--And ISNULL(L.LoginName,'')=ISNULL(@pAuthorizedBy,ISNULL(L.LoginName,''))                                                  
+END
+IF (@pRequestType = 'DUE')
+BEGIN
+INSERT INTO @TempTable1 (
+RowNUM
+,PatientNumber
+,PatientName
+,Age
+,VisitID
+,VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,NetAmount
+,Discount
+,DiscountReason
+,LabVisitType
+,IsCreditBill
+,ClientId
+,CreatedBy
+,OrgId
+,OrgAddId
+,OrgName
+,FinalBillID
+,VisitNumber
+,PaidAmount
+,ReferingPhysicianName
+,History
+,Remarks
+)
+SELECT 1
+,P.PatientNumber
+,S.DisplayText + P.NAME AS PatientName
+,CONVERT(NVARCHAR, DATEDIFF(YY, P.DOB, dbo.Fn_getserverdate(@ContextInfo))) + ' / ' + P.SEX AS Age
+,FB.VISITID
+,'OP' AS VisitType
+,FB.CreatedAt AS VisitDate
+,FB.BillNumber
+,FBF.GroSSBillValue
+,FBF.NetValue
+,FBF.DiscountAmount
+,FBF.DiscountReason AS DiscountReason
+,ISNULL(PV.LabVisitType, 0)
+,ISNULL(FB.IsCreditBill, 'N')
+,VCM.ClientID
+,FB.CreatedBy
+,FB.OrgID
+,FB.OrgAddreSSID
+,ORG.ORGNAME
+,FB.FinalBillID
+,Pv.VisitNumber
+--,DPA.PaidAmount
+,FBF.AmountReceived 
+,PV.ReferingPhysicianName
+,''--PH.DetailHistory as History
+,'' --Ph.Remarks
+FROM FinalBill FB WITH (NOLOCK)
+INNER JOIN FinalBill_Franchisee FBF WITH (NOLOCK) ON FB.FinalBillID=FBF.FinalBillID
+LEFT JOIN DuePaidDetail DPA WITH (NOLOCK) ON DPA.DueBillNo = FB.FinalBillID
+AND FB.OrgID = @pOrgID
+AND FB.Due = DPA.PaidAmount
+LEFT JOIN VisitClientMapping VCM ON VCM.RateID = VCM.RateID
+AND VCM.OrgID = FB.OrgID
+AND VCM.FinalBillID = FB.FinalBillID AND VCM.ClientID=@ClinetID
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON FB.VisitID = PV.PatientVisitId AND PV.OrgID = FB.OrgID
+INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID = FB.PatientID AND P.OrgID = FB.OrgID
+--left Join PatientHistoryExt PH With (Nolock) On PH.PatientVisitId=Pv.PatientVisitId and PH.PatientID=P.PatientID and PH.OrgID=Pv.OrgID
+INNER JOIN SalutationOrgMapping S WITH (NOLOCK) ON P.TITLECode = S.TitleID
+INNER JOIN PatientDueDetails PDD WITH (NOLOCK) ON PDD.FinalBillID = FB.FinalBillID
+AND PDD.OrgID = FB.OrgId
+INNER JOIN @ContextInfo ctx1 ON ctx1.OrgID = S.OrgID
+AND ctx1.LanguageCode = S.LanguageCode
+INNER JOIN @ORGTAB ORG ON ORG.ORGID = FB.OrgID
+WHERE FB.CreatedAt BETWEEN @pFDate
+AND @pTDate
+AND (P.NAME LIKE COALESCE('%' + @PatientName + '%', P.NAME))
+AND (P.PatientNumber = COALESCE(@PatientNo, P.PatientNumber))
+AND (FB.OrgAddressID = COALESCE(@pLocationId, FB.OrgAddressID))
+AND ISnull(VCM.ClientID, - 2) = COALESCE(@pClientID, Isnull(VCM.clientID, - 2))
+AND PDD.STATUS = 'Open'
+ 
+ update T set History=PH.DetailHistory ,T.Remarks=PH.Remarks from @TempTable1 T
+ left Join PatientHistoryExt PH With (Nolock) On PH.PatientVisitId=T.VisitID and PH.OrgID=@pOrgID
+  
+--update T1 set T1.Remarks=BD.Remarks
+--from @TempTable1 T1
+--inner join BillingDetails BD with(NOLOCK) on T1.FinalBillID=BD.FinalBillID and BD.OrgID=T1.OrgID
+--where isnull(BD.Remarks,'')<>''
+
+INSERT INTO @TempTable (
+PatientNumber
+,PatientName
+,Age
+,VisitId
+,VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,LabVisitType
+,IsCreditBill
+,NetAmount
+,Discount
+,ClientName
+,ClientType
+,UserName
+,OrgName
+,Location
+,Due
+,VisitNumber
+,PaidAmount
+,ReferingPhysicianName
+,History
+,Remarks
+)
+SELECT T.PatientNumber
+,T.PatientName
+,T.Age
+,T.VisitID
+,T.VisitType
+,T.VisitDate
+,T.BillNumber
+,T.TotalAmount
+,T.LabVisitType
+,T.IsCreditBill
+,T.NetAmount
+,T.Discount
+,CM.ClientName
+,CT.ClientTypeName
+,L.LoginName AS USERNAME
+,T.OrgName
+,OA.Location
+, ISNULL(PDD.DueAmount,0)- (ISNULL(RefundedAmount,0)+ISNULL(PDD.DuePaidAmt,0)+ISNULL(PDD.DiscountAmt,0))
+,T.VisitNumber
+,T.PaidAmount
+,T.ReferingPhysicianName
+,History
+,Remarks
+FROM @TempTable1 T
+INNER JOIN PatientDueDetails PDD WITH (NOLOCK) ON PDD.FinalBillID = T.FinalBillID
+AND PDD.OrgID = T.OrgId
+LEFT JOIN ClientMaster CM WITH (NOLOCK) ON CM.ClientID = T.ClientID
+AND CM.OrgID = CM.OrgID
+LEFT JOIN InvClientType CT WITH (NOLOCK) ON CT.ClientTypeID = CM.ClientTypeID
+INNER JOIN [Login] L WITH (NOLOCK) ON L.loginID = T.CreatedBy
+INNER JOIN OrganizationAddreSS OA WITH (NOLOCK) ON OA.AddreSSID = Isnull(@pLocationId, T.OrgAddId)
+WHERE ISNULL(CT.ClientTypeID, - 2) = ISNULL(@pClientType, ISNULL(CT.ClientTypeID, - 2))
+AND ISNULL(CT.LangCode, 'en-GB') = @LangCode
+END
+DECLARE @TotalAmount AS TABLE (TotAmount DECIMAL(18, 2))
+/* Total based on visitdate */
+--IF (@pRequestType = 'DUE')
+--BEGIN
+--INSERT INTO @TempTable (
+--RowNUM
+--,PatientNumber
+--,PatientName
+--,Age
+--,VisitType
+--,VisitDate
+--,NetAmount
+--,Discount
+--,Due
+--)
+--SELECT 2
+--,0
+--,'TOTAL'
+--,''
+--,''
+--,CONVERT(DATETIME, CONVERT(NVARCHAR, VisitDate, 103)) AS VisitDate
+--,NULL
+--,SUM(Discount) AS Discount
+--,SUM(Due)
+--FROM @TempTable
+--WHERE LabVisitType = ISNULL(@pVisitType, LabVisitType)
+--GROUP BY VisitDate
+--END
+IF (@pRequestType = 'DISCOUNT')
+BEGIN
+INSERT INTO @TotalAmount
+SELECT SUM(T1.Discount)
+FROM @TempTable T1
+WHERE T1.PatientName = 'TOTAL'
+AND T1.PatientNumber = 0
+END
+IF (@pRequestType = 'DUE')
+BEGIN
+INSERT INTO @TotalAmount
+SELECT SUM(T1.Due)
+FROM @TempTable T1
+WHERE T1.PatientName = 'TOTAL'
+AND T1.PatientNumber = 0
+END
+SELECT @pTotalDiscount = TotAmount
+FROM @TotalAmount
+/*OutPut List*/
+IF (
+@pRequestType = 'DISCOUNT'
+AND @preporttype = 0
+)
+BEGIN
+SELECT count(PatientNumber) AS PatientCount
+,VisitDate
+,Sum(Discount) AS Discount
+FROM @TempTable
+GROUP BY VisitDate
+ORDER BY VisitDate
+END
+IF (
+@pRequestType = 'DISCOUNT'
+AND @preporttype = 1
+)
+BEGIN
+SELECT PatientNumber
+,PatientName
+,Age
+,VisitId AS PatientVisitId
+,VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,NetAmount AS NetValue
+,Discount
+,DiscountReason
+,IsCreditBill
+,Due
+,OrgName AS OrganisationName
+,Location
+,ClientName
+,ClientType AS ClientTypeName
+,UserName
+,VisitNumber
+,Userwise
+,ReferingPhysicianName AS ReferredBy
+,History as Category
+,Remarks as WardName
+FROM @TempTable T
+WHERE ISNULL(Userwise, '') = ISNULL(@pUserWise, ISNULL(Userwise, ''))
+AND ISNULL(UserName, '') = ISNULL(@pAuthorizedBy, ISNULL(UserName, ''))
+ORDER BY RowNUM
+,VisitDate
+END
+IF (
+@pRequestType = 'DISCOUNT'
+AND @preporttype = 2
+)
+BEGIN
+SELECT count(PatientNumber) AS PatientCount
+,VisitDate
+,Sum(Discount) AS Discount
+FROM @TempTable
+GROUP BY VisitDate
+ORDER BY VisitDate
+END
+IF (@pRequestType = 'DUE')
+BEGIN
+SELECT PatientNumber
+,PatientName
+,Age
+,VisitId AS PatientVisitId
+,tbl.mdvalue as VisitType
+,VisitDate
+,BillNumber
+,TotalAmount
+,NetAmount AS NetValue
+,Discount
+,DiscountReason
+,IsCreditBill
+,Due
+,OrgName AS OrganisationName
+,Location
+,ClientName
+,ClientType AS ClientTypeName
+,UserName
+,VisitNumber
+,convert(VARCHAR(30), PaidAmount) AS PaidCurrency
+,ReferingPhysicianName AS ReferredBy
+,History As Category
+,Remarks as WardName
+FROM @TempTable T
+inner join @tbl tbl on tbl.mdkey= T.VisitType           
+WHERE LabVisitType = ISNULL(@pVisitType, LabVisitType)
+OR PatientName = 'TOTAL'
+ORDER BY RowNUM
+,VisitDate
+END
+END
+
+
+
+
+
+
+
+

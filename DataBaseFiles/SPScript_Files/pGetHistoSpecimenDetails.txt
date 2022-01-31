@@ -1,0 +1,14 @@
+CREATE Procedure pGetHistoSpecimenDetails
+(
+@OrgID Bigint,
+@PatientVisitID Bigint,
+@TestID Bigint,
+@Type Nvarchar(50),
+  @ContextInfo    [UDT_CONTEXT] READONLY
+)
+AS 
+BEGIN
+select ID,Type,SampleID,SampleName,SampleCount,ClinicalNotes,ClinicalDiagnosis from 
+HistoSpecimenDetails where patientvisitid=@PatientVisitID and ID=@TestID and Type=@Type and orgid=@OrgID
+END
+

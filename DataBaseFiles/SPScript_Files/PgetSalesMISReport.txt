@@ -1,0 +1,102 @@
+
+/****** Object:  StoredProcedure [dbo].[PgetSalesMISReport]    Script Date: 8/14/2018 6:35:10 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+create Proc [dbo].[PgetSalesMISReport]    
+(    
+@fdate [DATETIME]=null ,    
+ @tdate [DATETIME] =null,      
+ @pOrgID bigint      
+,@Pparamtype VARCHAR(100)=null    
+,@Pparamvalue VARCHAR(100)=null    
+,@pExcelReportId [INT] = NULL    
+,@pExcelReportName VARCHAR(255) = NULL    
+,@pToExecute VARCHAR(10) = NULL    
+    
+)    
+as     
+Begin
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+SET NOCOUNT ON;    
+BEGIN  TRY  
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)    
+
+
+
+Declare @TmpTable as Table
+(
+ClientID bigint,
+SalesPerson nvarchar(100),
+ClientCode nvarchar(50),
+ClientName nvarchar(100),
+TestName nvarchar(200),
+TotalTestCount nvarchar(200),
+TotalTestValue decimal(18,2),
+SpecialRatesGiven decimal(18,2)
+,Locality_ID bigint
+,Locality_Value nvarchar(150)
+)
+
+insert into @TmpTable
+select distinct 
+CM.ClientID,
+'',
+ISNULL(CM.ClientCode,'') as ClientCode,
+ISNULL(CM.ClientName,'') as ClientName, 
+BD.FeeDescription , 
+count(BD.FeeDescription) over (partition by CM.clientCode, BD.FeeDescription,BD.Amount) ,
+(BD.Amount*(count(BD.FeeDescription) over (partition by CM.clientCode, BD.FeeDescription,BD.Amount) )) , 
+BD.Amount ,CM.ZonalID,''
+from FinalBill FB  
+inner join BillingDetails BD  on FB.FinalBillID=BD.FinalBillID and BD.OrgID=FB.OrgID  --and BD.FeeID=Oi.ID and BD.Feetype=OI.Type
+inner join VisitClientMapping VCM  on VCM.FinalBillID=BD.FinalBillID and VCM.VisitID=FB.VisitID and VCM.OrgID=BD.OrgID and ISNULL(VCM.IsActive,'Y')!='N' 
+inner join ClientMaster CM  on CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID 
+where FB.Orgid=@pOrgID and FB.CreatedAT between @fdate+' 00:00:00' and @tdate+' 23:59:59'  
+and  FB.finalbillid=BD.finalbillid and BD.BillingDetailsID not in  
+(select Billingdetailsid from AmountRefundDetails AR where ar.finalbillid=FB.Finalbillid and ar.orgid=@pOrgID) 
+
+Update t SET t.SalesPerson=STUFF((SELECT ',' + Erm.Name 
+              from 
+				AddressDetails ad  
+				Inner Join EmployeeRegMaster ERM  on ERM.EmpID = ad.EmpID and ERM.Orgid=ad.OrgID 
+				Inner Join EmployerDeptMaster EDM  on EDM.EmpDeptID=ERM.DeptID and EDM.OrgID=ERM.OrgID and EDM.EmpDeptName='ACCOUNT HOLDER' 
+				where  ad.ReferenceID=CM.ClientID and ad.orgid=CM.OrgID and ad.ContactType='ACCHOLDER' 
+
+              FOR XML PATH (''))
+             , 1, 1, '')
+  From @TmpTable t
+  Inner Join ClientMaster CM ON CM.ClientID=t.ClientID and CM.Orgid=@pOrgID
+
+  Update T set T.Locality_Value=LO.Locality_Value from @TmpTable T
+  Inner Join  Localities LO WITH(NOLOCK) on LO.Locality_ID=T.Locality_ID
+
+  Select 'xyz' as Report
+  ,SalesPerson as 'Sales Person'
+  ,ClientCode as 'ClientCode'
+  ,ClientName as 'ClientName'
+  ,TestName as 'Test Name'
+  ,TotalTestCount as 'Total Test Count'
+  ,TotalTestValue as 'Total Business'
+  ,SpecialRatesGiven as 'Special Rates Given'
+  ,Locality_Value as Zone
+  from @TmpTable
+
+
+
+END TRY 
+                                
+BEGIN CATCH   
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='PgetSalesMISReport @fdate = '+cast(@fdate as varchar)+'@tdate = '+cast(@tdate as varchar)+'@pOrgID= '+cast(@pOrgID as varchar)
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH   
+End
+
+
+GO
+
+

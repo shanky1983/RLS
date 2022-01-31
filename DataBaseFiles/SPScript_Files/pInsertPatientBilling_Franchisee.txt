@@ -1,0 +1,4507 @@
+
+CREATE PROCEDURE [dbo].[pInsertPatientBilling_Franchisee] @pPatientID [BIGINT]
+	,@pOrgID [INT]
+	,@pOrgAddressID [INT]
+	,@pCreatedBy [BIGINT]
+	,@Name [nvarchar] (250)
+	,@TITLECode [nvarchar] (250)
+	,@SEX [nchar] (1)
+	,@Age [nvarchar] (50)
+	,@PatientNumber [nvarchar] (30)
+	,@pAddress1 [nvarchar] (250)
+
+
+
+	,@pAddress2 [nvarchar] (250)
+	,@pAddress3 [nvarchar] (250)
+	,@pCity [nvarchar] (50)
+	,@pPhoneNo [nvarchar] (20)
+	,@pMobileNo [nvarchar] (20)
+	,@pMartialStatus [nchar] (1)
+	,@pDOB [DATETIME]
+	,@pAgeValue [INT]
+	,@pAgeUnits [nchar] (1)
+	,@pCompressedName [nvarchar] (255)
+	,@pNationality [bigint]
+	,@pStateID [bigint]
+	,@pCountryID [bigint]
+	,@pPinCode [nvarchar] (10)
+	,@SmartcardNo [NVARCHAR] (16)
+	,@EMail [nvarchar] (200)
+	,@IsNotifyType [INT]
+	,@pURNo [nvarchar] (50)
+	,@pURNof [BIGINT]
+	,@pURNType [BIGINT]
+	,@pPatientHistory [nvarchar] (max)
+	,@pPatientType [NVARCHAR] (50)
+	,@pPatientStatus [NVARCHAR] (50)
+	,@pVisitPurposeID [INT]
+	,@pSecuredCode [nvarchar] (150)
+	,@PriorityID [INT]
+	,@pIsExternalPatient [INT]
+	,@pWardNo [nvarchar] (20)
+	,@pEpisodeID [BIGINT]
+	,@pEpisodeVisitID [BIGINT]
+	,@PatientVisitID [BIGINT]
+	,@pReferredPhysicianID [BIGINT]
+	,@ReferingPhysicianName [nvarchar] (300)
+	,@pReferedHospitalID [INT]
+	,@pReferingHospitalName [nvarchar] (100)
+	,@pReferedSpecialityID [INT]
+	,@SpecialtyID [BIGINT]
+	,@ReferralType [nchar] (1)
+	,@pGrossValue [DECIMAL] (
+	18
+	,2
+	)
+	,@pDiscount [DECIMAL] (
+	    18
+	,2
+	)
+	,@pDiscountReason [nvarchar] (250)
+	,@pDiscountApprovedBy [BIGINT]
+	,@pTax [DECIMAL] (
+	18
+	,2
+	)
+	,@pServiceCharge [DECIMAL] (
+	18
+	,2
+	)
+	,@pRoundOff [DECIMAL] (
+	18
+	,2
+	)
+	,@pNetValue [DECIMAL] (
+	18
+	,2
+	)
+	,@pDue [DECIMAL] (
+	18
+	,2
+	)
+	,@pTaxTable [dbo].[UDTAXBILLDETAILS] READONLY
+	,@pBillingTable [dbo].[UDTPATIENTDUECHART] READONLY
+	,@pIsCreditBill [nchar] (1)
+	,@AmtReceivedDetails [dbo].[UDTAMOUNTRECEIVEDDETAILS] READONLY
+	,@pOrderedInvTable [dbo].[ORDEREDINVESTIGATION] READONLY
+	,@paymentstatus [nvarchar] (15)
+	,@pUID [nvarchar] (255)
+	,@pEpisodeTrackID [BIGINT]
+	,@pSiteID [BIGINT]
+	,@pVisitSampleStatus [nvarchar] (50)
+	,@pSamplePickupDate [DATETIME]
+	,@pConsignmentNo [nvarchar] (50)
+	,@pControlMappingDetails [dbo].[CONTROLMAPPINGDETAILS] READONLY
+	,@pRegistrationRemarks [nvarchar] (255)
+	,@pReturnStatus [INT] OUTPUT
+	,@pExternalPatientNumber [nvarchar] (30)
+	,@pDespatchMode [dbo].[UDTDISPATCHMODE] READONLY
+	,@pTATDate [DATETIME]
+	,@pEDCess [DECIMAL] (
+	18
+	,2
+	)
+	,@pSHEDCess [DECIMAL] (
+	18
+	,2
+	)
+	,@pIsEditMode [nchar] (1) = 'N'
+	,@pVisitTypeID [INT]
+	,@pPatientStausID [INT]
+	,@ContextInfo [UDT_CONTEXT] READONLY
+	,@VisitClientMapping VISITCLIENTMAPPING READONLY
+	,@RoleID [BIGINT] OUTPUT
+	,@OnBehalfofLocationID BIGINT
+	,@pvisitID BIGINT
+	,@pPhleboID INT
+	,@pLogisticsID INT
+	,@pRoundNo NVARCHAR(200)
+	,@pexautoauthorization NVARCHAR(5)
+	,@pParentPatientID BIGINT
+	,@pExternalVisitID NVARCHAR(255)
+	,/* previousVisitID */
+	@pApprovalNo NVARCHAR(50)
+	,@NewPassword NVARCHAR(255)
+	,@pZoneId BIGINT
+	,@pUnknownFlag TINYINT
+	,@pDiscountID BIGINT
+	,@IsCopay NVARCHAR(2)
+	,@PatientDiscount UDTPATIENTDISCOUNT READONLY
+	,@IsFoc NVARCHAR(3)
+	,@MyCardActiveDays NVARCHAR(15)
+	,@MemebershipcardType NVARCHAR(255)
+	,@HealthCardType NVARCHAR(255)
+	,@OTP NCHAR(10)
+	,@Status NCHAR(10)
+	,@MembershipCardMappingID BIGINT
+	,@CreditRedeemType NVARCHAR(55)
+	,@FinalBillRedeemPoints DECIMAL(18, 2)
+	,@FinalbillRedeemValue DECIMAL(18, 2)
+	,@HasHealthCard NVARCHAR(1)
+	,@RedemPoints DECIMAL(18, 2)
+	,@RedemValue DECIMAL(18, 2)
+	,@PatientRedemDetails PATIENTREDEMDETAILS READONLY
+	,@pUnOrderedInv [dbo].[ORDEREDINVESTIGATION] READONLY
+	,@STATFlag NVARCHAR(20)
+	,@ClientFlag NVARCHAR(20)
+	,@ItemLevelDiscountTotal DECIMAL(18, 2)
+	,@TotalDiscount [decimal] (
+	18
+	,2
+	)
+	,@CollectionID [bigint]
+	,@EmailCCAddress NVARCHAR(max)
+	,@pValue NVARCHAR(50)
+	,@pPVisitNumber NVARCHAR(50)
+	,@pClinicCode NVARCHAR(50),
+	@pVisitTemplate visittemplate Readonly
+	--,@ReportLanguage NVARCHAR(100)
+	,@ReportLanguage [dbo].[UDTPatientVisitLanguage] READONLY,
+	@DueReason NVARCHAR(50),
+	@DueAuthorizer NVARCHAR(255),
+	@pHealthHubIDNw NVARCHAR(100)=null 
+	WITH EXECUTE AS OWNER
+AS
+BEGIN
+
+SET NOCOUNT ON
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
+BEGIN  TRY	
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)  
+
+Declare @Franchisee BIT
+set @Franchisee=1
+	DECLARE @BookingID BIGINT, @pPID BIGINT, @pBID BIGINT, @EmployeeID NVARCHAR(200) ,@SRFID NVARCHAR(250),@IsSRF NCHAR(1),@TRFID NVARCHAR(500),@ISNeedPassportinVisitLevel Nchar(1)
+	DECLARE @PassportNo NVARCHAR(250)
+
+	SELECT @IsSRF=ConfigValue 
+	FROM ConfigkeyMaster CM (NOLOCK) 
+	INNER JOIN ConfigOrgMaster  COM (NOLOCK) ON CM.ConfigkeyID=COM.ConfigkeyID
+	WHERE CM.Configkey='UseWardnoAsSRFID' AND COM.OrgID=@pOrgID
+
+	Select @ISNeedPassportinVisitLevel =ConfigValue 
+	FROM ConfigkeyMaster CM (NOLOCK) 
+	INNER JOIN ConfigOrgMaster  COM (NOLOCK) ON CM.ConfigkeyID=COM.ConfigkeyID
+	WHERE CM.Configkey='NeedPassportAsVisitLevel' AND COM.OrgID=@pOrgID
+	 
+
+	SELECT @BookingID = CONVERT(BIGINT, DepartmentName)
+	FROM @ContextInfo
+	
+	SET @pBID = @BookingID
+
+	DECLARE @NeedExBarcode BIGINT
+
+	SELECT @NeedExBarcode = DepartmentCode
+	FROM @ContextInfo
+	
+	IF (@BookingID = ''	OR @BookingID = NULL )
+	BEGIN
+		SET @BookingID = 0
+	END
+
+	------------ Check PatientID Exist or Not Exist ----------------
+	SET @pPID = -1
+	IF (@BookingID != 0)
+	  BEGIN
+	    SELECT @pPID = dbo.fnGetPatientID (@BookingID, @pOrgID)
+      END
+   ------------ Check PatientID Exist or Not Exist END -------------
+
+   ------------ for HomeCollection Start ----------
+   DECLARE @SourceType NVARCHAR(100), @HealthHubID NVARCHAR(100),
+           @IsAlphaNum INT 
+   
+   SELECT @HealthHubID = RoleName
+   FROM   @ContextInfo
+   
+   --- If @IsAlphaNum return 1 then failure 0 then Success ---
+   SET @IsAlphaNum = 0
+   SELECT @IsAlphaNum = CASE WHEN RoleName LIKE '%[^a-z1-9@()-_]%'
+                        THEN 1 ELSE 0 END  
+   FROM   @ContextInfo
+
+   IF (@IsAlphaNum = 0)
+     BEGIN
+	    SET @HealthHubID = '';
+	 END
+   
+   SET @SourceType = ''
+   
+   DECLARE @ItemLevelDiscountneed VARCHAR(20);
+
+			SET @ItemLevelDiscountneed = Isnull((
+						SELECT configvalue
+						FROM configorgmaster
+						WHERE orgid = @pOrgID
+							AND configkeyid = (
+								SELECT configkeyid
+								FROM configkeymaster
+								WHERE configkey = 'NeedItemLevelDiscount'
+								)
+						), 'N')
+
+   IF EXISTS( Select 1 from Bookings with(Nolock) where OrgID = @pOrgID and BookingID = @BookingID)
+     BEGIN
+       SELECT @SourceType = SourceType, @HealthHubID = ISNULL(HealthHubID,'')
+	   FROM Bookings with(Nolock) where OrgID = @pOrgID and BookingID = @BookingID
+     END
+
+	IF (@HealthHubID != '') --- If Walkin Patient
+	  BEGIN
+	     SELECT TOP 1 @pPID = PatientID FROM Patient with(Nolock) WHERE OrgID = @pOrgID and HealthHubID = @HealthHubID
+      END
+
+ --   DECLARE @TName [nvarchar](Max), @TGender [nchar](1),   @TDOB [nvarchar](255), @TMobNo [nvarchar](20), 
+ --            @TEMail NVARCHAR(200),  @TURNo [nvarchar](50), @TURNType [nvarchar](50)  
+    
+	--IF (@pPID != - 1 AND @HealthHubID != '')  
+ --     BEGIN  
+	--	   SELECT top 1 @TName = NAME  
+	--			 ,@TGender = SEX  
+	--			 ,@TDOB = CONVERT(NVARCHAR(255), DOB)  
+	--			 ,@TMobNo = MobileNumber  
+	--			 ,@TEMail = EMail  
+	--			 ,@TURNo = URNO  
+	--			 ,@TURNType = CONVERT(NVARCHAR(255), URNTypeId)  
+	--	   FROM Patient  
+	--		   ,PatientAddress  
+	--	   WHERE Patient.PatientID = @pPID  
+	--		   AND PatientAddress.PatientID = @pPID  
+	--		   --AND PatientAddress.AddressType = 'P'
+	--		   AND Patient.OrgID = @pOrgID
+ 
+	--	 IF ( @TName != @Name )   
+	--		BEGIN 
+	--		 SET @pReturnStatus = 102  
+	--		 RETURN  
+	--		END 
+	--	 ELSE IF ( @TGender != @SEX)  
+	--	   BEGIN 
+	--		 SET @pReturnStatus = 102  
+	--		 RETURN  
+	--	   END 
+	--	 ELSE IF (CONVERT(DATE, @TDOB) != CONVERT(DATE, @pDOB))
+	--	   BEGIN 
+	--		 SET @pReturnStatus = 102  
+	--		 RETURN  
+	--	   END 
+ --     END
+
+   ------------ for HomeCollection End ------------
+   
+   IF (@BookingID != 0)
+	 BEGIN
+	   --SET @BookingID=0 --Commanded for HomeCollection Booking table update to PatientID, PatientNumber and VisitID 
+	   SET @pPatientID = -1
+	   IF (@pPID != -1)
+		 BEGIN
+		   SET @BookingID = 0
+		   SET @pPatientID = @pPID
+		 END
+	 END
+   
+ --by Dinesh      
+ DECLARE @ConfigKeyValue_pat NVARCHAR(10)    
+    
+ SELECT @ConfigKeyValue_pat = com.ConfigValue    
+ FROM ConfigKeyMaster ckm    
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID    
+  AND com.OrgID = @pOrgID    
+  AND ISNULL(ckm.ConfigKey, '') = 'IsPatientLogin'    
+    
+ --end Dinesh      
+ --*************Added for Igenetic-->Cash collection for credit client*****************----     
+ --------------------- VEL---------------------
+	IF EXISTS (
+	SELECT	1
+	FROM ConfigKeyMaster ckm
+	INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID
+		AND com.OrgID = @pOrgID
+		AND ISNULL(ckm.ConfigKey, '') = 'B2CSSRSFILLFORMAT')
+	BEGIN
+	   SET @NewPassword= 'UhjJLCcZM8o='
+	END
+
+	--------------------- VEL---------------------
+
+
+ DECLARE @collectcashforcreditclient NVARCHAR(10);  
+  
+ SELECT @collectcashforcreditclient = com.ConfigValue  
+ FROM ConfigKeyMaster ckm  
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID  
+  AND com.OrgID = @pOrgID  
+  AND ISNULL(ckm.ConfigKey, '') = 'collectcashforcreditclient';  
+  
+  IF(@collectcashforcreditclient='' or @collectcashforcreditclient is NULL)  
+BEGIN  
+    SET @collectcashforcreditclient='N'  
+END  
+ --*************Added for Igenetic-->Cash collection for credit client*****************----   
+ DECLARE @IsCountryCode NVARCHAR(10)  
+  
+ SET @IsCountryCode = (  
+   SELECT iscountrycode  
+   FROM CommunicationConfig  
+   WHERE OrgID = @pOrgID  
+    AND iscountrycode = 'Y'  
+   )  
+  
+ DECLARE @ServerDate DATETIME  
+  
+ SELECT @ServerDate = (  
+   SELECT dbo.Fn_getserverdate(@ContextInfo)  
+   )  
+  
+ DECLARE @TempPatientID BIGINT  
+ DECLARE @Curdate DATE  
+ DECLARE @TypeCard NVARCHAR(100)  
+  
+ SELECT @TypeCard = item  
+ FROM dbo.Fnsplit(@CreditRedeemType, '~')  
+  
+ DECLARE @CurrencyID BIGINT  
+  
+ SELECT @CurrencyID = isnull(CurrencyID, 0)  
+ FROM RateMaster  
+ WHERE orgid = @pOrgID  
+  AND RateId = (  
+   SELECT TOP 1 RateID  
+   FROM @pBillingTable  
+   )  
+  
+ DECLARE @pClientcode NVARCHAR(50)  
+ DECLARE @pClientId BIGINT  
+ Declare @IsAdvanceClient Bigint=0
+  
+ SELECT @pClientcode = ClientCode  
+  ,@pClientId = ClientID  ,@IsAdvanceClient=Isnull(IsAdvanceClient,0)
+ FROM ClientMaster  
+ WHERE ClientID = (  
+   SELECT TOP 1 ClientID  
+   FROM @VisitClientMapping  
+   )  
+  
+ --IF( @pIsCreditBill = 'N' )            
+ --  BEGIN            
+ IF EXISTS (  
+   SELECT 1  
+   FROM ClientMaster CM   
+   INNER JOIN @VisitClientMapping VCM ON VCM.CLientID = CM.ClientID  
+   WHERE CM.OrgID = @pOrgID  
+    AND Isnull(CM.IsCash, 'Y') = 'N'  
+   )  
+ BEGIN  
+  SET @pIsCreditBill = 'Y'  
+ END  
+  
+ --END            
+ SELECT @Curdate = (  
+   SELECT dbo.Fn_getserverdate(@ContextInfo)  
+   )  
+  
+ IF (Isnull(@pExternalVisitID, '') <> '')  
+ BEGIN  
+  SELECT @TempPatientID = PatientID  
+  FROM PatientVisit  
+  WHERE ExternalVisitID = @pExternalVisitID  
+   AND OrgID = @pOrgID  
+  
+  IF (@TempPatientID <> @pPatientID)  
+  BEGIN  
+   IF EXISTS (  
+     SELECT ExternalVisitID  
+     FROM PatientVisit  
+     WHERE ExternalVisitID = @pExternalVisitID  
+      AND OrgID = @pOrgID  
+     )  
+   BEGIN  
+    SET @pReturnStatus = 101  
+  
+    RETURN  
+ END  
+  END  
+ END  
+  
+ DECLARE @CoPaymentType NVARCHAR(15) = NULL  
+  
+ IF @IsSRF ='Y'
+ BEGIN
+   SELECT @SRFID = CASE WHEN Charindex('|',AdditionalInfo)>0 THEN SUBSTRING(AdditionalInfo,Charindex('|',AdditionalInfo)+1,CHARINDEX('~',Additionalinfo)-(CHARINDEX('|',Additionalinfo)+1)) ELSE '' END ,
+   @CoPaymentType=SUBSTRING(AdditionalInfo,0,Charindex('|',AdditionalInfo)) ,
+   @PassportNo=CASE WHEN Charindex('~',AdditionalInfo)>0 THEN SUBSTRING(AdditionalInfo,Charindex('~',AdditionalInfo)+1,Len(AdditionalInfo)) ELSE '' END
+	 FROM @ContextInfo  
+	 WHERE Isnull(AdditionalInfo, '') <> ''
+
+	 SET @TRFID=@pRoundNo
+	 SET @pRoundNo=''
+
+ END
+ ELSE IF @ISNeedPassportinVisitLevel = 'Y'
+ BEGIN
+ SELECT @SRFID = CASE WHEN Charindex('|',AdditionalInfo)>0 THEN SUBSTRING(AdditionalInfo,Charindex('|',AdditionalInfo)+1,CHARINDEX('~',Additionalinfo)-(CHARINDEX('|',Additionalinfo)+1)) ELSE '' END ,
+   @CoPaymentType=SUBSTRING(AdditionalInfo,0,Charindex('|',AdditionalInfo)) ,
+   @PassportNo=CASE WHEN Charindex('~',AdditionalInfo)>0 THEN SUBSTRING(AdditionalInfo,Charindex('~',AdditionalInfo)+1,Len(AdditionalInfo)) ELSE '' END
+	 FROM @ContextInfo  
+	 WHERE Isnull(AdditionalInfo, '') <> ''
+ END
+
+ ELSE
+ BEGIN
+ SELECT @CoPaymentType = AdditionalInfo  
+ FROM @ContextInfo  
+ WHERE Isnull(AdditionalInfo, '') <> ''  
+ END
+ DECLARE @pOrderedInvTableNew ORDEREDINVESTIGATION  
+ DECLARE @pCreatedAt AS DATETIME = (  
+   SELECT dbo.Fn_getserverdate(@ContextInfo)  
+   )  
+ DECLARE @NewAge NVARCHAR(20)  
+ --DECLARE @pvisitID bigint = -1                                                                                   
+ DECLARE @pRoleID AS BIGINT  
+ DECLARE @pDeptID AS BIGINT  
+ DECLARE @pFinalBillID AS BIGINT = - 1  
+ DECLARE @pBillNumber NVARCHAR(30) = ''  
+ DECLARE @invCount INT  
+ DECLARE @pLoginId BIGINT  
+ DECLARE @pLabNo NVARCHAR(30)  
+ DECLARE @pOrderedInvCnt INT  
+ DECLARE @pAmountReceived DECIMAL(18, 2) = 0  
+ DECLARE @NeedTempRegistration NCHAR(1) = 'N'  
+ DECLARE @LoginRoleID INT  
+ DECLARE @patNum AS NVARCHAR(30)  
+ DECLARE @previousFinalBID BIGINT  
+ DECLARE @pPreviousNetValue DECIMAL(18, 2)  
+ DECLARE @DecimalAgeValue NVARCHAR(50)  
+ DECLARE @BaseRateID BIGINT  
+ DECLARE @pClientPolicyID INT  
+ DECLARE @DiscountPolicyID INT  
+ DECLARE @DiscountCategoryCode NVARCHAR(25)  
+  
+ --IF (  
+ --  (  
+ --   @OnBehalfofLocationID = 0  
+ --   AND @IsCopay = 'Y'  
+ --   )  
+ --  OR @pIsCreditBill = 'N'  
+ --  OR @collectcashforcreditclient = 'Y'  
+ --  )  
+ --BEGIN  
+  SELECT @pAmountReceived = Sum(AmtReceived)  
+  FROM @AmtReceivedDetails  
+ --END  
+  
+ SELECT @pRoleID = LI.RoleID  
+  ,@pDeptID = Isnull(LI.DeptID, - 1)  
+ FROM LoggedInUsers LI  
+ WHERE LI.LoginID = @pCreatedBy  
+  
+ --IF @pAgeUnits='Y' and CHARINDEX('.',@Age) > 0                            
+ --       BEGIN                                                                                  
+ -- DECLARE @str nvarchar(255)                                                                                  
+ -- DECLARE @str1 nvarchar(255)                                                                                  
+ -- SET @str=@Age                                                              
+ -- SET @str1= substring(@str,1,(charindex('~',@str)-1))                                                                                  
+ -- set @DecimalAgeValue=@str1+'.0.0'                              
+ -- set @Age=convert(nvarchar,@pAgeValue)+'~Year(s)'                                                                                  
+ --  END                                                                                    
+ --       if @pAgeUnits='M'                                                                                 
+ --       begin                               
+ --       set @DecimalAgeValue='0.'+cast(@pAgeValue as nvarchar)+'.0.0'                                                                                  
+ --       END                                                                          
+ --       if @pAgeUnits='W'                                                                                  
+ --       begin                                                                                  
+ --       set @DecimalAgeValue='0.0.'+cast(@pAgeValue as nvarchar)+'.0'                                             
+ --       End                                                                                  
+ --       if @pAgeUnits='D'                                              
+ --        begin                                                                                  
+ --       set @DecimalAgeValue='0.0.0.'+cast(@pAgeValue as nvarchar)                                                                                  
+ --       End                          
+ IF @pPatientID <= 0  
+ BEGIN  
+  DECLARE @NewAge1 NVARCHAR(20)  
+  
+  SET @NewAge1 = (  
+    SELECT Replace(@Age, '~', ' ')  
+    );  
+  SET @NewAge = @NewAge1  
+   --SET @NewAge = CONVERT(nvarchar,@pAgeValue,5) + ' ' + @pAgeUnits                      
+ END  
+  
+ IF @pDue < 0  
+ BEGIN  
+  SET @pDue = 0  
+ END  
+  
+ --IF @pIsCreditBill = 'Y'  
+ -- AND @collectcashforcreditclient <> 'Y' --@pOrgID<>109  
+ --BEGIN  
+ -- SET @pDue = 0  
+ --END  
+  
+ IF (@PatientVisitID = 0)  
+ BEGIN  
+  SET @PatientVisitID = - 1  
+ END  
+  
+ IF (@pPatientID > 0)  
+ BEGIN  
+  SET @pDOB = @pDOB  
+ --SET @pDOB = dbo.fn_getDOB(@pAgeValue, @pAgeUnits)                                                        
+   --SET @NewAge = dbo.fn_getAge(@pDOB)                   
+ END  
+  
+ IF (@pDOB <> '01 Jan 1800')  
+ BEGIN  
+  DECLARE @NewAge2 NVARCHAR(20)  
+  
+  SET @NewAge2 = (  
+    SELECT Replace(@Age, '~', ' ')  
+    );  
+  SET @NewAge = @NewAge2  
+   --SET @NewAge = dbo.fn_getAge(@pDOB)        
+END  
+ELSE  
+ BEGIN   
+ DECLARE @NewAge3 NVARCHAR(20)  
+ DECLARE @Check NVARCHAR(20)  
+ SELECT @Check= RIGHT(@Age, 7);  
+ if(  @Check = 'UnKnown' )  
+  SET @NewAge3 = (  
+    SELECT Replace(@Age, '~', ' ')  
+    );  
+  SET @NewAge = @NewAge3  
+ END  
+  
+ --IF(@pDOB = '01 Jan 1800')                                          
+ --BEGIN       
+ -- SET @pDOB = dbo.fn_getDOB(@pAgeValue, @pAgeUnits)                          
+ -- SET @NewAge = dbo.fn_getAge(@pDOB)                        
+ --END                                                             
+ IF (@pDOB = '01 Jan 1800' AND @NewAge<>' UnKnown')  
+ BEGIN  
+  SET @pDOB = '1800-01-01 00:00:00';  
+  SET @NewAge = '';  
+ END  
+  
+ IF (@NewAge = '')  
+ BEGIN  
+  SET @pDOB = '1800-01-01 00:00:00';  
+ END  
+  
+ IF @pTATDate = 'Jan  1 1753 12:00AM'  
+ BEGIN  
+  SET @pTATDate = NULL  
+ END  
+  
+ DECLARE @pReportDeliveryDate DATETIME  
+  
+ SELECT @pReportDeliveryDate = Max(TatDate)  
+ FROM @pBillingTable  
+  
+ IF (@OnBehalfofLocationID = NULL)  
+  SET @OnBehalfofLocationID = 0  
+  
+ DECLARE @NEXTURN NVARCHAR(20)  
+ DECLARE @Configcount BIGINT  
+  
+ IF @pURNo = ''  
+ BEGIN  
+  IF (  
+    (  
+     SELECT Count(PA.URNO)  
+     FROM LabRefOrgAddress LRA  
+     INNER JOIN Patient PA ON PA.OrgID = LRA.RefOrgID  
+     WHERE PA.PatientID = @pPatientID  
+      AND LRA.LabRefOrgID = @PatientVisitID  
+     ) = 0  
+    )  
+  BEGIN  
+   SET @Configcount = ''  
+  
+   SELECT @Configcount = Isnull((  
+      SELECT ConfigValue  
+      FROM ConfigOrgMaster  
+      WHERE OrgID = @pOrgID  
+       AND ConfigKeyID = (  
+        SELECT ConfigKeyID  
+        FROM ConfigKeyMaster  
+        WHERE ConfigKey = 'URNNUMBER'  
+        )  
+      ), 0)  
+  
+   IF @Configcount <> ''  
+   BEGIN  
+    EXEC Pgetnextid @pOrgID  
+     ,'URN'  
+     ,@NEXTURN OUT  
+     ,@pOrgAddressID  
+  
+    SET @pURNo = CONVERT(NVARCHAR, @NEXTURN)  
+    SET @pURNo = (  
+      SELECT CO.ConfigValue  
+      FROM ConfigOrgMaster CO  
+      INNER JOIN ConfigKeyMaster CK ON CO.ConfigKeyID = CK.ConfigKeyID  
+      WHERE CK.ConfigKey = 'URNIDPRIFIX'  
+       AND CO.OrgID = (  
+        SELECT CO.ConfigValue  
+        FROM ConfigOrgMaster CO  
+        INNER JOIN ConfigKeyMaster CK ON CO.ConfigKeyID = CK.ConfigKeyID  
+        WHERE CK.ConfigKey = 'URNNUMBER'  
+         AND CO.OrgID = @pOrgID  
+        )  
+      ) + '' + @pURNo  
+    SET @pURNof = 1  
+    SET @pURNType = 8  
+   END  
+   ELSE  
+   BEGIN  
+    SET @pURNo = NULL  
+    SET @pURNof = NULL  
+    SET @pURNType = NULL  
+   END  
+  END  
+  ELSE  
+  BEGIN  
+   SET @pURNo = (  
+     SELECT PA.URNO  
+     FROM LabRefOrgAddress LRA  
+     INNER JOIN Patient PA ON PA.OrgID = LRA.RefOrgID  
+     WHERE PA.PatientID = @pPatientID  
+      AND LRA.LabRefOrgID = @PatientVisitID  
+     )  
+  END  
+ END  
+  
+ DECLARE @AlterColumn NVARCHAR(Max)  
+ DECLARE @OldValues NVARCHAR(Max)  
+ DECLARE @PName NVARCHAR(Max)  
+ DECLARE @Page NVARCHAR(Max)  
+ DECLARE @Address1 NVARCHAR(Max)  
+ DECLARE @Address2 NVARCHAR(Max)  
+DECLARE @Address3 NVARCHAR(Max)  
+ DECLARE @PTITLECode NVARCHAR(20)  
+ DECLARE @PMarStatus [nchar] (1)  
+ DECLARE @PhoneNo NVARCHAR(20)  
+ DECLARE @MobileNo [nvarchar] (20)  
+ DECLARE @Gender [nchar] (1)  
+ DECLARE @DOB NVARCHAR(255)  
+ DECLARE @City NVARCHAR(50)  
+ DECLARE @StateID NVARCHAR(50)  
+ DECLARE @CountryID NVARCHAR(50)  
+ DECLARE @pEMail NVARCHAR(200)  
+ DECLARE @ApprovalNo NVARCHAR(50)  
+ DECLARE @ExternalPatientNumber [nvarchar] (30)  
+ DECLARE @URNo [nvarchar] (50)  
+ DECLARE @URNType NVARCHAR(50)  
+ DECLARE @pReferingPhysicianName [nvarchar] (300)  
+ DECLARE @ReferingHospitalName [nvarchar] (100)  
+ DECLARE @pSRFID [varchar] (80)
+ DECLARE @pTRFID [varchar] (80)
+ DECLARE @pPassportNo NVARCHAR(100)
+  
+ SET @AlterColumn = ''  
+ SET @OldValues = ''  
+  
+ IF (@pPatientID != - 1 AND ISNULL(@BookingID,0)=0)  
+ BEGIN  
+  SELECT @PName = NAME  
+   ,@PTITLECode = CONVERT(NVARCHAR(255), TITLECode)  
+   ,@PMarStatus = MartialStatus  
+   ,@Page = Age  
+   ,@Address1 = Add1  
+ ,@Address2 = Add2  
+   ,@Address3 = Add3  
+   ,@PhoneNo = LandLineNumber  
+   ,@MobileNo = MobileNumber  
+   ,@Gender = SEX  
+   ,@DOB = CONVERT(NVARCHAR(255), DOB)  
+   ,@City = City  
+   ,@StateID = CONVERT(NVARCHAR(255), StateID)  
+   ,@CountryID = CONVERT(NVARCHAR(255), CountryID)  
+   ,@pEMail = EMail  
+   ,@ExternalPatientNumber = ExternalPatientNumber  
+   ,@URNo = URNO  
+   ,@URNType = CONVERT(NVARCHAR(255), URNTypeId)  
+   ,@pPassportNo=PatientAddress.PassportNo
+  FROM Patient  
+      INNER JOIN PatientAddress    
+  ON Patient.PatientID = @pPatientID    
+      
+ -- WHERE Patient.PatientID = @pPatientID        
+   AND PatientAddress.PatientID = @pPatientID  
+   AND PatientAddress.AddressType = 'P'  
+
+    IF EXISTS (  SELECT 1  FROM ConfigKeyMaster ckm  
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID  
+  AND com.OrgID = @pOrgID  
+  AND ISNULL(ckm.ConfigKey, '') = 'NeedPassportAsVisitLevel')  
+  BEGIN
+  SELECT @pPassportNo = PassportNumber
+  FROM PatientVisit  
+  WHERE PatientVisitId = @PatientVisitID  
+   AND OrgID = @pOrgID  
+  END
+  
+  SELECT @pReferingPhysicianName = ReferingPhysicianName  
+   ,@ReferingHospitalName = HospitalName  ,
+   @pSRFID=SRFID,
+   @pTRFID=TRFID
+  FROM PatientVisit  
+  WHERE PatientVisitId = @PatientVisitID  
+   AND OrgID = @pOrgID  
+  
+  SELECT @ApprovalNo = Isnull(ApprovalNo, '')  
+  FROM AdditionalVisitDetails  
+  WHERE PatientVisitID = @PatientVisitID  
+  
+  IF (@PName != @Name)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Name'  
+   SET @OldValues += ',' + @PName  
+  END  
+  
+  IF (@PTITLECode != @TITLECode)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'TITLECode'  
+   SET @OldValues += ',' + @PTITLECode  
+  END  
+  
+  IF (@PMarStatus != @pMartialStatus)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'MartialStatus'  
+   SET @OldValues += ',' + @PMarStatus  
+  END  
+  
+  IF (@Page != @NewAge)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Age'  
+   SET @OldValues += ',' + @Page  
+  END  
+  
+  IF (@Address1 != @pAddress1)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Add1'  
+   SET @OldValues += ',' + @Address1  
+  END  
+  
+  IF (@Address2 != @pAddress2)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Add2'  
+   SET @OldValues += ',' + @Address2  
+  END  
+  
+  IF (@Address3 != @pAddress3)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Add3'  
+   SET @OldValues += ',' + @Address3  
+  END  
+  
+  IF (@PhoneNo != @pPhoneNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'LandLineNumber'  
+   SET @OldValues += ',' + @PhoneNo  
+  END  
+  
+  IF (@MobileNo != @pMobileNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'MobileNumber'  
+   SET @OldValues += ',' + @MobileNo  
+  END  
+  
+  IF (@Gender != @SEX)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'SEX'  
+   SET @OldValues += ',' + @Gender  
+  END  
+  
+  IF (CONVERT(DATE, @DOB) != CONVERT(DATE, @pDOB))  
+  BEGIN  
+   SET @AlterColumn += ',' + 'DOB'  
+   SET @OldValues += ',' + CONVERT(NVARCHAR(255), @DOB)  
+  END  
+  
+  IF (@City != @pCity)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'City'  
+   SET @OldValues += ',' + @City  
+  END  
+  
+  IF (@StateID != @pStateID)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'State'  
+   SET @OldValues += ',' + @StateID  
+  END  
+  
+  IF (@CountryID != @pCountryID)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Country'  
+   SET @OldValues += ',' + @CountryID  
+  END  
+  
+  IF (@pEMail != @EMail)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'EMail'  
+   SET @OldValues += ',' + @pEMail  
+  END  
+  
+  IF (@ExternalPatientNumber != @pExternalPatientNumber)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'ExternalPatientNumber'  
+   SET @OldValues += ',' + @ExternalPatientNumber  
+  END  
+  
+  IF (@URNo != @pURNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'URNO'  
+   SET @OldValues += ',' + @URNo  
+  END  
+  
+  IF (@ApprovalNo != @pApprovalNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'ApprovalNo'  
+   SET @OldValues += ',' + @ApprovalNo  
+  END  
+  
+  IF (@URNType != @pURNType)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'URNTypeId'  
+   SET @OldValues += ',' + @URNType  
+  END  
+  
+  IF (@pReferingPhysicianName != @ReferingPhysicianName)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'ReferingPhysicianName'  
+   SET @OldValues += ',' + @pReferingPhysicianName  
+  END  
+  
+  IF (@ReferingHospitalName != @pReferingHospitalName) 
+  BEGIN  
+   SET @AlterColumn += ',' + 'HospitalName'  
+   SET @OldValues += ',' + @ReferingHospitalName  
+  END  
+  IF (@pSRFID != @SRFID)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'SRFID'  
+   SET @OldValues += ',' + @pSRFID  
+  END 
+  IF (@pTRFID != @TRFID)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'TRFID'  
+   SET @OldValues += ',' + @pTRFID  
+  END 
+   
+
+   IF EXISTS (  SELECT 1  FROM ConfigKeyMaster ckm  
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID  
+  AND com.OrgID = @pOrgID  
+  AND ISNULL(ckm.ConfigKey, '') = 'NeedPassportAsVisitLevel')
+  BEGIN
+  IF (@PassportNo != @pPassportNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'PassportNumber'  
+   SET @OldValues += ',' + @pPassportno  
+  END
+ END
+ ELSE BEGIN
+ IF (@PassportNo != @pPassportNo)  
+  BEGIN  
+   SET @AlterColumn += ',' + 'Passportno'  
+   SET @OldValues += ',' + @pPassportno  
+  END 
+ END
+ 
+   
+ END
+  
+ IF (@pPatientID = - 1 OR ISNULL(@BookingID,0)!=0)
+ BEGIN  
+  DECLARE @pPatientNumber AS NVARCHAR(30)  
+  
+  EXEC Pgetnextid @pOrgID  
+   ,'PAT'  
+   ,@pPatientNumber OUT  
+   ,@pOrgAddressID  
+  
+  DECLARE @pRegistrationType NCHAR(1)  
+  
+  SELECT @NeedTempRegistration = COM.ConfigValue  
+  FROM ConfigOrgMaster COM  
+  INNER JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID = COM.ConfigKeyID  
+  WHERE CKM.ConfigKey = 'NeedTempPatientReg'  
+  
+  IF @NeedTempRegistration = 'Y'  
+   SET @pRegistrationType = 'T'  
+  
+  --    print   @pRegistrationType                 
+  --print @NeedTempRegistration                                                                                       
+  INSERT INTO Patient (  
+   NAME  
+   ,Email  
+   ,TITLECode  
+   ,SEX  
+   ,RegistrationDTTM  
+   ,DOB  
+   ,OCCUPATION  
+   ,MartialStatus  
+   ,BloodGroup  
+   ,Comments  
+   ,PlaceOfBirth  
+   ,PersonalIdentification  
+   ,[Status]  
+   ,OrgID  
+   ,CreatedBy  
+   ,CreatedAt  
+   ,Age  
+   ,PatientNumber  
+   ,CompressedName  
+   ,Nationality  
+   ,URNofId  
+   ,URNTypeId  
+   ,URNO  
+   ,NotifyType  
+   ,PatientType  
+   ,PatientStatus  
+   ,ExternalPatientNumber  
+   ,RegistrationType  
+   ,UnknownFlag  
+   ,HasHealthCard
+   ,HealthHubID  
+   )  
+  SELECT @Name  
+   ,@EMail  
+   ,@TitleCode  
+   ,@Sex  
+   ,@pCreatedAt  
+   ,@pDOB  
+   ,''  
+   ,@pMartialStatus  
+   ,- 1  
+   ,''  
+   ,''  
+   ,'~'  
+   ,'A'  
+   ,@pOrgID  
+   ,@pCreatedBy  
+   ,@pCreatedAt  
+   ,@NewAge  
+   ,@pPatientNumber  
+   ,@pCompressedName  
+   ,@pNationality  
+   ,@pURNof  
+   ,@pURNType  
+   ,@pURNo  
+   ,@IsNotifyType  
+   ,@pPatientType  
+   ,@pPatientStatus  
+   ,@pExternalPatientNumber  
+   ,@pRegistrationType  
+   ,@pUnknownFlag  
+   ,@HasHealthCard  
+   ,@HealthHubID
+
+  SELECT @pPatientID = Scope_identity()  
+  
+  
+  INSERT INTO PatientAddress (  
+   PatientID  
+   ,Add1  
+   ,Add2  
+   ,Add3  
+   ,City  
+   ,MobileNumber  
+   ,LandLineNumber  
+   ,AddressType  
+   ,CountryID  
+   ,StateID  
+   ,CreatedAt  
+   ,CreatedBy  
+   ,PostalCode  
+   ,Passportno
+   )  
+  SELECT @pPatientID  
+   ,@pAddress1  
+   ,@pAddress2  
+   ,@pAddress3  
+   ,@pCity  
+   ,  
+   /*Commented By arivalagan.k*/  
+   @pMobileNo  
+   ,  
+   --CASE     
+   --      WHEN @IsCountryCode = 'Y' THEN @pMobileNo Else CONVERT(nvarchar,(select ISDCode from Country where CountryID=@pCountryID))+ @pMobileNo    
+   --END,         
+   @pPhoneNo  
+   ,'P'  
+   ,@pCountryID  
+   ,@pStateID  
+   ,@pCreatedAt  
+   ,@pCreatedBy  
+   ,@pPinCode  
+   ,@PassportNo
+  
+  INSERT INTO PatientAddress (  
+   PatientID  
+   ,Add1  
+   ,Add2  
+   ,Add3  
+   ,City  
+   ,MobileNumber  
+   ,LandLineNumber  
+   ,AddressType  
+   ,StateID  
+   ,CountryID  
+   ,CreatedAt  
+   ,CreatedBy  
+   ,PostalCode
+   ,Passportno  
+   )  
+  SELECT @pPatientID  
+   ,@pAddress1  
+   ,@pAddress2  
+   ,@pAddress3  
+   ,@pCity  
+   ,CASE   
+    WHEN @IsCountryCode = 'Y'  
+     THEN @pMobileNo  
+    ELSE CONVERT(NVARCHAR, (  
+       SELECT ISDCode  
+     FROM Country  
+       WHERE CountryID = @pCountryID  
+       )) + @pMobileNo  
+    END  
+   ,@pPhoneNo  
+   ,'C'  
+   ,@pStateID  
+   ,@pCountryID  
+   ,@pCreatedAt  
+   ,@pCreatedBy  
+   ,@pPinCode 
+   ,@PassportNo 
+ END  
+ ELSE  
+ BEGIN  
+  --select 'suresh'
+  
+  DECLARE @pAddressID BIGINT  
+ 
+  SELECT @pAddressID = AddressID  
+  FROM PatientAddress 
+  WHERE PatientID = @pPatientID  
+   AND AddressType = 'P'  
+  
+  --**Audit Code Begin**--                                                                                                                              
+  DECLARE @AuditCount1 INT  
+  DECLARE @AuditCount2 INT  
+  DECLARE @AuditCount3 INT  
+  DECLARE @AuditCountforedit INT  
+
+  -------ADDED BY PRABAKAR FOR EDIT BILL NOTIFICATIONS ENTRY-- 
+ --SELECT @AuditCountforedit = Count(1)                
+  --FROM   Patient P                                 
+  --       INNER JOIN PatientVisit PV                       
+  --               ON P.PatientID = PV.PatientID                               
+  --WHERE  ( P.Name != @Name                                
+  --          OR P.Age != @NewAge                      
+  --          OR P.SEX != @SEX                                
+  --          OR P.DOB != @pDOB                                
+  --          OR P.MartialStatus != @pMartialStatus                                
+  --          OR PV.ReferingPhysicianName != @ReferingPhysicianName )                                
+  --       AND P.PatientID = @pPatientID                                
+  -------END-------------------------------------------------                                
+  SELECT @AuditCount1 = Count(PatientID)  
+  FROM Patient  
+  WHERE (  
+    NAME != @Name  
+    OR Age != @NewAge  
+    OR SEX != @SEX  
+    OR TITLECode != @TITLECode  
+    OR DOB != @pDOB  
+    OR MartialStatus != @pMartialStatus  
+    OR CompressedName != @pCompressedName  
+    OR EMail != @EMail  
+    OR Isnull(URNO, '0') = @pURNo  
+    OR URNofId = @pURNof  
+    OR URNTypeId = @pURNType  
+    )  
+   AND PatientID = @pPatientID  
+   
+   
+   If(@ISNeedPassportinVisitLevel = 'Y')
+   BEGIN
+    SELECT @AuditCount2 = Count(PatientID)  
+  FROM PatientAddress  
+  WHERE (  
+    Add1 != @pAddress1  
+    OR Add2 != @pAddress2  
+    OR Add3 != @pAddress3  
+    OR MobileNumber != @pMobileNo  
+    OR LandLineNumber != @pPhoneNo  
+    OR City != @pCity  
+    OR StateID != @pStateID  
+    OR CountryID != @pCountryID  
+    OR PostalCode != @pPinCode 
+	
+    )  
+   AND AddressID = @pAddressID  
+   END
+   ELSE
+   BEGIN
+   
+  
+  SELECT @AuditCount2 = Count(PatientID)  
+  FROM PatientAddress  
+  WHERE (  
+    Add1 != @pAddress1  
+    OR Add2 != @pAddress2  
+    OR Add3 != @pAddress3  
+    OR MobileNumber != @pMobileNo  
+    OR LandLineNumber != @pPhoneNo  
+    OR City != @pCity  
+    OR StateID != @pStateID  
+    OR CountryID != @pCountryID  
+    OR PostalCode != @pPinCode 
+	OR Passportno!=@PassportNo
+    )  
+   AND AddressID = @pAddressID  
+  END
+  SELECT @AuditCount3 = Count(PatientID)  
+  FROM PatientHistoryExt  
+  WHERE (  
+    DetailHistory != @pPatientHistory  
+    OR Remarks != @pRegistrationRemarks  
+    )  
+   AND PatientID = @pPatientID  
+  
+  DECLARE @StrpPatientID NVARCHAR(30)  
+  
+  SELECT @StrpPatientID = CONVERT(NVARCHAR, @pPatientID)  
+    --select @NewAge
+  IF (  
+    @AuditCount1 > 0  
+    OR @AuditCount2 > 0  
+    OR @AuditCount3 > 0  
+    )  
+  BEGIN  
+   
+   IF NOT EXISTS (  
+     SELECT PatientID  
+     FROM Patient_HIST  
+     WHERE PatientId = @pPatientID  
+      AND OrgID = @pOrgID  
+     )  
+   BEGIN  
+    
+    EXEC [Pinsertaudithistory] @pPatientID  
+     ,'Patient'  
+     ,@pCreatedBy  
+     ,@pOrgID  
+     ,''  
+     ,0  
+     ,@ContextInfo  
+	 --select @NewAge
+   END  
+  
+   IF NOT EXISTS (  
+     SELECT PatientID  
+     FROM PatientAddress_HIST  
+     WHERE AddressID = @pAddressID  
+      AND Patientid = @pPatientID  
+     )  
+   BEGIN  
+    EXEC [Pinsertaudithistory] @pAddressID  
+     ,'PatientAddress'  
+     ,@pCreatedBy  
+     ,@pOrgID  
+     ,''  
+     ,@StrpPatientID  
+     ,@ContextInfo  
+   END  
+  
+   IF NOT EXISTS (  
+     SELECT PatientID  
+     FROM PatientHistoryExt_Hist  
+     WHERE Patientid = @pPatientID  
+      AND OrgID = @pOrgID  
+     )  
+   BEGIN  
+    EXEC [Pinsertaudithistory] @pPatientID  
+     ,'PatientHistoryExt'  
+     ,@pCreatedBy  
+     ,@pOrgID  
+     ,''  
+     ,0  
+     ,@ContextInfo  
+   END  
+  END  
+  
+  IF EXISTS (  
+    SELECT 1  
+    FROM PatientVisit  
+    WHERE ReferVisitID = @PatientVisitID  
+    )  
+  BEGIN  
+   DECLARE @TransPatientID BIGINT  
+  
+   SELECT @TransPatientID = PatientID  
+   FROM PatientVisit  
+   WHERE ReferVisitID = @PatientVisitID  
+  
+ UPDATE Patient with (ROWLOCK)  
+   SET NAME = @Name  
+    ,Age = @NewAge  
+    ,SEX = @SEX  
+    ,TITLECode = @TITLECode  
+    ,DOB = @pDOB  
+    ,MartialStatus = @pMartialStatus  
+    ,EMail = @EMail  
+    ,CompressedName = @pCompressedName  
+    ,ExternalPatientNumber = @pExternalPatientNumber  
+    ,PatientType = @pPatientType  
+    ,PatientStatus = @pPatientStatus  
+    ,NotifyType = @IsNotifyType  
+    ,URNO = @pURNo  
+    ,URNTypeId = @pURNType  
+ ,URNofId = @pURNof  
+   WHERE PatientID = @TransPatientID  
+     
+     
+  
+   UPDATE PatientAddress with (ROWLOCK)  
+   SET Add1 = @pAddress1  
+    ,Add2 = @pAddress2  
+    ,Add3 = @pAddress3  
+    ,MobileNumber = @pMobileNo  
+    ,LandLineNumber = @pPhoneNo  
+    ,City = @pCity  
+    ,StateID = @pStateID  
+    ,CountryID = @pCountryID  
+    ,PostalCode = @pPinCode  
+    ,ModifiedBy = @pCreatedBy  
+    ,ModifiedAt = @pCreatedAt  
+	,Passportno=@PassportNo
+   WHERE PatientID = @TransPatientID  
+    AND AddressType = 'C'  
+ IF(@ISNeedPassportinVisitLevel = 'Y')
+     BEGIN
+     
+     UPDATE PatientAddress with (ROWLOCK)  
+   SET 
+	Passportno=''
+   WHERE PatientID = @TransPatientID  
+    AND AddressType = 'C'
+     
+     END
+	--- Seetha Part update SRFID in Child Org ----
+	Declare @TransPatientVisitID bigint
+
+	SELECT @TransPatientVisitID = PatientVisitID  
+    FROM PatientVisit  
+    WHERE ReferVisitID = @PatientVisitID 
+    Update PatientVisit set SRFID=@SRFID,TRFID=@TRFID , PassportNumber=@PassportNo where PatientVisitID=@TransPatientVisitID
+	--- Seetha Part update SRFID in Child Org ----
+	
+	
+	 
+  END  
+  
+  UPDATE Patient with (ROWLOCK)  
+  SET NAME = @Name  
+   ,Age = @NewAge  
+   ,SEX = @SEX  
+   ,TITLECode = @TITLECode  
+   ,DOB = @pDOB  
+   ,MartialStatus = @pMartialStatus  
+   ,EMail = @EMail  
+   ,CompressedName = @pCompressedName  
+   ,ExternalPatientNumber = @pExternalPatientNumber  
+   ,PatientType = @pPatientType  
+   ,PatientStatus = @pPatientStatus  
+   ,NotifyType = @IsNotifyType  
+   ,URNO = @pURNo  
+   ,URNTypeId = @pURNType  
+   ,URNofId = @pURNof  
+  WHERE PatientID = @pPatientID  
+  
+  UPDATE PatientAddress with (ROWLOCK)  
+  SET Add1 = @pAddress1  
+   ,Add2 = @pAddress2  
+   ,Add3 = @pAddress3  
+   ,MobileNumber = @pMobileNo  
+   ,LandLineNumber = @pPhoneNo  
+   ,City = @pCity  
+   ,StateID = @pStateID  
+   ,CountryID = @pCountryID  
+   ,PostalCode = @pPinCode  
+   ,ModifiedBy = @pCreatedBy  
+   ,ModifiedAt = @pCreatedAt  
+   ,Passportno=@PassportNo
+  WHERE PatientID = @pPatientID -- and AddressType='P'     
+  
+  IF(@ISNeedPassportinVisitLevel = 'Y')
+     BEGIN
+     
+     UPDATE PatientAddress with (ROWLOCK)  
+   SET 
+	Passportno=''
+   WHERE PatientID = @pPatientID
+     
+     END                                                                                        
+  
+  BEGIN  
+   IF NOT EXISTS (  
+     SELECT 1  
+     FROM PatientHistoryExt  
+     WHERE PatientVisitId = @PatientVisitID  
+      AND OrgID = @pOrgID  
+      AND PatientID = @pPatientID  
+     )  
+    INSERT INTO PatientHistoryExt (  
+     DetailHistory  
+     ,PatientVisitId  
+     ,PatientID  
+     ,OrgID  
+     ,CreatedAt  
+     ,CreatedBy  
+     ,Remarks  
+     )  
+    SELECT @pPatientHistory  
+     ,@PatientVisitID  
+     ,@pPatientID  
+     ,@pOrgID  
+     ,@pCreatedAt  
+     ,@pCreatedBy  
+     ,@pRegistrationRemarks  
+   ELSE  
+    UPDATE PatientHistoryExt with (ROWLOCK)  
+    SET DetailHistory = @pPatientHistory  
+     ,Remarks = @pRegistrationRemarks  
+    WHERE PatientVisitId = @PatientVisitID  
+     AND OrgID = @pOrgID  
+     AND PatientID = @pPatientID  
+  END  
+  
+  IF (  
+    @AuditCount1 > 0  
+    OR @AuditCount2 > 0  
+    OR @AuditCount3 > 0  
+    )  
+  BEGIN  
+   EXEC [Pinsertaudithistory] @pPatientID  
+    ,'Patient'  
+    ,@pCreatedBy  
+    ,@pOrgID  
+    ,@AlterColumn  
+    ,0  
+    ,@ContextInfo  
+  
+   EXEC [Pinsertaudithistory] @pAddressID  
+    ,'PatientAddress'  
+    ,@pCreatedBy  
+    ,@pOrgID  
+    ,@AlterColumn  
+    ,@StrpPatientID  
+    ,@ContextInfo  
+  
+   EXEC [Pinsertaudithistory] @pPatientID  
+    ,'PatientHistoryExt'  
+    ,@pCreatedBy  
+    ,@pOrgID  
+    ,@AlterColumn  
+    ,0  
+    ,@ContextInfo  
+  
+   UPDATE Patient_HIST with (ROWLOCK)  
+   SET OldValues = @OldValues  
+    ,ApprovalNo = @pApprovalNo  
+    ,ExternalPatientNumber = @pExternalPatientNumber  
+   WHERE Patient_HISTID IN (  
+     SELECT Max(Patient_HISTID)  
+     FROM Patient_HIST  
+     )  
+  END  
+ END  
+  
+ IF (@pIsEditMode = 'N')  
+ BEGIN  
+  IF @pParentPatientID <= 0  
+  BEGIN  
+   IF (@pvisitID <= 0)  
+   BEGIN  
+    DECLARE @TodaysvisitCount NVARCHAR(10)  
+  
+    IF EXISTS (  
+      SELECT 1  
+      FROM PatientVisit  
+      WHERE Cast(VisitDate AS DATE) = @Curdate  
+       AND OrgID = @pOrgID  
+      )  
+    BEGIN  
+     SELECT @TodaysvisitCount = Isnull(Max(CONVERT(BIGINT, Isnull(TodaysVisitNo, 0))), 0) + 1  
+     FROM PatientVisit  
+     WHERE Cast(VisitDate AS DATE) = @Curdate  
+      AND OrgID = @pOrgID  
+    END  
+    ELSE  
+    BEGIN  
+     SET @TodaysvisitCount = 1  
+    END  
+  
+    DECLARE @pVisitNumber AS NVARCHAR(30)  
+  
+    EXEC Pgetnextid @pOrgID  
+     ,'PVN' 
+   ,@pVisitNumber OUT  
+     ,@pOrgAddressID  
+  
+    IF (@pReferredPhysicianID > 0)  
+    BEGIN  
+     SET @pReferredPhysicianID = @pReferredPhysicianID  
+    END  
+    ELSE IF (Isnull(@ReferingPhysicianName, '') <> '')  
+    BEGIN  
+     --IF NOT EXISTS(SELECT PhysicianName from ReferingPhysician where PhysicianName=@ReferingPhysicianName)                                                                                      
+     INSERT ReferingPhysician (  
+      PhysicianName  
+      ,OrgID  
+      ,Salutation  
+      ,CreatedAt  
+      ,CreatedBy  
+      ,RegistrationType  
+      ,IsActive  
+      )  
+     VALUES (  
+      Upper(@ReferingPhysicianName)  
+      ,@pOrgID  
+      ,14  
+      ,@pCreatedAt  
+      ,@pCreatedBy  
+      ,'T'  
+      ,'Y'  
+      )  
+  
+     SELECT @pReferredPhysicianID = Scope_identity()  
+    END  
+
+	 IF EXISTS (  SELECT 1  FROM ConfigKeyMaster ckm  
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID  
+  AND com.OrgID = @pOrgID  
+  AND ISNULL(ckm.ConfigKey, '') = 'NeedPassportAsVisitLevel')  
+  BEGIN
+  Update PatientAddress set PassportNo='' where PatientID=@pPatientID 
+
+  END
+
+  --- Seetha changes -- REF Doctor Scope Change -- Start
+
+  If (@pReferredPhysicianID = 0)
+  BEGIN
+  Set @pReferredPhysicianID = (select ReferingPhysicianID from ReferingPhysician 
+  where PhysicianCode='SELF' and ORGID=@pOrgID and ISNULL(Status,'A') <> 'D')
+  Set @pReferredPhysicianID = ISNULL(@pReferredPhysicianID,0)
+   Set @ReferingPhysicianName = (select PhysicianName from ReferingPhysician 
+  where PhysicianCode='SELF' and ORGID=@pOrgID  and ISNULL(Status,'A') <> 'D')
+  Set @ReferingPhysicianName = ISNULL(@ReferingPhysicianName,'')
+  
+  END
+
+   --- Seetha changes -- REF Doctor Scope Change  -- END
+  
+    INSERT INTO PatientVisit (  
+     PatientID  
+     ,VisitDate  
+     ,ReferOrgID  
+     ,OrgID  
+     ,OrgAddressID  
+     ,ConditionId  
+   ,VisitType    
+     ,VisitPurposeID    
+     ,SpecialityID    
+     ,PhysicianID    
+     ,ParentVisitId    
+     ,CreatedBy    
+     ,CreatedAt    
+     ,ReferingPhysicianID    
+     ,ReferingSpecialityID    
+     ,TokenNumber    
+     ,ReferingPhysicianName    
+     ,SecuredCode    
+     ,ReferralType    
+     ,PriorityID    
+     ,HospitalID    
+     ,HospitalName    
+     ,LabVisitType    
+     ,WardNo    
+     ,EpisodeId    
+     ,EpisodeVisitID    
+     ,EpisodeVisitTrackID    
+     ,ConsignmentNo    
+     ,VisitNumber    
+     ,PatientStatusID    
+     ,TodaysVisitNo    
+     ,CreditLimit    
+     ,IsDueBill    
+     ,IsIncomplete   
+	 ,NurseNotes
+	 ,BookingID -- Included for HomeCollection
+	 ,SourceType -- Included for HomeCollection
+	 ,IsFranchisee
+	 	 ,SRFID
+	 ,TRFID
+   )    
+    SELECT @pPatientID    
+     ,@pCreatedAt    
+     ,@PatientVisitID    
+     ,@pOrgID    
+     ,@pOrgAddressID    
+     ,0    
+     ,@pVisitTypeID    
+     ,@pVisitPurposeID    
+     ,@SpecialtyID    
+     ,0    
+     ,0    
+     ,@pCreatedBy    
+     ,@pCreatedAt    
+     ,@pReferredPhysicianID    
+     ,@pReferedSpecialityID    
+     ,0    
+     ,Upper(@ReferingPhysicianName)    
+     ,@pSecuredCode    
+     ,@ReferralType    
+     ,@PriorityID    
+     ,@pReferedHospitalID    
+     ,@pReferingHospitalName    
+     ,@pIsExternalPatient    
+     ,CASE WHEN @IsSRF='Y' THEN '' ELSE @pWardNo    END
+     ,@pEpisodeID    
+     ,@pEpisodeVisitID    
+     ,@pEpisodeTrackID    
+     ,@pConsignmentNo    
+     ,@pVisitNumber    
+     ,@pPatientStausID    
+     ,@TodaysvisitCount    
+     ,- 1.00    
+     ,CASE     
+      WHEN @pDue > 0    
+                                            and @collectcashforcreditclient <> 'Y'     
+    
+       THEN 1    
+      ELSE 0    
+      END    
+     ,CASE     
+      WHEN @pSiteID = 0    
+       THEN 'N'    
+      ELSE 'Y'    
+      END  
+	  ,@NeedExBarcode  
+	  ,@pBID
+	  ,@SourceType
+	  ,@Franchisee
+	  ,@SRFID
+	  ,@TRFID
+
+    SELECT @pvisitID = Scope_identity()    
+	 IF EXISTS (  SELECT 1  FROM ConfigKeyMaster ckm  
+ INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID  
+  AND com.OrgID = @pOrgID  
+  AND ISNULL(ckm.ConfigKey, '') = 'NeedPassportAsVisitLevel')  
+  BEGIN
+  Update PatientVisit set PassportNumber=@PassportNo where PatientVisitID=@pvisitID and OrgID=@pOrgId
+
+  END 
+
+	INSERT INTO PatientVisitLanguage (PatientVisitID,ReportLanguage,IsActive,CreatedAt,CreatedBy)
+	SELECT @pvisitID,ReportLanguage,'A',@pCreatedAt,@pCreatedBy FROM @ReportLanguage
+    
+    DECLARE @configKeyIDClientBatch INT                  
+                  
+      DECLARE @ConfigValueClientBatch nvarchar(50)                  
+                  
+                  
+                  
+      SELECT @configKeyIDClientBatch = ConfigKeyID                  
+                  
+      FROM   ConfigKeyMaster WITH(NOLOCK)                  
+                  
+      WHERE  ConfigKey = 'PopupconfigorgidReport'                  
+                  
+                  
+                  
+      SELECT @ConfigValueClientBatch = ConfigValue                  
+                  
+      FROM   ConfigOrgMaster WITH(NOLOCK)                  
+                  
+      WHERE  ConfigKeyID = @configKeyIDClientBatch                  
+  
+             AND OrgID = @pOrgID    
+
+  if(@ConfigValueClientBatch ='Y')      
+    Begin      
+          
+     declare @Feeid int      
+     declare @Feetype varchar(10)      
+     select @Feeid=FeeId,@Feetype=Feetype from @pVisitTemplate      
+     Declare @Batchid nvarchar(100)      
+     select @Batchid= Batchid from clientBatchMaster where clientid=@pClientId and Testnameid=@Feeid and Testtype=@Feetype and getdate() between Fromdate and Todate      
+      
+    insert into visittemplate(          
+     PatientVisitID,          
+     FeeID,          
+     FeeType,          
+     TemplateID,          
+     TemplateData,          
+     FinalBillID,          
+     OrgID,      
+     BatchId)          
+     select          
+     @pvisitID,          
+     FeeId,          
+     Feetype,          
+     templateid,          
+     templatedata,          
+     finalbillid,          
+     orgid,      
+     @Batchid from @pVisitTemplate          
+           
+     update clientBatchMaster set TestReducedCount = isnull(TestReducedCount,0)+1 where clientid=@pClientId and Testnameid=@Feeid and Testtype=@Feetype and getdate() between Fromdate and Todate      
+             End           
+    IF (@pBID > 0)    
+    BEGIN    
+     UPDATE Bookings with (ROWLOCK)    
+     SET PatientID = @pPatientID    
+      ,PatientVisitID = @pvisitID 
+	  ,PatientNumber = @pPatientNumber 
+	  ,BookingStatus = 'CD'
+     WHERE BookingID = @pBID    
+	 
+	 UPDATE Patient with (ROWLOCK)    
+     SET HealthHubID = @HealthHubID
+	 WHERE PatientID = @pPatientID AND PatientNumber = @pPatientNumber AND OrgID = @pOrgID
+
+    END    
+    IF (    
+      @pExternalVisitID IS NULL    
+      OR @pExternalVisitID = ''    
+      )    
+    BEGIN    
+     UPDATE PatientVisit with (ROWLOCK)    
+     SET ExternalVisitID = @pvisitID    
+     WHERE PatientVisitId = @pvisitID    
+    END    
+    ELSE    
+    BEGIN    
+     UPDATE PatientVisit with (ROWLOCK)    
+     SET ExternalVisitID = @pExternalVisitID    
+     WHERE PatientVisitId = @pvisitID    
+    END    
+    
+    IF (    
+      @pVisitNumber IS NULL    
+      OR @pVisitNumber = ''    
+      )    
+    BEGIN    
+     UPDATE PatientVisit with (ROWLOCK)    
+     SET VisitNumber = @pvisitID    
+     WHERE PatientVisitId = @pvisitID    
+    END    
+    
+    --/*Insert into History*/                       
+     INSERT INTO PatientVisit_HIST  (PatientVisitId,PatientID,VisitDate,ReferOrgID,OrgID,OrgAddressID,ConditionId, VisitType,VisitPurposeID,                                           
+     SpecialityID,PhysicianID,ParentVisitId,                                                                                                                      
+     CreatedBy,CreatedAt,ReferingPhysicianID,ReferingSpecialityID,TokenNumber,ReferingPhysicianName,SecuredCode,ReferralType,                                                                       
+     PriorityID,HospitalID,HospitalName,LabVisitType,WardNo,EpisodeId,EpisodeVisitID,EpisodeVisitTrackID,ConsignmentNo,                                              
+     VisitNumber,PatientStatusID,TodaysVisitNo,ExternalVisitID,CreditLimit,SRFID,TRFID,PassportNumber)                                
+     SELECT PatientVisitId,PatientID,VisitDate,ReferOrgID,OrgID,OrgAddressID,ConditionId, VisitType,VisitPurposeID,                                           
+     SpecialityID,PhysicianID,ParentVisitId,                                                     
+     @pCreatedBy,(SELECT dbo.fn_GetServerDate(@ContextInfo)),ReferingPhysicianID,ReferingSpecialityID,TokenNumber,ReferingPhysicianName,SecuredCode,ReferralType,                                                                            
+     PriorityID,HospitalID,HospitalName,LabVisitType,WardNo,EpisodeId,EpisodeVisitID,EpisodeVisitTrackID,ConsignmentNo,                                                                       
+     VisitNumber,PatientStatusID,TodaysVisitNo,ExternalVisitID,-1.00  ,SRFID ,TRFID  ,PassportNumber                       
+     from PatientVisit where PatientVisitId =@pvisitID                                  
+    --/*Insert into History*/                                   
+    IF NOT EXISTS (    
+      SELECT 1    
+      FROM AdditionalVisitDetails   
+      WHERE PatientVisitID = @pvisitID    
+      )    
+    BEGIN    
+     INSERT INTO AdditionalVisitDetails (    
+      PatientVisitID    
+      ,PhlebetomyID    
+      ,LogisticsID    
+      ,[RoundNo]    
+      ,Exautoauthorization    
+      ,ZoneID    
+      ,EmailCC    
+      ,VisitNumber    
+      ,ClinicCode    
+      )    
+     SELECT @pvisitID    
+      ,@pPhleboID    
+      ,@pLogisticsID    
+      ,@pRoundNo    
+      ,@pexautoauthorization    
+      ,@pZoneId    
+      ,@EmailCCAddress    
+      ,@pPVisitNumber    
+      ,@pClinicCode    
+    END    
+    
+    IF (    
+      @pApprovalNo IS NULL    
+      OR @pApprovalNo = ''    
+      )    
+    BEGIN    
+     UPDATE AdditionalVisitDetails with (ROWLOCK)    
+     SET ApprovalNo = NULL    
+     WHERE PatientVisitId = @pvisitID    
+    END    
+    ELSE    
+    BEGIN    
+     UPDATE AdditionalVisitDetails with (ROWLOCK)    
+     SET ApprovalNo = @pApprovalNo    
+     WHERE PatientVisitId = @pvisitID    
+    END    
+    
+    IF EXISTS (    
+      SELECT Count(1)    
+      FROM @pDespatchMode    
+      )    
+    BEGIN    
+     INSERT PatientDisPatchDetails (    
+      PatientID    
+      ,VisitID    
+      ,OrgID    
+      ,DispatchType    
+      ,DispatchValue    
+      ,CreatedBy    
+      ,CreatedAt    
+      ,Value    
+      )    
+     SELECT @pPatientID    
+      ,@pvisitID    
+      ,@pOrgID    
+      ,DispatchType    
+      ,Dispatchvalue    
+      ,@pCreatedBy    
+      ,@pCreatedAt    
+      ,@pValue    
+     FROM @pDespatchMode    
+    END    
+   END    
+    
+   --ELSE                                                              
+   --BEGIN                                                                                                          
+   INSERT INTO CheckAttributeDetails (    
+    ControlID    
+    ,ControlKey    
+    ,ControlValue    
+    ,VisitID    
+    ,EpisodeID    
+    ,SiteID    
+    ,OrgID    
+    ,CreatedAt    
+    ,CreatedBy    
+    )    
+   SELECT ControlMappingID    
+    ,ControlCode    
+    ,ControlValue    
+    ,@pvisitID    
+    ,@pEpisodeID    
+    ,@pSiteID    
+    ,@pOrgID    
+    ,@pCreatedAt    
+    ,@pCreatedBy    
+   FROM @pControlMappingDetails    
+  END    
+    
+  IF (@pFinalBillID <= 0)    
+  BEGIN    
+   EXEC dbo.Pgetnextid @pOrgID    
+    ,'BLN'    
+    ,@pBillNumber OUTPUT    
+    ,@pOrgAddressID    
+    
+   IF @pParentPatientID > 0    
+   BEGIN    
+    SELECT TOP 1 @previousFinalBID = FB.FinalbillID    
+    FROM finalBill FB    
+    WHERE FB.visitID = @pParentPatientID    
+     AND FB.OrgID = @pOrgID    
+    ORDER BY CreatedAt DESC    
+    
+    SELECT @pPreviousNetValue = NetValue    
+    FROM FinalBill    
+    WHERE FinalBillID = @previousFinalBID    
+    
+    SET @pVisitID = @pParentPatientID    
+    
+    DECLARE @TaskActionID BIGINT    
+    
+    IF EXISTS (    
+      SELECT IsSTAT    
+      FROM @pBillingTable    
+      WHERE IsSTAT = 'Y'    
+      )    
+    BEGIN    
+     SELECT @TaskActionID = TaskActionID    
+     FROM TaskActions    
+     WHERE ActionName = 'CollectSample'    
+     
+     UPDATE PatientVisit with (ROWLOCK)    
+     SET IsStat = 'Y'    
+     WHERE PatientVisitID = @pVisitID    
+      AND OrgID = @pOrgID    
+    
+     UPDATE T    
+     SET T.HighlightColor = 'MistyRose'    
+      ,T.ShowedTime = T.CreatedAt    
+     FROM Tasks T with (ROWLOCK)    
+     WHERE PatientVisitID = @pVisitID    
+      AND TaskActionID = @TaskActionID    
+    
+     UPDATE OI     
+     SET OI.IsStat = TB.IsStat    
+     FROM OrderedInvestigations OI with (ROWLOCK)    
+     INNER JOIN @pBillingTable TB ON TB.FeeID = OI.ID    
+     WHERE VisitID = @pVisitID    
+      AND OrgID = @pOrgID    
+    END    
+    ELSE    
+    BEGIN    
+UPDATE PatientVisit with (ROWLOCK)    
+     SET IsStat = 'N'    
+     WHERE PatientVisitID = @pVisitID    
+AND OrgID = @pOrgID    
+    
+     UPDATE T    
+     SET T.HighlightColor = ''    
+     FROM Tasks T with (ROWLOCK)    
+     WHERE PatientVisitID = @pVisitID    
+      AND TaskActionID = @TaskActionID    
+    
+     UPDATE OI     
+     SET OI.IsStat = TB.IsStat    
+     FROM OrderedInvestigations OI with (ROWLOCK)    
+     INNER JOIN @pBillingTable TB ON TB.FeeID = OI.ID    
+     WHERE VisitID = @pVisitID    
+      AND OrgID = @pOrgID    
+    END    
+   END    
+    
+   IF EXISTS (    
+     SELECT 1    
+     FROM Finalbill    
+     WHERE Orgid = @pOrgID    
+      AND Visitid = @pVisitID    
+      AND Patientid <> @pPatientID    
+     )    
+   BEGIN    
+    RAISERROR (    
+      'The Visit Number is already mapped with another patient'    
+      ,16    
+      ,2    
+      )    
+    
+    RETURN    
+   END    
+    
+   ---Add by Dinesh for Patient Portal on 21 nov 2015      
+   IF (@ConfigKeyValue_pat = 'Y')    
+   BEGIN    
+    SELECT @RoleID = RoleID    
+    FROM ROLE    
+    WHERE RoleName = 'Patient'    
+     AND OrgID = @pOrgID    
+    
+    BEGIN    
+     IF (    
+       @pPatientNumber != NULL    
+       OR @pPatientNumber != ''    
+       OR @pPatientNumber != 0    
+       )    
+      SET @patNum = @pPatientNumber    
+     ELSE    
+      SET @patNum = @PatientNumber    
+    END    
+    
+    IF (    
+      @patNum != NULL    
+      OR @patNum != ''    
+      OR @patNum != 0    
+      )    
+    BEGIN    
+     SELECT @pLoginId = MAX(LOGINID) + 1    
+     FROM LOGIN --WHERE OrgID = @pOrgID                                                                        
+    
+     IF NOT EXISTS (    
+       SELECT 1    
+       FROM LOGIN    
+       WHERE LoginName = @patNum    
+        AND OrgID = @pOrgID    
+       )    
+     BEGIN    
+      INSERT INTO LOGIN (    
+       LoginID    
+       ,LoginName    
+       ,Password    
+       ,IsLocked    
+       ,HasUserChangedPassword    
+       ,PasswordChangeCount    
+       ,OrgID    
+       ,STATUS    
+       ,CreatedBy    
+       ,CreatedAt    
+       ,ThemeID    
+       ,IsFirstLogin    
+       )    
+      VALUES (    
+       @pLoginId    
+       ,@patNum    
+       ,@NewPassword    
+       ,'N'    
+       ,'Y'    
+       ,1    
+       ,@pOrgID    
+       ,'A'    
+       ,@pCreatedBy    
+       ,@pCreatedAt    
+       ,1    
+       ,'Y'    
+       )    
+    
+      UPDATE Patient with (ROWLOCK)    
+      SET loginID = @pLoginId    
+      WHERE PatientNumber = @patNum    
+       AND OrgID = @pOrgID    
+     END    
+    
+     IF NOT EXISTS (    
+       SELECT 1    
+       FROM LoginRole    
+       WHERE RoleID = @RoleID    
+        AND LoginId = @pLoginId    
+       )    
+     BEGIN    
+      INSERT INTO LoginRole (    
+       RoleID    
+       ,LoginID    
+       ,StartDTTM    
+       ,EndDTTM    
+       ,STATUS    
+       ,CreatedBy    
+       ,CreatedAt    
+       )    
+      VALUES (    
+       @RoleID    
+       ,@pLoginId    
+       ,@pCreatedAt    
+       ,@pCreatedAt    
+       ,'A'    
+       ,@pCreatedBy    
+       ,@pCreatedAt    
+       )    
+     END    
+    
+     IF NOT EXISTS (    
+       SELECT 1    
+       FROM Users    
+       WHERE LoginID = @pLoginId    
+        AND OrgID = @pOrgID    
+       )    
+     BEGIN    
+      INSERT INTO Users (    
+       NAME    
+       ,DOB    
+       ,SEX    
+       ,TitleCode    
+       ,Email    
+       ,STATUS    
+       ,MaritalStatus    
+       ,OrgID    
+       ,CreatedBy    
+       ,CreatedAt    
+       ,LoginID    
+       )    
+      VALUES (    
+       @Name    
+       ,@pDOB    
+       ,@SEX    
+,@TITLECode    
+   ,@EMail    
+,'A'   
+       ,@pMartialStatus    
+       ,@pOrgID    
+       ,@pCreatedBy    
+       ,@pCreatedAt    
+       ,@pLoginId    
+       )    
+     END    
+    
+     IF NOT EXISTS (    
+       SELECT 1    
+       FROM LoginLocationMapping LLM     
+       INNER JOIN LoginRole LR  ON LR.LoginRoleID = LLM.LoginRoleID    
+       WHERE LR.RoleID = @RoleID    
+        AND LR.LoginID = @pLoginId    
+        AND LLM.OrgID = @pOrgID    
+       )    
+     BEGIN    
+      SELECT @LoginRoleID = LoginRoleID    
+      FROM LoginRole    
+      WHERE RoleID = @RoleID    
+       AND LoginID = @pLoginId    
+    
+      INSERT INTO LoginLocationMapping (    
+       LoginRoleID    
+       ,OrgID    
+       ,AddressID    
+       )    
+      VALUES (    
+       @LoginRoleID    
+       ,@pOrgID    
+       ,@pOrgAddressID    
+       )    
+     END    
+    END    
+    
+    --------------------------------------------------------------                                                    
+    SELECT @RoleID = RoleID    
+    FROM [Role]    
+    WHERE RoleName = 'Patient'    
+     AND OrgID = @pOrgID    
+    
+    SET @RoleID = 0    
+    SET NOCOUNT OFF    
+   END    
+    
+   --End by dinesh                
+   ----Surya.G ---  For Cash with Advance -------------
+    Declare @RestrictReceAmtForCashwithAdvance varchar(2)
+  SET @RestrictReceAmtForCashwithAdvance = (Select ConfigValue  
+      FROM ConfigOrgMaster  
+      WHERE OrgID = @pOrgID  
+       AND ConfigKeyID = (  
+        SELECT ConfigKeyID  
+        FROM ConfigKeyMaster  
+        WHERE ConfigKey = 'RestrictReceAmtForCashwithAdvance'  
+        ) )
+
+   ----Surya.G --------------
+if (@IsCopay ='')    
+Begin    
+set @IsCopay='N'     
+end    
+   INSERT INTO FinalBill (    
+    OrgID    
+    ,PatientID    
+    ,VisitID    
+    ,GrossBillValue    
+       
+    ,StdDedID  
+    ,NetValue    
+       
+       ,IsCreditBill
+     
+    ,CreatedBy    
+    ,CreatedAt    
+    ,OrgAddressID    
+    ,TaxAmount    
+    ,BillNumber    
+       
+    ,ServiceCharge    
+    ,RoundOff    
+       
+    ,TPAPaymentStatus    
+    ,TATDate    
+    ,EDcess    
+    ,SHEDCess    
+    ,ReportDateTime    
+    ,IsFoc    
+    ,RedeemPoints    
+    ,RedeemValue    
+    ,HasHealthcoupon    
+    ,CollectionID    
+,IsCoPayBill   ,
+IsFranchisee 
+    )    
+   SELECT @pOrgID    
+    ,@pPatientID    
+    ,@pVisitID    
+    ,@pGrossValue    
+      
+    ,0    
+    ,@pNetValue    
+    
+    ,@pIsCreditBill  
+    ,@pCreatedBy    
+    ,@pCreatedAt    
+    ,@pOrgAddressID    
+    ,@pTax    
+    ,@pBillNumber    
+      
+    ,@pServiceCharge    
+    ,@pRoundOff    
+       
+    ,'Pending'    
+    ,@pReportDeliveryDate    
+    ,@pEDCess    
+    ,@pSHEDCess    
+    ,@pReportDeliveryDate    
+    ,@IsFoc    
+    ,@RedemPoints    
+    ,@RedemValue    
+    ,@HasHealthCard    
+    ,@CollectionID    
+,@IsCopay 
+,@Franchisee  
+			
+			SELECT @pFinalBillID = Scope_identity()
+Insert Into Finalbill_Franchisee (
+VisitID,
+OrgID,
+FinalBillID,
+GrossBillValue,
+DiscountAmount,
+NetValue,
+AmountReceived,
+Due,
+
+IsCreditBill,
+CurrentDue,
+DiscountReason,
+DiscountApprovedBy,
+
+RoundOff,
+CreatedAt,
+CreatedBy
+)
+select @pVisitID,@pOrgID,@pFinalBillID ,@pGrossValue    
+    ,@pDiscount    
+    ,@pNetValue    
+    ,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pAmountReceived  END
+	,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pDue End 
+	,@pIsCreditBill 
+	,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pDue End 
+	,@pDiscountReason   
+	,@pDiscountApprovedBy
+	,@pRoundOff 
+	,@pCreatedAt
+	,@pCreatedBy
+
+
+			
+			
+
+			--- Modified By Murali Manohar To Insert ClientBill for Ledger      
+			INSERT INTO ClientBill (
+				BillDate
+				,OrgID
+				,FinalBillID
+				,PatientID
+				,VisitID
+				,SourceCode
+				,CurrencyID
+				,Amount
+				,STATUS
+				,CreatedAt
+				,CreatedBy
+				)
+			SELECT convert(DATE, @pcreatedat)
+				,@pOrgID
+				,@pFinalBillID
+				,@pPatientID
+				,@pVisitID
+				,@pClientcode
+				,@CurrencyID
+				,@pNetValue
+				,'Approved'
+				,@pcreatedat
+				,@pCreatedBy ---mano                            
+				------------------------------Murali Manohar-------------------------    
+
+			-------  
+			IF (@ClientFlag = 'Y')
+			BEGIN
+				INSERT INTO FinalBill (
+					OrgID
+					,PatientID
+					,VisitID
+					,GrossBillValue
+					
+					,StdDedID
+					,NetValue
+					
+					,IsCreditBill
+					,CreatedBy
+					,CreatedAt
+					,OrgAddressID
+					,TaxAmount
+					,BillNumber
+					
+					,ServiceCharge
+					,RoundOff
+					
+					,TPAPaymentStatus
+					,TATDate
+					,EDcess
+					,SHEDCess
+					,ReportDateTime
+					,IsFoc
+					,RedeemPoints
+					,RedeemValue
+					,HasHealthcoupon
+					,IsFranchisee
+					)
+				SELECT @pOrgID
+					,@pPatientID
+					,@pVisitID
+					,@pGrossValue
+					
+					,0
+					,@pNetValue
+					
+					,@pIsCreditBill
+					,@pCreatedBy
+					,@pCreatedAt
+					,@pOrgAddressID
+					,@pTax
+					,@pBillNumber
+					
+					,@pServiceCharge
+					,@pRoundOff
+					
+					,'Pending'
+					,@pReportDeliveryDate
+					,@pEDCess
+					,@pSHEDCess
+					,@pReportDeliveryDate
+					,@IsFoc
+					,@RedemPoints
+					,@RedemValue
+					,@HasHealthCard
+					,@Franchisee
+				SELECT @pFinalBillID = Scope_identity()
+
+
+				Insert Into Finalbill_Franchisee (
+VisitID,
+OrgID,
+FinalBillID,
+GrossBillValue,
+DiscountAmount,
+NetValue,
+AmountReceived,
+Due,
+
+IsCreditBill,
+CurrentDue,
+DiscountReason,
+DiscountApprovedBy,
+
+RoundOff,
+CreatedAt,
+CreatedBy
+)
+select @pVisitID,@pOrgID,@pFinalBillID ,@pGrossValue    
+    ,@pDiscount    
+    ,@pNetValue    
+    ,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pAmountReceived  END
+	,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pDue End 
+	,@pIsCreditBill 
+	,Case When Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and Isnull(@pIsCreditBill,'N')='N' then 0 Else @pDue End 
+	,@pDiscountReason   
+	,@pDiscountApprovedBy
+	,@pRoundOff 
+	,@pCreatedAt
+	,@pCreatedBy
+
+
+
+				--- Modified By Murali Manohar To Insert ClientBill for Ledger         
+				--IF(@pOrgID = 70 AND(@pClientId =67 OR @pClientId =70 OR @pClientId =360 OR @pClientId =782))        
+				--BEGIN           
+				INSERT INTO ClientBill (
+					BillDate
+					,OrgID
+					,FinalBillID
+					,PatientID
+					,VisitID
+					,SourceCode
+					,CurrencyID
+					,Amount
+					,STATUS
+					,CreatedAt
+					,CreatedBy
+					)
+				SELECT convert(DATE, @pcreatedat)
+					,@pOrgID
+					,@pFinalBillID
+					,@pPatientID
+					,@pVisitID
+					,@pClientcode
+					,@CurrencyID
+					,@pNetValue
+					,'Approved'
+					,@pcreatedat
+					,@pCreatedBy ---mano                            
+					------------------------------Murali Manohar-------------------------     
+			END
+
+			------------
+			IF (@pDiscountID > 0)
+			BEGIN
+				INSERT INTO PatientDiscount (
+					FinalBillID
+					,DiscountID
+					,DiscountCode
+					,DiscountName
+					,DiscountType
+					,UserDiscountValue
+					,DiscountCeilingValue
+					,SlabCeilingValue
+					,SlabPercentage
+					)
+				SELECT @pFinalBillID
+					,@pDiscountID
+					,PD.DiscountCode
+					,PD.DiscountName
+					,PD.DiscountType
+					,PD.UserDiscountValue
+					,PD.DiscountCeilingValue
+					,PD.SlabCeilingValue
+					,PD.SlabPercentage
+				FROM @PatientDiscount PD
+			END
+
+			-------                                  
+			IF @pParentPatientID > 0
+			BEGIN
+				UPDATE FinalBill with (ROWLOCK)
+				SET RefFinalBillID = @pFinalBillID
+				WHERE FinalbillID = @previousFinalBID
+					AND VisitID = @pParentPatientID
+
+				UPDATE FinalBill with (ROWLOCK)
+				SET VisitID = @pParentPatientID
+				WHERE FinalbillID = @pFinalBillID
+					AND VisitID = @pVisitID
+					AND OrgID = @pOrgID
+
+				--SELECT TOP 1 @previousFinalBID = FB.FinalbillID FROM finalBill FB WHERE FB.visitID  = @pParentPatientID and FB.OrgID=@pOrgID                           
+				--UPDATE FinalBill SET RefFinalBillID=@previousFinalBID WHERE FinalbillID=@previousFinalBID and VisitID=@pParentPatientID                                                                        
+				--UPDATE FinalBill SET VisitID=@pParentPatientID WHERE FinalbillID=@pFinalBillID and VisitID=@pVisitID and OrgID=@pOrgID                                                                                                              
+				DECLARE @CreditReceiptNo NVARCHAR(25)
+				DECLARE @DebitReceiptNo NVARCHAR(25)
+				DECLARE @CreditReferenceID BIGINT
+				DECLARE @DebitReferenceID BIGINT
+
+				--SELECT @ReceiptNo = @ReceiptNo                                                                                                               
+				/**  CODE START FOR Credit/Debit Notes - NALLA**/
+				IF EXISTS (
+						SELECT FinalbillID
+						FROM InvoiceDetails
+						WHERE FinalbillID = @previousFinalBID
+						)
+				BEGIN
+					/** Credit Notes**/
+					EXEC dbo.Pgetnextid @pOrgID
+						,'REC'
+						,@CreditReceiptNo OUTPUT
+
+					INSERT INTO CreditDebitSummary (
+						ReceiptNo
+						,CrDrDate
+						,ClientType
+						,ClientId
+						,ItemType
+						,Authorizedby
+						,OrgID
+						)
+					SELECT @CreditReceiptNo
+						,@pCreatedAt
+						,'Client'
+						,0
+						,'Credit'
+						,@pCreatedBy
+						,@pOrgID
+
+					SET @CreditReferenceID = Scope_identity()
+
+					INSERT INTO CreditDebitDetails (
+						SummaryID
+						,ReferenceType
+						,ReferenceID
+						,Amount
+						,Reason
+						,OrgID
+						,CreatedAt
+						)
+					SELECT @CreditReferenceID
+						,'Billing'
+						,@previousFinalBID
+						,@pPreviousNetValue
+						,137
+						,@pOrgID
+						,@pCreatedAt
+				END
+			END
+
+			--NALLA                                                                                                                   
+			IF @pParentPatientID <= 0
+			BEGIN
+				IF (
+						@pPatientHistory <> ''
+						OR @pRegistrationRemarks <> ''
+						)
+				BEGIN
+					INSERT INTO PatientHistoryExt (
+						DetailHistory
+						,PatientVisitId
+						,PatientID
+						,OrgID
+						,CreatedAt
+						,CreatedBy
+						,Remarks
+						)
+					SELECT @pPatientHistory
+						,@pVisitID
+						,@pPatientID
+						,@pOrgID
+						,@pCreatedAt
+						,@pCreatedBy
+						,@pRegistrationRemarks
+				END
+			END
+		END
+
+		SELECT @invCount = Count(1)
+		FROM @pBillingTable BT
+		WHERE BT.FeeType IN (
+				'INV'
+				,'PKG'
+				,'GRP'
+				)
+
+		IF @invCount > 0
+		BEGIN
+			EXEC dbo.Pgetnextid @pOrgID
+				,'INV'
+				,@pLabNo OUTPUT
+				,@pOrgAddressID
+		END
+		ELSE
+		BEGIN
+			SET @pLabNo = - 1
+		END
+
+		IF @pParentPatientID <= 0
+		BEGIN
+			INSERT VisitClientMapping (
+				VisitID
+				,ClientID
+				,FinalBillID
+				,RateID
+				,OrgID
+				,PreAuthAmount
+				,PreAuthApprovalNumber
+				,ClaimAmount
+				,ClaimLogic
+				,CoPayment
+				,CopaymentPercent
+				,CoPaymentLogic
+				,NonMedicalAmount
+				,ClientAttributes
+				,IsAllMedical
+				,PaymentStatus
+				,CreatedBy
+				,CreatedAt
+				,ModifiedBy
+				,ModifiedAt
+				,OnBehalfOfClientID
+				,CoPaymentType
+				,IsCopay
+				)
+			SELECT @pVisitId
+				,ClientID
+				,@pFinalBillID
+				,RateID
+				,@pOrgID
+				,PreAuthAmount
+				,PreAuthApprovalNumber
+				,ClaimAmount
+				,ClaimLogic
+				,CoPayment
+				,CopaymentPercent
+				,CoPaymentLogic
+				,NonMedicalAmount
+				,ClientAttributes
+				,IsAllMedical
+				,PaymentStatus
+				,@pCreatedBy
+				,@pCreatedAt
+				,@pCreatedBy
+				,@pCreatedAt
+				,@OnBehalfofLocationID
+				,@CoPaymentType
+				,@IsCopay
+			FROM @VisitClientMapping
+			 /****************SAP UPDATION***********************/
+			   DECLARE @CreditCLientID BIGINT
+			    IF( @pIsCreditBill = 'Y' )
+                    BEGIN
+                        IF( @IsCopay = 'N' )
+                          BEGIN
+						  SELECT @CreditCLientID = CM.ClientID
+                              FROM  @VisitClientMapping VM
+                                     INNER JOIN ClientMaster CM 
+                                             ON CM.ClientID = VM.ClientID
+						  UPDATE CCD set CCD.PendingCreditLimit=(CCD.PendingCreditLimit - @pNetValue),CCD.NotInvoiced=(CCD.NotInvoiced + @pNetValue)
+						      From ClientCreditDetails CCD with (ROWLOCK) 
+									INNER JOIN ClientMaster CM  
+											ON CM.ClientID=CCD.ClientID
+											where CCD.ClientID=@CreditCLientID
+						  END
+					END
+			  /****************SAP END***********************/
+		END
+		ELSE
+		BEGIN
+			INSERT VisitClientMapping (
+				VisitID
+				,ClientID
+				,FinalBillID
+				,RateID
+				,OrgID
+				,PreAuthAmount
+				,PreAuthApprovalNumber
+				,ClaimAmount
+				,ClaimLogic
+				,CoPayment
+				,CopaymentPercent
+				,CoPaymentLogic
+				,NonMedicalAmount
+				,ClientAttributes
+				,IsAllMedical
+				,PaymentStatus
+				,CreatedBy
+				,CreatedAt
+				,ModifiedBy
+				,ModifiedAt
+				,OnBehalfOfClientID
+				,CoPaymentType
+				)
+			SELECT @pParentPatientID
+				,ClientID
+				,@pFinalBillID
+				,RateID
+				,@pOrgID
+				,PreAuthAmount
+				,PreAuthApprovalNumber
+				,ClaimAmount
+				,ClaimLogic
+				,CoPayment
+				,CopaymentPercent
+				,CoPaymentLogic
+				,NonMedicalAmount
+				,ClientAttributes
+				,IsAllMedical
+				,PaymentStatus
+				,@pCreatedBy
+				,@pCreatedAt
+				,@pCreatedBy
+				,@pCreatedAt
+				,@OnBehalfofLocationID
+				,@CoPaymentType
+			FROM @VisitClientMapping
+
+			UPDATE VisitClientMapping with (ROWLOCK)
+			SET RefFinalBillID = @pFinalBillID
+				,IsActive = 'N'
+			WHERE finalbillid = @previousFinalBID
+				AND visitid = @pParentPatientID
+				AND OrgID = @pOrgID
+
+			DECLARE @previousClientID BIGINT
+
+			SELECT @previousClientID = ClientID
+			FROM VisitClientMapping
+			WHERE finalbillid = @previousFinalBID
+				AND visitid = @pParentPatientID
+				AND OrgID = @pOrgID
+
+			UPDATE CM
+			SET CM.ClientID = @previousClientID
+			FROM CreditDebitSummary CM with (ROWLOCK)
+			WHERE SummaryID = @CreditReferenceID
+
+			SELECT @previousClientID = ClientID
+			FROM @VisitClientMapping
+
+			UPDATE CM
+			SET CM.ClientID = @previousClientID
+			FROM CreditDebitSummary CM with (ROWLOCK)
+			WHERE CM.SummaryID = @DebitReferenceID
+			 /****************SAP UPDATION***********************/
+			   DECLARE @CreditCLientID1 BIGINT
+			    IF( @pIsCreditBill = 'Y' )
+                    BEGIN
+                        IF( @IsCopay = 'N' )
+                          BEGIN
+						  SELECT @CreditCLientID1 = CM.ClientID
+         FROM   @VisitClientMapping VM
+                                     INNER JOIN ClientMaster CM 
+                                             ON CM.ClientID = VM.ClientID
+						  UPDATE CCD set CCD.PendingCreditLimit=(CCD.PendingCreditLimit - @pNetValue),CCD.NotInvoiced=(CCD.NotInvoiced + @pNetValue)
+						      From ClientCreditDetails CCD with (ROWLOCK) 
+									INNER JOIN ClientMaster CM  
+											ON CM.ClientID=CCD.ClientID
+											where CCD.ClientID=@CreditCLientID
+						  END
+					END
+			  /****************SAP END***********************/
+		END
+		DECLARE @tblTransBills TABLE (
+			FeeID INT
+			,FeeType NVARCHAR(20)
+			,ClientID BIGINT
+			)
+
+		INSERT INTO @tblTransBills (
+			FeeID
+			,FeeType
+			,ClientID
+			)
+		SELECT BT.FeeID
+			,BT.FeeType
+			,(
+				SELECT TOP 1 ClientID
+				FROM @VisitClientMapping
+				)
+		FROM @pBillingTable BT
+		WHERE BT.DetailsID IN (
+				0
+				,- 1
+				)
+			AND @pFinalBillID > 0
+
+		----select *from @tblTransBills                                                              
+		DECLARE @tFeedID BIGINT
+		DECLARE @tFeeType NVARCHAR(200)
+		DECLARE @tClientId BIGINT
+
+		SELECT @tFeedID = FeeID
+			,@tFeeType = FeeType
+			,@tClientId = ClientID
+		FROM @tblTransBills
+
+		DECLARE @NClientID BIGINT
+
+		SET @NClientID = @tClientId
+
+		DECLARE @tedmptable AS TABLE (
+			Rateid BIGINT
+			,Amout DECIMAL(18, 2)
+			)
+		DECLARE @BFeeID BIGINT
+		DECLARE @BillingItems AS TABLE (
+			RowID INT IDENTITY(1, 1)
+			,FeeID BIGINT
+			,FeeType NVARCHAR(10)
+			,Rateid BIGINT
+			,Amount DECIMAL(18, 2)
+			)
+
+		INSERT INTO @BillingItems (
+			FeeID
+			,FeeType
+			)
+		SELECT FeeID
+			,FeeType
+		FROM @pBillingTable
+
+		DECLARE BillingItems CURSOR
+		FOR
+		SELECT DISTINCT RowID
+		FROM @BillingItems
+
+		OPEN BillingItems
+
+		FETCH NEXT
+		FROM BillingItems
+		INTO @BFeeID
+
+		WHILE @@FETCH_STATUS = 0
+		BEGIN
+			DECLARE @xFeeID BIGINT
+				,@xFeeType NVARCHAR(10)
+				,@xRate DECIMAL(18, 2)
+				,@pTClientID BIGINT
+
+			SELECT @pTClientID = (
+					SELECT TOP 1 ClientID
+					FROM @VisitClientMapping
+					)
+
+			SELECT @xFeeID = FeeID
+				,@xFeeType = FeeType
+			FROM @BillingItems
+			WHERE RowID = @BFeeID
+
+			INSERT INTO @tedmptable
+			EXEC Pgettransferbillingitemsdetails @pOrgID
+				,@xFeeID
+				,@xFeeType
+				,@pTClientID
+				,@ContextInfo
+
+			DECLARE @yTrateID BIGINT
+			DECLARE @yTAmount DECIMAL(18, 2)
+
+			SELECT @yTrateID = Rateid
+				,@yTAmount = Amout
+			FROM @tedmptable
+
+			UPDATE @BillingItems
+			SET rateid = @yTrateID
+				,Amount = @yTAmount
+			WHERE RowID = @BFeeID
+
+			DELETE @tedmptable
+
+			FETCH NEXT
+			FROM BillingItems
+			INTO @BFeeID
+		END
+
+		CLOSE BillingItems
+
+
+
+		DEALLOCATE BillingItems
+
+		INSERT INTO BillingDetails (
+			FinalBillID
+			,FeeId
+			,FeeType
+			,FeeDescription
+			,Amount
+			,CreatedBy
+			,CreatedAt
+			,STATUS
+			,Quantity
+			,IsCreditBill
+			,Rate
+			,IsReimbursable
+			
+			,ReferenceType
+			,RefPhyName
+			,RefPhysicianID
+			,DiscOrEnhanceType
+			,Remarks
+			,LabNo
+			,RoleID
+			,DeptID
+			,OrgID
+			,ActualAmount
+			,RateID
+			,IsDiscountable
+			,IsTaxable
+			,IsNABL
+			,IsOutSource
+			,IsSTAT
+			,ClientID
+			,TransferRateID
+			,TransferAmount
+			,LocationID
+			,TatDateTime
+			,BaseRateID
+			,DiscountPolicyID
+			,DiscountCategoryCode
+			,ReportDateTime
+			,MaxTestDisPercentage
+			,MaxTestDisAmount
+			,BaseTestcalculationAmount
+			,IsRedeem
+			,RedeemPoints
+  , RedeemAmount,
+              BilledDate)
+		SELECT DISTINCT @pFinalBillID
+			,BT.FeeID
+			,BT.FeeType
+			,BT.Description
+			,BT.CoPayValue
+			,@pCreatedBy
+			,@pCreatedAt
+			,BT.STATUS
+			,BT.unit
+			,@pIsCreditBill
+			,(BT.CoPayValue * BT.unit)
+			,BT.IsReimbursable
+			
+			,''
+			,Upper(@ReferingPhysicianName)
+			,@pReferredPhysicianID
+			
+			,BT.DiscOrEnhanceType
+			,@pRegistrationRemarks
+			,@pLabNo
+			,@pRoleID
+			,@pDeptID
+			,@pOrgID
+			,BT.ActualAmount
+			,BT.RateID
+			,BT.IsDiscountable
+			,BT.IsTaxable
+			,BT.IsNABL
+			,BT.IsOutSource
+			,BT.IsSTAT
+			,(
+				SELECT TOP 1 ClientID
+				FROM @VisitClientMapping
+				)
+			,TBT.Rateid
+			,TBT.Amount
+			,@pOrgAddressID
+			,BT.TatDate
+			,BaseRateID
+			,BT.DiscountPolicyID
+			,BT.DiscountCategoryCode
+			,BT.ReportDeliveryDate
+			,BT.MaxTestDisPercentage
+			,Bt.MaxTestDisAmount
+			,BT.BaseTestcalculationAmount
+			,BT.IsRedeem
+			,BT.RedeemPoints
+                            ,BT.RedeemAmount,
+                            BT.FromDate
+		FROM @pBillingTable BT
+		INNER JOIN @BillingItems TBT ON TBT.FeeID = Bt.FeeID
+			AND TBT.FeeType = BT.FeeType
+		WHERE BT.DetailsID IN (
+				0
+				,- 1
+				)
+			AND @pFinalBillID > 0
+
+			Insert Into BillingDetails_Franchisee
+			(
+			BillingDetailsID,
+FinalbillID,
+FBFranchiseeID,
+FeeID,
+FeeType,
+FeeDescription,
+OrgID,
+Amount,
+ActualAmount,
+Quantity,
+DiscountAmount,
+DiscountPercent,
+DiscountReason,
+ItemDiscount,
+ItemDiscountPercentage,
+ItemDiscountReason,
+CreatedAt,
+CreatedBy)
+Select BD.BillingDetailsID
+	   ,@pFinalBillID
+	   ,FBF.ID
+	   ,BD.FeeID
+	   ,BD.FeeType
+			,BD.FeeDescription
+			,@pOrgID,
+			BT.Amount,
+			BT.ActualAmount,
+			BT.unit,
+			Case when @ItemLevelDiscountneed='Y' then (BT.DiscountAmount+BT.EligibleAmount) else BT.DiscountAmount END,
+			BT.DiscountPercent,
+			@pDiscountReason,
+			BT.EligibleAmount,BT.CoSharing,BT.Performertype
+			,@pCreatedAt
+			,@pCreatedBy
+			
+			
+			FROM BillingDetails BD 
+			               Inner Join FinalBill FB on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID
+						   Inner Join Finalbill_Franchisee FBF on FBF.FinalBillID=FB.FinalBillID and FB.OrGID=FBF.OrgID
+						   Inner Join @pBillingTable BT On BT.FeeID=BD.FeeId and BT.FeeType=BD.FeeType
+		    INNER JOIN @BillingItems TBT ON TBT.FeeID = Bt.FeeID AND TBT.FeeType = BT.FeeType
+			Where FB.FinalbillID = @pFinalBillID and FB.OrgID=@pOrgID
+			
+			
+			
+			
+			-- Item Level discount --
+
+UPDATE FB
+SET FB.GrossBillValue = t.sumPrice
+FROM FinalBill AS FB
+INNER JOIN
+    (
+        SELECT FinalBillID, SUM(Amount) sumPrice
+        FROM BillingDetails
+        WHERE FinalBillID = @pFinalBillID
+        GROUP BY FinalBillID 
+    ) t
+    ON t.FinalBillID= FB.FinalBillID
+WHERE FB.FinalbillID = @pFinalBillID
+
+UPDATE FB
+SET FB.NetValue = t.sumPrice
+FROM FinalBill AS FB
+INNER JOIN
+    (
+        SELECT FinalBillID, SUM(Amount) sumPrice
+        FROM BillingDetails
+        WHERE FinalBillID = @pFinalBillID
+        GROUP BY FinalBillID 
+    ) t
+    ON t.FinalBillID= FB.FinalBillID
+WHERE FB.FinalbillID = @pFinalBillID
+
+Declare @FraNetValue Decimal(18,2)
+Select @FraNetValue = Netvalue from Finalbill where FinalbillID=@pFinalBillID
+
+
+				IF Exists (( select 1 from CollectionsMaster CMA with (ROWLOCK)
+			Inner join finalbill fB with (Rowlock) on FB.CollectionID=CMA.CollectionID and FB.OrgID=CMA.OrgID
+			WHERE FB.FinalBillID=@previousFinalBID
+				AND CMA.OrgID = @pOrgID)) 
+				BEGIN
+				IF(@CollectionID=0)
+
+				BEGIN
+					UPDATE CMA
+			SET CMA.TotalDepositUsed = Isnull(CMA.TotalDepositUsed, 0) - ISNULL(FB.NetValue,0)
+
+			FROM CollectionsMaster CMA with (ROWLOCK)
+			Inner join finalbill fB with (Rowlock) on FB.CollectionID=CMA.CollectionID and FB.OrgID=CMA.OrgID
+			WHERE FB.FinalBillID=@previousFinalBID
+				AND CMA.OrgID = @pOrgID
+				END
+				else 
+				BEGIN
+				UPDATE CMA
+			SET CMA.TotalDepositUsed = Isnull(CMA.TotalDepositUsed, 0) - ISNULL(FB.NetValue,0)
+
+			FROM CollectionsMaster CMA with (ROWLOCK)
+			Inner join finalbill fB with (Rowlock) on FB.CollectionID=CMA.CollectionID and FB.OrgID=CMA.OrgID
+			WHERE FB.FinalBillID=@previousFinalBID
+				AND CMA.OrgID = @pOrgID
+			--	UPDATE CMA
+			--SET CMA.TotalDepositUsed = Isnull(CMA.TotalDepositUsed, 0) + @pNetValue
+			--FROM CollectionsMaster CMA with (ROWLOCK)
+			--WHERE CMA.CollectionID = @CollectionID
+			--	AND CMA.OrgID = @pOrgID
+				END
+				END
+				else
+				 begin
+				 UPDATE CMA
+
+			SET CMA.TotalDepositUsed = Isnull(CMA.TotalDepositUsed, 0) + @FraNetValue
+			FROM CollectionsMaster CMA with (ROWLOCK)
+			
+			WHERE CMA.CollectionID = @CollectionID
+			
+			AND CMA.OrgID = @pOrgID
+
+				 END
+			
+
+			If(@ItemLevelDiscountneed ='Y')
+			BEGIN
+		
+			Declare @DiscountAmount Decimal(18,2)
+
+			Set @DiscountAmount = (select Sum(BD.ItemDiscount) from Finalbill_Franchisee FB
+			Inner Join BillingDetails_Franchisee BD on FB.FinalBillID=BD.FinalbillID 
+			where FB.FinalbillId=@pFinalBillID Group by FB.FinalbillID)
+
+			
+
+
+			Update FB set FB.GrossbillValue=(FB.GrossbillValue + @DiscountAmount) 
+			from Finalbill_Franchisee FB where FB.FinalbillId=@pFinalBillID
+
+			if Exists(select 1 from Finalbill_Franchisee where finalbillid=@pFinalBillID and DiscountAmount > 0 and @DiscountAmount >0)
+			BEGIN
+
+			Update FB set FB.DiscountAmount=(FB.DiscountAmount + @DiscountAmount) 
+			from Finalbill_Franchisee FB where FB.FinalbillId=@pFinalBillID
+
+			END
+
+			if Exists(select 1 from Finalbill_Franchisee where finalbillid=@pFinalBillID and DiscountAmount <= 0 and @DiscountAmount >0)
+			BEGIN
+
+			Update FB set FB.DiscountReason='Test Level Discount'
+			from Finalbill_Franchisee FB where FB.FinalbillId=@pFinalBillID
+			Update FB set FB.DiscountAmount=(FB.DiscountAmount + @DiscountAmount) 
+			from Finalbill_Franchisee FB where FB.FinalbillId=@pFinalBillID
+
+			END
+
+
+			END
+
+			
+
+
+		IF @pParentPatientID > 0
+		BEGIN
+			SELECT @pClientPolicyID = Isnull(DiscountPolicyID, 0)
+			FROM ClientMaster 
+			WHERE ClientID = (
+					SELECT ClientID
+					FROM @VisitClientMapping
+					)
+				AND OrgID = @pOrgID
+
+			IF @pClientPolicyID > 0 --and  @SPRate!='SPECIAL'                                          
+			BEGIN
+				SELECT @DiscountPolicyID = PM.PolicyID
+					,@DiscountCategoryCode = DPM.CategoryCode
+				FROM DiscountPolicyMapping DPM 
+				INNER JOIN PolicyMaster PM  ON DPM.PolicyID = PM.PolicyID
+				WHERE PM.OrgID = @pOrgID --AND DPM.FeeTypeCode = @pFeeType                                                                    
+					AND DPM.PolicyID = @pClientPolicyID
+
+				IF @DiscountPolicyID > 0
+					UPDATE BillingDetails with (ROWLOCK)
+					SET DiscountPolicyID = @DiscountPolicyID
+						,DiscountCategoryCode = @DiscountCategoryCode
+					WHERE FinalBillID = @pFinalBillID
+						AND OrgID = @pOrgID
+			END
+
+			IF EXISTS (
+					SELECT 1
+					FROM InvClientMaster
+					WHERE ClientID = (
+							SELECT ClientID
+							FROM @VisitClientMapping
+							)
+						AND Isnull(BaseRate, 'N') = 'Y'
+					)
+			BEGIN
+				SELECT @BaseRateID = RateId
+				FROM InvClientMaster
+				WHERE ClientID = (
+						SELECT ClientID
+						FROM @VisitClientMapping
+						)
+					AND Isnull(BaseRate, 'N') = 'Y'
+			END
+
+			IF @BaseRateID > 0
+				UPDATE BillingDetails with (ROWLOCK)
+				SET BaseRateID = @BaseRateID
+				WHERE FinalBillID = @pFinalBillID
+					AND OrgID = @pOrgID
+		END
+
+		IF NOT EXISTS (
+				SELECT 1
+				FROM ClientMaster CM
+				INNER JOIN @VisitClientMapping VCM ON CM.ClientID = VCM.ClientID
+					AND CM.ClientCode = 'GENERAL'
+					AND Isnull(CM.ISCash, 'N') != 'Y'
+				)
+		BEGIN
+			INSERT INTO InvoiceLookup (
+				BillNo
+				,Type
+				,RaisedToClient
+				,InvoiceStatus
+				,CreatedBy
+				,CreatedAt
+				,OrgID
+				)
+			SELECT DISTINCT @pFinalBillID
+				,'Bill'
+				,(
+					SELECT ClientID
+					FROM @VisitClientMapping
+					)
+				,'Pending'
+				,@pCreatedBy
+				,@pCreatedAt
+				,@pOrgID
+			FROM @pBillingTable BT
+			WHERE BT.DetailsID IN (
+					0
+					,- 1
+					)
+				AND @pFinalBillID > 0
+		END
+
+		IF (@OnBehalfofLocationID > 0)
+		BEGIN
+			SET @tClientId = @OnBehalfofLocationID
+		END
+
+		IF NOT EXISTS (
+				SELECT 1
+				FROM ClientMaster CM
+				INNER JOIN @VisitClientMapping VCM ON CM.ClientID = VCM.ClientID
+					AND CM.ClientCode = 'GENERAL'
+					AND Isnull(CM.ISCash, 'N') != 'Y'
+				)
+		BEGIN
+			IF (@OnBehalfofLocationID > 0)
+			BEGIN
+				IF EXISTS (
+						SELECT ClientID
+						FROM InvClientMaster
+						WHERE ClientID = @OnBehalfofLocationID
+						)
+				BEGIN
+					IF EXISTS (
+							SELECT ClientID
+							FROM InvClientMaster
+							WHERE ClientID = @NClientID
+								AND TransferRate = 'Y'
+							)
+					BEGIN
+						INSERT INTO InvoiceLookup (
+							BillNo
+							,Type
+							,RaisedToClient
+							,InvoiceStatus
+							,CreatedBy
+							,CreatedAt
+							,OrgID
+							)
+						SELECT DISTINCT @pFinalBillID
+							,'TP'
+							,@OnBehalfofLocationID
+							,'Pending'
+							,@pCreatedBy
+							,@pCreatedAt
+							,@pOrgID
+						FROM @pBillingTable BT
+						WHERE BT.DetailsID IN (
+								0
+								,- 1
+								)
+							AND @pFinalBillID > 0
+					END
+					ELSE IF (@IsCopay = 'Y')
+					BEGIN
+						INSERT INTO InvoiceLookup (
+							BillNo
+							,Type
+							,RaisedToClient
+							,InvoiceStatus
+							,CreatedBy
+							,CreatedAt
+							,OrgID
+							)
+						SELECT DISTINCT @pFinalBillID
+							,'COPAY'
+							,@OnBehalfofLocationID
+							,'Pending'
+							,@pCreatedBy
+							,@pCreatedAt
+							,@pOrgID
+						FROM @pBillingTable BT
+						WHERE BT.DetailsID IN (
+								0
+								,- 1
+								)
+							AND @pFinalBillID > 0
+					END
+				END
+			END
+		END
+
+		--IF (
+		--		(
+		--			@OnBehalfofLocationID = 0
+		--			AND @IsCopay = 'Y'
+		--			) 
+		--		OR ( @pIsCreditBill = 'N')
+  --                OR @collectcashforcreditclient = 'Y' ) 
+
+				 
+		--BEGIN
+		--IF ((Isnull(@RestrictReceAmtForCashwithAdvance,'N')='Y' and IsNull(@pIsCreditBill,'N') = 'N' and @IsAdvanceClient=1))
+		--Begin
+		--Print 'Advance Client'
+		--End
+		--Else
+		--BEGIN
+			INSERT INTO AmountReceivedDetails (
+				FinalBillID
+				,AmtReceived
+				,ReceivedBy
+				,ClosureStatus
+				,OrgID
+				,CreatedBy
+				,CreatedAt
+				,TypeID
+				,ChequeorCardNumber
+				,BankNameorCardType
+				,Remarks
+				,IntermediatepaymentID
+				,ReceiptNO
+				,BaseCurrencyID
+				,PaidCurrencyID
+				,OtherCurrencyAmount
+				,RoleID
+				,DeptID
+				,CardHolderName
+				,CashGiven
+				,BalanceGiven
+				)
+			SELECT @pFinalBillID
+				,UDA.AmtReceived
+				,@pCreatedBy
+				,'Open'
+				,@pOrgID
+				,@pCreatedBy
+				,@pCreatedAt
+				,UDA.TypeID
+				,UDA.ChequeorCardNumber
+				,UDA.BankNameorCardType
+				,UDA.Remarks
+				,0
+				,0
+				,UDA.BaseCurrencyID
+				,UDA.PaidCurrencyID
+				,UDA.OtherCurrencyAmount
+				,@pRoleID
+				,@pDeptID
+				,UDA.CardHolderName
+				,UDA.CashGiven
+				,UDA.BalanceGiven
+			FROM @AmtReceivedDetails UDA
+			WHERE UDA.AmtReceived > 0
+				AND @pFinalBillID > 0
+		--END
+		--END
+
+		UPDATE C
+		SET C.ConsumedUnits = Isnull(C.ConsumedUnits, 0) + UDA.Units
+		FROM CouponDetails C with (ROWLOCK)
+		INNER JOIN @AmtReceivedDetails UDA ON C.BatchNo = UDA.ChequeorCardNumber
+		WHERE UDA.TypeID = (
+				SELECT TOP 1 PT.PaymentTypeID
+				FROM PaymentType PT
+				INNER JOIN PaymentTypeOrgMapping POM ON PT.PaymentTypeID = POM.PaymentTypeID
+					AND POM.OrgID = @pOrgID
+				WHERE PT.PaymentName = 'Coupon'
+				)
+
+		IF (@pDue > 0 )
+		BEGIN
+		 IF(Isnull(@IsAdvanceClient,0)=1 and Isnull(@RestrictReceAmtForCashwithAdvance,'')='Y' and @pIsCreditBill='N')
+		 Begin
+		 Print 'Adance Client DueTable'
+		 End
+		 Else
+		 Begin
+			INSERT INTO PatientDueDetails (
+				PatientID
+				,VisitID
+				,FinalBillID
+				,DueAmount
+				,OrgID
+				,IsCreditBill
+				,STATUS
+				,DueBillNo
+				,CreatedBy
+				,CreatedAt
+				,DueReason
+				,DueApprovedBy
+				)
+			SELECT FB.PatientID
+				,FB.VisitID
+				,FB.FinalBillID
+				,FBF.Due
+				,FB.OrgID
+				,FB.IsCreditBill
+				,'Open'
+				,FB.BillNumber
+				,@pCreatedBy
+				,@pCreatedAt
+				,Isnull(@DueReason,'')
+				,CAST(@DueAuthorizer AS BIGINT)
+			FROM FinalBill FB
+			Inner Join Finalbill_Franchisee FBF On FBF.FinalBillID=FB.FinalBillID and FBF.OrgID=FB.OrgID
+			WHERE FB.OrgID = @pOrgID
+				AND FB.PatientID = @pPatientID
+				AND FB.VisitID = @pVisitID
+				AND FB.FinalBillID = @pFinalBillID
+				AND @pFinalBillID > 0
+		END
+		END
+
+		DECLARE @OrderStatus NVARCHAR(30)
+
+		SELECT @OrderStatus = SampleStatus
+		FROM InvestigationOrgSampleStatus
+		WHERE OrgID = @pOrgID
+			AND SeqNo = 1
+
+		IF @pParentPatientID <= 0
+		BEGIN
+			IF (@BookingID > 0)
+			BEGIN
+				INSERT INTO @pOrderedInvTableNew
+				SELECT PINV.NAME
+					,PINV.ID
+					,@pvisitID
+					,PINV.CreatedBy
+					,PINV.ModifiedBy
+					,@OrderStatus
+					,PINV.Type
+					,PINV.OrgID
+					,PINV.StudyInstanceUId
+					,@pLabNo
+					,ReferedToOrgID
+					,ReferedToLocation
+					,PINV.InvestigationsType
+					,PINV.ReferralID
+					,PINV.UID
+					,PINV.ReferenceType
+					,CASE 
+						WHEN ISNULL(PRO.OBR_Placer_Order_Number, '') = ''
+							THEN '0'
+						ELSE PRO.OBR_Placer_Order_Number
+						END RefPhyName
+					,PINV.RefPhysicianID
+					,SequenceNo
+					,ReportDateTime
+					,TatDateTime
+					,IsStat
+
+					,PINV.SampleID,0
+
+				FROM @pOrderedInvTable PINV
+				LEFT JOIN PreOrderedInvestigations PRO  ON PINV.ID = PRO.ID
+					AND PINV.Type = PRo.Type
+					AND PRO.QuotationId = @BookingID
+    END     
+    ELSE     
+              BEGIN     
+                  INSERT INTO @pOrderedInvTableNew     
+			SELECT NAME
+				,ID
+				,@pvisitID
+				,CreatedBy
+				,ModifiedBy
+				,@OrderStatus
+				,Type
+				,OrgID
+				,StudyInstanceUId
+				,@pLabNo
+				,ReferedToOrgID
+				,ReferedToLocation
+				,InvestigationsType
+				,ReferralID
+				,UID
+				,ReferenceType
+				,RefPhyName
+				,RefPhysicianID
+				,SequenceNo
+				,ReportDateTime
+				,TatDateTime
+				,IsStat
+
+				,SampleID,0
+
+			FROM @pOrderedInvTable
+    END     
+	UPDATE Tb
+
+			SET Tb.IsStat = BT.IsStat
+
+				--,Tb.SamplePickupDate = @pSamplePickupDate
+
+				,Tb.TatDatetime = BT.TatDate
+
+				,Tb.ReportDateTime = BT.ReportDeliveryDate
+
+			FROM @pOrderedInvTableNew Tb
+
+			INNER JOIN @pBillingTable BT ON BT.FeeID = Tb.ID
+
+			WHERE Tb.VisitID = @pvisitID and tb.type<>'PKG'
+
+				AND OrgID = @pOrgID
+
+			----Murali---                  
+
+			UPDATE Tb
+
+			SET Tb.IsStat = BT.IsStat
+
+				--,Tb.SamplePickupDate = @pSamplePickupDate
+
+				,Tb.TatDatetime = BT.TatDate
+
+				,Tb.ReportDateTime = BT.ReportDeliveryDate
+
+			FROM @pOrderedInvTableNew Tb
+
+			INNER JOIN @pBillingTable BT ON BT.FeeID = Tb.ID
+
+			WHERE Tb.VisitID = @pvisitID and tb.type='PKG'
+
+				AND OrgID = @pOrgID
+
+				--AND TB.PkgID IS NOT NULL
+
+			-----      
+			EXEC [dbo].[Pinsertorderedinvestigation] @pOrderedInvTableNew
+				,@pOrgID
+				,@pReturnStatus OUT
+				,@pUnOrderedInv
+				,@ContextInfo
+
+			--EXEC [dbo].[pInsertOrderedInvestigationHos] @pOrderedInvTableNew,@pOrgID, @pOrderedInvCnt out, @pReturnStatus out,                                                                                                                        
+			--@paymentstatus,@pUID,@pLabNo,@pVisitSampleStatus,@pSamplePickupDate                             
+			UPDATE Tb
+			SET Tb.IsStat = BT.IsStat
+				,SamplePickupDate = @pSamplePickupDate
+				,Tb.TatDatetime = BT.TatDate
+				,Tb.ReportDateTime = BT.ReportDeliveryDate
+			FROM OrderedInvestigations Tb with (ROWLOCK)
+			INNER JOIN @pBillingTable BT ON BT.FeeID = Tb.ID
+			WHERE Tb.VisitID = @pvisitID
+				AND OrgID = @pOrgID
+
+			----Murali---                    
+			UPDATE Tb
+			SET Tb.IsStat = BT.IsStat
+				,SamplePickupDate = @pSamplePickupDate
+				,Tb.TatDatetime = BT.TatDate
+				,Tb.ReportDateTime = BT.ReportDeliveryDate
+			FROM OrderedInvestigations Tb with (ROWLOCK)
+			INNER JOIN @pBillingTable BT ON BT.FeeID = Tb.PkgID
+			WHERE Tb.VisitID = @pvisitID
+				AND OrgID = @pOrgID
+				AND TB.PkgID IS NOT NULL
+
+			-----    
+			DECLARE @Radiologyconfig VARCHAR(20);
+
+			SET @Radiologyconfig = Isnull((
+						SELECT configvalue
+						FROM configorgmaster
+						WHERE orgid = @pOrgID
+							AND configkeyid = (
+								SELECT configkeyid
+								FROM configkeymaster
+								WHERE configkey = 'RadialogyDept'
+								)
+						), 'N')
+
+			IF (@Radiologyconfig <> 'Y')
+			BEGIN
+			UPDATE OI
+			SET OI.STATUS = 'Approve'
+			FROM orderedinvestigations OI with (ROWLOCK)
+			INNER JOIN Investigationorgmapping IOM ON OI.ID = IOM.InvestigationID
+				AND OI.ORGID = IOM.ORGID
+				AND OI.VISITID = @pvisitID
+			INNER JOIN INVDEPTMASTER IDM ON IDM.DEPTID = IOM.DEPTID
+				AND IDM.DISPLAY = 'N'
+				AND IDM.OrgID = IOM.OrgID
+			WHERE OI.VISITID = @pvisitID
+				AND IDM.DISPLAY = 'N'
+				AND OI.ORGID = @pOrgID
+				AND OI.Type = 'INV'
+				AND IDM.OrgID = @pOrgID
+
+			UPDATE OI
+			SET OI.STATUS = 'Approve'
+			FROM orderedinvestigations OI with (ROWLOCK)
+			INNER JOIN InvOrgGroup iog ON iog.AttGroupID = OI.ID
+				AND iog.OrgID = OI.OrgID
+			INNER JOIN InvGroupMapMaster igmm ON igmm.GroupID = iog.OrgGroupID
+				AND igmm.Parent = 'N'
+			INNER JOIN InvestigationOrgMapping iom ON igmm.InvestigationID = iom.InvestigationID
+				AND OI.OrgID = iom.OrgID
+				AND OI.VISITID = @pvisitID
+			INNER JOIN INVDEPTMASTER IDM ON IDM.DEPTID = IOM.DEPTID
+				AND IDM.DISPLAY = 'N'
+				AND IDM.OrgID = IOM.OrgID
+			WHERE OI.VisitID = @pvisitID
+				AND IDM.Display = 'N'
+				AND OI.OrgID = @pOrgID
+				AND OI.Type = 'GRP'
+				AND IDM.OrgID = @pOrgID
+		END
+				END                                                                                                                                    
+	END
+	ELSE
+	BEGIN
+		UPDATE PatientVisit with (ROWLOCK) 
+		SET WardNo = CASE WHEN @IsSRF='Y' THEN '' ELSE Isnull(@pWardNo, '')    END
+			,HospitalName = Isnull(@pReferingHospitalName, '')
+			,HospitalID = Isnull(@pReferedHospitalID, '')
+			,PriorityID = @PriorityID
+			,VisitType = Isnull(@pVisitTypeID, '')
+			,VisitPurposeID = Isnull(@pVisitPurposeID, '')
+			,ReferingPhysicianID = @pReferredPhysicianID
+			,ReferingPhysicianName =CASE WHEN Isnull(@ReferingPhysicianName, '')!='' THEN Isnull(@ReferingPhysicianName, '') ELSE ReferingPhysicianName END
+			,IsIncomplete = CASE 
+				WHEN @pSiteID = 0
+					THEN 'N'
+				ELSE 'Y'
+				END
+				,SRFID=@SRFID
+				,TRFID=@TRFID
+				,PassportNumber=@PassportNo
+		WHERE PatientVisitId = @PatientVisitID
+
+		/*Insert into History*/
+		INSERT INTO PatientVisit_HIST (
+			PatientVisitId
+			,PatientID
+			,VisitDate
+			,ReferOrgID
+			,OrgID
+			,OrgAddressID
+			,ConditionId
+			,VisitType
+			,VisitPurposeID
+			,SpecialityID
+			,PhysicianID
+			,ParentVisitId
+			,CreatedBy
+			,CreatedAt
+			,ReferingPhysicianID
+			,ReferingSpecialityID
+			,TokenNumber
+			,ReferingPhysicianName
+			,SecuredCode
+			,ReferralType
+			,PriorityID
+			,HospitalID
+			,HospitalName
+			,LabVisitType
+			,WardNo
+			,EpisodeId
+			,EpisodeVisitID
+			,EpisodeVisitTrackID
+			,ConsignmentNo
+			,VisitNumber
+			,PatientStatusID
+			,TodaysVisitNo
+			,ExternalVisitID
+			,CreditLimit
+			,SRFID
+			,TRFID
+			,PassportNumber
+			)
+		SELECT PatientVisitId
+			,PatientID
+			,VisitDate
+			,ReferOrgID
+			,OrgID
+			,OrgAddressID
+			,ConditionId
+			,VisitType
+			,VisitPurposeID
+			,SpecialityID
+			,PhysicianID
+			,ParentVisitId
+			,@pCreatedBy
+			,@ServerDate
+			,ReferingPhysicianID
+			,ReferingSpecialityID
+			,TokenNumber
+			,ReferingPhysicianName
+			,SecuredCode
+			,ReferralType
+			,PriorityID
+			,HospitalID
+			,HospitalName
+			,LabVisitType
+			,WardNo
+			,EpisodeId
+			,EpisodeVisitID
+			,EpisodeVisitTrackID
+			,ConsignmentNo
+			,VisitNumber
+			,PatientStatusID
+			,TodaysVisitNo
+			,ExternalVisitID
+			,- 1.00
+			,SRFID
+			,TRFID
+			,PassportNumber
+		FROM PatientVisit
+		WHERE PatientVisitId = @PatientVisitID
+
+		DECLARE @PatientVisit_Hist_ID BIGINT
+			,@Patient_Hist_ID BIGINT
+
+		SELECT @PatientVisit_Hist_ID = Scope_identity()
+
+		SELECT @Patient_Hist_ID = Max(Patient_HISTID)
+		FROM Patient_HIST
+
+		UPDATE Patient_HIST with (ROWLOCK)
+		SET PatientVisit_HISTID = @PatientVisit_Hist_ID
+		WHERE Patient_HISTID = @Patient_Hist_ID
+
+
+
+			IF Exists(select 1 from  ConfigKeyMaster CFM INNER JOIN ConfigOrgMaster COM ON CFM.ConfigKeyID=COM.ConfigKeyID 
+			AND ConfigKey='IsRadiologyInteg' AND COM.OrgID=@pOrgID and com.Configvalue ='Y' )
+			and exists (select 1 from RadiologyDataintegration where PatientVisitID=@PatientVisitID and isprocessed='1' AND orderstatus='NW')
+
+					 begin
+					 insert into RadiologyDataintegration(PatientVisitID,OrgID,AccessionNumber,IsProcessed,ErrorMessage,CreatedAt,OrderStatus)
+					 select top 1 PatientVisitID,OrgID,AccessionNumber,'0','OrderUpdate',getdate(),'UP' from RadiologyDataintegration
+					 where PatientVisitID=@PatientVisitID and isprocessed='1'
+
+	                 end
+  /*Insert into History*/  
+  IF EXISTS (  
+    SELECT 1  
+    FROM AdditionalVisitDetails  
+    WHERE PatientVisitID = @PatientVisitID  
+    )  
+  BEGIN  
+   UPDATE AdditionalVisitDetails with (ROWLOCK)  
+   SET PhlebetomyID = @pPhleboID  
+    ,LogisticsID = @pLogisticsID  
+    ,[RoundNo] = @pRoundNo  
+    ,Exautoauthorization = @pexautoauthorization  
+    ,ZoneID = @pZoneId  
+    ,EmailCC = @EmailCCAddress  
+    ,VisitNumber = @pPVisitNumber  
+    ,ClinicCode = @pClinicCode  
+   WHERE PatientVisitID = @PatientVisitID  
+  END  
+  
+  IF EXISTS (  
+    SELECT Count(1)  
+    FROM @pDespatchMode  
+    )  
+  BEGIN  
+   IF NOT EXISTS (  
+    SELECT PatientID  
+     FROM PatientDisPatchDetails  
+     WHERE PatientID = @pPatientID  
+     )  
+   BEGIN  
+    INSERT PatientDisPatchDetails (  
+     PatientID  
+     ,VisitID  
+     ,OrgID  
+     ,DispatchType  
+     ,DispatchValue  
+     ,CreatedBy  
+     ,CreatedAt  
+     ,value  
+     )  
+    SELECT @pPatientID  
+     ,@PatientVisitID  
+     ,@pOrgID  
+     ,DispatchType  
+     ,Dispatchvalue  
+     ,@pCreatedBy  
+     ,@pCreatedAt  
+     ,@pValue  
+    FROM @pDespatchMode  
+   END  
+   ELSE  
+   BEGIN  
+    DELETE  
+    FROM PatientDisPatchDetails  
+    WHERE PatientID = @pPatientID  
+     AND OrgID = @pOrgID  
+  
+    INSERT PatientDisPatchDetails (  
+     PatientID  
+     ,VisitID  
+     ,OrgID  
+     ,DispatchType  
+     ,DispatchValue  
+     ,CreatedBy  
+     ,CreatedAt  
+     ,Value  
+     )  
+    SELECT @pPatientID  
+     ,@PatientVisitID  
+     ,@pOrgID  
+     ,DispatchType  
+     ,Dispatchvalue  
+     ,@pCreatedBy  
+     ,@pCreatedAt  
+     ,@pValue  
+    FROM @pDespatchMode  
+   IF Exists(select 1 from PatientDisPatchDetails PDD    
+            where VisitID=@PatientVisitID and ORgid=@pOrgID and PDD.DispatchType='T' and PDD.DispatchValue='Home')  
+   Begin  
+   UPDATE Notifications with (ROWLOCK) set Status=''   
+     
+   where IdentityID=@PatientVisitID AND OrgID=@pOrgID    
+     
+   AND CATEGORY = 'REPORT'   
+   AND ISATTACHMENT = 'Y'   
+            AND ACTIONTYPE IN ('PDF','ROUNDBPDF')  
+   AND Status='Due'  
+   END  
+   END  
+  END  
+ END  
+ DECLARE @BillNumber NVARCHAR(500)  
+  
+ --EXEC [dbo].[pInsertBillingDetailsFeeSplit] @pFinalBillID,@pOrgID ,NUll ,'IBN','OP'                                                                                                                                         
+ IF (  
+   @pVisitNumber IS NULL  
+   OR @pVisitNumber = ''  
+   )  
+ BEGIN  
+  SELECT @pVisitNumber = VisitNumber  
+  FROM PatientVisit   
+  WHERE PatientVisitId = @pvisitID  
+   AND OrgID = @pOrgID  
+   AND PatientID = @pPatientID  
+ END  
+  
+ SELECT @BillNumber = BillNumber  
+ FROM FinalBill  
+ WHERE FinalBillID = @pFinalBillID  
+  
+ DECLARE @redeemcount AS BIGINT  
+ DECLARE @redeemtest AS NVARCHAR(100) = ''  
+  
+ SELECT @redeemcount = count(Redeem)  
+ FROM (  
+  SELECT Isnull(IOG.isredeem, '') Redeem  
+  FROM OrderedInvestigations OI  
+  INNER JOIN invorggroup IOG ON IOG.attgroupid = OI.ID  
+  WHERE oi.VisitID = @pvisitID  
+   AND IOG.OrgID = @pOrgID  
+   AND IOG.isredeem = 'Y'  
+    
+  UNION ALL  
+    
+  SELECT Isnull(IOM.isredeem, '') Redeem  
+  FROM OrderedInvestigations OI  
+  INNER JOIN InvestigationOrgMapping IOM ON IOM.InvestigationID = OI.ID  
+  WHERE oi.VisitID = @pvisitID  
+   AND IOM.OrgID = @pOrgID  
+   AND IOM.isredeem = 'Y'  
+  ) T  
+  
+ IF (@redeemcount <> 0)  
+ BEGIN  
+  SET @redeemtest = 'Y'  
+ END  
+  
+ IF (  
+   @HasHealthCard = 'Y'  
+   AND @redeemtest = 'Y'  
+   )  
+ BEGIN  
+  DECLARE @MembershipCardTypeID BIGINT  
+  /* Generate Random Number */  
+  DECLARE @MembershipCardNo NVARCHAR(255) = CONVERT(NUMERIC(11, 0), Rand() * 89999999999)  
+  --DECLARE @MembershipCardMappingID BIGINT               
+  DECLARE @SlabPercentage DECIMAL(18, 2) = 0.00  
+  DECLARE @SlabAmount DECIMAL(18, 2) = 0.00  
+  DECLARE @CreditAmount DECIMAL(18, 2) = 0.00  
+  DECLARE @ValidDays INT  
+  DECLARE @CreditPoints DECIMAL(18, 2)  
+  DECLARE @ConfigRatioValue NVARCHAR(10)  
+  -- DECLARE @NextMembershipCardNo nvarchar(255)            
+  DECLARE @CurrentMembershipCardMappingID BIGINT = 0  
+  
+  IF (@MembershipCardMappingID > 0)  
+  BEGIN  
+   SET @CurrentMembershipCardMappingID = @MembershipCardMappingID  
+  END  
+  
+  SELECT @ValidDays = @MyCardActiveDays  
+  
+  SELECT @ConfigRatioValue = COM.ConfigValue  
+  FROM ConfigKeyMaster CKM   
+  INNER JOIN ConfigOrgMaster COM  ON CKM.ConfigKeyID = COM.ConfigKeyID  
+  WHERE CKM.ConfigKey = 'RedeemPointsRatio'  
+   AND COM.OrgID IN (  
+    SELECT OrgId  
+    FROM @ContextInfo  
+    )  
+  
+  DECLARE @SlabRatioPoints DECIMAL(18, 2) = 0.00  
+  DECLARE @SlabRatioAmount DECIMAL(18, 2) = 0.00  
+  DECLARE @tempRedeemRatio AS TABLE (  
+   ID INT IDENTITY(1, 1)  
+   ,Ratio DECIMAL(18, 2)  
+   )  
+  
+  INSERT INTO @tempRedeemRatio  
+  SELECT item  
+  FROM dbo.Fnsplit(@ConfigRatioValue, ':')  
+  
+  SELECT @SlabRatioPoints = Ratio  
+  FROM @tempRedeemRatio  
+  ORDER BY ID DESC  
+  
+  SELECT @SlabRatioAmount = Ratio  
+  FROM @tempRedeemRatio  
+  ORDER BY ID  
+  
+  DECLARE @tempCardType AS TABLE (  
+   ID INT IDENTITY(1, 1)  
+   ,CardType NVARCHAR(100)  
+   )  
+  DECLARE @CreditType NVARCHAR(50)  
+  DECLARE @DebitType NVARCHAR(50)  
+  
+  INSERT INTO @tempCardType  
+  SELECT item  
+  FROM dbo.Fnsplit(@CreditRedeemType, '~')  
+  
+  SELECT @CreditType = CardType  
+  FROM @tempCardType  
+  ORDER BY ID DESC  
+  
+  SELECT @DebitType = CardType  
+  FROM @tempCardType  
+  ORDER BY ID  
+  
+  IF (@HealthCardType = 'New')  
+  BEGIN  
+   /** comments for vignesh for MembershipCardNo create the random No            
+            
+            
+            
+                               EXEC Pgetnextid            
+            
+            
+            
+                                 @pOrgID,            
+            
+            
+            
+                                 'HCNO',            
+            
+            
+            
+                                 @NextMembershipCardNo OUT,            
+            
+            
+            
+                                 @pOrgAddressID            
+            
+            
+            
+                  **/  
+   DECLARE @ConfigValue NVARCHAR(10) = 'N'  
+  
+   SELECT @ConfigValue = COM.ConfigValue  
+   FROM ConfigKeyMaster CKM   
+   INNER JOIN ConfigOrgMaster COM  ON CKM.ConfigKeyID = COM.ConfigKeyID  
+   WHERE CKM.ConfigKey = 'HealthCardOTP'  
+    AND COM.OrgID = (  
+     SELECT OrgId  
+     FROM @ContextInfo  
+     )  
+  
+   SELECT @SlabPercentage = pointspercent  
+    ,@SlabAmount = pointsvalue  
+   FROM patientcreditslabmapping  
+   WHERE @pGrossValue BETWEEN rangefrom  
+     AND rangeto  
+  
+SELECT @CreditAmount = (@SlabPercentage * @pGrossValue) / 100  
+  
+   SET @CreditPoints = Isnull((@CreditAmount * @SlabRatioAmount), 0.00)  
+  
+   UPDATE FB  
+   SET FB.CreditValue = @CreditAmount  
+   FROM FInalbill FB with (ROWLOCK)  
+   WHERE FB.FinalBillID = @pFinalBillID  
+  
+   --SELECT @MembershipCardNo = patientnumber            
+   --FROM   patient             
+   --WHERE  patientid = @pPatientID            
+   /** comments for vignesh for MembershipCardNo create the random No            
+            
+            
+            
+                            SELECT @MembershipCardNo = @NextMembershipCardNo            
+            
+            
+            
+                  **/  
+   SELECT @MembershipCardTypeID = membershipcardtypeid  
+   FROM patientmembershipcardtype  
+   WHERE membershipcardtype = @MemebershipcardType  
+  
+   INSERT INTO patientmembershipcardmapping (  
+    membershipcardtypeid  
+    ,patientid  
+    ,membershipcardno  
+    ,orgid  
+    ,otp  
+    ,STATUS  
+    ,createdby  
+    ,createdat  
+    ,mobileno  
+    )  
+   VALUES (  
+    @MembershipCardTypeID  
+    ,@pPatientID  
+    ,@MembershipCardNo  
+    ,@pOrgID  
+    ,@OTP  
+    ,CASE Isnull(@ConfigValue, 'N')  
+     WHEN 'Y'  
+      THEN 'Pending'  
+     ELSE 'Active'  
+     END  
+    ,@pCreatedBy  
+    ,@pCreatedAt  
+    ,@pMobileNo  
+    )  
+  
+   SET @MembershipCardMappingID = Scope_identity()  
+  
+   INSERT INTO patientcreditdetails (  
+    membershipcardmappingid  
+    ,patientid  
+    ,visitid  
+    ,orgid  
+    ,creditpoints  
+    ,creditvalue  
+    ,validfrom  
+    ,validto  
+    ,createdby  
+    ,createdat  
+    ,FinalBillID  
+    )  
+   SELECT @MembershipCardMappingID  
+    ,@pPatientID  
+    ,@pvisitID  
+    ,@pOrgID  
+    ,Floor(@CreditPoints)  
+    ,Floor(@CreditAmount)  
+    ,@ServerDate  
+    ,@ServerDate + @ValidDays  
+    ,@pCreatedBy  
+    ,@pCreatedAt  
+    ,@pFinalBillID  
+  
+  INSERT INTO patientotpdetails (  
+membershipcardmappingid  
+    ,patientid  
+    ,visitid  
+    ,orgid  
+    ,otp  
+    ,validfrom  
+    ,validto  
+    ,isreleased  
+    ,isverified  
+    ,createdby  
+    ,createdat  
+    ,modifiedby  
+    ,modifiedat  
+    )  
+   SELECT @MembershipCardMappingID  
+    ,@pPatientID  
+    ,@pvisitID  
+    ,@pOrgID  
+    ,@OTP  
+    ,@ServerDate  
+    ,Dateadd(minute, 60, Getdate())  
+    ,'N'  
+    ,'N'  
+    ,@pCreatedBy  
+    ,@pCreatedAt  
+    ,@pCreatedBy  
+    ,@pCreatedAt  
+  END  
+  ELSE IF (@HealthCardType = 'Existing')  
+  BEGIN  
+   BEGIN  
+    IF (  
+      @CreditType != ''  
+      OR @DebitType != ''  
+      )  
+    BEGIN  
+     IF (  
+       @CreditType = 'Credit'  
+       OR @CreditType = NULL  
+       )  
+     BEGIN  
+      --DECLARE @ConfigValue nvarchar(10) ='N'             
+      SELECT @ConfigValue = COM.ConfigValue  
+      FROM ConfigKeyMaster CKM   
+      INNER JOIN ConfigOrgMaster COM  ON CKM.ConfigKeyID = COM.ConfigKeyID  
+      WHERE CKM.ConfigKey = 'HealthCardOTP'  
+       AND COM.OrgID = (  
+        SELECT OrgId  
+        FROM @ContextInfo  
+        )  
+  
+      SELECT @SlabPercentage = pointspercent  
+       ,@SlabAmount = pointsvalue  
+      FROM patientcreditslabmapping  
+      WHERE @pGrossValue BETWEEN rangefrom  
+        AND rangeto  
+  
+      SELECT @CreditAmount = (@SlabPercentage * @pGrossValue) / 100  
+  
+      SET @CreditPoints = Isnull((@CreditAmount * @SlabRatioAmount), 0.00)  
+  
+      UPDATE FB  
+      SET FB.CreditValue = @CreditAmount  
+      FROM FInalbill FB with (ROWLOCK)  
+      WHERE FB.FinalBillID = @pFinalBillID  
+  
+      SELECT @MembershipCardNo = patientnumber  
+      FROM patient   
+      WHERE patientid = @pPatientID  
+  
+      SELECT @MembershipCardTypeID = membershipcardtypeid  
+      FROM patientmembershipcardtype  
+      WHERE membershipcardtype = @MemebershipcardType  
+  
+      --if(@CreditAmount!=null)    
+      --@CreditAmount            
+      -- Declare @RedeemAmounti Decimal(18,2)         
+      --                     --SELECT @SlabPercentage=Points,@SlabValues=Value FROM PatientCreditSlabMapping WHERE @pGrossValue Between RangeFrom AND RangeTo            
+      --   select @RedeemAmountis=BT.RedeemAmount from @pBillingTable BT            
+      INSERT INTO patientcreditdetails (  
+       membershipcardmappingid  
+       ,patientid  
+       ,visitid  
+       ,orgid  
+       ,creditpoints  
+       ,creditvalue  
+       ,validfrom  
+       ,validto  
+       ,createdby  
+       ,createdat  
+       ,FinalbillId  
+       )  
+      SELECT @MembershipCardMappingID  
+       ,@pPatientID  
+       ,@pvisitID  
+       ,@pOrgID  
+       ,Floor(@CreditPoints)  
+       ,Floor(@CreditAmount)  
+       ,@ServerDate  
+       ,@ServerDate + @ValidDays  
+       ,@pCreatedBy  
+       ,@pCreatedAt  
+       ,@pFinalBillID  
+       -- INSERT INTO PatientOTPDetails(MembershipCardMappingID,PatientID,VisitID,OrgId,OTP,ValidFrom,ValidTo,IsReleased,IsVerified,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt)            
+       --SELECT @MembershipCardMappingID,@pPatientID,isnull(@pvisitID,''),@pOrgID,@OTP,@ServerDate,DATEADD(minute,2,@ServerDate),'N','N', @pCreatedBy,@pCreatedAt,@pCreatedBy,@pCreatedAt            
+     END  
+  
+     IF (  
+       @DebitType = 'Redeem'  
+       OR @DebitType != NULL  
+       )  
+     BEGIN  
+      DECLARE @RedeemAmountis DECIMAL(18, 2)  
+  
+      SELECT @RedeemAmountis = Sum(BT.RedeemAmount)  
+      FROM @pBillingTable BT  
+  
+      SET @RedemPoints = @RedeemAmountis * @SlabRatioAmount  
+  
+      UPDATE FB  
+      SET FB.RedeemValue = @RedeemAmountis  
+       ,FB.RedeemPoints = @RedeemAmountis 
+      FROM FInalbill FB with (ROWLOCK)   
+      WHERE FB.FinalBillID = @pFinalBillID  
+  
+      INSERT INTO patientredemdetails (  
+       membershipcardmappingid  
+       ,patientid  
+       ,visitid  
+       ,orgid  
+       ,redempoints  
+,redemvalue  
+       ,createdby  
+       ,createdat  
+       ,modifiedby  
+       ,modifiedat  
+       ,FinalBillID  
+       )  
+      SELECT @MembershipCardMappingID  
+       ,@pPatientID  
+       ,@pvisitID  
+       ,@pOrgID  
+       ,Floor(@RedemPoints)  
+       ,Floor(@RedeemAmountis)  
+       ,@pCreatedBy  
+       ,@ServerDate  
+       ,@pCreatedBy  
+       ,@ServerDate  
+       ,@pFinalBillID  
+  
+      INSERT INTO patientotpdetails (  
+       membershipcardmappingid  
+       ,patientid  
+       ,visitid  
+       ,orgid  
+       ,otp  
+       ,validfrom  
+       ,validto  
+       ,isreleased  
+       ,isverified  
+       ,createdby  
+       ,createdat  
+       ,modifiedby  
+       ,modifiedat  
+       )  
+      SELECT @MembershipCardMappingID  
+       ,@pPatientID  
+       ,Isnull(@pvisitID, '')  
+       ,@pOrgID  
+       ,@OTP  
+       ,@ServerDate  
+       ,Dateadd(minute, 60, Getdate())  
+       ,'N'  
+       ,'N'  
+       ,@pCreatedBy  
+       ,@pCreatedAt  
+       ,@pCreatedBy  
+       ,@pCreatedAt  
+       --INSERT INTO PatientRedemDetails(MembershipCardMappingID,PatientID,VisitID,OrgId,CreditPoints,CreditValue,ValidFrom,ValidTo,CreatedBy,CreatedAt)            
+       --SELECT @MembershipCardMappingID,@pPatientID,@pvisitID,@pOrgID,@SlabPoints,@SlabValues,@ServerDate,@ServerDate+@ValidDays,@pCreatedBy,@pCreatedAt            
+       -- INSERT INTO PatientOTPDetails(MembershipCardMappingID,PatientID,VisitID,OrgId,OTP,ValidFrom,ValidTo,IsReleased,IsVerified,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt)            
+       --SELECT @MembershipCardMappingID,@pPatientID,isnull(@pvisitID,''),@pOrgID,@OTP,@ServerDate,@ServerDate,'N','N', @pCreatedBy,@pCreatedAt,@pCreatedBy,@pCreatedAt            
+     END  
+    END  
+   END  
+  END  
+  ELSE IF (@HealthCardType = 'HEALTHCOUPON')  
+  BEGIN  
+   --  DECLARE @ConfigValue nvarchar(10) = 'N'            
+   SELECT @ConfigValue = COM.ConfigValue  
+   FROM ConfigKeyMaster CKM   
+   INNER JOIN ConfigOrgMaster COM  ON CKM.ConfigKeyID = COM.ConfigKeyID  
+   WHERE CKM.ConfigKey = 'HealthCardOTP'  
+    AND COM.OrgID = (  
+     SELECT OrgId  
+     FROM @ContextInfo  
+     )  
+  
+   SELECT @SlabPercentage = pointspercent  
+    ,@SlabAmount = pointsvalue  
+   FROM patientcreditslabmapping  
+   WHERE @pGrossValue BETWEEN rangefrom  
+     AND rangeto  
+  
+   SELECT @CreditAmount = Floor((@SlabPercentage * @pNetValue) / 100)  
+  
+   SET @CreditPoints = Floor(Isnull((@CreditAmount * @SlabRatioAmount), 0.00))  
+  
+   UPDATE FB  
+   SET FB.CreditValue = @CreditAmount  
+   FROM FInalbill FB with (ROWLOCK)   
+   WHERE FB.FinalBillID = @pFinalBillID  
+  
+   --SELECT @MembershipCardNo = patientnumber            
+   --FROM   patient             
+   --WHERE  patientid = @pPatientID            
+   /** comments for vignesh for MembershipCardNo create the random No            
+            
+            
+            
+                            EXEC Pgetnextid            
+            
+            
+            
+                              @pOrgID,            
+            
+            
+            
+                              'HCNO',            
+            
+            
+            
+                              @NextMembershipCardNo OUT,            
+            
+            
+            
+                              @pOrgAddressID            
+            
+            
+            
+                              
+            
+            
+            
+                            SELECT @MembershipCardNo = @NextMembershipCardNo            
+       
+            
+            
+                  **/  
+   SELECT @MembershipCardTypeID = membershipcardtypeid  
+   FROM patientmembershipcardtype  
+   WHERE membershipcardtype = @MemebershipcardType  
+  
+   IF (  
+     @pNetValue > 0  
+     AND @pDue = 0  
+     )  
+   BEGIN  
+    INSERT INTO patientmembershipcardmapping (  
+     membershipcardtypeid  
+     ,patientid  
+     ,membershipcardno  
+     ,orgid  
+     ,otp  
+     ,STATUS  
+     ,createdby  
+     ,createdat  
+     ,mobileno  
+     )  
+    VALUES (  
+     @MembershipCardTypeID  
+     ,@pPatientID  
+     ,@MembershipCardNo  
+     ,@pOrgID  
+     ,@OTP  
+     ,CASE Isnull(@ConfigValue, 'N')  
+      WHEN 'Y'  
+       THEN 'Pending'  
+      ELSE 'Active'  
+      END  
+     ,@pCreatedBy  
+     ,@pCreatedAt  
+     ,@pMobileNo  
+     )  
+  
+    SET @MembershipCardMappingID = Scope_identity()  
+  
+    INSERT INTO patientcreditdetails (  
+     membershipcardmappingid  
+     ,patientid  
+     ,visitid  
+     ,orgid  
+     ,creditpoints  
+     ,creditvalue  
+     ,validfrom  
+     ,validto  
+     ,createdby  
+     ,createdat  
+     ,FinalBillID  
+     )  
+    SELECT @MembershipCardMappingID  
+     ,@pPatientID  
+     ,@pvisitID  
+     ,@pOrgID  
+     ,Floor(@CreditPoints)  
+     ,Floor(@CreditAmount)  
+     ,@ServerDate  
+     ,@ServerDate + @ValidDays  
+     ,@pCreatedBy  
+     ,@pCreatedAt  
+     ,@pFinalBillID  
+   END  
+  
+   --INSERT INTO patientotpdetails            
+   --            (membershipcardmappingid,            
+   --             patientid,            
+   --             visitid,            
+   --   orgid,            
+   --             otp,            
+   --             validfrom,   
+   --      validto,            
+   --             isreleased,            
+   --             isverified,            
+   --             createdby,            
+   --             createdat,            
+   --      modifiedby,            
+   --             modifiedat)            
+   --SELECT @MembershipCardMappingID,            
+   --       @pPatientID,            
+   --       @pvisitID,            
+   --       @pOrgID,            
+   --       @OTP,            
+   --   @ServerDate,            
+   --       Dateadd(minute, 60, Getdate()),          
+   --       'N',           
+   --       'N',            
+   --       @pCreatedBy,            
+   --       @pCreatedAt,            
+   --       @pCreatedBy,            
+   --       @pCreatedAt            
+   IF (  
+     (  
+      @DebitType = 'Redeem'  
+      OR @DebitType != NULL  
+      )  
+     AND @CurrentMembershipCardMappingID > 0  
+     )  
+   BEGIN  
+    --    DECLARE @RedeemAmountis DECIMAL(18, 2)            
+    SELECT @RedeemAmountis = Sum(BT.RedeemAmount)  
+    FROM @pBillingTable BT  
+  
+    SET @RedemPoints = @RedeemAmountis * @SlabRatioAmount  
+  
+    UPDATE FB  
+    SET FB.RedeemValue = @RedeemAmountis  
+     ,FB.RedeemPoints = @RedeemAmountis  
+    FROM FInalbill FB with (ROWLOCK)   
+    WHERE FB.FinalBillID = @pFinalBillID  
+  
+    INSERT INTO patientredemdetails (  
+     membershipcardmappingid  
+     ,patientid  
+     ,visitid  
+     ,orgid  
+     ,redempoints  
+     ,redemvalue  
+     ,createdby  
+     ,createdat  
+     ,modifiedby  
+     ,modifiedat  
+     ,FinalBillID  
+     )  
+    SELECT P.MembershipCardMappingID  
+     ,@pPatientID  
+     ,@pvisitID  
+     ,@pOrgID  
+     ,Floor(p.RedemPoints)  
+     ,Floor(p.RedemValue)  
+     ,@pCreatedBy  
+     ,@ServerDate  
+     ,@pCreatedBy  
+     ,@ServerDate  
+     ,@pFinalBillID  
+    FROM @PatientRedemDetails p  
+     --INSERT INTO patientotpdetails            
+     --            (membershipcardmappingid,            
+     --             patientid,            
+     --             visitid,            
+     --             orgid,            
+     --             otp,            
+     --             validfrom,           
+     --   validto,            
+     --             isreleased,            
+     --   isverified,            
+     --  createdby,            
+     --           createdat,            
+     --             modifiedby,            
+     --    modifiedat)            
+     --SELECT @MembershipCardMappingID,            
+     --       @pPatientID,            
+     --      Isnull(@pvisitID, ''),            
+     --       @pOrgID,            
+     --       @OTP,            
+     --       @ServerDate,            
+     --       Dateadd(minute, 60, Getdate()),            
+     --       'N',            
+     --       'N',            
+     --       @pCreatedBy,            
+     --       @pCreatedAt,            
+     --       @pCreatedBy,            
+     --       @pCreatedAt            
+     --INSERT INTO PatientRedemDetails(MembershipCardMappingID,PatientID,VisitID,OrgId,CreditPoints,CreditValue,ValidFrom,ValidTo,CreatedBy,CreatedAt)            
+     --SELECT @MembershipCardMappingID,@pPatientID,@pvisitID,@pOrgID,@SlabPoints,@SlabValues,@ServerDate,@ServerDate+@ValidDays,@pCreatedBy,@pCreatedAt            
+     -- INSERT INTO PatientOTPDetails(MembershipCardMappingID,PatientID,VisitID,OrgId,OTP,ValidFrom,ValidTo,IsReleased,IsVerified,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt)            
+     --SELECT @MembershipCardMappingID,@pPatientID,isnull(@pvisitID,''),@pOrgID,@OTP,@ServerDate,@ServerDate,'N','N', @pCreatedBy,@pCreatedAt,@pCreatedBy,@pCreatedAt            
+   END  
+  END  
+ END  
+Declare @Referencetype nchar(1)='N'
+Declare @Client Int
+Select Distinct Top 1 @Client=ClientID FROM VisitClientMapping where VisitID=@pvisitID AND OrgID=@pOrgID AND Isnull(IsActive,'Y')='Y'
+IF EXISTS (Select 1 from ClientMaster CM (NOLOCK)
+		 INNER JOIN ClientAttributesDetails CAD ON CAD.ClientID=CM.ClientID AND CAD.OrgID=CM.OrgID
+		 INNER JOIN Clientattributes CA ON CA.AttributeID=CAD.AttributesID
+		 WHERE CM.OrgID=@pOrgID AND CM.ClientID=@Client AND CA.AttributesType='Commercial' AND CA.AttributeName='Checklist')
+		 BEGIN
+		 SET @Referencetype='Y'
+		 END  
+		 ELSE
+		 BEGIN
+		 SET @Referencetype='N'
+		 END
+ IF (@pIsEditMode = 'Y')  
+ BEGIN  
+  --SELECT @pFinalBillID = FinalBillID FROM FinalBill  WHERE PatientID=@pPatientID ORDER BY FinalBillID DESC                  
+  SELECT @pvisitID = PatientVisitId  
+  FROM PatientVisit   
+  WHERE PatientID = @pPatientID  
+   AND OrgID = @pOrgID  
+   AND PatientVisitId = Isnull(@PatientVisitID, PatientVisitId)  
+  ORDER BY VisitDate DESC  
+  
+  SELECT @pPatientID PatientID  
+   ,@pvisitID VisitID  
+   ,FinalBillID  
+   ,@pLabNo LabNo  
+   ,@pVisitNumber VersionNo  
+   ,BillNumber  
+   ,  
+   ----Added by Thamilselvan to Get the @MembershipCardNo for Client Billing Form            
+   @MembershipCardNo BatchNo  
+   ,@Referencetype AS ReferenceType  
+  FROM FinalBill   
+  WHERE VisitID = @pvisitID  
+   AND OrgID = @pOrgID  
+ END  
+ ELSE  
+ BEGIN  
+  SELECT @pPatientID PatientID  
+   ,@pvisitID VisitID  
+   ,@pFinalBillID FinalBillID  
+   ,@pLabNo LabNo  
+   ,@pVisitNumber VersionNo  
+   ,@BillNumber BillNumber  
+   ,  
+   ----Added by Thamilselvan to Get the @MembershipCardNo for Client Billing Form            
+   @MembershipCardNo BatchNo  
+   ,@MembershipCardMappingID AS FeeId  
+   ,@Referencetype AS ReferenceType  
+ END  
+  
+ SET @pReturnStatus = 1  
+ DECLARE @VisitNumber NVARCHAR(100)
+ IF NOT EXISTS (SELECT 1 FROM IntegrationOrderAPILog (NOLOCK) WHERE PatientID=@pPatientID AND PatientVisitID=CASE WHEN @pvisitID!=0 THEN @pvisitID ELSE @PatientVisitID END)
+	 BEGIN  
+	  EXEC  pInsertIntegrationAPIMessageLog @pPatientID,@pvisitID,@pOrgID,'NW',@pVisitNumber,@pFinalBillID,'Bill',@ContextInfo	  
+	 END 
+	 ELSE IF EXISTS (SELECT 1 FROM IntegrationOrderAPILog (NOLOCK) WHERE PatientID=@pPatientID AND PatientVisitID=@PatientVisitID)
+	 BEGIN
+	 SELECT @VisitNumber=OrderID FROM IntegrationOrderAPILog (NOLOCK) WHERE PatientID=@pPatientID AND PatientVisitID=@PatientVisitID
+			EXEC  pInsertIntegrationAPIMessageLog @pPatientID,@PatientVisitID,@pOrgID,'MO',@VisitNumber,@pFinalBillID,'Patient',@ContextInfo=@ContextInfo
+		--END 
+	 END
+	 ELSE
+	 BEGIN
+	   EXEC  pInsertIntegrationAPIMessageLog @pPatientID,@pvisitID,@pOrgID,'MO',@pVisitNumber,@pFinalBillID,'Add Bill',@ContextInfo=@ContextInfo
+	 END
+ SELECT @RoleID = RoleID  
+ FROM [Role]  
+ WHERE RoleName = 'Patient'  
+  AND OrgID = @pOrgID  
+  
+ SET @RoleID = 0  
+ SET NOCOUNT OFF  
+   END TRY                                   
+  BEGIN CATCH     
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pInsertPatientBilling @pPatientID = '+cast(@pPatientID as varchar)+'@pOrgID = '+cast(@pOrgID as varchar)   
+ exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;   
+END CATCH   
+END  
+  
+  
+  
+
+  
+  
+  

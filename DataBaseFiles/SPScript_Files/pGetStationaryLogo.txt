@@ -1,0 +1,49 @@
+CREATE PROCEDURE [dbo].[pGetStationaryLogo]  ---121099,69,'1299979,1299978'            
+@pVisitID bigint,                                  
+@OrgID int,            
+@InvestigationID VARCHAR(max) ,      
+@SecClientID bigint  =0                            
+AS                                                                                                                                        
+BEGIN                       
+SET NOCOUNT ON              
+
+DECLARE @TempStationaryLogo AS TABLE
+(
+	ID INT IDENTITY(1,1),
+	ClientID BIGINT,
+	ClientName VARCHAR(100),
+	HeaderLogo VARCHAR(100),
+	HeaderCount INT
+)
+
+IF(@SecClientID=0)      
+BEGIN  
+    
+	 SELECT @SecClientID = (SELECT distinct VCM.ClientID FROM VisitClientMapping VCM 
+	 WHERE VCM.OrgID=@OrgID and VCM.VisitID=@pVisitID and Isnull(VCM.IsActive, 'Y') != 'N' )
+    
+END         
+
+INSERT INTO @TempStationaryLogo(ClientID,ClientName,HeaderLogo,HeaderCount)
+SELECT ClientID,ClientName,HeaderLogo,Count(HeaderLogo) AS  HeaderCount FROM ClientMaster WITH (NOLOCK)  
+WHERE ClientID =@SecClientID and Isnull(HeaderLogo,'')<>''   
+GROUP BY ClientID,ClientName,headerlogo        
+     
+IF NOT EXISTS(SELECT 1 FROM @TempStationaryLogo where HeaderCount>0 )
+BEGIN  
+        delete from @TempStationaryLogo
+		INSERT INTO @TempStationaryLogo(ClientID,HeaderLogo,HeaderCount)
+		SELECT 0,StationaryLogo,Count(StationaryLogo) AS  HeaderCount FROM PatientVisit PV WITH (NOLOCK)
+		INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON PV.OrgID=OA.OrgID AND PV.OrgAddressID=OA.AddressID
+		WHERE  PV.PatientVisitID=@pVisitID AND PV.OrgID=@OrgID
+		GROUP BY StationaryLogo
+
+END
+
+SELECT ClientID,ClientName,HeaderLogo,HeaderCount FROM @TempStationaryLogo
+
+END
+
+
+
+ 

@@ -1,0 +1,112 @@
+CREATE PROCEDURE pInsertStockReceived_LIMSAPI 
+(
+	 @OrgCode Nvarchar(50) =NULL,
+	 @ReceiptID BIGINT = NULL,
+	 @ReceiptDate DATETIME =NULL,
+	 @FromLocationCode NVARCHAR(50)=NULL,
+	 @ToLocationCode NVARCHAR(50) =NULL,
+	 @outSRDNo [nvarchar](50) OUTPUT,
+	 @pInventoryItemsMappingType [dbo].[InventoryItemsMapping_LIMSAPI] READONLY
+)
+AS
+BEGIN
+
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50)
+DECLARE @Context dbo.UDT_Context
+DECLARE @InventoryItemsMapping_LIMSAPI [dbo].[InventoryItemsMapping]
+
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @OrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @OrgCode
+	END
+
+INSERT INTO @InventoryItemsMapping_LIMSAPI
+Select 
+P.CategoryID,IMT.ProductID,IMT.CategoryName,P.ProductName,IMT.Quantity,IMT.ComplimentQTY,IMT.Tax,Discount,IMT.Rate,
+IMT.UOMID,IMT.Unit,IMT.UnitPrice,IMT.LSUnit,IMT.Description,IMT.ExpiryDate,IMT.Manufacture,IMT.BatchNo,IMT.Providedby,IMT.Type,IMT.Amount,IMT.ID,
+IMT.POQuantity,IMT.POUnit,IMT.RECQuantity,IMT.RECUnit,IMT.SellingUnit,IMT.InvoiceQty,   (IMT.RECQuantity * IMT.InvoiceQty),IMT.AttributeDetail,IMT.HasExpiryDate,
+IMT.HasBatchNo,IMT.HasUsage,IMT.UsageCount,IMT.RakNo,IMT.MRP,IMT.InHandQuantity,IMT.ExciseTax,IMT.DiscOrEnhancePercent,IMT.DiscOrEnhanceType,IMT.Remarks,
+IMT.ProductKey,IMT.UnitSellingPrice,IMT.UnitCostPrice,IMT.ReceivedOrgID,P.ParentProductID,IMT.ReceivedOrgAddID,IMT.ParentProductKey,IMT.PrescriptionNO,
+IMT.ActualPrice,IMT.EligibleAmount,IMT.ClientFeeTypeRateCustID,IMT.InvoiceDate,IMT.StockStatus,IMT.DefectiveQty,IMT.Comments,IMT.Shortage,IMT.Damage,IMT.Rejected,
+IMT.PrepareCharges,	IMT.ProductCode	,IMT.CopayValue,	IMT.CopayType,	IMT.GenericName	,IMT.ProductReceivedDetailsID,	IMT.PurchaseTax,	IMT.HandlingCharges	,
+IMT.ReceivedUniqueNumber	,IMT.ReceivedBatchNo	,IMT.StockReceivedBarcodeDetailsID	,IMT.StockReceivedBarcodeID,	IMT.BarcodeNo	,IMT.IsUniqueBarcode,
+IMT.TaxAmount,	IMT.IsSmsNeeded	,IMT.SchemeType,	IMT.SchemeDisc,	IMT.DiscountType,	IMT.TotalSchemeDisc,	IMT.TotalNormalDisc
+From @pInventoryItemsMappingType IMT
+INNER JOIN Products P ON P.Productid = IMT.ProductID
+
+INSERT INTO @Context
+SELECT 
+       O.OrgID,O.Name,O.LogoPath,L.OrgAddressID,0 RoleID,NULL RoleName,0 UserID,0 LoginID,NULL LoginName,
+	   NULL Age,FL.LocationID LocationID,L.LocationID PharmacyLocationID,'',
+       NULL,	NULL,	0,	0	,0,	NULL	,0	,NULL,	NULL,	NULL,	NULL
+FROM Organization O
+INNER JOIN Locations L ON O.Orgid =L.OrgID AND L.LocationCode = @ToLocationCode
+INNER JOIN Locations FL ON O.Orgid =L.OrgID AND FL.LocationCode = @FromLocationCode
+WHERE O.OrgID=@pOrgID 
+
+
+Declare @OrgID INT
+Declare @OrgAddID INT
+Declare @TLocationID int
+Declare @FLocationID int
+Declare @outStockReceivedID Bigint 
+Declare @outPurchaseOrderNo [nvarchar](50)
+Declare @oSRDNo [nvarchar](50)
+Declare @strReceiptID Nvarchar(100)
+
+ 
+Select @OrgID =OrgID, @OrgAddID =OrgAddressID,@TLocationID=PharmacyLocationID,@FLocationID=LocationID From @Context
+
+Select @OrgID,@OrgAddID,@TLocationID,@FLocationID
+
+Set @strReceiptID =CONVERT(Varchar(1000),@ReceiptID)
+
+ EXEC  pInsertQuickStockReceivedDetails @pStockReceivedDate=@ReceiptDate,
+                                                             @pOrgID=@OrgID,
+                                                             @OrgAddressID=@OrgAddID ,
+                                                             @pSupplierID =0,
+                                                             @pStatus ='Approved',
+                                                             @pComments ='API Adock',
+                                                             @pCreatedBy =101,
+                                                             @pInventoryItemsMappingType=@InventoryItemsMapping_LIMSAPI ,
+                                                             @InvoiceNo  ='',
+                                                             @DCNumber =@strReceiptID,
+                                                             @ToLocationID =@TLocationID,
+                                                             @FromLocationID=@FLocationID,
+    @IndentID  =0,
+                                                             @Tax   =0.00,
+                                                             @Discount =0.00,
+                                                             @GrandTotal   =0.00,
+                                                             @StockReceivedID=@outStockReceivedID OUTPUT,
+                                                             @pPurchaseOrderNo=@outPurchaseOrderNo OUTPUT,
+                                                             @StrockReceivedTypeID  =1,
+                                                             @UsedCreditAmount  =0.00,
+                                                             @CessOnExciseTax  =0.00,
+                                                             @HighterEdCessTax   =0.00,
+                                                             @CessOnExciseTaxAmount =0.00,
+                                                             @HighterEdCessTaxAmount  =0.00,
+                                                             @CSTAmount  = 0.00,
+                                                             @ExciseTaxAmount   =0.00,
+                                                             @CSTax    =0.00,
+                                                             @RoundOfValue  =0.00,
+                                                             @RoundOfType =0.00,
+                                                             @InvoiceDate  =NULL,
+                                                             @TaxCalcType   =NULL,
+                                                             @SupServiceTax  =0.00,
+                                                             @PODiscountPercent  =0.00,
+                                                             @PODiscountAmount   =0.00,
+                                                             @SupServiceTaxAmount   =0.00,
+                                                             @StampFee =      0.00,
+                                                             @DeliveryCharges  = 0.00,
+                                                             @pIsConsignment  =NULL,
+                                                             @pInterimBillNo  =NULL,
+                                                             @SRDNo=@oSRDNo  OUTPUT,
+                                                             @ContextInfo =   @Context 
+
+ SELECT @outSRDNo=@oSRDNo
+END

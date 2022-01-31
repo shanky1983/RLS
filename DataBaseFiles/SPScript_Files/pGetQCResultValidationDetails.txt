@@ -1,0 +1,82 @@
+CREATE PROCEDURE [dbo].[pGetQCResultValidationDetails]
+	@pDeviceID [nvarchar](25),
+	@pLotNumber [nvarchar](25),
+	@pTestCode [nvarchar](25),
+	@pLevel [nvarchar](25),
+	@pOrgID INT,
+	@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+DECLARE @ret bigint    
+  BEGIN        
+ SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+   SET NOCOUNT ON; 
+BEGIN TRY
+ DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+ --DECLARE @pOrgID INT=223;
+ --SELECT @pDeviceID='153',@pLotNumber='123',@pTestCode='BHS020',@pLevel='1';
+  --SELECT @pLevel = (CASE WHEN @pLevel='C1' THEN 'C1' WHEN @pLevel='C2' THEN 'C2' WHEN @pLevel='C3' THEN 'C3' ELSE 'C1' END)
+   DECLARE @LotID BIGINT =(SELECT LotID FROM LotMaster WITH(NOLOCK) WHERE LotCode=@pLotNumber AND OrgID=@pOrgID)
+
+   DECLARE @InvestigationID INT = (SELECT InvestigationID FROM InvestigationOrgMapping WITH(NOLOCK) WHERE TestCode=@pTestCode AND OrgID=@pOrgID)
+
+   DECLARE @InstrumentID INT = (SELECT Top 1 InstrumentID FROM DeviceIntegrationOrgMapping WITH(NOLOCK) WHERE DeviceID=@pDeviceID AND OrgID=@pOrgID)
+   
+   SELECT @pDeviceID AS 'DeviceID',@pLotNumber AS 'LotNumber',@pTestCode AS 'TestCode',QCLevel AS 'QClevel',CAST(LabMean AS VARCHAR) AS 'LabMean',CAST(LabSD AS VARCHAR) AS 'LabSD' 
+   From QCRuleMaster WHERE OrgID=@pOrgID AND LotID=@LotID AND Analyte=@InvestigationID AND QCLevel= @pLevel AND IsActive=1;
+
+   SELECT TOP 10 @pLotNumber AS 'LotNumber', AV.Value1 AS 'QCValue',CONVERT(VARCHAR(5),AV.QcStatus) AS QCStatus, @pLevel AS QCLevel,QCRange,QCRule FROM AnalyteQCValues AV (NOLOCK) 
+	--INNER JOIN MetaData MD WITH (NOLOCK) ON  MD.Code=AV.QcStatus AND MD.Domain='QcCheck'
+	INNER JOIN MetaData MDL WITH (NOLOCK) ON MDL.MetaDataID=AV.QCLevel AND MDL.Code=@pLevel 
+   WHERE  (ISNULL(AV.Value1, '') <> '') AND AV.InstrumentID=@InstrumentID AND AV.InvestigationID=@InvestigationID  AND AV.QcStatus!=0
+   AND AV.LotID=@LotID  ORDER BY ProcessedAt desc;
+  
+   DECLARE @OtherLevels AS TABLE
+   (
+     SNO INT IDENTITY(1,1),
+	 LevelCode VARCHAR(5)
+    )
+
+	INSERT INTO @OtherLevels(LevelCode)
+	SELECT Code FROM MetaData WHERE Domain='LotLevel' AND Code NOT IN (@pLevel)
+
+
+	DECLARE @OtherLevelDetails AS TABLE
+	(
+	 QCValueID BIGINT NULL,
+	 LotNumber VARCHAR(25) NULL,
+	 QCValue NVARCHAR(20) NULL,
+	 QCStatus NVARCHAR(5) NULL,
+	 QCLevel NVARCHAR(5) NULL,
+	 QCRange NVARCHAR(10) NULL,
+	 QCRule NVARCHAR(10) NULL
+	)
+
+   --INSERT INTO @OtherLevelDetails(QCValueID,LotNumber,QCValue,QCStatus,QCLevel,QCRange,QCRule)
+   --SELECT TOP 1 QCValueID,@pLotNumber, AV.Value1 ,AV.QCStatus,MDL.Code,AV.QCRange,AV.QCRule FROM AnalyteQCValues AV (NOLOCK) 
+   ----INNER JOIN MetaData MD WITH (NOLOCK) ON  MD.Code=AV.QcStatus AND MD.Domain='QcCheck'
+   --INNER JOIN MetaData MDL WITH (NOLOCK) ON MDL.MetaDataID=AV.QCLevel 
+   --INNER JOIN @OtherLevels Temp ON MDL.Code =Temp.LevelCode AND  Temp.SNO=1
+   --WHERE   AV.InstrumentID=@InstrumentID AND AV.InvestigationID=@InvestigationID   AND AV.LotID=@LotID AND (ISNULL(AV.Value1, '') <> '')  
+   --ORDER BY QCValueID desc;
+
+   --INSERT INTO @OtherLevelDetails(QCValueID,LotNumber,QCValue,QCStatus,QCLevel,QCRange,QCRule)
+   --  SELECT TOP 1 QCValueID,@pLotNumber AS 'LotNumber', AV.Value1 AS 'QCValue',AV.QCStatus,MDL.Code AS QCLevel,AV.QCRange,AV.QCRule FROM AnalyteQCValues AV (NOLOCK) 
+   ----INNER JOIN MetaData MD WITH (NOLOCK) ON  MD.Code=AV.QcStatus AND MD.Domain='QcCheck'
+   --INNER JOIN MetaData MDL WITH (NOLOCK) ON MDL.MetaDataID=AV.QCLevel
+   --INNER JOIN @OtherLevels Temp ON MDL.Code =Temp.LevelCode AND  Temp.SNO=2
+   --WHERE AV.InstrumentID=@InstrumentID AND AV.InvestigationID=@InvestigationID   AND AV.LotID=@LotID AND (ISNULL(AV.Value1, '') <> '') 
+   --ORDER BY QCValueID desc;
+
+   SELECT LotNumber,QCValue,QCStatus,QCLevel,QCRange,QCRule FROM @OtherLevelDetails 
+
+ END TRY
+
+BEGIN CATCH   
+			                           
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(), @sptrace ='pGetQCResultValidationDetails @pOrgID = '+CAST(@pOrgID AS VARCHAR)+'@pDeviceID = '
+	+CAST(@pDeviceID AS VARCHAR) +'@pLotNumber = '+@pLotNumber 
+	 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH     
+  END

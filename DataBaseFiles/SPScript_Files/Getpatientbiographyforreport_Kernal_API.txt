@@ -1,0 +1,685 @@
+
+--GetPatientBiographyForReport 551604,67          
+--GetPatientBiographyForReport 542951,67                                       
+CREATE PROCEDURE [dbo].[Getpatientbiographyforreport_Kernal_API] (@pVisitID BIGINT,
+                                                       @OrgID    INT)
+AS
+  BEGIN
+      /**Added by mohan for collected on**/
+      DECLARE @HistoryID BIGINT
+      DECLARE @refAccessionNumber BIGINT
+      DECLARE @ParentVisitID BIGINT
+      DECLARE @referVisitID BIGINT
+      DECLARE @reportVisitID BIGINT
+      DECLARE @ApprovedDate DATETIME
+      DECLARE @pReferVisitID BIGINT,
+              @ParentOrgID   INT
+
+      SELECT @pReferVisitID = ReferVisitID
+      FROM   PatientVisit (NOLOCK)
+      WHERE  PatientVisitId = @pVisitID
+
+      SELECT @ParentOrgID = OrgID
+      FROM   PatientVisit (NOLOCK)
+      WHERE  PatientVisitID = @pReferVisitID
+
+      /*BEGIN | DefectID [7129] | BalaMagesh | Datein 20160927 | M | 201609200057--Client Name wrongly shows in report   */
+      DECLARE @parentReferVisitID BIGINT,
+              @PParentOrgID       INT
+
+      SELECT @parentReferVisitID = ReferVisitID
+      FROM   PatientVisit (NOLOCK)
+      WHERE  PatientVisitId = @pReferVisitID
+
+      SELECT @PParentOrgID = OrgID
+      FROM   PatientVisit (NOLOCK)
+      WHERE  PatientVisitID = @parentReferVisitID
+
+      --select @parentReferVisitID
+      --select @PParentOrgID
+      IF( @parentReferVisitID > 0
+          AND @parentReferVisitID IS NOT NULL )
+        BEGIN
+            SET @pReferVisitID=@parentReferVisitID
+            SET @ParentOrgID=@PParentOrgID
+        END
+
+      /*END | DefectID [7129] | BalaMagesh | Datein 20160927 */
+      DECLARE @pClientName    VARCHAR (100),
+              @pClientAddress NVARCHAR(2000),
+              @pZoneAddress   VARCHAR(100),
+              @pPostalCode    VARCHAR (100),
+              @RefPhyName     VARCHAR (255),
+              @pClientID      BIGINT,
+              @pGClientID     BIGINT,
+			  /*BEGIN REPORT NAME CHANGE BY DEENA 06032018*/
+			  @IshideClientName nvarchar(10)
+			    /*END REPORT NAME CHANGE BY DEENA 06032018*/
+
+      SELECT @pClientName = ClientName,
+             @pClientAddress = Isnull(CA.Address1, ''),
+             @pZoneAddress = Isnull(' Zone: '
+                                    + Isnull(ll.Code, ll.Locality_Value), ''),
+             @pPostalCode = CA.PostalCode,
+             @pClientID = CM.ClientID
+      FROM   ClientMaster CM WITH(NOLOCK)
+             INNER JOIN VisitClientMapping VCM (NOLOCK)
+                     ON CM.OrgID = VCM.OrgID
+                        AND CM.ClientID = VCM.ClientID
+                        AND VCM.RefFinalBillID IS NULL
+             LEFT JOIN AddressDetails CA (NOLOCK)
+                    ON CA.ReferenceID = VCM.ClientID
+                       AND Isnull(CA.Address1, '') <> ''
+                       /*BEGIN | Big ID[470] | BalaMagesh | Datein 20160321 | M |  Client Address is not getting printed on reports */
+                       AND CA.IsCommunication = 'Y'
+                       AND CA.AddressTypeID <> 0
+					   AND CA.ReferenceType='Client'
+             /*END | Big ID[470] | BalaMagesh | Datein 20160321 */
+             LEFT JOIN Localities ll (NOLOCK)
+                    ON ll.Locality_ID = CM.ZonalID
+                       AND ll.Type = 'Zone'
+      WHERE  VCM.VisitID = @pReferVisitID
+             AND VCM.OrgID = @ParentOrgID
+
+      --SELECT @pGClientID = ClientID
+      --FROM   ClientMaster (nolock)
+      --WHERE  OrgID = @ParentOrgID
+      --       AND ClientCode = 'GENERAL'
+
+	   --IF( @pClientID = @pGClientID )
+	   --/*END REPORT NAME CHANGE BY DEENA 06032018*/
+    -- -- IF( @IshideClientName = 'Y' )
+	   --/*END REPORT NAME CHANGE BY DEENA 06032018*/
+    --    BEGIN
+    --        SET @pClientName = (SELECT Location
+    --                            FROM   PatientVisit PV WITH (NOLOCK)
+    --                                   INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+    --                                           ON OA.AddressID = PV.OrgAddressID
+    --                            WHERE  PV.PatientVisitId = @pReferVisitID)
+    --        SET @pClientAddress =''
+    --    END
+
+ 
+	   /*END REPORT NAME CHANGE BY DEENA 06032018*/
+     
+      --SELECT @RefPhyName = ReferingPhysicianName
+      --FROM   PatientVisit (NOLOCK)
+      --where  OrganizationId = @ParentOrgID
+      --       and PatientVisitId = @pReferVisitID
+      SELECT @RefPhyName = CASE
+                             WHEN 'Dr.' + Isnull((ReferingPhysicianName), '') = 'Dr.' THEN NULL
+                             ELSE 'Dr.' + Isnull((ReferingPhysicianName), '')
+                           END
+      FROM   PatientVisit (NOLOCK)
+      WHERE  OrgID = @ParentOrgID
+             AND PatientVisitId = @pReferVisitID
+
+      SELECT @refAccessionNumber = ReferredAccessionNo
+      FROM   OrderedInvestigations (NOLOCK)
+      WHERE  VisitID IN ( @pVisitID )
+             AND ReferredAccessionNo IS NOT NULL
+
+      DECLARE @TempDemography AS TABLE
+        (
+           PatientName           VARCHAR(255),
+           VisitDate             DATETIME,
+           SEX                   VARCHAR(20),
+           VisitNo               VARCHAR(256),
+           ExternalVisitID       VARCHAR(255),
+           PatientVisitId        BIGINT,
+           VisitType             VARCHAR(20),
+           Age                   VARCHAR(20),
+           ReferingPhysicianName VARCHAR(100),
+           PatientID             VARCHAR(30),
+           ConstultantName       VARCHAR (255),
+           CollectedOn           VARCHAR(30),
+           ReportedOn            DATETIME,
+           PrintedOn             DATETIME,
+           ContactNo             VARCHAR(50),
+           ClientName            VARCHAR(255),
+           DetailHistory         VARCHAR(MAX),
+           HospitalName          VARCHAR(255),
+           Patient_HISTID        BIGINT,
+           ExternalPatientNumber VARCHAR(30),
+           DOB                   DATETIME,
+           ApprovedAt            DATETIME,
+           Name                  VARCHAR(255),
+           PatientNumber         VARCHAR(100),
+           Address               NVARCHAR(2000),
+           ZoneAddress           VARCHAR(100),
+           PostalCode            VARCHAR(100),
+           PatientAddress        VARCHAR(512),
+           PatientPostalcode     VARCHAR(100),
+           attrubuteCode         VARCHAR(50)
+        )
+
+      IF( @refAccessionNumber > 0
+          AND @refAccessionNumber IS NOT NULL )
+        BEGIN
+            SELECT @ParentVisitID = VisitID
+            FROM   OrderedInvestigations WITH (NOLOCK)
+            WHERE  AccessionNumber = @refAccessionNumber
+        END
+      ELSE
+        BEGIN
+            SET @ParentVisitID=@pVisitID
+            SET @referVisitID=@pVisitID
+        END
+
+      SELECT @referVisitID = PatientVisitId
+      FROM   PatientVisit WITH (NOLOCK)
+      WHERE  ReferVisitID = @pVisitID
+
+      IF( @referVisitID > 0
+          AND @referVisitID IS NOT NULL )
+        BEGIN
+            SET @reportVisitID=@referVisitID
+        END
+      ELSE
+        BEGIN
+            SET @reportVisitID=@pVisitID
+        END
+
+      --print 'out'                                                                                 
+      PRINT @reportVisitID
+
+      SELECT @HistoryID = Patient_HISTID
+      FROM   OrderedInvestigations WITH (NOLOCK)
+      WHERE  VisitId = @pVisitID
+             AND OrgID = @OrgID
+             AND Patient_HISTID IS NOT NULL
+
+      DECLARE @ClientIDSt BIGINT
+      DECLARE @ClientCode NVARCHAR(100)
+	    /*BEGIN REPORT NAME CHANGE BY DEENA 06032018*/
+		DECLARE	  @GIshideClientName nvarchar(10)
+			    /*END REPORT NAME CHANGE BY DEENA 06032018*/
+
+      IF( @refAccessionNumber > 0
+          AND @refAccessionNumber IS NOT NULL )
+        BEGIN
+            SELECT @ClientCode = CM.ClientCode,
+  @ClientIDSt = VCM.ClientID,
+				   @IshideClientName=''
+            FROM   VisitClientMapping VCM WITH (NOLOCK)
+                   INNER JOIN ClientMaster CM WITH (NOLOCK)
+                           ON CM.ClientID = VCM.ClientID
+                              AND CM.OrgID = VCM.OrgID
+            WHERE  VisitID = @ParentVisitID
+                   AND VCM.IsActive IS NULL
+        END
+      ELSE
+        BEGIN
+            SELECT @ClientCode = CM.ClientCode,
+                   @ClientIDSt = VCM.ClientID,
+				   @IshideClientName=''
+            FROM   VisitClientMapping VCM WITH (NOLOCK)
+                   INNER JOIN ClientMaster CM WITH (NOLOCK)
+                           ON CM.ClientID = VCM.ClientID
+                              AND CM.OrgID = VCM.OrgID
+            WHERE  VisitID = @pVisitID
+                   AND CM.OrgID = @OrgID
+                   AND VCM.IsActive IS NULL
+        END
+
+		  IF( @IshideClientName = 'Y' )
+	   /*END REPORT NAME CHANGE BY DEENA 06032018*/
+        BEGIN
+		    IF(ISNULL(@pReferVisitID,0)>0)
+			BEGIN
+            SET @pClientName = (SELECT Location
+                                FROM   PatientVisit PV WITH (NOLOCK)
+                                       INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+                                               ON OA.AddressID = PV.OrgAddressID
+                                WHERE  PV.PatientVisitId = @pReferVisitID)
+            SET @pClientAddress =''
+			END
+			ELSE
+			BEGIN 
+			SET @pClientName = (SELECT Location
+                                FROM   PatientVisit PV WITH (NOLOCK)
+                                       INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+                                               ON OA.AddressID = PV.OrgAddressID
+                                WHERE  PV.PatientVisitId = @pVisitID)
+            SET @pClientAddress =''
+			END
+        END
+
+
+
+		--select @IshideClientName
+	    --select @pClientName
+		--select @GIshideClientName
+
+      CREATE TABLE #Clientstationary
+        (
+           AttributeID    BIGINT,
+           Clientid       BIGINT,
+           attributetype  VARCHAR(50),
+           CADAttributeID BIGINT,
+           attrubuteCode  VARCHAR(50)
+        )
+
+		 IF( @pReferVisitID IS NOT NULL
+                AND @pReferVisitID <> '' )
+              BEGIN
+			 
+			   INSERT INTO #Clientstationary
+                  (AttributeID,Clientid,attributetype,CADAttributeID,attrubuteCode)
+					  SELECT CA.AttributeID,
+							 CAD.ClientID,
+							 CA.AttributesType,
+							 CAD.AttributesID,
+							 CA.AttributeCode
+					  FROM   ClientAttributes CA (NOLOCK)
+							 INNER JOIN ClientAttributesDetails CAD (NOLOCK)
+									 ON CA.AttributeID = CAD.AttributesID
+					  WHERE  CAD.OrgID = @ParentOrgID
+							 AND CA.AttributesType = 'Notify'
+							 AND CA.AttributeID = 22
+							 AND CAD.ClientID = @ClientIDSt
+			  
+			  END
+			  ELSE
+			  BEGIN 
+			 
+      INSERT INTO #Clientstationary
+                  (AttributeID,Clientid,attributetype,CADAttributeID,attrubuteCode)
+      SELECT CA.AttributeID,
+             CAD.ClientID,
+             CA.AttributesType,
+             CAD.AttributesID,
+             CA.AttributeCode
+      FROM   ClientAttributes CA (NOLOCK)
+             INNER JOIN ClientAttributesDetails CAD (NOLOCK)
+                     ON CA.AttributeID = CAD.AttributesID
+      WHERE  CAD.OrgID = @OrgID
+             AND CA.AttributesType = 'Notify'
+             AND CA.AttributeID = 22
+             AND CAD.ClientID = @ClientIDSt
+ END
+
+      --and isnull(CAD.value  ,'Y')='Y'           
+      --insert INTO  #Clientstationary(AttributeID,Clientid,attributetype,CADAttributeID,attrubuteCode) 
+      --select 22,@ClientIDSt,'Notify',22,'ISTrust'         
+	    /*BEGIN REPORT NAME CHANGE BY DEENA 06032018*/
+       IF( @ClientCode = 'GENERAL' )
+	   --  IF( @GIshideClientName = 'Y' )
+		   /*END REPORT NAME CHANGE BY DEENA 06032018*/
+        BEGIN 
+       INSERT INTO @TempDemography
+            SELECT DISTINCT s.TitleName + ' ' + p.Name                                                                                                                                   AS PatientName,
+                            (SELECT VisitDate
+                             FROM   PatientVisit WITH (NOLOCK)
+                             WHERE  PatientVisitId = @ParentVisitID)                                                                                                                     AS VisitDate,
+                            CASE
+                              WHEN Isnull(OI.Patient_HISTID, 0) = 0 THEN ( CASE
+                                                                             WHEN Isnull(p.UnknownFlag, 0) = 0
+                                                                                   OR Isnull(p.UnknownFlag, 0) = 1 THEN ( CASE Upper(p.SEX)
+                                                                                                                            WHEN 'M' THEN 'Male'
+                                                                                                                            WHEN 'F' THEN 'Female'
+                                                                                                                            WHEN 'V' THEN 'Vet'
+                                                                                                                            WHEN 'N' THEN 'NA'
+                                                                                                                            ELSE ''
+                                                                                                                          END )
+                                                                             ELSE ''
+                                                                           END )
+                              ELSE (SELECT CASE Upper(p.SEX)
+                                             WHEN 'M' THEN 'Male'
+                                             WHEN 'F' THEN 'Female'
+                                             WHEN 'V' THEN 'Vet'
+                                             WHEN 'N' THEN 'NA'
+                                             ELSE ''
+                                           END
+                                    FROM   Patient_HIST PHIS (NOLOCK)
+                                    WHERE  PHIS.Patient_HISTID = @HistoryID
+                                           AND PHIS.OrgID = @OrgID)
+                            END                                                                                                                                                          AS SEX,
+                            (SELECT VisitNumber
+                             FROM   PatientVisit (NOLOCK)
+                             WHERE  PatientVisitId = @ParentVisitID)                                                                                                                     AS VisitNo,
+                            pv.ExternalVisitID,
+                            pv.PatientVisitId,
+                            CASE pv.VisitType
+                              WHEN 0 THEN 'OP'
+                              WHEN 1 THEN 'IP'
+                            END                                                                                                                                                          AS VisitType,
+                            --CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2  
+                            --THEN (CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'                                               
+                            --ELSE P.Age end) ELSE '' END AS Age ,                                                   
+                            Isnull(P.Age, '')                                                                                           AS Age,
+                            --ISNULL(P.Age,'')+'/' AS Age,                                                                 
+                            --ISNULL((pv.ReferingPhysicianName),'') AS ReferingPhysicianName,           
+                            CASE
+                              WHEN 'Dr.'+ Isnull((pv.ReferingPhysicianName), '') = 'Dr.' THEN '' ELSE 'Dr.' + pv.ReferingPhysicianName 
+                            END                                                                                                                                                        AS ReferingPhysicianName,
+                            p.patientnumber                                                                                                                                              AS PatientID,
+                            CASE pv.VisitType
+                              WHEN 1 THEN (SELECT TOP 1 'Constultant Name : ' + SL.TitleName
+                                                        + phy.PhysicianName
+                                           FROM   PrimaryConsultant IAD WITH ( NOLOCK)
+                                                  INNER JOIN Physician phy WITH ( NOLOCK)
+                                                          ON phy.PhysicianID = IAD.PrimaryConsultantID
+                                                  INNER JOIN Salutation SL WITH ( NOLOCK)
+                                                          ON SL.TitleID = phy.TitleCode
+                                           WHERE  IAD.VisitID = @pVisitID)
+                            END                                                                                                                                                          AS ConstultantName,
+                            (SELECT Isnull(CASE
+                                             WHEN Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime)AS TIME)) = 0 THEN CONVERT(VARCHAR, Min(CollectedDateTime), 103)
+                                             ELSE CONVERT(VARCHAR, Min( CollectedDateTime ), 103)
+                                                  + ' '
+                                                  + CONVERT(VARCHAR, Cast(Min( CollectedDateTime) AS TIME), 0 )
+                                           END, CONVERT(VARCHAR, Min(ModifiedAt), 103) + ' '
+                                                + CONVERT(VARCHAR, Cast(Min(ModifiedAt ) AS TIME), 0))
+                             FROM   PatientInvSample WITH (NOLOCK)
+                             WHERE  PatientVisitID = @ParentVisitID and IsActive =1 )                                                                                                                     AS CollectedOn,
+                            --(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,                                             
+                            (SELECT Max(ApprovedAt)
+                             FROM   PatientInvestigation (NOLOCK)
+                             /*BEGIN | Bug ID[5028] | BalaMagesh | Datein 20160725 | M | 201607080015--Approved Time shows wrongly in Report*/
+                             WHERE  PatientVisitID = @pVisitID)
+                            /*END | Bug ID[5028] | Arjun Kumar K | Datein 20160725 */                                                                                                    AS ReportedOn,
+                            CONVERT(VARCHAR, dbo.Fn_getserverdatewithoutcontext(@OrgID, 0), 100)                                                                                         AS PrintedOn,
+                            CASE
+                              WHEN Isnull(PA.LandLineNumber, '') <> ''
+                                   AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                          ELSE
+                                CASE
+                                  WHEN Isnull(PA.MobileNumber, '') <> ''
+                                       AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+                                  ELSE ''
+                                END
+                            END                                                                                                                                                          AS ContactNo,
+                            (SELECT Location
+                             FROM   PatientVisit pv1 WITH (NOLOCK)
+                                    INNER JOIN OrganizationAddress OA1 WITH (NOLOCK)
+                                            ON OA1.AddressID = pv1.OrgAddressID
+                             WHERE  PatientVisitId = @ParentVisitID)                                                                                                                     AS ClientName,
+                            Isnull(PH.DetailHistory, '')                                                                                                                                 AS DetailHistory,
+                            Isnull(( pv.HospitalName ), '')                                                                                                                              AS HospitalName,
+                            OI.Patient_HISTID,
+                            p.ExternalPatientNumber,
+                            /*BEGIN | Bug ID[5028] | BalaMagesh | Datein 20160725 | M | 201607080015--Approved Time shows wrongly in Report*/
+                            --(select convert(varchar, P.DOB, 103))
+                            P.DOB                                                                                                                                                        AS DOB,
+                            /*END | Bug ID[5028] | Arjun Kumar K | Datein 20160725 */
+                            (SELECT Max(ApprovedAt)
+                             FROM   PatientInvestigation WITH (NOLOCK)
+                             WHERE  PatientVisitID = @pVisitID)                                                                                                                          AS ApprovedAt,
+                            p.Name                                                                                                                                                       AS Name,
+                             -- BEGIN | DEENA | 20180411 | WardNo  FOR API
+						    CASE WHEN Isnull('('+Isnull(p.ExternalPatientNumber, '')+')', '')='()' THEN p.PatientNumber ELSE 
+							--CASE WHEN Isnull(p.ExternalPatientNumber, '')='' THEN p.PatientNumber ELSE p.ExternalPatientNumber END  
+							CASE WHEN EXISTS (select 1 from vendorconfigurationmaster VCM WITH(NOLOCK) 
+			                      WHERE VCM.VendorID=P.VendorID AND VCM.Type='ScreenCustomize' AND VCM.Name='ExternalPID' AND Value='N')
+			    THEN p.PatientNumber
+				ELSE
+			     P.ExternalPatientNumber END 
+							END + CASE WHEN ISNULL(pv.WardNo,'')='' THEN '' ELSE  ' \ WardNo:'+pv.WardNo END AS PatientNumber,
+                               -- END | DEENA | 20180411 | WardNo  FOR API
+							--p.PatientNumber +'('+ p.ExternalPatientNumber+')'    
+                            --as PatientNumber,   
+                            ''                                                                                                                                                           AS Address,
+                            ''                                                                                                                                                           AS ZoneAddress,
+                            ''                                                                                                                                                           AS PostalCode,
+                            --CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                      
+                            PA.Add1 + ' ' + PA.Add2 + ' ' + PA.City                                                                                                                      AS PatientAddress,
+                            PA.PostalCode                                                                                                                                                AS PatientPostalcode,
+                            'ISTrust'                                                                                                                                                    AS attrubuteCode
+            FROM   PatientVisit pv WITH (NOLOCK)
+                   INNER JOIN Patient p WITH (NOLOCK)
+                           ON p.PatientID = pv.PatientID
+                   INNER JOIN Salutation s WITH (NOLOCK)
+                           ON s.TitleID = p.TITLECode
+                   INNER JOIN PatientAddress PA WITH (NOLOCK)
+                           ON PA.PatientID = P.PatientID
+                   INNER JOIN OrganizationAddress OA WITH (NOLOCK)
+                           ON OA.AddressID = PV.OrgAddressID
+                   LEFT JOIN PatientHistoryExt PH (NOLOCK)
+                          ON PH.PatientID = p.PatientID
+                             AND PH.PatientVisitId = pv.PatientVisitId
+                             AND PH.OrgID = pv.OrgID
+                   LEFT JOIN OrderedInvestigations OI WITH (NOLOCK)
+                          ON OI.VisitID = pv.PatientVisitId
+                             AND OI.OrgID = PV.OrgID
+            WHERE  pv.PatientVisitId = @pVisitID
+                   AND pv.OrgID = @OrgID
+            ORDER  BY OI.Patient_HISTID DESC
+
+            IF( @pReferVisitID IS NOT NULL
+                AND @pReferVisitID <> '' )
+              BEGIN
+                  UPDATE TM
+                  SET    TM.ClientName = Isnull(@pClientName, TM.ClientName),TM.Address = Isnull(@pClientAddress, TM.Address),TM.ZoneAddress = Isnull(@pZoneAddress,   
+      TM.ZoneAddress),TM.PostalCode = Isnull(@pPostalCode, TM.PostalCode),TM.ReferingPhysicianName = Isnull(@RefPhyName, TM.ReferingPhysicianName)  
+                  FROM   @TempDemography TM
+              END
+
+            SELECT PatientName,
+                   VisitDate,
+                   SEX,
+                   VisitNo,
+                   ExternalVisitID,
+                   PatientVisitId,
+                   VisitType,
+                   age,
+                   ReferingPhysicianName,
+                   PatientID,
+                   ConstultantName,
+                   CollectedOn,
+                   ReportedOn,
+                   PrintedOn,
+                   ContactNo,
+                   CASE WHEN @IshideClientName = 'Y'THEN @pClientName ELSE ClientName END AS ClientName,
+                   DetailHistory,
+                   HospitalName,
+                   Patient_HISTID,
+                   ExternalPatientNumber,
+                   DOB,
+                   ApprovedAt,
+                   Name,
+                   PatientNumber,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE Address END AS Address,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE ZoneAddress END AS ZoneAddress,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE PostalCode END AS PostalCode,
+                   PatientAddress,
+                   PatientPostalcode,
+                   attrubuteCode
+            FROM   @TempDemography
+        END
+      ELSE
+        BEGIN
+            --select 'a' 
+            INSERT INTO @TempDemography
+            SELECT DISTINCT s.TitleName + ' ' + p.Name                                                                                                                                   AS PatientName,
+          (SELECT VisitDate
+                             FROM   PatientVisit WITH (NOLOCK)
+                             WHERE  PatientVisitId = @ParentVisitID)                                                                                                                     AS VisitDate,
+                            CASE
+                              WHEN Isnull(OI.Patient_HISTID, 0) = 0 THEN ( CASE
+                                                                             WHEN Isnull(p.UnknownFlag, 0) = 0
+                                                                                   OR Isnull(p.UnknownFlag, 0) = 1 THEN ( CASE Upper(p.SEX)
+                                                                                                                            WHEN 'M' THEN 'Male'
+                                                                                                                            WHEN 'F' THEN 'Female'
+                                                                                                                            WHEN 'V' THEN 'Vet'
+                                                                                                                            WHEN 'N' THEN 'NA'
+                                                                                                                            ELSE ''
+                                                                                                                          END )
+                                                                             ELSE ''
+                                                                           END )
+                              ELSE (SELECT CASE Upper(p.SEX)
+                                             WHEN 'M' THEN 'Male'
+                                             WHEN 'F' THEN 'Female'
+                                             WHEN 'V' THEN 'Vet'
+                                             WHEN 'N' THEN 'NA'
+                                             ELSE ''
+                                           END
+                                    FROM   Patient_HIST PHIS (NOLOCK)
+                                    WHERE  PHIS.Patient_HISTID = @HistoryID
+                                           AND PHIS.OrgID = @OrgID)
+                            END                                                                                                                                                          AS SEX,
+                            (SELECT VisitNumber
+                             FROM   PatientVisit (NOLOCK)
+                             WHERE  PatientVisitId = @ParentVisitID)                                                                                                                     AS VisitNo,
+                            pv.ExternalVisitID,
+                            pv.PatientVisitId,
+                            CASE pv.VisitType
+                              WHEN 0 THEN 'OP'
+                              WHEN 1 THEN 'IP'
+                            END                                                                                                                                                          AS VisitType,
+                            --CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2 THEN  
+                            --(CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'                                               
+                            --ELSE P.Age end) ELSE '' END AS Age ,                                                   
+                            Isnull(P.Age, '')                                                                                                                                            AS Age,
+                            --ISNULL(P.Age,'')+'/' AS Age,                                                                 
+                            --ISNULL((pv.ReferingPhysicianName),'') AS ReferingPhysicianName,        
+                            CASE
+                               WHEN 'Dr.'+ Isnull((pv.ReferingPhysicianName), '') = 'Dr.' THEN '' ELSE 'Dr.' + pv.ReferingPhysicianName 
+							
+                            END                                                                                                                                                           AS ReferingPhysicianName,
+                            p.patientnumber                                                                                                                                              AS PatientID,
+                            CASE pv.VisitType
+                              WHEN 1 THEN (SELECT TOP 1 'Constultant Name : ' + SL.TitleName
+                                                        + phy.PhysicianName
+                                           FROM   PrimaryConsultant IAD WITH (NOLOCK)
+                                                  INNER JOIN Physician phy WITH ( NOLOCK)
+                                                          ON phy.PhysicianID = IAD.PrimaryConsultantID
+                                                  INNER JOIN Salutation SL WITH ( NOLOCK)
+                                                          ON SL.TitleID = phy.TitleCode
+                                           WHERE  IAD.VisitID = @pVisitID)
+                            END                                                                                                                                                          AS ConstultantName,
+                            (SELECT Isnull(CASE
+                                             WHEN Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime)AS TIME)) = 0 THEN CONVERT(VARCHAR, Min(CollectedDateTime), 103)
+                                             ELSE CONVERT(VARCHAR, Min( CollectedDateTime ), 103)
+                                                  + ' '
+                                                  + CONVERT(VARCHAR, Cast(Min( CollectedDateTime) AS TIME), 0 )
+                                           END, CONVERT(VARCHAR, Min(ModifiedAt), 103) + ' '
+                                                + CONVERT(VARCHAR, Cast(Min(ModifiedAt ) AS TIME), 0))
+                             FROM   PatientInvSample WITH (NOLOCK)
+                             WHERE  PatientVisitID = @ParentVisitID and IsActive =1 )                                                                                                                     AS CollectedOn,
+                            --(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,              
+                            (SELECT Max(ApprovedAt)
+                             FROM   PatientInvestigation (NOLOCK)
+                             /*BEGIN | Bug ID[5028] | BalaMagesh | Datein 20160725 | M | 201607080015--Approved Time shows wrongly in Report*/
+                             WHERE  PatientVisitID = @pVisitID)                                                                                                                          AS ReportedOn,
+                            /*END | Bug ID[5028] | Arjun Kumar K | Datein 20160725 */
+                            CONVERT(VARCHAR, dbo.Fn_getserverdatewithoutcontext(@OrgID, 0), 100)                                                                                         AS PrintedOn,
+                            CASE
+                              WHEN Isnull(PA.LandLineNumber, '') <> ''
+                                   AND PA.LandLineNumber <> '0' THEN PA.LandLineNumber
+                              ELSE
+                                CASE
+                                  WHEN Isnull(PA.MobileNumber, '') <> ''
+                                       AND PA.MobileNumber <> '0' THEN PA.MobileNumber
+          ELSE ''
+                                END
+                            END                                                                                                                                                          AS ContactNo,
+                            CM.ClientName,
+                            Isnull(PH.DetailHistory, '')                                                                                                                                 AS DetailHistory,
+                            Isnull(( pv.HospitalName ), '')                                                                                                                              AS HospitalName,
+                            OI.Patient_HISTID,
+                            p.ExternalPatientNumber,
+                            /*BEGIN | Bug ID[5028] | BalaMagesh | Datein 20160725 | M | 201607080015--Approved Time shows wrongly in Report*/
+                            --(select convert(varchar, P.DOB, 103))        
+                            P.DOB                                                                                                                                                        AS DOB,
+                            /*END | Bug ID[5028] | Arjun Kumar K | Datein 20160725 */
+                            (SELECT Max(ApprovedAt)
+                             FROM   PatientInvestigation WITH (NOLOCK)
+                             WHERE  PatientVisitID = @pVisitID)                                                                                                                          AS ApprovedAt,
+                            p.Name                                                                                                                                                       AS Name,
+                            --p.PatientNumber as PatientNumber, 
+			    -- BEGIN | DEENA | 20180411 | WardNo  FOR API
+                            CASE WHEN Isnull('('+Isnull(p.ExternalPatientNumber, '')+')', '')='()' THEN p.PatientNumber ELSE CASE WHEN Isnull(p.ExternalPatientNumber, '')='' THEN p.PatientNumber ELSE p.ExternalPatientNumber END  END + CASE WHEN 
+			    ISNULL(pv.WardNo,'')='' THEN '' ELSE  ' \ WardNo:'+pv.WardNo END AS PatientNumber,
+                         -- END | DEENA | 20180411 | WardNo  FOR API
+			    CA.Address1                                                                                                                                                  AS Address,
+                            ' Zone: '
+                            + Isnull(ll.Code, ll.Locality_Value)                                                                                                                         AS ZoneAddress,
+                            CA.PostalCode                                                                                                                                                AS PostalCode,
+                            --CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                    
+                            PA.add1 + ' ' + PA.Add2 + ' ' + PA.City                                                                                                                      AS PatientAddress,
+                            --'' as PatientAddress,                         
+                            PA.PostalCode                                                                                                                                                AS PatientPostalcode,
+                            Isnull(CAD.attrubuteCode, 'ISTrust')                                                                                                                         AS attrubuteCode
+            FROM   PatientVisit pv WITH (NOLOCK)
+                   INNER JOIN Patient p WITH (NOLOCK)
+                           ON p.PatientID = pv.PatientID
+ INNER JOIN Salutation s WITH (NOLOCK)
+                           ON s.TitleID = p.TITLECode
+                   INNER JOIN PatientAddress PA WITH (NOLOCK)
+                           ON PA.PatientID = P.PatientID
+                   LEFT JOIN VisitClientMapping VCM (NOLOCK)
+                          ON VCM.VisitID = PV.PatientVisitId
+                             AND VCM.OrgID = PV.OrgID
+                   LEFT JOIN ClientMaster CM (NOLOCK)
+                          ON CM.ClientID = VCM.ClientID
+                             AND CM.OrgID = VCM.OrgID
+                   LEFT JOIN #Clientstationary CAD (NOLOCK)
+                          ON CAD.ClientID = VCM.ClientID
+                   LEFT JOIN AddressDetails CA (NOLOCK)
+                          ON CA.ReferenceID = VCM.ClientID
+                             AND Isnull(CA.Address1, '') <> ''
+                             /*BEGIN | Big ID[470] | BalaMagesh | Datein 20160321 | M |  Client Address is not getting printed on reports */
+                             AND CA.IsCommunication = 'Y'
+                             AND CA.AddressTypeID <> 0
+                   /*END | Big ID[470] | BalaMagesh | Datein 20160321 */
+                   LEFT JOIN Localities ll (NOLOCK)
+                          ON ll.Locality_ID = CM.ZonalID
+                             AND ll.Type = 'Zone'
+                   LEFT JOIN PatientHistoryExt PH (NOLOCK)
+                          ON PH.PatientID = p.PatientID
+                             AND PH.PatientVisitId = pv.PatientVisitId
+                             AND PH.OrgID = pv.OrgID
+                   LEFT JOIN OrderedInvestigations OI WITH (NOLOCK)
+                          ON OI.VisitID = pv.PatientVisitId
+                             AND OI.OrgID = PV.OrgID
+            WHERE  pv.PatientVisitId = @pVisitID
+                   AND pv.OrgID = @OrgID
+                   AND Isnull(ISactive, 'Y') = 'Y'
+            ORDER  BY OI.Patient_HISTID DESC
+
+            IF( @pReferVisitID IS NOT NULL
+                AND @pReferVisitID <> '' )
+              BEGIN
+                  UPDATE TM
+                  SET    TM.ClientName = Isnull(@pClientName, TM.ClientName),TM.Address = Isnull(@pClientAddress, TM.Address),  
+      TM.ZoneAddress = Isnull(@pZoneAddress, TM.ZoneAddress),TM.PostalCode = Isnull(@pPostalCode, TM.PostalCode),TM.ReferingPhysicianName = Isnull(@RefPhyName,   
+      TM.ReferingPhysicianName)  
+                  FROM   @TempDemography TM
+              END
+
+            SELECT PatientName,
+                   VisitDate,
+                   SEX,
+                   VisitNo,
+                   ExternalVisitID,
+                   PatientVisitId,
+                   VisitType,
+                   age,
+                   ReferingPhysicianName,
+                   PatientID,
+                   ConstultantName,
+                   CollectedOn,
+                   ReportedOn,
+                   PrintedOn,
+                   ContactNo,
+                   CASE WHEN @IshideClientName = 'Y'THEN @pClientName ELSE ClientName END AS ClientName,
+                   DetailHistory,
+                   HospitalName,
+                   Patient_HISTID,
+                   ExternalPatientNumber,
+                   DOB,
+                   ApprovedAt,
+                   Name,
+                   PatientNumber,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE Address END AS Address,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE ZoneAddress END AS ZoneAddress,
+                   CASE WHEN @IshideClientName = 'Y'THEN '' ELSE PostalCode END AS PostalCode,
+                   PatientAddress,
+                   PatientPostalcode,
+                   attrubuteCode
+            FROM   @TempDemography
+        END
+  END 
+
+

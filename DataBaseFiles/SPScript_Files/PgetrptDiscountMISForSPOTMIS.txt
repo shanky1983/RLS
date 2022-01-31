@@ -1,0 +1,65 @@
+CREATE proc [dbo].[PgetrptDiscountMISForSPOTMIS]
+(
+@Fromdate datetime,
+@Todate datetime,
+@Orgid int
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+
+)
+as
+/*
+Exec PgetrptDiscountMIS @Fromdate = '20170401',@Todate = '20170430',@Orgid = 167,@OrgAddressid = 310
+*/
+Begin
+Set nocount ON;
+Declare @fdate date,@tdate date,@Cnt int,
+@OrgAddressid bigint
+select @fdate = @fromdate,@tdate = dateadd(day,1,@Todate)
+Declare @tmp as table
+(
+sno smallint identity(1,1),BilledDate date,BillNumber varchar(100),Patientno varchar(100),PatientName varchar(100),[Bill] decimal(18,2),
+[Discount] decimal(18,2),Userid varchar(100)
+)
+Insert @Tmp(BilledDate ,BillNumber ,PatientNo,PatientName ,[Bill] ,
+[Discount] ,Userid )
+Select
+isnull(FB.BillDate,PV.Createdat),FB.BillNumber,P.PatientNumber,P.Name as PatientName,isnull(tp.BillAmt,0) as [Bill Amount]
+,isnull(Tp.DisAmt,0)+isnull(PDD.DisAmt,0) as [Discount Amount],UR.Name as Userid
+From Patient P (nolock)
+Inner join PatientVisit PV (nolock) on P.Patientid = PV.Patientid
+Inner join Finalbill FB (nolock) on PV.PatientVisitid = FB.Visitid
+Left join Users UR (nolock) on FB.Createdby = UR.LoginID
+Cross Apply
+( 
+Select
+SUM(BD.Amount) as BillAmt,SUM(BD.DiscountAmount) as DisAmt
+From Billingdetails BD (nolock) Where FB.Finalbillid = BD.Finalbillid
+) TP
+Cross Apply
+(
+Select 
+SUM(DiscountAmt) as DisAmt
+From PatientDuedetails PDD (nolock)
+Where PDD.Finalbillid = FB.Finalbillid 
+and PDD.Createdat between @fdate and @tdate 
+) PDD
+Where PV.Createdat between @fdate and @tdate 
+and   PV.OrgID = @Orgid
+--and   PV.OrgAddressid = @OrgAddressid
+and TP.DisAmt > 0
+Order by FB.BillDate
+Select @Cnt = Count(1) From @Tmp
+Select
+sno,convert(varchar,BilledDate,103) as Billdate ,BillNumber ,Patientno,PatientName ,[Bill] as [Bill Amount] ,
+[Discount] as [Discount Amount],Userid as [User Name]
+From @Tmp
+union all
+Select
+@Cnt+1 as Sno,'Total' as BilledDate ,null as BillNumber ,null as patientno,null as PatientName ,SUM([Bill]) as [Bill Amt] ,
+SUM([Discount]) as [Discount Amount] ,null 
+From @Tmp
+End

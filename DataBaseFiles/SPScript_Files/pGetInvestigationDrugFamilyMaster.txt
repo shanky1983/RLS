@@ -1,0 +1,24 @@
+/****** Object:  StoredProcedure [dbo].[pGetInvestigationDrugFamilyMaster]    Script Date: 6/25/2018 11:21:31 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pGetInvestigationDrugFamilyMaster](@FamilyName varchar(100)=null,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+declare @orgid bigint
+
+select @orgid=orgid from @ContextInfo
+if(@FamilyName is null)
+begin
+select FamilyId,Familyname,Familycode,LangCode,IsActive from InvestigationDrugFamilyMaster where orgid=@orgid
+end
+else if(@FamilyName is not null)
+begin
+select FamilyId from InvestigationDrugFamilyMaster where orgid=@orgid and familyname=@FamilyName
+end
+end
+
+GO

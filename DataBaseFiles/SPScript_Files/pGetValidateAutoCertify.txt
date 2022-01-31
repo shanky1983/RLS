@@ -1,0 +1,50 @@
+CREATE procedure pGetValidateAutoCertify
+@InvestigationId bigint,
+@pOrgID int,
+@visitid bigint,  
+@groupid bigint,
+@ContextInfo [UDT_CONTEXT] READONLY
+As
+Begin
+Declare @IsGroupDependencies bit
+set @IsGroupDependencies=0
+
+if(isnull(@groupid,0)>0)
+Begin
+if exists(select 1 from Groupdepndtest where groupid=@groupid and Orgid=@pOrgID)
+begin
+select @IsGroupDependencies=IsGroupDependencies from InvAutoCertifyValidation IV
+Inner Join invorggroup IOG (nolock) on IV.InvestigationId=IOG.AttgroupId and IV.Orgid=IOG.OrgId where IOG.Orggroupid=@groupid and IV.Type='GRP' and IV.Orgid=@pOrgID
+End 
+Else
+Begin
+set @IsGroupDependencies=1
+End
+End
+
+select Isautocertify,
+IsDeviceError,
+IsQCstatus,
+IsCriticalValue,
+IsDeltavalue,
+IsAutoauthorizationrange,
+@IsGroupDependencies as IsGroupDependencies,
+IsCrossParameterCheck,
+IsTechnicianVerificationNeeded from InvAutoCertifyValidation where InvestigationId=@InvestigationId and Type='INV' and Orgid=@pOrgID
+
+declare @Isautocertify bit =1
+declare @IsDeltavalue bit =1
+select 'Pass'
+As QCStatus,
+isnull(PIA.DeltaLowerLimit,0) as DeltaLowerLimit,
+isnull(PIA.DeltaHigherLimit,0) as DeltaHigherLimit, IV.Value as InvestigationValue,'N' as IsAutoAuthorize,'N' as IsAbnormal,'' DeviceErrorCode,@Isautocertify as Isautocertify,
+@IsDeltavalue as IsDeltavalue
+from DeltaCrossParameter DCP (nolock)
+inner join PatientInvestigation PI WITH (NOLOCK) on DCP.CrossParameterId=PI.InvestigationID and PI.PatientVisitID=@visitid 
+Inner Join InvestigationValues IV  WITH (NOLOCK) on IV.patientvisitid=PI.patientvisitid and IV.investigationid=PI.Investigationid
+inner join PatientInvestigationAttributes PIA (nolock) on PIA.PatientInvID =PI.PatientInvID
+where DCP.InvestigationId=@InvestigationId and DCP.Orgid=@pOrgID
+
+End
+
+

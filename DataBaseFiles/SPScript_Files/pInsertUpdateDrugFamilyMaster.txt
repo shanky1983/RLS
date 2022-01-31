@@ -1,0 +1,28 @@
+/****** Object:  StoredProcedure [dbo].[pInsertUpdateDrugFamilyMaster]    Script Date: 6/25/2018 11:22:08 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pInsertUpdateDrugFamilyMaster](@FamilyId bigint, @Familyname Varchar(100),@Familycode Varchar(100),@ReturnId int out,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+
+declare @CreatedBy bigint,@OrgId int
+declare @language nvarchar(30)
+
+select @OrgId=OrgID,@CreatedBy=LoginID,@language=LanguageCode from @ContextInfo
+
+if(@FamilyId=0 and @FamilyId = '')
+begin
+insert into InvestigationDrugFamilyMaster values(@Familyname,@Familycode,@OrgId,GETDATE(),@CreatedBy,null,null,@language,1)
+insert into InvestigationDrugFamilyMasterHistory values((select convert(bigint, scope_identity())),@Familyname,@Familycode,@OrgId,GETDATE(),@CreatedBy,null,null,@language,1)
+end
+else if(@FamilyId is not null and @FamilyId > 0)
+begin
+update InvestigationDrugFamilyMaster set familyname=@Familyname,Familycode=@Familycode,ModifiedBy=@CreatedBy,ModifiedAt=GETDATE() where OrgID=@OrgId and FamilyId=@FamilyId
+insert into InvestigationDrugFamilyMasterHistory values(@FamilyId,@Familyname,@Familycode,@OrgId,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,@language,(select isactive from InvestigationDrugFamilyMaster where familyid=@FamilyId and orgid=@OrgId))
+end
+end
+GO

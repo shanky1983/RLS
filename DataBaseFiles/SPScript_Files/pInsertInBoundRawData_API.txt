@@ -1,0 +1,14 @@
+
+CREATE PROCEDURE [dbo].[pInsertInBoundRawData_API](
+@VendorID BIGINT,
+@Type VARCHAR(50),
+@MethodName NVARCHAR(500),
+@Data NVARCHAR(MAX)
+
+)
+AS 
+BEGIN
+
+INSERT INTO InBoundRawData(VendorID,Type,MethodName,Data,CreatedAt)
+SELECT @VendorID,@Type,@MethodName,@Data,getdate()
+END

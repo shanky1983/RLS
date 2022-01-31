@@ -1,0 +1,25 @@
+CREATE PROCEDURE pGetOrgLocation_LIMSAPI
+(
+  @pOrgCode NVARCHAR(100),
+  @pCategoryCode NVARCHAR(100)
+)
+AS
+BEGIN
+
+ DECLARE @pOrgID INT = NULL
+
+  IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+    BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID
+		FROM Integrationtypemaster ITM
+			INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+  
+    SELECT OG.OrgID, OG.Name as ClientID, OA.Location as LocationName, OA.AddressID as LocationCode, 
+				   case OA.Status when 'D' then 'Inactive' else 'Active' end as Status, OA.IsDefault as ProcessingLocation
+	FROM Organization OG WITH(Nolock)
+	INNER JOIN OrganizationAddress OA WITH(Nolock) ON OG.OrgID = OA.OrgID AND OG.OrgID = COALESCE(@pOrgID, OA.OrgID)
+  
+END

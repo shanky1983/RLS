@@ -1,0 +1,476 @@
+CREATE procedure [dbo].[pGetIntegrationResultForHealthiAPI]   
+ (@OrgID bigint)     
+as     
+begin     
+declare  @Results as TABLE       
+  (
+     User_id			  Bigint, 
+	 Order_id			  Bigint,
+	 MRN				  Bigint,
+	 Order_no			  Bigint,
+	 Patient_name		  NVARCHAR(250),
+	 Age				  VARCHAR(30),
+	 Gender				  Char(1),
+	 Phone_number		  varchar(15),
+	 EMailID				  NVARCHAR(100),
+     MessageID            bigint ,      
+     OrgCode              NVARCHAR(5),      
+     OrderID              varchar(40),      
+     ExternalPatientID    NVARCHAR(25),
+	 Barcode		      NVARCHAR(250),        
+     ExternalBarcodeID    NVARCHAR(250),      
+     LISPatientID         BIGINT,      
+     LISVisitID           NVARCHAR(250),      
+     OrderedTestCode      NVARCHAR(250),      
+     OrderedTestName      NVARCHAR(500),      
+     Group_Code        NVARCHAR(250),      
+     Group_Name        NVARCHAR(250),      
+     Test_Code      NVARCHAR(250),      
+     Test_Name      NVARCHAR(250),      
+     ResultValue          NVARCHAR(Max),      
+     Measurement_Unit                  NVARCHAR(100),      
+     ReferenceRange			NVARCHAR(max),      
+     Abnormal_Flag           NCHAR(1),       
+     Remarks              NVARCHAR(max),     
+     IsSensitive          NCHAR(1),       
+     GroupResultStatus    NVARCHAR(100),      
+     ProcessStatus  VARCHAR(100),      
+     Approved_By           NVARCHAR(200),      
+     Reported_on		  DATETIME,      
+     CoAuthorizedBy       NVARCHAR(200),      
+     CoAuthorizedDateTime DATETIME,      
+     ReportHold           CHAR(1),      
+     Collected_By            NVARCHAR(100),       
+     CreatedDateTime    DATETIME,      
+	 NotificationID       bigint,      
+	 FileName             nvarchar(1000),      
+	 File_Path            nvarchar(1000),      
+	 Template             nvarchar(500),
+	 ApproverUserName     nvarchar(200),
+	 ApproverLoginName    nvarchar(200), 
+	 ClientCode           nvarchar(200),
+	 ClientName			  nvarchar(200),
+	 Specimen			  nvarchar(200), 
+	 Method				  nvarchar(500),	 
+	 Center_code		  nvarchar(500),
+	 Collected_At		  nvarchar(500),
+	 Taken_on			  DateTime
+	 )
+
+	  --if (@orgID=220)
+	  --begin 
+	  --set @orgID=232
+	  --end
+
+    DECLARE @visitID bigint=0
+    DECLARE @Getdate datetime=getdate()-1; --Select Convert(Date,@Getdate)
+    --DECLARE @orgID bigint =232 
+    DECLARE @pdfRootFolder nvarchar(200)      
+    select  @pdfRootFolder=value from communicationconfig where orgid=@OrgID and name='PdfFolderPath'            
+--   select top 1  @visitID=nc.Identityid,@orgID=nc.OrgID      
+--   from  IntegrationConfig ic       
+--  inner join Notifications nc on nc.OrgID=ic.OrgID       
+----  inner join orderedinvestigations oi on oi.VisitID=nc.IdentityID and nc.OrgID=oi.OrgID      
+--  where ic.IsActive='Y' and nc.ActionType='OutBound'  and nc.Status=''  order by nc.createdat asc 
+
+ Select top 1  @visitID=N.Identityid from Notifications N With(Nolock)      
+  where N.OrgID=@OrgID and Isnull(N.Status,'Completed')='Completed' and Isnull(N.HasRepushed,0)=0 and Convert(date,N.CreatedAt)>Convert(Date,@Getdate)
+  group by N.Identityid,N.CreatedAt  order by N.CreatedAt asc      
+  
+  --Select @visitID 
+      
+DECLARE @ORDEREDITEMS AS TABLE (VisitID bigint,ID BIGINT,Type nvarchar(40),Name nvarchar(500),AccessionNumber bigint ,Status nvarchar(100),      
+OrderedStatusDateTime DATETIME ,ContentStatusDateTime DateTime,pkgid bigint,pkgname varchar(100),      
+NotificationID bigint,OrgID bigint,FileName nvarchar(1000),FilePath nvarchar(1000),Template nvarchar(500) ,
+	 ApproverUserName     nvarchar(200),
+	 ApproverLoginName    nvarchar(200),
+	 ApprovedTime		  Datetime, Collected_By NVARCHAR(50),Taken_on DateTime )
+      
+insert into @ORDEREDITEMS 
+  select  oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status ,oi.CreatedAt AS DD,oi.CreatedAt,oi.pkgid,oi.pkgname ,0,      
+ oi.OrgID,(Select top 1 NN.AttachmentName from Notifications NN (nolock) where NN.IdentityID=@visitID and NN.Orgid=@Orgid and Isnull(NN.AttachmentName,'')<>'' )
+ ,isnull(@pdfRootFolder,'')+(Select top 1 NN.Template from Notifications NN (nolock) where NN.IdentityID=@visitID and NN.Orgid=@Orgid and Isnull(NN.AttachmentName,'')<>'' and NN.ActionType='Pdf')
+ +(Select top 1 NN.AttachmentName from Notifications NN (nolock) where NN.IdentityID=@visitID and NN.Orgid=@Orgid and Isnull(NN.AttachmentName,'')<>'' and NN.ActionType='Pdf') ,''
+ ,U.Name AS ApproverUserName,L.LoginName as ApproverLoginName,PI.ApprovedAt As ApprovedTime,u1.Name As Collected_By,pv.CreatedAt as Taken_on
+ from  -- Notifications nc inner join 
+  orderedinvestigations oi --on oi.VisitID=nc.IdentityID and nc.OrgID=oi.OrgID 
+  INNER JOIN Patientinvestigation PI(nolock) ON PI.AccessionNumber=OI.AccessionNumber and PI.OrgID=OI.OrgID 
+  Inner join PatientVisit Pv (Nolock) On pv.PatientVisitId=oi.VisitID and Pv.OrgID=OI.OrgID
+  INNER JOIN Login L On L.Loginid=PI.Approvedby   and L.OrgID=PI.OrgID  
+  INNER JOIN Users U On U.Loginid=L.Loginid   and L.OrgID=U.OrgID
+  INNER JOIN Users U1 On U1.Loginid=pv.CreatedBy   and pv.OrgID=U1.OrgID
+  where oi.VisitID=@visitID and OI.OrgID=@orgID 
+  and oi.Status='Approve' --and Isnull(nc.AttachmentName,'')<>''
+  group by oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status,oi.CreatedAt,oi.pkgid,oi.pkgname,oi.OrgID,
+  U.Name,L.LoginName,PI.ApprovedAt ,u1.Name,pv.CreatedAt    
+ --nc.OrgID,nc.AttachmentName,NC.NotificationID 
+ Order by oi.visitid,oi.ID,oi.Type,oi.Name,oi.AccessionNumber, oi.Status,oi.CreatedAt,oi.pkgid,oi.pkgname,oi.OrgID, 
+ U.Name,L.LoginName,PI.ApprovedAt  ,u1.Name ,pv.CreatedAt      
+ --nc.OrgID,nc.AttachmentName,NC.NotificationID
+  asc      
+
+  --Declare @TblSampleID as Table (Visitid bigint,Orgid Bigint,SampleID bigint,BarcodeNumber nvarchar(250),InvID Bigint)
+  --Insert into @TblSampleID
+  --Select ORD.Visitid,ORD.OrgID,PS.SampleID,PS.BarcodeNumber,PIN.InvestigationID from @ORDEREDITEMS ORD 
+  --Inner Join PatientInvSample PS(Nolock) On Ord.VisitID=PS.PatientVisitID and ORD.OrgID=PS.OrgID
+  --Inner Join PatientInvestigation PIN(Nolock) On PIN.AccessionNumber=ORD.AccessionNumber and PIN.SampleID=PS.SampleCode
+  --Group By ORD.Visitid,ORD.OrgID,PS.SampleID,PS.BarcodeNumber,PIN.InvestigationID Order by ORD.Visitid,ORD.OrgID,PS.SampleID,PS.BarcodeNumber,PIN.InvestigationID
+  
+      --Select * from @ORDEREDITEMS return
+	  --Select * from @TblSampleID
+	   
+insert into @Results      
+select B.UserID as User_id, 
+	 B.RefPhysicianID As Order_id,
+	 B.ScheduleID As MRN ,
+	 B.BookingID As Order_no	,
+	 B.PatientName As Patient_name ,
+	 B.Age ,
+	 B.SEX As Gender ,
+	 B.PhoneNumber As Phone_number,
+	 B.EMail as EMailID,		  
+oi.AccessionNumber AS MessageID
+,Cast(PV.OrgID as Varchar(5)) AS OrgCode
+,PV.ExternalVisitID AS OrderID      
+,P.PatientNumber AS ExternalPatientID
+,PIS.BarcodeNumber AS Barcode
+,PIS.ExternalBarcode AS ExternalBarcodeID   
+,p.patientid  AS LISPatientID    
+,pv.VisitNUmber AS LISVisitID     
+,iom.TestCode AS OrderedTestcode       
+,oi.Name     AS OrderedTestName  
+,'' As Group_Code     
+,'' As Group_Name    
+,iom.TestCode AS Test_Code       
+,oi.Name     AS Test_name     
+,iv.Value   AS ResultValue   
+,iv.UOMCode  AS Measurement_Unit    
+,pi.ReferenceRange AS ReferenceRange     
+,pi.IsAbnormal     As Abnormal_Flag
+,pi.MedicalRemarks  As Remarks      
+,pi.IsSensitive     
+,oi.status sts      
+,oi.status  AS ProcessStatus    
+,oi.ApproverUserName As Approved_By     
+,pi.ApprovedAt    As Reported_on  
+,''      
+,getdate()      
+,'N'      
+,oi.Collected_By     
+,getdate() AS CreatedDateTime     
+,oi.NotificationID      
+,oi.FileName, oi.FilePath  As File_Path      
+,oi.Template,oi.ApproverUserName,oi.ApproverLoginName,CM.ClientCode,CM.ClientName
+,SM.SampleDesc as Specimen,PI.MethodName as Method,OA.Location as Collected_At,OAD.Location as Center_code,oi.Taken_on
+from @ORDEREDITEMS oi    
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID  
+INNER JOIN PatientInvSample PIS(NOLOCK) ON PIS.PatientVisitID=PV.PatientVisitID AND PIS.OrgID=PV.OrgID         
+inner join MISPatientInvestigation pii (nolock)on pii.Accessionnumber=oi.AccessionNumber and PII.SampleID=PIS.SampleCode  and PII.ContainerID=PIS.SampleContainerID  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=PII.AccessionNumber and PII.SampleID=PI.SampleID  
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID  and Iv.Status=Pi.Status  
+inner join VisitClientMapping VCM (nolock)on VCM.Visitid=PV.PatientVisitID and VCM.Orgid=PV.OrgID
+inner join ClientMaster CM On CM.ClientID =VCM.ClientID and CM.Orgid=VCM.Orgid 
+inner join InvSampleMaster SM On SM.SampleCode=PIS.SampleCode AND PIS.OrgID=SM.OrgID 
+inner join Investigationorgmapping iom (nolock) on iom.investigationid=oi.ID and iom.OrgID=pv.OrgID  
+inner join OrganizationAddress OA On OA.AddressID=PIS.CollectedLocID AND PIS.OrgID=OA.OrgID	
+inner join OrganizationAddress OAD On OAD.AddressID=PIS.RecSampleLocID AND PIS.OrgID=OAD.OrgID	
+inner join patient p (nolock) on p.PatientID=pv.PatientID 
+inner join Bookings B (nolock) on B.PatientID=pv.PatientID and B.OrgID=Pv.OrgID      
+where  oi.type='INV' and isnull(oi.pkgid,0)=0 and B.BookingStatus<>'C'  and Iv.Status<>'Recheck' 
+   
+union              
+           
+select 
+ B.UserID as User_id, 
+	 B.RefPhysicianID As Order_id,
+	 B.ScheduleID As MRN ,
+	 B.BookingID As Order_no	,
+	 B.PatientName As Patient_name ,
+	 B.Age ,
+	 B.SEX As Gender ,
+	 B.PhoneNumber As Phone_number,
+	 B.EMail as EMailID,
+	 oi.AccessionNumber AS MessageID
+,Cast(PV.OrgID as Varchar(5)) AS OrgCode
+,PV.ExternalVisitID AS OrderID      
+,P.PatientNumber AS ExternalPatientID
+,PIS.BarcodeNumber AS Barcode
+,PIS.ExternalBarcode AS ExternalBarcodeID   
+,p.patientid  AS LISPatientID    
+,pv.VisitNUmber AS LISVisitID     
+,iog.TestCode AS OrderedTestcode       
+,oi.Name     AS OrderedTestName      
+,iog.TestCode AS Group_Code      
+,oi.Name       AS Group_Name
+,iom.investigationcode  AS Test_Code    
+,pi.InvestigationName   AS Test_Name
+,iv.Value AS ResultValue     
+,iv.UOMCode   AS Measurement_Unit   
+,pi.ReferenceRange  AS ReferenceRange    
+,pi.IsAbnormal  As Abnormal_Flag      
+,pi.MedicalRemarks   As Remarks  
+,pi.IsSensitive     
+,oi.status sts      
+,oi.status AS ProcessStatus     
+,oi.ApproverUserName As Approved_By  
+,pi.ApprovedAt   As Reported_on   
+,''      
+,getdate()      
+,'N'      
+,oi.Collected_By
+,getdate() AS CreatedDateTime     
+,oi.NotificationID      
+,oi.FileName, oi.FilePath As File_Path       
+,oi.Template,oi.ApproverUserName,oi.ApproverLoginName,CM.ClientCode,CM.ClientName
+,SM.SampleDesc as Specimen,PI.MethodName as Method,OA.Location as Collected_At,OAD.Location as Center_code,oi.Taken_on
+from @ORDEREDITEMS oi      
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID  
+INNER JOIN PatientInvSample PIS(NOLOCK) ON PIS.PatientVisitID=PV.PatientVisitID AND PIS.OrgID=PV.OrgID    
+inner join MISPatientInvestigation pii (nolock)on pii.Accessionnumber=oi.AccessionNumber and PII.SampleID=PIS.SampleCode  and PII.ContainerID=PIS.SampleContainerID  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=PII.AccessionNumber and PII.SampleID=PI.SampleID    
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID  and Iv.Status=PI.Status  
+inner join InvOrgGroup iog (nolock) on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID      
+inner join Investigationorgmapping iom (nolock) on iom.investigationid=pi.InvestigationID and iom.OrgID=pv.OrgID  
+inner join VisitClientMapping VCM (nolock)on VCM.Visitid=PV.PatientVisitID and VCM.Orgid=PV.OrgID
+inner join ClientMaster CM On CM.ClientID =VCM.ClientID and CM.Orgid=VCM.Orgid    
+inner join InvSampleMaster SM On SM.SampleCode=PIS.SampleCode AND PIS.OrgID=SM.OrgID  
+inner join OrganizationAddress OA On OA.AddressID=PIS.CollectedLocID AND PIS.OrgID=OA.OrgID	
+inner join OrganizationAddress OAD On OAD.AddressID=PIS.RecSampleLocID AND PIS.OrgID=OAD.OrgID	  
+inner join patient p (nolock) on p.PatientID=pv.PatientID  
+inner join Bookings B (nolock) on B.PatientID=pv.PatientID and B.OrgID=Pv.OrgID
+where  oi.type='GRP' and isnull(oi.pkgid,0)=0 and B.BookingStatus<>'C'  and Iv.Status<>'Recheck' 
+    
+union    
+Select B.UserID as User_id, 
+	 B.RefPhysicianID As Order_id,
+	 B.ScheduleID As MRN ,
+	 B.BookingID As Order_no	,
+	 B.PatientName As Patient_name ,
+	 B.Age ,
+	 B.SEX As Gender ,
+	 B.PhoneNumber As Phone_number,
+	 B.EMail as EMailID,  
+     oi.AccessionNumber AS MessageID
+,Cast(PV.OrgID as Varchar(5)) AS OrgCode
+,PV.ExternalVisitID AS OrderID      
+,P.PatientNumber AS ExternalPatientID
+,PIS.BarcodeNumber AS Barcode
+,PIS.ExternalBarcode AS ExternalBarcodeID   
+,p.patientid  AS LISPatientID    
+,pv.VisitNUmber AS LISVisitID,       
+(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) as OrderedTestcode,      
+ oi.pkgname AS OrderedTestName,
+ iog.TestCode AS Group_Code      
+,oi.Name       AS Group_Name
+,iom.investigationcode  AS Test_Code    
+,pi.InvestigationName   AS Test_Name
+,iv.Value AS ResultValue     
+,iv.UOMCode AS Measurement_Unit      
+,pi.ReferenceRange  AS ReferenceRange     
+,pi.IsAbnormal   as Abnormal_Flag   
+,pi.MedicalRemarks as Remarks  
+,pi.IsSensitive          
+,oi.Status as sts      
+,oi.Status  AS ProcessStatus    
+,oi.ApproverUserName As Approved_By 
+,pi.ApprovedAt   As Reported_on    
+,''      
+,getdate()      
+,'N'      
+,oi.Collected_By
+,getdate()   AS CreatedDateTime   
+,oi.NotificationID      
+,oi.FileName, oi.FilePath  As File_Path      
+,oi.Template,oi.ApproverUserName,oi.ApproverLoginName,CM.ClientCode,CM.ClientName,
+SM.SampleDesc as Specimen,PI.MethodName as Method,OA.Location as Collected_At,OAD.Location as Center_code ,oi.Taken_on      
+ from @ORDEREDITEMS oi      
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID 
+INNER JOIN PatientInvSample PIS(NOLOCK) ON PIS.PatientVisitID=PV.PatientVisitID AND PIS.OrgID=PV.OrgID    
+inner join InvOrgGroup iog (nolock) on iog.AttGroupID=oi.ID and iog.OrgID=pv.OrgID      
+inner join MISPatientInvestigation pii (nolock)on pii.Accessionnumber=oi.AccessionNumber and PII.SampleID=PIS.SampleCode  and PII.ContainerID=PIS.SampleContainerID  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=PII.AccessionNumber and PII.SampleID=PI.SampleID 
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID    and Iv.Status=PI.Status       
+inner join Investigationorgmapping iom (nolock) on pi.investigationid=iom.investigationID and iom.OrgID=iv.OrgID   
+inner join VisitClientMapping VCM (nolock)on VCM.Visitid=PV.PatientVisitID and VCM.Orgid=PV.OrgID
+inner join ClientMaster CM On CM.ClientID =VCM.ClientID and CM.Orgid=VCM.Orgid 
+inner join InvSampleMaster SM On SM.SampleCode=PIS.SampleCode AND PIS.OrgID=SM.OrgID   
+inner join OrganizationAddress OA On OA.AddressID=PIS.CollectedLocID AND PIS.OrgID=OA.OrgID	
+inner join OrganizationAddress OAD On OAD.AddressID=PIS.RecSampleLocID AND PIS.OrgID=OAD.OrgID	 
+inner join patient p (nolock) on p.PatientID=pv.PatientID       
+inner join Bookings B (nolock) on B.PatientID=pv.PatientID and B.OrgID=Pv.OrgID
+where isnull(oi.pkgid,0)>0 and Oi.Type='GRP' And B.BookingStatus<>'C' and Iv.Status<>'Recheck'
+      
+union       
+select
+B.UserID as User_id, 
+	 B.RefPhysicianID As Order_id,
+	 B.ScheduleID As MRN ,
+	 B.BookingID As Order_no	,
+	 B.PatientName As Patient_name ,
+	 B.Age ,
+	 B.SEX As Gender ,
+	 B.PhoneNumber As Phone_number,
+	 B.EMail as EMailID,
+	 oi.AccessionNumber AS MessageID
+,Cast(PV.OrgID as Varchar(5)) AS OrgCode
+,PV.ExternalVisitID AS OrderID      
+,P.PatientNumber AS ExternalPatientID
+,PIS.BarcodeNumber AS Barcode
+,PIS.ExternalBarcode AS ExternalBarcodeID   
+,p.patientid  AS LISPatientID    
+,pv.VisitNUmber AS LISVisitID ,      
+(select TestCode from InvOrgGroup IG1 where IG1.AttGroupID=OI.pkgid and IG1.orgid=pv.OrgID) AS OrderedTestcode      
+,oi.pkgname AS OrderedTestName      
+--, iom.TestCode AS Groupcode     
+--,oi.Name      AS GroupName
+,''		AS Group_Code     
+,''     AS Group_Name
+,iom.investigationcode  AS Test_Code    
+,pi.InvestigationName   AS Test_Name 
+,iv.Value      AS ResultValue
+,iv.UOMCode   AS Measurement_Unit  
+,pi.ReferenceRange  AS ReferenceRange    
+,pi.IsAbnormal  As Abnormal_Flag  
+,pi.MedicalRemarks as Remarks    
+,pi.IsSensitive      
+,oi.Status as sts      
+,oi.Status AS ProcessStatus     
+,oi.ApproverUserName As Approved_By 
+,pi.ApprovedAt   As Reported_on      
+,''      
+,getdate()      
+,'N'      
+,oi.Collected_By
+,getdate()  AS	CreatedDateTime    
+,oi.NotificationID      
+,oi.FileName, oi.FilePath as File_Path       
+,oi.Template,oi.ApproverUserName,oi.ApproverLoginName,CM.ClientCode,CM.ClientName
+,SM.SampleDesc as Specimen,PI.MethodName as Method,OA.Location as Collected_At,OAD.Location as Center_code,oi.Taken_on    
+ from @ORDEREDITEMS oi      
+inner join patientvisit pv (nolock) on pv.PatientVisitID=oi.VisitID    
+INNER JOIN PatientInvSample PIS(NOLOCK) ON PIS.PatientVisitID=PV.PatientVisitID AND PIS.OrgID=PV.OrgID  
+inner join MISPatientInvestigation pii (nolock)on pii.Accessionnumber=oi.AccessionNumber and PII.SampleID=PIS.SampleCode  and PII.ContainerID=PIS.SampleContainerID  
+inner join PatientInvestigation pi (nolock)on pi.Accessionnumber=PII.AccessionNumber and PII.SampleID=PI.SampleID 
+inner join investigationvalues iv (nolock)on pi.Patientvisitid=iv.PatientVisitID and  iv.InvestigationID=pi.InvestigationID  and Iv.Status=PI.Status     
+inner join Investigationorgmapping iom (nolock) on pi.investigationid=iom.investigationID and iom.OrgID=iv.OrgID   
+inner join VisitClientMapping VCM (nolock)on VCM.Visitid=PV.PatientVisitID and VCM.Orgid=PV.OrgID
+inner join ClientMaster CM On CM.ClientID =VCM.ClientID and CM.Orgid=VCM.Orgid  
+inner join InvSampleMaster SM On SM.SampleCode=PIS.SampleCode AND PIS.OrgID=SM.OrgID  
+inner join OrganizationAddress OA On OA.AddressID=PIS.CollectedLocID AND PIS.OrgID=OA.OrgID	
+inner join OrganizationAddress OAD On OAD.AddressID=PIS.RecSampleLocID AND PIS.OrgID=OAD.OrgID	 
+inner join patient p (nolock) on p.PatientID=pv.PatientID  
+inner join Bookings B (nolock) on B.PatientID=pv.PatientID and B.OrgID=Pv.OrgID     
+where isnull(oi.pkgid,0)>0 and OI.Type='INV' and B.BookingStatus<>'C'  and Iv.Status<>'Recheck'   
+      
+      
+UPDATE n SET n.HasRepushed=1 
+--select * 
+from Notifications n (nolock) where IdentityID=@visitID and n.OrgID=@OrgID  
+
+select distinct  User_id			  , 
+	 Order_id			  ,
+	 MRN				  ,
+	 Order_no			  ,
+	 Patient_name		  ,
+	 Age				  ,
+	 Gender				  ,
+	 Phone_number		  ,
+	 EMailID, 
+     MessageID             ,      
+     OrgCode              ,      
+     OrderID              ,      
+     ExternalPatientID    ,
+	 Barcode		      ,        
+     ExternalBarcodeID    ,      
+     LISPatientID         ,      
+     LISVisitID           ,      
+     OrderedTestCode      ,      
+     OrderedTestName      ,      
+     Group_Code        ,      
+     Group_Name        ,      
+     Test_Code      ,      
+     Test_Name      ,      
+     ResultValue          ,      
+     Measurement_Unit                  ,      
+     ReferenceRange			,      
+     Abnormal_Flag           ,      
+     Remarks              ,     
+     IsSensitive          ,       
+     GroupResultStatus    ,      
+     ProcessStatus   ,      
+     Approved_By            ,      
+     Reported_on		   ,      
+     CoAuthorizedBy        ,      
+     CoAuthorizedDateTime  ,      
+     ReportHold            , 
+	 Collected_By,       
+     CreatedDateTime     ,      
+	 NotificationID       ,      
+	 FileName             ,      
+	 File_Path            ,      
+	 Template             ,
+	 ApproverUserName     ,
+	 ApproverLoginName    , 
+	 ClientCode  ,
+	 ClientName			  ,
+	 Specimen			  , 
+	 Method				  , 
+	 Center_code		  ,
+	 Collected_At		  
+	 ,Taken_on
+		from @Results Group by User_id			  , 
+	 Order_id			  ,
+	 MRN				  ,
+	 Order_no			  ,
+	 Patient_name		  ,
+	 Age				  ,
+	 Gender				  ,
+	 Phone_number		  ,
+	 EMailID, 
+     MessageID             ,      
+     OrgCode              ,      
+     OrderID              ,      
+     ExternalPatientID    ,
+	 Barcode		      ,        
+     ExternalBarcodeID    ,      
+     LISPatientID         ,      
+     LISVisitID           ,      
+     OrderedTestCode      ,      
+     OrderedTestName      ,      
+     Group_Code        ,      
+     Group_Name        ,      
+     Test_Code      ,      
+     Test_Name      ,      
+     ResultValue          ,      
+     Measurement_Unit                  ,      
+     ReferenceRange			,      
+     Abnormal_Flag           ,      
+     Remarks              ,     
+     IsSensitive          ,       
+     GroupResultStatus    ,      
+     ProcessStatus   ,      
+     Approved_By            ,      
+     Reported_on		   ,      
+     CoAuthorizedBy        ,      
+     CoAuthorizedDateTime  ,      
+     ReportHold            ,
+	 Collected_By,      
+     CreatedDateTime     ,      
+	 NotificationID       ,      
+	 FileName             ,      
+	 File_Path            ,      
+	 Template             ,
+	 ApproverUserName     ,
+	 ApproverLoginName    , 
+	 ClientCode           ,
+	 ClientName			  ,
+	 Specimen			  , 
+	 Method				  , 
+	 Center_code		  ,
+	 Collected_At		  
+	 ,Taken_on
+		      
+      
+end      
+      
+      

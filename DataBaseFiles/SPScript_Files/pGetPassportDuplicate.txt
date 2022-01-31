@@ -1,0 +1,14 @@
+CREATE PROCEDURE [dbo].[pGetPassportDuplicate]
+    @PassportNo Nvarchar(100),
+ 
+    @ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN     
+Declare @OrGID int
+Select @OrgID = OrgId from @ContextInfo
+
+select PV.PassportNumber AS URN,ISNULL(PatientNumber,'') Displaytext from Patient P
+ Inner Join Patientvisit PV on P.PatientID=PV.PatientID 
+where PV.PassportNumber = @PassportNo and PV.OrgID=@OrgID   
+END

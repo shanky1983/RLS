@@ -1,0 +1,25 @@
+/****** Object:  StoredProcedure [dbo].[pGetOrganismDrugLevelMapDetails]    Script Date: 12/5/2018 5:18:51 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetOrganismDrugLevelMapDetails]
+@DrugID BIGINT,
+@ContextInfo [UDT_Context] READONLY
+WITH EXECUTE AS OWNER
+AS
+BEGIN 
+/*DEC PART*/
+DECLARE @LoginID BIGINT,@CurrentTDateTime DATETIME=GETDATE(),@OrgID BIGINT
+
+SELECT TOP 1 @LoginID=LoginID,@OrgID=OrgID FROM @ContextInfo
+
+
+SELECT  DLM.LevelID,DLM.LevelName,DLM.DrugID,DLM.IsActive,DLM.OrgID
+FROM DrugLevelMapping  DLM WITH(NOLOCK) WHERE  DLM.OrgID=@OrgID AND DLM.IsActive=1  AND DLM.DrugID=@DrugID
+END
+GO
+
+

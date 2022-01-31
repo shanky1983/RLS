@@ -1,0 +1,608 @@
+---------changes by arun start 09/12/2020---
+---------Include REPRINT TRF BARCODE option in Visit Search screen - Role mapping--
+DECLARE @ActionId INT, @RoleID BIGINT, @RedirectPageID BIGINT
+SET @ActionId = (SELECT ActionID from ActionMaster where actioncode ='Reprint_TRFBarcode_SampleSearch')
+SET @RoleID = (select ROLEID from Role where Rolename = 'LabReception' and OrgID =220) 
+SET @RedirectPageID = (select Pageid from Pages where PageName ='VisitDetails')
+IF NOT EXISTS (SELECT 1 FROM ActionRoleMapping WHERE actionid = @ActionId and roleid = @RoleID and RedirectPageID = @RedirectPageID and searchtypeid =11)
+BEGIN
+--select @ActionId,@RoleID,@RedirectPageID,11,GETDATE(),'Y'
+	INSERT INTO ActionRoleMapping(Actionid,RoleId,Redirectpageid,searchtypeid,createdat,IsMapped)
+	VALUES(@ActionId,@RoleID,@RedirectPageID,11,GETDATE(),'Y')
+END
+---------------------
+----------Billing is should not allowed with out TRF Files Config
+--select top 1* from ConfigKeyMaster  order by 1 desc  --361
+--select top 1 * from ConfigOrgMaster where OrgID = 244 order by 1 desc --45518
+
+DECLARE @ConfigKeyId BIGINT
+
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey = 'IsTRFMandatory')
+BEGIN
+	SET @ConfigKeyId = (SELECT COUNT(1) from ConfigKeyMaster) +1
+
+	INSERT INTO ConfigKeyMaster (ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)
+	VALUES (@ConfigKeyId,'IsTRFMandatory','Upload TRFMandatory','N','CHB')	
+END
+ELSE
+BEGIN
+	SET @ConfigKeyId = (SELECT ConfigKeyID from ConfigKeyMaster WHERE ConfigKey = 'IsTRFMandatory')
+END
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster WHERE ConfigKeyID = @ConfigKeyId AND OrgID = 220)
+BEGIN
+	INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+	VALUES (@ConfigKeyId,'Y',220)
+END
+---
+---------changes by arun End ---
+
+----------- Changes by Seetha Start ------------------------------
+
+--- Labcode Scripts
+-------------------
+
+DECLARE @OrgID INT,@ConfigKeyID INT
+
+SELECT @OrgID =202
+
+SELECT @ConfigKeyID=MAX(ConfigkeyID)+1 FROM ConfigkeyMaster
+IF NOT EXISTS (SELECT 1 FROM ConfigkeyMaster WHERE Configkey='NeedLabCodeforTest' )
+BEGIN
+INSERT INTO ConfigkeyMaster (ConfigkeyID,Configkey,DisplayText,IsInternal,CreatedAt,CreatedBy)
+SELECT @ConfigKeyID,'NeedLabCodeforTest','Lab Code for Each test ?','N',getdate(),405
+END
+SELECT @ConfigKeyID=ConfigkeyID FROM ConfigkeyMaster WHERE Configkey='NeedLabCodeforTest'
+ 
+IF NOT EXISTS (SELECT 1 FROM  ConfigOrgMaster WHERE ConfigkeyID=@ConfigKeyID AND OrgID=@OrgID AND @OrgID>0 )
+BEGIN
+ INSERT INTO ConfigOrgMaster (ConfigkeyID,OrgID,ConfigValue,CreatedAt)
+ SELECT @ConfigKeyID,@OrgID,'Y',GETDATE()
+END
+ 
+GO
+
+Declare @OrgID int,@ID bigint,@Type Nvarchar(10),@Prefix Nvarchar(10),@IncNumber bigint,@IncChar Nvarchar(10),@LabNumber Nvarchar(10)
+
+Set @OrgID=202
+set @ID = (SElect InvestigationID from  InvestigationORgMapping where TestCode='BHS020' and ORgID=@OrgID)
+set @Type='INV'
+set @Prefix='NA'
+set @IncChar='AA'
+Set @IncNumber=0
+set @LabNumber='0000'
+
+If Not Exists(select 1 from LabcodePattern where ID=@ID and Type=@Type and OrgID=@OrgID)
+BEGIN
+Insert into LabCodePattern (OrgID,ID,Type,Prefix,IncCharacter,IncNumber,Labnumber)
+select @OrgID,@ID,@Type,@Prefix,@IncChar,@IncNumber,@LabNumber
+END
+
+
+Declare @OrgID int,@ID bigint,@Type Nvarchar(10),@Prefix Nvarchar(10),@IncNumber bigint,@IncChar Nvarchar(10),@LabNumber Nvarchar(10)
+
+Set @OrgID=202
+set @ID = (SElect InvestigationID from  InvestigationORgMapping where TestCode='BHC029' and ORgID=@OrgID)
+set @Type='INV'
+set @Prefix='CA'
+set @IncChar='AA'
+Set @IncNumber=0
+set @LabNumber='0000'
+
+If Not Exists(select 1 from LabcodePattern where ID=@ID and Type=@Type and OrgID=@OrgID)
+BEGIN
+Insert into LabCodePattern (OrgID,ID,Type,Prefix,IncCharacter,IncNumber,Labnumber)
+select @OrgID,@ID,@Type,@Prefix,@IncChar,@IncNumber,@LabNumber
+END
+
+
+
+Declare @OrgID int,@ID bigint,@Type Nvarchar(10),@Prefix Nvarchar(10),@IncNumber bigint,@IncChar Nvarchar(10),@LabNumber Nvarchar(10)
+
+Set @OrgID=202
+set @ID = (SElect AttGroupID from  InvOrgGroup where TestCode='BH107G' and ORgID=@OrgID)
+set @Type='GRP'
+set @Prefix='LI'
+set @IncChar='AA'
+Set @IncNumber=0
+set @LabNumber='0000'
+
+If Not Exists(select 1 from LabcodePattern where ID=@ID and Type=@Type and OrgID=@OrgID)
+BEGIN
+Insert into LabCodePattern (OrgID,ID,Type,Prefix,IncCharacter,IncNumber,Labnumber)
+select @OrgID,@ID,@Type,@Prefix,@IncChar,@IncNumber,@LabNumber
+END
+
+---------- Clinical History Scripts
+------------------------------------
+
+Declare @ConfigKeyID bigint
+Declare @OrgID int
+Set @OrgID=202
+
+IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='EnablehistoryforTest')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'EnablehistoryforTest','Do you want show history for test level?','N','N')
+				END
+			SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='EnablehistoryforTest'
+			IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='EnablehistoryforTest' AND COM.OrgID=@OrgID)
+				BEGIN
+					INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'Y',@OrgID,GETDATE())
+				END
+
+Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int
+ set @FieldName='Test Name'
+  set @OrgID=202
+ set @ReferenceID = (select  InvestigationID from InvestigationORgMapping where TestCode='BHM004' and ORgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='INV'
+ set @DataType = 'String'
+ set @ControlType = 'Label'
+ set @IsResultValue = 0
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue
+ END
+ GO
+
+ Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int
+ set @FieldName='Clinical History'
+  set @OrgID=202
+ set @ReferenceID = (select  InvestigationID from InvestigationORgMapping where TestCode='BHM004' and ORgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='INV'
+ set @DataType = 'String'
+ set @ControlType = 'Textbox'
+ set @IsResultValue = 0
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue
+ END
+ GO
+
+Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int
+ set @FieldName='Test Name'
+  set @OrgID=202
+ set @ReferenceID = (select  InvestigationID from InvestigationORgMapping where TestCode='BHA070' and ORgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='INV'
+ set @DataType = 'String'
+ set @ControlType = 'Label'
+ set @IsResultValue = 0
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue
+ END
+ GO
+
+ Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int
+ set @FieldName='Clinical History'
+  set @OrgID=202
+ set @ReferenceID = (select  InvestigationID from InvestigationORgMapping where TestCode='BHA070' and ORgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='INV'
+ set @DataType = 'String'
+ set @ControlType = 'Textbox'
+ set @IsResultValue = 0
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue
+ END
+ GO
+ 
+ Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int
+ set @FieldName='Test Name'
+  set @OrgID=202
+ set @ReferenceID = (select AttGroupID from InvOrgGroup where TestCode='BHC030' and OrgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='GRP'
+ set @DataType = 'String'
+ set @ControlType = 'Label'
+ set @IsResultValue = 0
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue
+ END
+ GO
+
+ Declare @FieldName Nvarchar(500),@ReferenceID int,@ReferenceType NVarchar(100), @TestType Nvarchar(100),
+ @DataType Nvarchar(100),@ControlType Nvarchar(100),@IsResultValue bit,@ORgID int,@InvestigationID bigint
+ set @FieldName='Urine Volume'
+  set @OrgID=202
+ set @ReferenceID = (select AttGroupID from InvOrgGroup where TestCode='BHC030' and OrgID=@OrgID)
+ set @ReferenceType = 'TEST'
+ set @TestType ='GRP'
+ set @DataType = 'String'
+ set @ControlType = 'Textbox'
+ set @IsResultValue = 1
+ set @InvestigationID=(select InvestigationID from InvestigationORgMapping where TestCode='IC7002' and Orgid=@OrgID)
+
+ If not exists( select 1 from ClientAttributesFields where ReferenceID=@ReferenceID and ReferenceType=@ReferenceType and TestType=@TestType 
+ and FieldName=@FieldName)
+ BEGIN
+ Insert Into ClientAttributesFields (ReferenceID,ReferenceType,OrgID,FieldName,DataType,ControlType,TestType,IsResultValue,InvestigationID)
+ select @ReferenceID,@ReferenceType,@ORgID,@FieldName,@DataType,@ControlType,@TestType,@IsResultValue,@InvestigationID
+ END
+ GO
+
+IF not Exists (select 1 from Actionmaster where Actionname='Edit Clinical History' and ActionCode = 'Edit_Clinical_History')
+BEGIN
+Insert into ActionMaster (ActionID,ActionName,QueryString,ActionCode,IsShareable,LanguageCode)
+Select (MAx(ActionID)+1),'Edit Clinical History','../Billing/LabQuickBilling.aspx?PID={PatientID}&VID={PatientVisitID}&PNAME={PatientName}&ISClinicHistory=Y','Edit_Clinical_History','Y','en-GB' from ActionMaster
+END
+
+Declare @ActionID int , @RoleId int, @REDirectPAgeID int,@SearchTypeID int, @OrgId int,@PageID int
+Set @OrgId=202
+Set @ActionID = (select ActionID from ActionMAster where Actionname='Edit Clinical History' and ActionCode = 'Edit_Clinical_History')
+set @RoleID = (Select RoleID from Role where OrgID =@OrgId and RoleNAme='LabReception')
+set @RedirectPAgeID = (Select PageID from Pages where PAgeNAme='Lab Quick Billing' and PageUrL='/Billing/LabQuickBilling.aspx')
+Set @SearchTypeID = 11
+
+If Not Exists (select 1 from ActionRoleMApping where ActionID=@ActionID and RoleID=@RoleID and RedirectPageID=@PAgeID and SEarchTypeID=@SearchTypeID)
+BEGIN
+Insert Into ActionRoleMapping ( ActionID,RoleID,RedirectPageID,SearchTypeID,IsMapped)
+select @ActionID,@RoleID,@RedirectPageID,@SearchTypeID,'Y'
+END
+
+
+---- PDF and Round PDF Outsource Merge Scripts
+------------------------------------------------
+
+Declare @ConfigKeyID bigint
+Declare @OrgID int
+SEt @OrgID=202
+
+IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportRoundpdfprocessfolderpath')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'OutSourceReportRoundpdfprocessfolderpath','Which  folder you want to move processed outsource Round pdf?','N','N')
+				END
+			SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportRoundpdfprocessfolderpath'
+			IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='OutSourceReportRoundpdfprocessfolderpath' AND COM.OrgID=@OrgID)
+				BEGIN
+					INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'E:\\Attune\\RLSOutSourceProcessedRoundPdf\\',@OrgID,GETDATE())
+				END
+				GO
+
+				Declare @ConfigKeyID bigint
+				Declare @OrgID int
+SEt @OrgID=202
+
+                IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportsRoundpdffolderpath')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'OutSourceReportsRoundpdffolderpath','Which folder do you want to move Round PDF?','N','N')
+				END
+			   SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportsRoundpdffolderpath'
+			   IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='OutSourceReportsRoundpdffolderpath' AND COM.OrgID=@OrgID)
+			   BEGIN
+			   INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'E:\\Attune\\RLSOutSourceRoundPdf\\',@OrgID,GETDATE())
+			    END
+				GO
+				
+				Declare @ConfigKeyID bigint
+Declare @OrgID int
+SEt @OrgID=202
+
+IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportpdfprocessfolderpath')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'OutSourceReportpdfprocessfolderpath','Do you want to merge outsource pdf?','N','N')
+				END
+			SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportpdfprocessfolderpath'
+			IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='OutSourceReportpdfprocessfolderpath' AND COM.OrgID=@OrgID)
+				BEGIN
+					INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'E:\\Attune\\RLSOutSourcePdf\\',@OrgID,GETDATE())
+				END
+				GO
+
+				Declare @ConfigKeyID bigint
+				Declare @OrgID int
+SEt @OrgID=202
+
+                IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportspdffolderpath')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'OutSourceReportspdffolderpath','Which folder do you want to move?','N','N')
+				END
+			   SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='OutSourceReportspdffolderpath'
+			   IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='OutSourceReportspdffolderpath' AND COM.OrgID=@OrgID)
+			   BEGIN
+			   INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'E:\\Attune\\RLSOutSourceProcessedPdf\\',@OrgID,GETDATE())
+			    END
+				GO
+		Declare @ReportTemplateName Nvarchar(100),@OrgID int,@Type Nvarchar(25),@LangCode Nvarchar(20)
+SEt @ReportTemplateName ='OUTSOURCE'
+set @OrgID=202
+set @Type='OUTSOURCE'
+set @LangCode='en-GB' 
+If Not Exists(select 1 from InvReportMaster where ReportTemplateName=@ReportTemplateName and OrgID=@OrgID and LangCode=@LangCode)
+BEGIN
+Insert Into InvReportMaster (TemplateID,ReportTemplateName,	IsDefault,OrgID,IsActive,Type,IsSeperatePrint,TemplateSeq,LangCode)
+Select Max(TemplateID)+1,@ReportTemplateName,'N',@OrgID,'A',@Type,'Y',Max(TemplateSeq)+1,@LangCode   from InvReportMaster where Orgid=@OrgID
+
+END
+GO	
+
+-------- OutSource Registration TEST Report
+-------------------------------------------
+
+Declare @SpName Nvarchar(500)
+Set @SpName='pgetoutsourceregistrationtest'
+if Not Exists(select 1 from ReportExcelSP where Name=@SpName and Description='Outsource Registration Test Report')
+BEGIN
+Insert Into ReportExcelSP (Name,Description)
+select @SpName,'Outsource Registration Test Report'
+END
+Declare @SpID int,@ParameterType nvarchar(100)
+set @ParameterType='ShowDateRangePopup'
+Set @SpID= (select ID from ReportExcelSP where name=@SpName)
+if Not Exists(select 1 from reportexcelmaster where Sp=@SpID)
+BEGIN
+Insert Into reportexcelmaster (ExcelName,Sp,ReportName,PArameterType,IsActive)
+select 'Outsource Registration Test Report',@SpID,'Outsource Registration Test Report',@ParameterType,1
+END
+DEclare @ReportID int,@RoleID int
+set @ReportID= (SElect ID from reportexcelmaster where ExcelName='Outsource Registration Test Report')
+SEt @RoleID = (select RoleID from Role where OrgID=202 and RoleName='Administrator')
+
+IF Not Exists (select 1 from reportexcelrolemapping where ReportID=@ReportID and RoleID=@RoleID)
+BEGIN
+Insert Into reportexcelrolemapping (ReportID,RoleID,IsActive)
+select @ReportID,@RoleID,1
+END
+
+
+----- InstructionMapping
+-------------------------
+
+Declare @OrgID int
+set @OrgID=202
+if Not Exists (select 1 from metadata where domain='RemarksType' and Code='I')
+BEGIN
+Insert Into MetaData (Domain,Code,DisplayText,LangCode)
+select 'RemarksType','I','Instructions','en-GB'
+END
+
+if Not Exists (Select 1 from MetadataORgMapping where MetadataID = (select MetadataID from Metadata where Domain='RemarksType' and Code='I'	) and OrgID = @OrgID)
+BEGIN
+Insert Into MetadataORgMapping (MetadataID,OrgID,LangCode,Displaytext)
+select MEtadataID,@OrgID,'en-GB','Instructions' from Metadata where Domain='RemarksType' and Code='I'		
+END
+GO
+ 
+ 
+ 
+ Declare @ConfigKeyID bigint
+
+IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='ShowInstructionForTest')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'ShowInstructionForTest','Do you want show Instruction for test level?','N','N')
+				END
+			SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='ShowInstructionForTest'
+			IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='ShowInstructionForTest' AND COM.OrgID=202)
+				BEGIN
+					INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'Y',202,GETDATE())
+				END
+				
+--Due patient Report Issue	
+----------------------------
+
+Declare @ConfigKeyID bigint
+
+IF NOT EXISTS(SELECT ConfigKey FROM ConfigKeyMaster WHERE ConfigKey='DueBillreport')
+				BEGIN	
+					SELECT @ConfigKeyID= max(ConfigKeyID)+1 from ConfigKeyMaster
+					INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal,ControlType)VALUES(@ConfigKeyID,'DueBillreport','DueBillreport','N','N')
+				END
+			SELECT @ConfigKeyID= ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey='DueBillreport'
+			IF NOT EXISTS(SELECT CKM.ConfigKeyID FROM ConfigOrgMaster COM JOIN ConfigKeyMaster CKM ON CKM.ConfigKeyID=COM.ConfigKeyID WHERE CKM.ConfigKey='DueBillreport' AND COM.OrgID=168)
+				BEGIN
+					INSERT INTO ConfigOrgMaster(ConfigKeyID,ConfigValue,OrgID,CreatedAt)VALUES(@ConfigKeyID,'Y',168,GETDATE())
+				END			
+ 
+--------------- Changes by Seetha End ------------------------------
+-----------------------Script Added by arun --------------------------------
+--select top 10* from actionmaster where actionname ='TransferSample'
+--select top 10* from role order by 1 desc--Remote Registration
+---In client login - in the sample transfer page,action drop down was not loading.
+DECLARE @ActionId INT =0,@RoleId INT =0,@PageId INT =0
+SET @ActionId = (SELECT ACTIONID FROM actionmaster where actionname ='TransferSample' and LanguageCode = 'en-GB')
+SET @RoleId = (SELECT ROLEID FROM role where RoleName ='Remote Registration' and orgid = 168 and LangCode = 'en-GB')
+SET @PageId = (SELECT Pageid FROM Pages where Pagename ='Sample Transfer')
+IF NOT EXISTS (SELECT 1 FROM ActionRoleMapping WHERE Actionid = @ActionId AND RoleId = @RoleId)
+BEGIN
+	INSERT INTO ActionRoleMapping(ActionId,RoleID,Redirectpageid,SearchTypeid,IsMapped)
+	VALUES(@ActionId,@RoleId,@PageId,46,'Y')
+END
+---
+--select * from Metadata where Domain = 'DeltaCheckCalculation'
+--select * from MetaDataOrgMapping where metadataid in (1216,1217)
+--select * from Metadata where Domain = 'DeltaCheckTimeUnit'
+--select * from MetaDataOrgMapping where metadataid in (1218,1219)
+---Meta data was not loading in Delat check column of Test Master screen
+
+DECLARE @metadataid INT = 0,@metadataid1 INT = 0,@metadataid2 INT = 0,@metadataid3 INT = 0 
+SET @metadataid = (select metadataid from Metadata where Domain = 'DeltaCheckCalculation' and DisplayText='ABSOLUTE' and langcode = 'en-GB')
+SET @metadataid1 = (select metadataid from Metadata where Domain = 'DeltaCheckCalculation' and DisplayText='PERCENTAGE' and langcode = 'en-GB')
+SET @metadataid2 = (select metadataid from Metadata where Domain = 'DeltaCheckTimeUnit' and DisplayText='Minutes' and langcode = 'en-GB')
+SET @metadataid3 = (select metadataid from Metadata where Domain = 'DeltaCheckTimeUnit' and DisplayText='Hours' and langcode = 'en-GB')
+IF NOT EXISTS(SELECT 1 FROM MetaDataOrgMapping WHERE metadataid = @metadataid and orgid = 168 and langcode = 'en-GB')
+BEGIN
+	INSERT INTO MetaDataOrgMapping (Metadataid,Orgid,Langcode,DisplayText)
+	VALUES(@metadataid,168,'en-GB','ABSOLUTE')
+END
+IF NOT EXISTS(SELECT 1 FROM MetaDataOrgMapping WHERE metadataid = @metadataid1 and orgid = 168 and langcode = 'en-GB')
+BEGIN
+	INSERT INTO MetaDataOrgMapping (Metadataid,Orgid,Langcode,DisplayText)
+	VALUES(@metadataid1,168,'en-GB','PERCENTAGE')
+END
+IF NOT EXISTS(SELECT 1 FROM MetaDataOrgMapping WHERE metadataid = @metadataid2 and orgid = 168 and langcode = 'en-GB')
+BEGIN
+	INSERT INTO MetaDataOrgMapping (Metadataid,Orgid,Langcode,DisplayText)
+	VALUES(@metadataid2,168,'en-GB','Minutes')
+END
+IF NOT EXISTS(SELECT 1 FROM MetaDataOrgMapping WHERE metadataid = @metadataid3 and orgid = 168 and langcode = 'en-GB')
+BEGIN
+	INSERT INTO MetaDataOrgMapping (Metadataid,Orgid,Langcode,DisplayText)
+	VALUES(@metadataid3,168,'en-GB','Hours')
+END
+----------------
+-------------------------------END ------------------------------
+----------------added by arun ---------------------------------------
+-----in Remote Registration add action 'Collect Sample'
+
+DECLARE @ActionId INT =0,@RoleId INT =0,@PageId INT =0
+SET @ActionId = (SELECT ACTIONID FROM actionmaster where actionname ='Collect Sample' and LanguageCode = 'en-GB' and Actioncode = 'Collect_Sample_SampleSearch')
+SET @RoleId = (SELECT ROLEID FROM role where RoleName ='Remote Registration' and orgid = 168 and LangCode = 'en-GB')
+SET @PageId = (SELECT Pageid FROM Pages where Pagename ='Collect Sample')
+IF NOT EXISTS (SELECT 1 FROM ActionRoleMapping WHERE Actionid = @ActionId AND RoleId = @RoleId)
+BEGIN
+	INSERT INTO ActionRoleMapping(ActionId,RoleID,Redirectpageid,SearchTypeid,IsMapped)
+	VALUES(@ActionId,@RoleId,@PageId,42,'Y')
+END
+
+---------------------------------------------------------------------
+
+
+---------------------------------------- Added by Surya ----------------
+Declare @ORGID int =202
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='RestrictReceAmtForCashwithAdvance')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'RestrictReceAmtForCashwithAdvance','Restrict received amt for cash with advance client','N' FROM ConfigKeyMaster 
+END
+
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='RestrictVIDPaidStatusAnotherLoc')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='RestrictVIDPaidStatusAnotherLoc'
+ END
+ 
+
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='ShowExternalBarcodeInsteadofBarcode')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'ShowExternalBarcodeInsteadofBarcode','Show External Barcode Instead of Barcode','N' FROM ConfigKeyMaster 
+END
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='ShowExternalBarcodeInsteadofBarcode')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='ShowExternalBarcodeInsteadofBarcode'
+ END
+ 
+
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='SampleExpiryDateForExBarcode')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'SampleExpiryDateForExBarcode','In Billing Additional Test, How many days add for Sample Expiry Date','N' FROM ConfigKeyMaster 
+END
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='SampleExpiryDateForExBarcode')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'5',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='SampleExpiryDateForExBarcode'
+ END
+ 
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='NeedRegisterDateFormatinPerforming')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'NeedRegisterDateFormatinPerforming','Need RegisterDate Format as / in Performing','N' FROM ConfigKeyMaster 
+END
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='NeedRegisterDateFormatinPerforming')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='NeedRegisterDateFormatinPerforming'
+ END
+ 
+
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='RoleForDevice')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'RoleForDevice','RoleForDevice','N' FROM ConfigKeyMaster 
+END
+ 
+ 
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='AutoCertifyWithQC')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'AutoCertifyWithQC','AutoCertifyWithQC','N' FROM ConfigKeyMaster 
+END
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='AutoCertifyWithQC')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID FROM ConfigKeyMaster WHERE ConfigKey='AutoCertifyWithQC'
+ END
+
+ Declare @ORGID1 BIGINT=168 
+IF NOT EXISTS (SELECT 1 FROM ConfigKeyMaster WHERE ConfigKey='HideDiscountPartinB2B')
+BEGIN 
+INSERT INTO ConfigKeyMaster(ConfigKeyID,ConfigKey,DisplayText,IsInternal)
+SELECT MAX(ConfigKeyID)+1,'HideDiscountPartinB2B','HideDiscountPartinB2B','N' FROM ConfigKeyMaster 
+END
+
+IF NOT EXISTS (SELECT 1 FROM ConfigOrgMaster A INNER JOIN ConfigKeyMaster B ON A.ConfigKeyID=B.ConfigKeyID AND A.OrgID=@ORGID
+ WHERE B.ConfigKey='HideDiscountPartinB2B')
+ BEGIN 
+ INSERT INTO ConfigOrgMaster (ConfigKeyID,ConfigValue,OrgID)
+ SELECT ConfigKeyID,'Y',@ORGID1 FROM ConfigKeyMaster WHERE ConfigKey='HideDiscountPartinB2B'
+ END
+ 
+-------------------------------------- ENd ----------------------------
+-------------------added by arun ----------------------------
+--while transfer the visit from parent to child org and recollect one investigation in sr. labtech and recollect the sample and proceed the flow 
+---at the end report wasnot generated in parent org for the visit
+DECLARE @ClientId INT = 0, @Orgid INT =0
+SET @Orgid = 77
+SET @ClientId = (SELECT clientid from clientmaster  where clientname = 'general' and orgid = @Orgid)
+IF NOT EXISTS (SELECT 1 FROM ClientAttributesDetails where clientid = @ClientId AND Orgid = @Orgid)
+BEGIN
+	INSERT INTO ClientAttributesDetails (Clientid,AttributesID,value,description,orgid)
+	values(@ClientId,30,'Y','',@Orgid),(@ClientId,33,'Y','SmartReport',@Orgid)
+END
+
+select @ClientId = 0, @Orgid  =0
+SET @Orgid = 240
+SET @ClientId = (SELECT clientid from clientmaster  where clientname = 'general' and orgid = @Orgid)
+IF NOT EXISTS (SELECT 1 FROM ClientAttributesDetails where clientid = @ClientId AND Orgid = @Orgid)
+BEGIN
+	INSERT INTO ClientAttributesDetails (Clientid,AttributesID,value,description,orgid)
+	values(@ClientId,30,'Y','',@Orgid),(@ClientId,33,'Y','SmartReport',@Orgid)
+END
+
+select @ClientId = 0, @Orgid  =0
+SET @Orgid = 242
+SET @ClientId = (SELECT clientid from clientmaster  where clientname = 'general' and orgid = @Orgid)
+IF NOT EXISTS (SELECT 1 FROM ClientAttributesDetails where clientid = @ClientId AND Orgid = @Orgid)
+BEGIN
+	INSERT INTO ClientAttributesDetails (Clientid,AttributesID,value,description,orgid)
+	values(@ClientId,30,'Y','',@Orgid),(@ClientId,33,'Y','SmartReport',@Orgid)
+END
+
+---------------------------End-----------------------------------
+

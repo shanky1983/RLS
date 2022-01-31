@@ -1,0 +1,61 @@
+
+-- declare @p11 dbo.UDT_Context     
+--insert into @p11 values(-1,N'',N'',-1,-1,N'',-1,-1,N'',N'',-1,-1,N'',N'',N'',-1,-1,-1,N'',-1,N'',N'',N'',N'')
+--exec pGetPendingcount_PathWorks 67,15512,2342,@p11    
+CREATE procedure [dbo].[pGetPDFQuickApproval_PathWorks] (@OrgID       bigint, 
+                                                     @loginID     int, 
+                                                     @RoleID      bigint, 
+													 @TaskDetails [dbo].[TaskDetails] READONLY,
+                                                     @ContextInfo [UDT_Context] 
+READONLY) 
+As 
+  Begin 
+      declare @curdate datetime = dbo.Fn_getserverdate(@ContextInfo) 
+      declare @EndDate datetime = dbo.Fn_getserverdate(@ContextInfo) - 7 
+      if( @loginID = 0 ) 
+        Begin 
+            select @loginID = LoginID 
+            from   @ContextInfo 
+        End 
+      declare @tblVisits table 
+        ( 
+           PatientVisitID bigint, 
+           TaskActionID   int, 
+           AssignedTo     bigint, 
+           --TaskStatusID   int, 
+           OrgID          int 
+        ) 
+      insert into @tblVisits 
+                  (PatientVisitID, 
+                   TaskActionID, 
+                   AssignedTo, 
+                  -- TaskStatusID, 
+                   OrgID) 
+      select distinct PatientVisitID, 
+             TaskActionID, 
+             AssignedTo, 
+             --TaskStatusID, 
+             OrgID 
+      from   @TaskDetails 
+      where  TaskActionID in( 62, 67 ,92) 
+             --and TaskStatusID in( 1, 5 ) 
+             and orgid = @OrgID 
+             --and RoleID = @RoleID 
+             --AND TaskDate BETWEEN @EndDate and @curdate 
+			 select * from @tblVisits
+   
+
+																
+  End 
+
+
+
+
+
+
+
+
+
+
+
+

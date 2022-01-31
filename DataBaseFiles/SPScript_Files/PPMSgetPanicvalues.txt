@@ -1,0 +1,53 @@
+/****** Object:  StoredProcedure [dbo].[PPMSgetPanicvalues]    Script Date: 7/5/2020 7:43:16 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE Procedure [dbo].[PPMSgetPanicvalues]
+(
+@OrgID int,
+@FromDate date,
+@ToDate date
+)
+As 
+Begin
+SET @FromDate = CONVERT(DATETIME, CONVERT(nvarchar, @FromDate, 103) + ' 00:00:00')
+SET @ToDate = CONVERT(DATETIME, CONVERT(nvarchar, @ToDate, 103) + ' 23:59:59')
+
+DECLARE @DayCount INT = DATEDIFF(DAY, @FromDate, @ToDate)
+	 
+IF ( @DayCount <= 31 )
+
+Begin
+
+
+Declare @temp as table (PatientNumber nvarchar(40),Visitnumber varchar(200),PatientName varchar(250),
+DOB varchar(100),Gender varchar(100) ,Visitdate Datetime,Id bigint,type varchar(100)
+,Accessionnumber bigint,PackageName varchar(250))
+
+
+Insert into @temp 
+Select Distinct P.PatientNumber,PV.Visitnumber,P.Name as PatientName,P.DOB,P.[Sex] As 'Gender' ,PV.Visitdate, OI.Id,OI.Type,
+OI.AccessionNumber,isnull(oI.PkgName ,'') as PackageName
+from PatientVisit PV WITH (NOLOCK)
+inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid
+inner Join PatientAddress PA WITH (NOLOCK) ON P.PatientID=PA.PatientID and PA.addressType='P' 
+Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid
+where PV.orgid=@OrgID and  PV.Createdat Between @FromDate And @ToDate
+
+
+select t.PatientNumber,t.VisitNumber,t.PatientName,t.DOB,t.Gender,convert(varchar,t.Visitdate,103)Visitdate,t.Type,
+t.AccessionNumber,t.PackageName,V.groupname,V.Name as InvestigationName, V.value,P.ReferenceRange,IOM.UOMCode,p.Approvedby,LO.LoginName 
+ from @temp t
+inner Join PatientInvestigation p WITH (NOLOCK) ON p.AccessionNumber=t.AccessionNumber and P.IsAbnormal='P'
+inner Join InvestigationValues v WITH (NOLOCK) ON v.InvestigationID=p.InvestigationID and v.GroupID=p.GroupID and  v.PatientVisitID=p.PatientVisitId and p.Orgid =v.Orgid 
+Inner join InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.InvestigationID=V.InvestigationID and IOM.Orgid=V.OrgID
+inner join Login LO WITH (NOLOCK) ON LO.Loginid=P.Approvedby and LO.Orgid=P.Orgid
+where P.Orgid=@OrgID
+
+End
+End
+
+
+
+GO

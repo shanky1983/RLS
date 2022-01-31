@@ -1,0 +1,220 @@
+
+
+--EXEC pGetMasterData_LIMSAPI 'LIMSAPI','Location',1,100
+CREATE PROCEDURE [dbo].[pGetMasterData_LIMSAPI]
+(
+  @pOrgCode NVARCHAR(100),
+  @pType NVARCHAR(50),
+ -- @pCategoryCode NVARCHAR(100),
+  @Page INT,
+  @Size INT
+  
+)
+AS
+BEGIN
+
+ DECLARE @ParentID BIGINT, @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)
+
+ DECLARE @MaxRecordCount INT
+ DECLARE @MaxCountReached BIT
+ DECLARE @TotalRecords INT
+ DECLARE @TotalRecord INT
+
+ SELECT @MaxRecordCount=MaximumRecordCount 
+ FROM APIConfiguration 
+ WHERE SPName='pGetMasterData_LIMSAPI'
+
+ IF @Size > @MaxRecordCount
+ BEGIN
+ SET @Size = @MaxRecordCount
+ SET @MaxCountReached=1
+ END
+
+
+ -----This is not required since we have not used OrgId anywhere in SP
+ IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM
+			INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+	
+ 
+ 
+
+  
+  IF @pType = 'Country'
+    BEGIN
+
+	SELECT @TotalRecords = COUNT(1) FROM Country 
+	WITH(NOLOCK) 
+
+	  SELECT distinct CountryID,CountryName,CountryCode	          
+	  FROM Country with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY CountryID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+    END
+  ELSE IF @pType = 'State' 
+    BEGIN
+	
+
+	  SELECT @TotalRecords = COUNT(1) 
+	  FROM State with(NOLOCK) 
+
+	  SELECT StateID,StateName,StateCode, CountryID 
+	  FROM State with(NOLOCK) 
+	   ORDER BY StateID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+    END
+ ELSE IF @pType = 'URNTypes' 
+  BEGIN
+ SELECT @TotalRecords = COUNT(1) FROM URNTypes 
+	WITH(NOLOCK) --WHERE Type=@pType
+
+	  SELECT URNTypeId,URNType          
+	  FROM URNTypes with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY URNTypeId
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	   END
+ ELSE IF @pType = 'Gender'
+ BEGIN
+ SELECT @TotalRecords = COUNT(1) FROM MetaData 
+	WITH(NOLOCK) WHERE Domain=@pType
+
+	  SELECT Code,DisplayText	          
+	  FROM MetaData with(NOLOCK) WHERE Domain=@pType
+	  ORDER BY Code
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	   END
+	ELSE IF @pType = 'Salutation'
+	BEGIN
+ SELECT @TotalRecords = COUNT(1) FROM Salutation 
+	WITH(NOLOCK) --WHERE Type=@pType
+
+	  SELECT TitleID,TitleName          
+	  FROM Salutation with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY TitleID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	   END
+	   ELSE IF @pType='Location'
+	   	   BEGIN
+
+	     SELECT @TotalRecords = COUNT(1) 
+		  FROM OrganizationAddress OA WITH (NOLOCK)
+		INNER JOIN organization o WITH(NOLOCK) 
+			ON o.OrgID = oa.OrgID
+		WHERE OA.OrgID = @pOrgID
+			AND OA.STATUS = 'A'
+		  
+		 
+
+	  SELECT OA.AddressID as LocationID,OA.Location LocationName, 
+	   case when isnull(CenterTypeCode, 'CCS') ='CCS' then 'Y' Else 'N'end CollectionCenterYN ,
+	  case when isnull(CenterTypeCode, 'CCS') ='PCS'  then 'Y' Else 'N' end IsProcessingLocationYN            
+	   FROM OrganizationAddress OA WITH (NOLOCK)
+		INNER JOIN organization o WITH(NOLOCK) 
+			ON o.OrgID = oa.OrgID
+		WHERE OA.OrgID = @pOrgID
+			AND OA.STATUS = 'A'
+	  ORDER BY OA.AddressID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	   END
+ ELSE IF @pType='All'
+ BEGIN
+
+
+SELECT @TotalRecords = COUNT(1) FROM Country 
+	WITH(NOLOCK) 
+
+	  SELECT distinct CountryID,CountryName,CountryCode	          
+	  FROM Country with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY CountryID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+
+	SELECT @TotalRecords = @TotalRecords+COUNT(1) FROM State 
+	WITH(NOLOCK) 
+	  SELECT StateID,StateName,StateCode, CountryID 
+	  FROM State with(NOLOCK) 
+	   ORDER BY StateID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	
+	   SELECT @TotalRecords =@TotalRecords+ COUNT(1) FROM URNTypes 
+	WITH(NOLOCK) --WHERE Type=@pType
+
+	  SELECT URNTypeId,URNType          
+	  FROM URNTypes with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY URNTypeId
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	
+	  SELECT @TotalRecords = @TotalRecords+COUNT(1) FROM MetaData 
+	WITH(NOLOCK) WHERE Domain='Gender'
+
+	  SELECT Code,DisplayText	          
+	  FROM MetaData with(NOLOCK) WHERE Domain='Gender'
+	  ORDER BY Code
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	 
+	    SELECT @TotalRecords = @TotalRecords+COUNT(1) FROM Salutation 
+	WITH(NOLOCK) --WHERE Type=@pType
+
+	  SELECT TitleID,TitleName          
+	  FROM Salutation with(NOLOCK) --WHERE Type=@pType
+	  ORDER BY TitleID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+	  	  SELECT @TotalRecords = @TotalRecords+COUNT(1) 
+		  FROM OrganizationAddress OA WITH (NOLOCK)
+		INNER JOIN organization o WITH(NOLOCK) 
+			ON o.OrgID = oa.OrgID
+		WHERE OA.OrgID = @pOrgID
+			AND OA.STATUS = 'A'
+		  
+		 
+
+	  SELECT OA.AddressID as LocationID,OA.Location LocationName, 
+	  case when isnull(CenterTypeCode, 'CCS') ='CCS' then 'Y' Else 'N'end CollectionCenterYN ,
+	  case when isnull(CenterTypeCode, 'CCS') ='PCS'  then 'Y' Else 'N'end IsProcessingLocationYN          
+	   FROM OrganizationAddress OA WITH (NOLOCK)
+		INNER JOIN organization o WITH(NOLOCK) 
+			ON o.OrgID = oa.OrgID
+		WHERE OA.OrgID = @pOrgID
+			AND OA.STATUS = 'A'
+	  ORDER BY OA.AddressID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+    END
+
+	SELECT @TotalRecords as TotalRecords,CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as TotalPages,@MaxRecordCount as AllowableRecordCount
+END
+
+ --ELSE IF @pType = 'District' AND LEN(@pCategoryCode) > 0
+  --  BEGIN
+	 -- SELECT @ParentID = Locality_ID 
+	 -- FROM Localities with(NOLOCK) WHERE Locality_Value = @pCategoryCode
+
+	 -- SELECT @TotalRecords = COUNT(1) 
+	 -- FROM Localities with(NOLOCK) WHERE type ='District' AND ParentID = @ParentID
+
+	 -- SELECT Locality_ID,Code,Type, Locality_Value as LocationName
+	 -- FROM Localities with(NOLOCK) WHERE type ='District' AND ParentID = @ParentID
+	 -- ORDER BY Locality_ID
+  --    OFFSET (@Page -1) * @Size ROWS
+  --    FETCH NEXT @Size ROWS ONLY
+
+

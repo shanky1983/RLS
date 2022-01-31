@@ -1,0 +1,215 @@
+CREATE PROCEDURE pgetoutsourceregistrationtest 
+(
+@pFDate DATETIME
+
+,@pTDate DATETIME
+
+,@pOrgId INT
+
+,@Pparamtype VARCHAR(20) = NULL
+
+,@Pparamvalue SMALLINT = NULL
+)
+AS
+
+BEGIN
+
+Create table #TempOutSourceDetails
+(
+PatientVisitID Bigint,
+OrgID bigint,
+PatientID bigint,
+AttuneVisitID Nvarchar(100),
+AccessionNo bigint,
+FirstName Nvarchar(100),
+MiddleName Nvarchar(100),
+LastName Nvarchar(100),
+Gender Nvarchar(10),
+Age Nvarchar(10),
+Age1 Nvarchar(10),
+Address1 Nvarchar(200),
+Address2 Nvarchar(200),
+Address3 Nvarchar(200),
+City Nvarchar(100),
+Pin Nvarchar(50),
+Email Nvarchar(100),
+MobNo Nvarchar(15),
+Nationality Nvarchar(100),
+CollectionDate Nvarchar(100),
+CollectionTime Nvarchar(100),
+Aadhar Nvarchar(100),
+Passport Nvarchar(100),
+Ward Nvarchar(100),
+Location Nvarchar(100),
+ServiceCode Nvarchar(100),
+ContainerName Nvarchar(100),
+SampleTypeName Nvarchar(100),
+Temprature Nvarchar(100),
+Volume Nvarchar(100),
+Unit Nvarchar(100),
+Client Nvarchar(100),
+CollectionCenter Nvarchar(100),
+ReferredBy Nvarchar(100),
+ReferenceName Nvarchar(100),
+ReferredByEmail Nvarchar(100),
+ID bigint,
+Type Nvarchar(20),
+Invoice Nvarchar(3),
+PatientNumber Nvarchar(100)
+)
+
+
+Insert into #TempOutSourceDetails (PatientvisitID,OrgID,PatientID,ID,Type,AttuneVisitID ,AccessionNo,FirstName,MiddleName,LastName,Gender,Age,Age1,Address1,Address2,Address3,
+City,Pin,Email,MobNo,Nationality,CollectionDate,CollectionTime,Aadhar,Passport,Ward,Location,ServiceCode,ContainerName,SampleTypeName,Temprature,Volume,Unit,
+Client,CollectionCenter,ReferredBy,ReferenceName,ReferredByEmail,Invoice,PatientNumber)
+
+
+select distinct PV.PatientvisitID,PV.OrgID,P.PatientID,MIO.ID,MIO.Type,PV.VisitNumber,MIO.AccessionNumber,(CONVERT([varchar](60),ltrim(substring(P.Name,(1),
+                isnull(nullif(charindex(' ',P.Name),(0)),(1000)))),0)) as FirstName,
+				(CONVERT([varchar](60),ltrim(substring(P.Name,
+                charindex(' ',P.Name),case when (charindex(' ',
+                P.Name,charindex(' ',P.Name)+(1))-charindex(' ',P.Name))<=(0) 
+                then (0) else charindex(' ',P.Name,charindex(' ',
+                P.Name)+(1))-charindex(' ',P.Name) end)),0)) as MiddleName,
+				(CONVERT([varchar](60),ltrim(substring(P.Name,
+                isnull(nullif(charindex(' ',P.Name,charindex(' ',P.Name)+(1)),(0)),
+                charindex(' ',P.Name)),case when charindex(' ',P.Name)=(0) 
+                then (0) else len(P.Name) end)),0)) as LastName	,
+				P.Sex,'','', PA.Add1,PA.Add2,PA.Add3,PA.City,PA.PostalCode,P.Email,PA.MobileNumber,
+				C.CountryName, convert(Nvarchar(100),CollectedAt,103),convert(Nvarchar(100),CollectedAt,108),'','',Case when ISNULL(Pv.WardNo,'') = '' then 'NA' else PV.WardNo END,
+				LRO.RefOrgName,'','','','',1,'',CM.ClientCode,OA.Location,'Self','','','N',P.PatientNumber
+ from Patientvisit PV 
+Inner Join Patient P on P.PatientID=PV.PatientID and P.ORgID=PV.OrgID
+Inner Join PatientAddress PA on PA.PatientID=P.PatientID and PA.AddressType='P'
+Inner Join Country C on C.CountryID=PA.CountryID
+inner join VisitClientMapping VCM with(NOLOCK) on VCM.VisitID=PV.PatientVisitID and VCM.OrgID=PV.OrgID
+inner join ClientMaster CM with(NOLOCK) on CM.CLientID=VCM.CLientID and CM.OrgID=VCM.OrgID
+Inner Join MISORderedInvestigations MIO on MIO.VisitID=PV.PatientVisitID and MIO.OrgID=PV.OrgID 
+Inner Join MISPatientINvSample MPIV on MPIV.AccessionNumber=MIO.AccessionNumber 
+Inner Join OrganizationAddress OA on OA.AddressID=MPIV.CollectedLocID and OA.OrgID=PV.ORgID
+inner join OutsourcingDetail OSD with(NOLOCK) on OSD.PatientVisitID=PV.PatientVisitID and OSD.OrgID=PV.OrgID 
+and OSD.Accessionnumber=MIO.Accessionnumber
+inner join LabReferenceORg LRO with(NOLOCK) on LRO.LabRefOrgID=OSD.OutSourcingLocationID and LRO.OrgID=OSD.OrgID
+where PV.Createdat between @pFDate+' 00:00:00' and @pTDate+' 23:59:59' and PV.OrgID= @pOrgId ORder by PV.PatientvisitID desc
+
+                      /* Update Part Start */
+ 
+ /* Age */
+
+ Update temp set temp.Age = (SELECT top 1 item from   fnSplit (P.Age,' '))
+from #TempOutSourceDetails temp 
+Inner Join Patient P on P.PatientID = temp.PatientID and P.OrgID=temp.OrgID
+
+
+Update temp set temp.Age1 = (SELECT top 1 item from   fnSplit (P.Age,' ') order by item desc)
+from #TempOutSourceDetails temp 
+Inner Join Patient P on P.PatientID = temp.PatientID and P.OrgID=temp.OrgID
+
+/* Aadhar column update */
+
+--Update temp set temp.Aadhar = P.URNO
+--from #TempOutSourceDetails temp 
+--Inner Join Patient P on P.PatientID = temp.PatientID and P.OrgID=temp.OrgID
+--where P.URNTYPEID=5  
+
+
+
+/* Passport column update */
+
+Update temp set temp.Passport = P.URNO
+from #TempOutSourceDetails temp 
+Inner Join Patient P on P.PatientID = temp.PatientID and P.OrgID=temp.OrgID
+where P.URNTYPEID=5  
+
+
+
+/* Servicecode update INV and GRP */
+
+Update temp set temp.ServiceCode = IOM.TestCode
+from #TempOutSourceDetails temp 
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = temp.ID and IOM.OrgID=temp.OrgID
+where temp.Type='INV' 
+
+Update temp set temp.ServiceCode = IOG.TestCode
+from #TempOutSourceDetails temp 
+Inner Join InvOrgGroup IOG on IOG.AttGroupID = temp.ID and IOG.OrgID=temp.OrgID
+where temp.Type='GRP' 
+
+
+/* Container Name */
+
+Update temp set temp.ContainerName = ISNULL(ISM.Code,'')
+from #TempOutSourceDetails temp 
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = temp.ID and IOM.OrgID=temp.OrgID
+Inner Join InvestigationSampleContainer ISM on ISM.SampleContainerID = IOM.SampleContainerID and ISM.OrgID=IOM.OrgID
+where temp.Type='INV'  
+
+Update temp set temp.ContainerName = ISNULL(ISM.Code,'')
+from #TempOutSourceDetails temp 
+Inner Join InvOrgGroup IOG on IOG.AttGroupID = temp.ID and IOG.OrgID=temp.OrgID
+Inner Join InvGroupMapMaster IGMM on IGMM.GroupID=IOG.OrgGroupID  and IGMM.parent = 'N' and IGMM.Active='Y'
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = IGMM.InvestigationID and IOM.ORgID= IOG.OrgID 
+Inner Join InvestigationSampleContainer ISM on ISM.SampleContainerID = IOM.SampleContainerID and ISM.OrgID=IOM.OrgID
+where temp.Type='GRP'  
+
+/* Sample Type Name */
+
+Update temp set temp.SampleTypeNAme = ISNULL(ISM.Code,'')
+from #TempOutSourceDetails temp 
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = temp.ID and IOM.OrgID=temp.OrgID
+Inner Join InvSampleMaster ISM on ISM.SampleCode = IOM.SampleCode and ISM.OrgID=IOM.OrgID
+where temp.Type='INV'  
+
+Update temp set temp.SampleTypeNAme = ISNULL(ISM.Code,'')
+from #TempOutSourceDetails temp 
+Inner Join InvOrgGroup IOG on IOG.AttGroupID = temp.ID and IOG.OrgID=temp.OrgID
+Inner Join InvGroupMapMaster IGMM on IGMM.GroupID=IOG.OrgGroupID  and IGMM.parent = 'N' and IGMM.Active='Y'
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = IGMM.InvestigationID and IOM.ORgID= IOG.OrgID 
+Inner Join InvSampleMaster ISM on ISM.SampleCode = IOM.SampleCode and ISM.OrgID=IOM.OrgID
+where temp.Type='GRP'
+
+
+/* Temprature */
+
+Update temp set temp.temprature = Case when SCM.ConditionDesc = '--Select--' then '' else SCM.ConditionDesc END
+from #TempOutSourceDetails temp 
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = temp.ID and IOM.OrgID=temp.OrgID
+Inner Join ShippingConditionMaster SCM on SCM.ShippingConditionID = IOM.PreAnalyticalConditionId
+where temp.Type='INV'  
+
+Update temp set temp.temprature = Case when SCM.ConditionDesc = '--Select--' then '' else SCM.ConditionDesc END
+from #TempOutSourceDetails temp 
+Inner Join InvOrgGroup IOG on IOG.AttGroupID = temp.ID and IOG.OrgID=temp.OrgID
+Inner Join InvGroupMapMaster IGMM on IGMM.GroupID=IOG.OrgGroupID  and IGMM.parent = 'N' and IGMM.Active='Y'
+Inner Join InvestigationOrgMApping IOM on IOM.InvestigationID = IGMM.InvestigationID and IOM.ORgID= IOG.OrgID 
+Inner Join ShippingConditionMaster SCM on SCM.ShippingConditionID = IOM.PreAnalyticalConditionId
+where temp.Type='GRP'  
+
+
+/* Volume */
+
+/*Unit*/
+
+/* Referred by , Reference Name, Referred By Email */
+
+Update temp set temp.REferredby = 'Doctor', temp.ReferenceName= ISNULL(PV.ReferingPhysicianName,RF.PhysicianName)
+, temp.ReferredByEmail = ISNULL(AD.EmailID,'')
+from #TempOutSourceDetails temp 
+Inner Join Patientvisit PV on PV.PatientvisitID = temp.PatientvisitID and PV.OrgID=temp.OrgID
+Inner Join ReferingPhysician RF on PV.ReferingPhysicianID=RF.ReferingPhysicianID and PV.OrgID=RF.OrgID
+left Join AddressDetails AD on AD.ReferenceType='RefPhy' and AD.REferenceID=RF.ReferingPhysicianID and AD.OrgID=RF.OrgID
+
+                   /* Update Part END*/
+				   
+select AttuneVisitID ,AccessionNo,PatientNumber as 'Patient Number',FirstName as 'Patient First Name',MiddleName as 'Patient Middle Name',LastName as 'Patient Last Name',Gender,Age,Case when Age1 = 'Day(s)' then 'D' when Age1 = 'Month(s)' then 'M' Else 'Y
+' END as 'Age_YMDW',Case when ISNULL(Address1,'') <> '' then Address1 else '.' END as 'Address Line1',
+Address2 'Address Line2',Address3 as 'Address Line3',
+Case when ISNULL(City,'') <> '' then City else CollectionCenter END as 'City',Pin,Email,MobNo,Nationality,CollectionDate as 'Collection Date',CollectionTime 'Collection Time',Aadhar,Passport,Ward,Location,ServiceCode as 'Service Code',
+ContainerName 'Container Name',SampleTypeName 'Sample Type Name',Temprature,Volume,Unit,
+Client,CollectionCenter,ReferredBy as 'Referred By',ReferenceName as 'Reference Name',ReferredByEmail as 'Referred By Email',Invoice from #TempOutSourceDetails
+
+drop table #TempOutSourceDetails
+
+
+END
+

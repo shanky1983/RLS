@@ -1,0 +1,149 @@
+
+CREATE procedure [dbo].[pSavePatientInvSampleNMappingSingleScreen]          
+(          
+ @SaveIPInvSample [dbo].[IPInvSamples] READONLY,          
+ @pSampleMapping [dbo].[PatientInvSampleMapping] READONLY,          
+ @pGuid nvarchar(255),          
+ @pOrgID Int,        
+ @returnstatus [int] OUTPUT,        
+ @ContextInfo [UDT_Context] READONLY           
+)          
+As        
+Begin         
+Declare @tempSampleID BigInt        
+Declare @pOldSampleID BigInt        
+SET @returnstatus=-1       
+Declare @ReChkTestSampleMapping as table        
+(        
+ VisitID BigInt,RecheckInvID BigInt,SampleCode Int,OrgID Int,UID nvarchar(255)        
+)        
+Declare @tmpSampleMapping as table        
+(        
+ VisitID bigint,OrgID int,SampleID int,ID bigint,Type nvarchar(20),DeptID int,SampleInstanceID bigint,        
+ UID nvarchar(255),Barcode nvarchar(255),CreatedAt datetime,SID bigint        
+)        
+Declare @tmpPatientInvSample as table        
+(        
+ PatientVisitID bigint,BarcodeNumber nvarchar(250),SampleCode int,SampleDesc nvarchar(250),IPInvSampleCollectionMasterID bigint,        
+ OrgID int,CreatedBy bigint,CreatedAt datetime,ModifiedBy bigint,ModifiedAt datetime,SampleContainerID int,        
+ RecSampleLocID int,CollectedLocID int,UID nvarchar(255),recorgid int,SampleRelationshipID int,CollectedDateTime datetime,        
+ VmValue int,VmUnitID int,SampleConditionID int,ConsignmentNo nvarchar(50)        
+)        
+        
+Declare @tmpSampletracker as table        
+(        
+ PatientVisitID bigint,SampleID int,InvSampleStatusID int,CurrentOrgID int,DeptID int,Reason nvarchar(500),        
+ CreatedBy bigint,CreatedAt datetime,ModifiedBy bigint,ModifiedAt datetime,IPInvSampleCollectionMasterID bigint,        
+ OrgID int,CollectedIn int,Barcode nvarchar(20),Remarks nvarchar(500),SampleVolume int,SampleUnit nvarchar(50)        
+)        
+ IF NOT EXISTS(SELECT 1 
+                    FROM   PatientInvSampleMapping PSM WITH(NOLOCK) 
+                           INNER JOIN @pSampleMapping T 
+                                   ON PSM.VisitID = T.VisitID 
+                                      AND Psm.ID = T.ID 
+                    WHERE  PSM.Type = 'INV' 
+                           AND PSm.UID = @pGuid) 
+        BEGIN         
+insert into @ReChkTestSampleMapping        
+(        
+ VisitID,RecheckInvID,SampleCode,OrgID,UID        
+)        
+select         
+T.VisitID,T.ID,IOM.SampleCode,IOM.OrgID,T.UniqueID         
+from @pSampleMapping T         
+Inner Join InvestigationOrgMapping IOM On T.ID=IOM.InvestigationID AND IOM.OrgID=@pOrgID         
+Where IOM.OrgID= @pOrgID        
+END         
+IF Exists(select 1 from PatientInvSampleMapping PSM WITH(NOLOCK)
+INNER JOIN @ReChkTestSampleMapping t On T.VisitID=PSm.VisitID AND t.SampleCode=PSM.SampleID AND t.OrgID=PSM.OrgID AND t.RecheckInvID=PSM.ID AND PSM.Type='INV' AND PSm.UID=@pGuid)         
+BEGIN        
+ Insert Into @tmpSampleMapping        
+ (        
+  VisitID,OrgID,SampleID,ID,Type,DeptID,SampleInstanceID,UID,Barcode,CreatedAt        
+ )        
+ select PSM.VisitID,PSM.OrgID,PSM.SampleID,PSM.ID,PSM.Type,PSM.DeptID,PSM.SampleInstanceID,T.UID,PSM.Barcode,dbo.Fn_getserverdate(@ContextInfo) from PatientInvSampleMapping PSM WITH(NOLOCK)
+ INNER JOIN @ReChkTestSampleMapping t On T.VisitID=PSm.VisitID AND t.SampleCode=PSM.SampleID AND t.OrgID=PSM.OrgID AND t.RecheckInvID=PSM.ID AND PSM.Type='INV' AND PSm.UID=@pGuid         
+END        
+IF Exists(select 1 from PatientInvSampleMapping PSM WITH(NOLOCK)
+INNER JOIN @ReChkTestSampleMapping t On T.VisitID=PSm.VisitID AND t.SampleCode=PSM.SampleID AND t.OrgID=PSM.OrgID AND PSm.UID=@pGuid AND PSM.Type<>'INV')         
+BEGIN        
+ Insert Into @tmpSampleMapping        
+ (        
+  VisitID,OrgID,SampleID,ID,Type,DeptID,SampleInstanceID,UID,Barcode,CreatedAt        
+ )        
+ select TOP 1 PSM.VisitID,PSM.OrgID,PSM.SampleID,PSM.ID,PSM.Type,PSM.DeptID,PSM.SampleInstanceID,T.UID,PSM.Barcode,dbo.Fn_getserverdate(@ContextInfo) 
+ from PatientInvSampleMapping PSM WITH(NOLOCK)
+ INNER JOIN @ReChkTestSampleMapping t On T.VisitID=PSm.VisitID AND t.SampleCode=PSM.SampleID AND t.OrgID=PSM.OrgID AND PSm.UID=@pGuid AND PSM.Type<>'INV'          
+END        
+        
+Select @pOldSampleID=PIS.SampleID        
+from @tmpSampleMapping t1         
+Inner Join PatientInvSample PIS WITH(NOLOCK)ON PIS.BarcodeNumber=t1.Barcode AND t1.VisitID=PIS.PatientVisitID AND t1.SampleID=PIS.SampleCode AND t1.OrgID=PIS.OrgID        
+        
+        
+Insert into @tmpPatientInvSample        
+(        
+ PatientVisitID,BarcodeNumber,SampleCode,SampleDesc,IPInvSampleCollectionMasterID,OrgID,CreatedBy,CreatedAt,ModifiedBy,        
+ ModifiedAt,SampleContainerID,RecSampleLocID,CollectedLocID,UID,recorgid,SampleRelationshipID,CollectedDateTime,VmValue,        
+ VmUnitID,SampleConditionID,ConsignmentNo        
+)        
+select         
+PIS.PatientVisitID,PIS.BarcodeNumber,PIS.SampleCode,PIS.SampleDesc,PIS.IPInvSampleCollectionMasterID,PIS.OrgID,PIS.CreatedBy,        
+dbo.Fn_getserverdate(@ContextInfo),PIS.ModifiedBy,dbo.Fn_getserverdate(@ContextInfo),PIS.SampleContainerID,PIS.RecSampleLocID,PIS.CollectedLocID,t1.UID,PIS.recorgid,        
+PIS.SampleRelationshipID,PIS.CollectedDateTime,PIS.VmValue,PIS.VmUnitID,PIS.SampleConditionID,PIS.ConsignmentNo        
+from @tmpSampleMapping t1         
+Inner Join PatientInvSample PIS WITH(NOLOCK) ON PIS.BarcodeNumber=t1.Barcode AND t1.VisitID=PIS.PatientVisitID AND t1.SampleID=PIS.SampleCode AND t1.OrgID=PIS.OrgID        
+        
+        
+Insert Into PatientInvSample        
+(        
+ PatientVisitID,BarcodeNumber,SampleCode,SampleDesc,IPInvSampleCollectionMasterID,OrgID,CreatedBy,CreatedAt,ModifiedBy,        
+ ModifiedAt,SampleContainerID,RecSampleLocID,CollectedLocID,UID,recorgid,SampleRelationshipID,CollectedDateTime,VmValue,        
+ VmUnitID,SampleConditionID,ConsignmentNo        
+)        
+        
+select         
+PIS.PatientVisitID,PIS.BarcodeNumber,PIS.SampleCode,PIS.SampleDesc,PIS.IPInvSampleCollectionMasterID,PIS.OrgID,PIS.CreatedBy,        
+PIS.CreatedAt,PIS.ModifiedBy,PIS.ModifiedAt,PIS.SampleContainerID,PIS.RecSampleLocID,PIS.CollectedLocID,PIS.UID,PIS.recorgid,        
+PIS.SampleRelationshipID,PIS.CollectedDateTime,PIS.VmValue,PIS.VmUnitID,PIS.SampleConditionID,PIS.ConsignmentNo        
+from @tmpPatientInvSample PIS        
+        
+Set @tempSampleID=SCOPE_IDENTITY()        
+        
+Insert Into PatientInvSampleMapping        
+(        
+ VisitID,OrgID,SampleID,ID,Type,DeptID,SampleInstanceID,UID,Barcode,CreatedAt,SID        
+)        
+select         
+VisitID,OrgID,SampleID,ID,Type,DeptID,SampleInstanceID,UID,Barcode,dbo.Fn_getserverdate(@ContextInfo),@tempSampleID         
+from @tmpSampleMapping        
+        
+Insert Into @tmpSampletracker        
+(        
+ PatientVisitID,SampleID,InvSampleStatusID,CurrentOrgID,DeptID,Reason,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,        
+ IPInvSampleCollectionMasterID,OrgID,CollectedIn,Barcode,Remarks,SampleVolume,SampleUnit        
+)        
+select         
+PatientVisitID,SampleID,InvSampleStatusID,CurrentOrgID,DeptID,Reason,CreatedBy,dbo.Fn_getserverdate(@ContextInfo),ModifiedBy,dbo.Fn_getserverdate(@ContextInfo),        
+IPInvSampleCollectionMasterID,OrgID,CollectedIn,Barcode,Remarks,SampleVolume,SampleUnit        
+from SampleTracker WITH(NOLOCK) where SampleID=@pOldSampleID and InvSampleStatusID=3        
+        
+insert into SampleTracker        
+(        
+ PatientVisitID,SampleID,InvSampleStatusID,CurrentOrgID,DeptID,Reason,CreatedBy,CreatedAt,IPInvSampleCollectionMasterID,OrgID,        
+ CollectedIn,Barcode,Remarks,SampleVolume,SampleUnit        
+)        
+select         
+PatientVisitID,@tempSampleID,InvSampleStatusID,CurrentOrgID,DeptID,Reason,CreatedBy,CreatedAt,IPInvSampleCollectionMasterID,        
+OrgID,CollectedIn,Barcode,Remarks,SampleVolume,SampleUnit        
+from @tmpSampletracker        
+SET @returnstatus=0                                                                       
+RETURN @returnstatus      
+End
+
+
+
+
+
+
+

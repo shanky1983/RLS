@@ -1,0 +1,134 @@
+CREATE PROC pgetVisitnumbersbyPID @pPatientNumber VARCHAR(30),
+                                  @pPageID        BIGINT,
+                                  @ContextInfo    [UDT_CONTEXT] READONLY
+AS
+  BEGIN
+      DECLARE @pOrgID BIGINT
+      DECLARE @pLocation VARCHAR(100)
+
+      SELECT @pOrgID = OrgID
+      FROM   @ContextInfo
+
+      DECLARE @TempOrgID AS TABLE
+        (
+           OrgID INT
+        )
+
+      INSERT @TempOrgID
+      VALUES (@pOrgID)
+
+      INSERT INTO @TempOrgID
+      SELECT DISTINCT TOD.SharingOrgID
+      FROM   TrustedOrgDetails TOD (NOLOCK)
+             INNER JOIN TrustedOrgActions TOA(nolock)
+                     ON TOA.TrustedOrgDetailsID = TOD.TrustedOrgDetailsID
+             INNER JOIN @ContextInfo T
+                     ON TOD.LoggedOrgID = T.OrgID
+                        AND TOA.ROleID = T.RoleID
+                        AND TOA.IdentifyingType = 'PAGE'
+                        AND TOA.IdentifyingActionID = @pPageID
+      WHERE  TOD.SharingOrgID <> @pOrgID
+
+      --select * from @TempOrgID
+      --    return
+	  Declare @Barcode nvarchar(255)
+   Declare @Flag nvarchar(100) =null
+	  if (@pPatientNumber like '%,Barcode')
+	  begin
+   set @Flag='Barcode'
+	  set @Barcode= Replace(@pPatientNumber,',Barcode','')
+	  end
+   if (@pPatientNumber like '%,SRFNumber')  
+   begin  
+   set @Flag='SRFNumber'
+   set @Barcode= Replace(@pPatientNumber,',SRFNumber','')  
+   end  
+	  	DECLARE @ConfigKeyValueExBarcode NVARCHAR(10)
+
+      SET @ConfigKeyValueExBarcode = (SELECT com.ConfigValue
+                             FROM   ConfigKeyMaster ckm
+                                    INNER JOIN ConfigOrgMaster com
+                                            ON ckm.ConfigKeyID = com.ConfigKeyID
+                                               AND com.OrgID = @pOrgID
+                                               AND Isnull(ckm.ConfigKey, '') = 'ShowExternalBarcodeInsteadofBarcode')
+
+
+      IF( @pPatientNumber IS NOT NULL and Isnull(@Barcode,'')=''  )
+        BEGIN
+            SELECT P.PatientNumber,P.Name,CASE WHEN Len(PA.MobileNumber)>=10 THEN PA.MobileNumber ELSE '' END MobileNumber
+			 ,PV.VisitNumber  AS VisitNumber,
+                   CONVERT(VARCHAR(50), CONVERT(DATE, PV.VisitDate), 103)
+                   + '  '
+                   + Ltrim(RIGHT(CONVERT(VARCHAR(20), PV.VisitDate, 100), 7))AS NextReviewDate,
+                   O.Name + '(' + OA.Location + ')'                          AS Location
+            FROM   Patient P WITH (NOLOCK)
+			      INNER JOIN PatientAddress PA (NOLOCK) 
+				        ON P.PatientID=PA.PatientID  
+						AND PA.AddressType='C'
+                   INNER JOIN Patientvisit PV WITH (NOLOCK)
+                           ON PV.PatientID = P.PatientID
+                              AND P.OrgID = PV.OrgID
+                   INNER JOIN OrganizationAddress (nolock) OA
+                           ON OA.AddressID = PV.OrgAddressID
+                              AND OA.OrgID = PV.OrgID
+                   INNER JOIN Organization O WITH (NOLOCK)
+                           ON O.OrgID = OA.OrgID
+                   INNER JOIN @TempOrgID T
+                           ON PV.OrgID = T.OrgID
+            WHERE  P.PatientNumber = @pPatientNumber
+        END
+     IF( @pPatientNumber IS NOT NULL and Isnull(@Barcode,'')<>'' and Isnull(@Flag,'')='Barcode')  
+	 begin
+	 declare @ExBarcode as Table (PatientVisitID BigInt,OrgID int)
+	 Insert Into @ExBarcode
+	 Select distinct PatientVisitID,OrgID From PatientInvSample Where (Case when @ConfigKeyValueExBarcode='Y' and ExternalBarcode<>'' then ExternalBarcode Else BarcodeNumber End)=@Barcode
+	  
+	 SELECT Distinct P.PatientNumber,P.Name,CASE WHEN Len(PA.MobileNumber)>=10 THEN PA.MobileNumber ELSE '' END MobileNumber
+			 ,PV.VisitNumber  AS VisitNumber,
+                   CONVERT(VARCHAR(50), CONVERT(DATE, PV.VisitDate), 103)
+                   + '  '
+                   + Ltrim(RIGHT(CONVERT(VARCHAR(20), PV.VisitDate, 100), 7))AS NextReviewDate,
+                   O.Name + '(' + OA.Location + ')'                          AS Location
+            FROM   @ExBarcode PIS 
+                   INNER JOIN Patientvisit PV WITH (NOLOCK)
+                           ON PV.PatientVisitID = PIS.PatientVisitID
+                              AND PIS.OrgID = PV.OrgID
+                     Inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.OrgID=PV.OrgID
+			      INNER JOIN PatientAddress PA (NOLOCK) 
+				        ON P.PatientID=PA.PatientID  
+						AND PA.AddressType='C'
+                   INNER JOIN OrganizationAddress (nolock) OA
+                           ON OA.AddressID = PV.OrgAddressID
+                              AND OA.OrgID = PV.OrgID
+                   INNER JOIN Organization O WITH (NOLOCK)
+                           ON O.OrgID = OA.OrgID
+                   INNER JOIN @TempOrgID T
+                           ON PV.OrgID = T.OrgID
+            --WHERE  P.PatientNumber = @pPatientNumber
+			Order by PV.VisitNumber 
+	 End
+       IF( @pPatientNumber IS NOT NULL and Isnull(@Barcode,'')<>'' and Isnull(@Flag,'')='SRFNumber' )  
+        BEGIN   
+            SELECT P.PatientNumber,P.Name,PA.MobileNumber As MobileNumber  
+    ,PV.VisitNumber  AS VisitNumber,  
+                   CONVERT(VARCHAR(50), CONVERT(DATE, PV.VisitDate), 103)  
+                   + '  '  
+                   + Ltrim(RIGHT(CONVERT(VARCHAR(20), PV.VisitDate, 100), 7))AS NextReviewDate,  
+                   O.Name + '(' + OA.Location + ')'                          AS Location  
+            FROM   Patientvisit PV WITH (NOLOCK)
+			   Inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.OrgID=PV.OrgID  
+			   Inner Join PatientAddress PA WITH (NOLOCK) ON P.PatientID=PA.PatientID and PA.AddressType='C'
+                   INNER JOIN OrganizationAddress (nolock) OA  
+                           ON OA.AddressID = PV.OrgAddressID  
+                              AND OA.OrgID = PV.OrgID  
+                   INNER JOIN Organization O WITH (NOLOCK)  
+                           ON O.OrgID = OA.OrgID  
+                   INNER JOIN @TempOrgID T  
+                           ON PV.OrgID = T.OrgID  
+            WHERE  PV.SRFID = @Barcode  
+        END  
+  END   
+  
+
+
+GO

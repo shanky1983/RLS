@@ -1,0 +1,25 @@
+/****** Object:  StoredProcedure [dbo].[pActiveInactiveOrganismList]    Script Date: 6/25/2018 11:19:37 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pActiveInactiveOrganismList](@Id bigint, @IsActive int out,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+declare @Active bit
+declare @OrgId int
+
+select @OrgId=Orgid from  @ContextInfo
+select @Active=isnull(isactive,0) from OrganismMaster where OrgID=@OrgId and ID=@Id
+
+update OrganismMaster set IsActive=case when @Active=0 then 1 else 0 end where OrgID=@OrgId and ID=@Id 
+
+--insert into OrganismmasterHistory(Name,Code,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,IsActive,OrgID)
+--select Name,Code,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,IsActive,OrgID from Organismmaster where OrgID=@OrgId and ID=@Id
+
+select @IsActive=isactive from OrganismMaster where OrgID=@OrgId and ID=@Id
+end
+
+GO

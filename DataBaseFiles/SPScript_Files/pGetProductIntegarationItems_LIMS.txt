@@ -1,0 +1,74 @@
+CREATE PROCEDURE pGetProductIntegarationItems_LIMS 
+(
+   @OrgCode Nvarchar(100)
+)
+AS 
+BEGIN
+DECLARE  @Orgid int
+
+SELECT @Orgid= AttuneOrgID FROM VendorOrgMapping WHERE IntegrationTypeCode=@OrgCode
+
+
+Select * INTO #POI From SynProductIntegaration_LIMS WHERE orgid=@Orgid AND Status='Pending'
+
+
+
+
+SELECT  ProductIntegarationID,
+  @OrgCode as OrgCode,ProductCode,ProductName,P.ProductID,LSU as LeastSellingUnit,
+  MfgName as ManufacturerName,CategoryID as ProductCategoryId,TypeID as ProductTypeId,
+		(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='HasExpiryDate') as HasExpiryDate,
+		(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='HasBatchNo') as HasBatchNo,
+		TaxPercent,
+		'' as IsLabAnalyser,
+		ShelfPeriod,
+		ShelfPeriodCode as ShelfPeriodType,
+		Case When IsScheduleHDrug ='N' Then 'N' Else 'Y' End  IsScheduleDrug,
+		Case When IsScheduleHDrug ='N' Then '' Else IsScheduleHDrug End  ScheduleDrugType,
+		IsNorcotic,
+		'Y' as IsConsumable,
+		(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='CostPrice') as CostPrice,
+		(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='SellingPrice') as SellingPrice,
+		UsageCount as TestCount,
+		ReorderConsumptionlevel as ReorderLevelConsumption,
+ UOMCode as PurchaseUomCode ,
+ ConvesionQty ,
+ P.CreatedAt,P.ModifiedAt
+FROM Products P
+INNER JOIN Organization O ON O.OrgID=@Orgid 
+INNER JOIN #POI LPI ON P.ProductID=LPI.ProductID
+INNER JOIN ProductUOMMapping  PUMM ON PUMM.ProductID = P.ProductID
+WHERE P.Orgid =@Orgid AND LPI.Status='Pending' AND  PUMM.Status<>'DA'
+
+--SELECT P.ProductID,
+--			(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='HasExpiryDate') as HasExpiryDate,
+--			(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='HasBatchNo') as HasBatchNo,
+--			 TaxPercent,
+--			'' as IsLabAnalyser,
+--			ShelfPeriod,
+--			ShelfPeriodCode as ShelfPeriodType,
+--			Case When IsScheduleHDrug ='N' Then 'N' Else 'Y' End  IsScheduleDrug,
+--			Case When IsScheduleHDrug ='N' Then '' Else IsScheduleHDrug End  ScheduleDrugType,
+--			IsNorcotic,
+--			'Y' as IsConsumable,
+--			(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='CostPrice') as CostPrice,
+--			(Select AttributesValue   From ProductsAttributesDetails where  ProductID=LPI.ProductID AND AttributesKey='SellingPrice') as SellingPrice,
+--			UsageCount as TestCount,
+--			ReorderConsumptionlevel 
+--	FROM Products P
+--	INNER JOIN #POI LPI ON P.ProductID=LPI.ProductID
+--	WHERE LPI.Status='Pending'
+
+	--SELECT PUMM.Productid as ProductID,UOMCode as PurchaseUomCode ,
+	--		ConvesionQty   
+	--FROM ProductUOMMapping  PUMM
+	--INNER JOIN #POI LPI ON PUMM.ProductID=LPI.ProductID
+	--WHERE LPI.Status='Pending' AND PUMM.Status<>'DA'
+
+
+	Update LPOI SET Status='In-Progress' From SynProductIntegaration_LIMS LPOI --LIS_PDT_Integration..ProductIntegaration_LIMS LPOI
+	INNER JOIN #POI TPI ON LPOI.ProductIntegarationID=TPI.ProductIntegarationID 
+	                AND LPOI.ProductID=TPI.ProductID
+     
+END
+GO

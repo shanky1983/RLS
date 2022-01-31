@@ -1,0 +1,107 @@
+CREATE PROCEDURE [dbo].[pGetOrderedPackageDetailsforChecklist] (@pVisitID     [BIGINT],            
+                                               @pBillID      [BIGINT],            
+                                               @pOrgID       [BIGINT])            
+AS            
+  BEGIN  
+  DECLARE @Package TABLE   
+  (  
+   Name NVARCHAR(255)  
+  ,DeptName NVARCHAR(255)  
+  ,PkgName NVARCHAR(255)  
+  ,pkgId bigint  
+  ,ID INT  
+  ,Type NVARCHAR(10)  
+  ,DeptID INT  
+  )  
+  INSERT INTO @Package (Name, ID, Type, PkgName,pkgId)  
+  SELECT DISTINCT OI.PkgName,0 as id,'', '' as PkgName,isnull(Oi.pkgId,0) as pkgId  
+  FROM PATIENTVISIT PV (NOLOCK)  
+  INNER JOIN ORDEREDINVESTIGATIONS OI (NOLOCK) ON OI.VISITID=PV.PATIENTVISITID AND OI.ORGID=PV.ORGID  
+  INNER JOIN FINALBILL FB (NOLOCK) ON FB.VISITID=OI.VISITID AND FB.ORGID=OI.ORGID  
+  WHERE ISNULL(OI.PKGNAME,'')!='' AND PV.PATIENTVISITID=@pVisitID AND FB.FINALBILLID=@pBillID AND PV.ORGID=@pOrgID  
+  union  
+  SELECT DISTINCT OI.NAME,OI.ID,OI.TYPE, OI.PkgName as PkgName,isnull(Oi.pkgId,0) as pkgId  
+  FROM PATIENTVISIT PV (NOLOCK)  
+  INNER JOIN ORDEREDINVESTIGATIONS OI (NOLOCK) ON OI.VISITID=PV.PATIENTVISITID AND OI.ORGID=PV.ORGID  
+  INNER JOIN FINALBILL FB (NOLOCK) ON FB.VISITID=OI.VISITID AND FB.ORGID=OI.ORGID  
+  WHERE ISNULL(OI.PKGNAME,'')!='' AND PV.PATIENTVISITID=@pVisitID AND FB.FINALBILLID=@pBillID AND PV.ORGID=@pOrgID  
+  order by pkgId,Id  
+  
+  IF EXISTS (SELECT 1 FROM @Package WHERE TYPE='GRP')  
+  BEGIN  
+  UPDATE P SET P.DeptName=IDM.DeptName,P.DeptID=IDM.DeptID FROM @Package P  
+  INNER JOIN INVORGGROUP IOG ON IOG.ATTGROUPID=P.ID  
+  INNER JOIN INVGROUPMAPMASTER IGM ON IGM.GROUPID=IOG.ORGGROUPID AND IGM.ACTIVE='Y'  
+  INNER JOIN INVESTIGATIONORGMAPPING IOM ON IOM.INVESTIGATIONID=IGM.INVESTIGATIONID AND IOM.ORGID=IOG.ORGID  
+  INNER JOIN INVDEPTMASTER IDM ON IDM.DEPTID=IOM.DEPTID AND IDM.ORGID=IOM.ORGID  
+  WHERE IOG.ORGID=@pOrgID AND P.TYPE='GRP'  
+  END  
+  
+  IF EXISTS (SELECT 1 FROM @Package WHERE TYPE='INV')  
+  BEGIN  
+  UPDATE P SET P.DeptName=IDM.DeptName,P.DeptID=IDM.DeptID FROM @Package P  
+  INNER JOIN INVESTIGATIONORGMAPPING IOM ON IOM.INVESTIGATIONID=P.ID AND IOM.ORGID=@pOrgID  
+  INNER JOIN INVDEPTMASTER IDM ON IDM.DEPTID=IOM.DEPTID AND IDM.ORGID=IOM.ORGID  
+  WHERE IOM.ORGID=@pOrgID AND P.TYPE='INV'  
+  END  
+  
+  Declare @Final Table   
+  (  
+  ID1 int,  
+  SLno INT,  
+  --SLno INT IDENTITY(1,1),  
+  Name NVARCHAR(255)  
+  ,DeptName NVARCHAR(255)  
+  ,PkgName NVARCHAR(255)  
+  , pkgId bigint  
+  ,DeptID INT  
+  ,ID INT  
+  ,CheckBox bit  
+  )  
+  Insert into @Final (Name, DeptName, DeptID, PkgName, pkgid,ID,CheckBox)  
+  SELECT DISTINCT Name, DeptName, DeptID, PkgName,pkgid,ID, 0 as CheckBox FROM @Package ORDER BY pkgid,ID,DeptID  
+  
+Declare @tempxml Table (Sno INT Identity(1,1),PkgName Nvarchar(255))  
+Insert into @tempxml   
+Select Distinct PkgName from @Final where Isnull(PkgName,'')!='' order by PkgName  
+  
+Declare @Count Int  
+Declare @id Int  
+Declare @PkgName Nvarchar(255)  
+Set @Count=(select Distinct Count(Distinct PkgName) from @tempxml where Isnull(PkgName,'')!='')  
+SET @id=1  
+While @id<=@Count  
+BEGIN  
+Set @PkgName=(select PkgName from @tempxml where Sno=@id)  
+Update @Final set ID1=@id where PkgName=@PkgName  
+Set @id=@id+1  
+END  
+  
+-----  
+Declare @tempxml1 table (ID1 int,PkgName Nvarchar(255),Name Nvarchar(150),Nos int)  
+Insert into @tempxml1 (ID1,PkgName,Name)  
+Select Distinct ID1,PkgName,Name from @Final   
+  
+Declare @PkgName1 Nvarchar(255)  
+Declare @Name Nvarchar(255)  
+Declare @a int=1,@ca int  
+Set @ca=(Select Count(Distinct ID1) from @tempxml1 where isnull(ID1,0)!=0)  
+while @a<=@ca  
+BEGIN  
+Declare @caa int,@aa int=1  
+select @PkgName1=PkgName from @tempxml1 where ID1=@a  
+Set @caa=(select Distinct Count(Name) from @tempxml1 where ID1=@a AND PkgName=@PkgName1)  
+  
+while @aa<=@caa  
+BEGIN  
+select @Name=(select Top 1 Name from @tempxml1 where ID1=@a AND PkgName=@PkgName1 and isnull(Nos,0)=0)  
+Update @tempxml1 set Nos=@aa where ID1=@a AND PkgName=@PkgName1 and Name=@Name  
+Set @aa=@aa+1  
+END  
+Set @a=@a+1  
+END  
+Update TT set TT.SLno=T.Nos from  @Final TT  
+Inner join @tempxml1 T on T.ID1=TT.ID1 AND T.PkgName=TT.PkgName AND T.Name=TT.Name  
+  
+  SELECT Isnull(ID1,'') as ID1,isnull(SLno,'') as SLno, Name, ISNULL(DeptName,'') AS DeptName, ISNULL(PkgName,'') AS PkgName,pkgId, CheckBox FROM @Final ORDER BY pkgId,ID1,SLno  
+  END  

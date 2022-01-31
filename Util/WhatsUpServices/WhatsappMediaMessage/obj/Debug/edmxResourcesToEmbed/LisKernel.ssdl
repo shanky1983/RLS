@@ -1,0 +1,138 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Schema Namespace="LISKernelMedia.Store" Provider="System.Data.SqlClient" ProviderManifestToken="2012" Alias="Self" xmlns:store="http://schemas.microsoft.com/ado/2007/12/edm/EntityStoreSchemaGenerator" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+  <EntityType Name="CommunicationConfig">
+    <Key>
+      <PropertyRef Name="ID" />
+    </Key>
+    <Property Name="ID" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="OrgID" Type="int" Nullable="false" />
+    <Property Name="Type" Type="nvarchar" MaxLength="50" Nullable="false" />
+    <Property Name="Name" Type="nvarchar" MaxLength="100" Nullable="false" />
+    <Property Name="Value" Type="nvarchar" MaxLength="500" Nullable="false" />
+    <Property Name="IsActive" Type="nchar" MaxLength="1" />
+    <Property Name="CreatedBy" Type="bigint" />
+    <Property Name="CreatedAt" Type="datetime" />
+    <Property Name="ModifiedBy" Type="bigint" />
+    <Property Name="ModifiedAt" Type="datetime" />
+    <Property Name="InstanceID" Type="int" />
+    <Property Name="IsCountryCode" Type="nvarchar" MaxLength="100" />
+  </EntityType>
+  <!--Errors Found During Generation:
+warning 6002: The table/view 'Liskernel-New.dbo.Location' does not have a primary key defined. The key has been inferred and the definition was created as a read-only table/view.-->
+  <EntityType Name="Location">
+    <Key>
+      <PropertyRef Name="LocationID" />
+    </Key>
+    <Property Name="LocationID" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="LocationName" Type="nvarchar" MaxLength="50" />
+    <Property Name="Pincode" Type="bigint" />
+    <Property Name="CityID" Type="bigint" />
+    <Property Name="CreatedBy" Type="bigint" />
+    <Property Name="CreatedAt" Type="datetime" />
+    <Property Name="ModifiedBy" Type="bigint" />
+    <Property Name="ModifiedAt" Type="datetime" />
+    <Property Name="IsDefault" Type="nchar" MaxLength="1" />
+    <Property Name="StateID" Type="smallint" />
+  </EntityType>
+  <EntityType Name="Notifications">
+    <Key>
+      <PropertyRef Name="NotificationID" />
+    </Key>
+    <Property Name="NotificationID" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="ActionType" Type="nvarchar" MaxLength="20" />
+    <Property Name="Value" Type="nvarchar" MaxLength="500" />
+    <Property Name="AdditionalContext" Type="nvarchar" MaxLength="500" />
+    <Property Name="Category" Type="nvarchar" MaxLength="20" />
+    <Property Name="version" Type="nvarchar" MaxLength="20" />
+    <Property Name="Status" Type="nvarchar" MaxLength="20" />
+    <Property Name="OrgID" Type="int" />
+    <Property Name="OrgAddressID" Type="bigint" />
+    <Property Name="CreatedAt" Type="datetime" />
+    <Property Name="CreatedBy" Type="bigint" />
+    <Property Name="Template" Type="nvarchar(max)" />
+    <Property Name="ContextType" Type="nvarchar" MaxLength="50" />
+    <Property Name="IsAttachment" Type="nvarchar" MaxLength="10" />
+    <Property Name="Subject" Type="nvarchar" MaxLength="200" />
+    <Property Name="Seq_Num" Type="int" />
+    <Property Name="RetryCount" Type="int" />
+    <Property Name="Priority" Type="int" Nullable="false" />
+    <Property Name="AttachmentName" Type="nvarchar" MaxLength="500" />
+    <Property Name="IdentityID" Type="nvarchar" MaxLength="15" />
+    <Property Name="CompletionTime" Type="datetime" />
+    <Property Name="IsConfidentialTest" Type="nvarchar" MaxLength="3" />
+    <Property Name="IsClientBlinding" Type="nvarchar" MaxLength="10" />
+    <Property Name="RoundID" Type="bigint" />
+    <Property Name="EmailCC" Type="nvarchar(max)" />
+    <Property Name="Content" Type="nvarchar(max)" />
+    <Property Name="ReportType" Type="nvarchar" MaxLength="50" />
+    <Property Name="PickedAt" Type="datetime" />
+    <Property Name="HasRepushed" Type="bit" />
+    <Property Name="DelayReason" Type="nvarchar" MaxLength="250" />
+    <Property Name="EmailBccTo" Type="nvarchar" MaxLength="200" />
+    <Property Name="IsReprinting" Type="bit" />
+    <Property Name="ReportLanguage" Type="nvarchar" MaxLength="100" />
+    <Property Name="NoofCopies" Type="int" />
+  </EntityType>
+  <EntityType Name="Organization">
+    <Key>
+      <PropertyRef Name="OrgID" />
+    </Key>
+    <Property Name="OrgID" Type="int" Nullable="false" />
+    <Property Name="Name" Type="nvarchar" MaxLength="100" />
+    <Property Name="OrganizationTypeID" Type="int" />
+    <Property Name="AddressID" Type="int" />
+    <Property Name="Email" Type="nvarchar" MaxLength="100" />
+    <Property Name="Remarks" Type="nvarchar" MaxLength="200" />
+    <Property Name="LogoPath" Type="nvarchar" MaxLength="50" />
+    <Property Name="CreatedBy" Type="bigint" />
+    <Property Name="CreatedAt" Type="datetime" />
+    <Property Name="ModifiedBy" Type="bigint" />
+    <Property Name="ModifiedAt" Type="datetime" />
+    <Property Name="IntegrationName" Type="nvarchar" MaxLength="255" />
+    <Property Name="OrgDisplayName" Type="nvarchar" MaxLength="50" />
+    <Property Name="ParentOrgID" Type="int" />
+    <Property Name="RootOrgID" Type="int" />
+    <Property Name="ReferType" Type="nvarchar" MaxLength="20" />
+    <Property Name="ReferTypeID" Type="bigint" />
+    <Property Name="CentreCode" Type="bigint" />
+    <Property Name="TimeDifference" Type="int" />
+    <Property Name="TimeZone" Type="nvarchar(max)" />
+    <Property Name="Isbaseorg" Type="nvarchar" MaxLength="5" />
+    <Property Name="DefaultOrgID" Type="bigint" />
+    <Property Name="isdefaultorg" Type="nvarchar" MaxLength="5" />
+    <Property Name="OrgCategoryID" Type="int" />
+    <Property Name="HSNSAC" Type="nvarchar" MaxLength="100" />
+    <Property Name="ReportLanguage" Type="nvarchar" MaxLength="100" />
+  </EntityType>
+  <EntityType Name="WhatsUpTemplateMaster">
+    <Key>
+      <PropertyRef Name="TemplateMasterNo" />
+    </Key>
+    <Property Name="TemplateMasterNo" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+    <Property Name="TemplateName" Type="nvarchar" MaxLength="100" />
+    <Property Name="NoofParameters" Type="int" />
+    <Property Name="TemplateContent" Type="nvarchar" MaxLength="4000" />
+    <Property Name="ActionTemplateID" Type="int" />
+    <Property Name="MessageType" Type="nvarchar" MaxLength="50" />
+  </EntityType>
+  <EntityContainer Name="LISKernelMediaStoreContainer">
+    <EntitySet Name="CommunicationConfig" EntityType="Self.CommunicationConfig" Schema="dbo" store:Type="Tables" />
+    <EntitySet Name="Notifications" EntityType="Self.Notifications" Schema="dbo" store:Type="Tables" />
+    <EntitySet Name="Organization" EntityType="Self.Organization" Schema="dbo" store:Type="Tables" />
+    <EntitySet Name="WhatsUpTemplateMaster" EntityType="Self.WhatsUpTemplateMaster" Schema="dbo" store:Type="Tables" />
+    <EntitySet Name="Location" EntityType="Self.Location" store:Type="Tables" store:Schema="dbo">
+      <DefiningQuery>SELECT 
+    [Location].[LocationID] AS [LocationID], 
+    [Location].[LocationName] AS [LocationName], 
+    [Location].[Pincode] AS [Pincode], 
+    [Location].[CityID] AS [CityID], 
+    [Location].[CreatedBy] AS [CreatedBy], 
+    [Location].[CreatedAt] AS [CreatedAt], 
+    [Location].[ModifiedBy] AS [ModifiedBy], 
+    [Location].[ModifiedAt] AS [ModifiedAt], 
+    [Location].[IsDefault] AS [IsDefault], 
+    [Location].[StateID] AS [StateID]
+    FROM [dbo].[Location] AS [Location]</DefiningQuery>
+    </EntitySet>
+  </EntityContainer>
+</Schema>

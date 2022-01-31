@@ -1,0 +1,235 @@
+CREATE PROCEDURE PgetPatientsync  
+(  
+@pOrgId INT  
+)  
+AS   
+  BEGIN   
+      DECLARE @P_FromDate DATETIME   
+      DECLARE @P_ToDate DATETIME   
+      DECLARE @ServerDate DATETIME   
+      DECLARE @SynInterval INT   
+      DECLARE @ServerName NVARCHAR(200)   
+      DECLARE @ServerIP NVARCHAR(100)   
+      DECLARE @CurrentDatabase NVARCHAR(100)   
+      DECLARE @TableName NVARCHAR(100)   
+   DECLARE @InstanceId TINYINT  
+  
+   SELECT @InstanceId=1  
+  
+      SET @TableName='Patient'   
+  
+   CREATE TABLE #TempOrg  
+   (  
+   OrgId INT  
+   )  
+  
+  insert into #TempOrg(OrgId)  
+  select @pOrgId  
+  
+  
+      SELECT @ServerName = @@servername,   
+             @CurrentDatabase = Db_name()   
+  
+      SELECT @ServerIP = dec.local_net_address   
+      FROM   sys.dm_exec_connections AS dec   
+      WHERE  dec.session_id = @@SPID   
+  
+      SET @ServerDate=Getdate()   
+      SET nocount ON   
+  
+      SELECT @P_FromDate = Cast('1753-1-1' AS DATETIME),   
+   ---@P_FromDate ='2019-04-01 16:22:14.377',  
+             @SynInterval = 0,   
+             @P_ToDate = @ServerDate   
+  
+      SELECT @P_FromDate = lastrun,   
+             @P_ToDate = @ServerDate,   
+             @SynInterval = syninterval   
+      FROM   [integrationdatasync]   
+      WHERE  servername = @ServerName   
+             AND dbname = @CurrentDatabase   
+             AND tablename = @TableName  
+    AND OrgId=@pOrgId  
+  
+      IF Isnull(Datediff(mi, @P_FromDate, @P_ToDate), 0) >= @SynInterval   
+        BEGIN   
+     --*****************Patient Sync *********************     
+--            CREATE TABLE [BiPatient_IntSync]   
+--              (   
+--                [PatientDetailId] [bigint] IDENTITY(1,1) NOT NULL,  
+-- ORGID BIGINT,  
+-- OrgCode NVARCHAR(10),  
+-- LocationId BIGINT,  
+-- OrgName NVARCHAR(200),  
+-- LocationName NVARCHAR(200),  
+-- [PatientId] [bigint] NOT NULL,  
+-- [PatientNumber] [nvarchar](100) NULL,  
+-- SEX NVARCHAR(10),  
+--RegistrationDTTM DATETIME,  
+--DOB DATETIME,  
+--Age NVARCHAR(15),  
+-- [CreatedAt] [datetime] NULL,  
+-- [CreatedBy] [bigint] NULL,  
+-- [ModifiedAt] [datetime] NULL,  
+-- [ModifiedBy] [bigint] NULL,  
+-- Salutation NVARCHAR(30),  
+-- TITLECode tinyint  
+--              )   
+  
+INSERT INTO BiPatient_IntSync(OrgId,PatientId,PatientNumber,SEX,RegistrationDTTM,DOB,Age,TITLECode)  
+SELECT  P.OrgId,P.PatientId,P.PatientNumber,P.SEX,P.RegistrationDTTM,DOB,Age,TITLECode  
+FROM Patient(NOLOCK) P   
+INNER JOIN #TempOrg T ON   
+T.OrgId=P.OrgId  
+WHERE  ( P.createdat >= @P_FromDate   
+                     AND P.createdat < @P_ToDate )   
+        
+  
+  
+  
+UPDATE BiPatient_IntSync SET OrgName=tmp.Name FROM   
+(  
+SELECT T.PatientDetailId,Name FROM  BiPatient_IntSync T  
+INNER JOIN Organization(NOLOCK) O ON   
+O.OrgId=T.OrgId  
+)tmp  
+WHERE BiPatient_IntSync.PatientDetailId=tmp.PatientDetailId  
+  
+UPDATE BiPatient_IntSync SET LocationId=tmp.OrgAddressID,LocationName=tmp.Location FROM   
+(  
+SELECT T.PatientDetailId,OrgAddressID,Location FROM  BiPatient_IntSync T  
+INNER JOIN PatientVisit PV ON PV.PatientID=T.PatientID  
+AND PV.OrgId=T.OrgId  
+INNER JOIN OrganizationAddress(NOLOCK) OA ON   
+OA.OrgId=T.OrgId  
+AND OA.AddressID=PV.OrgAddressID  
+)tmp  
+WHERE BiPatient_IntSync.PatientDetailId=tmp.PatientDetailId  
+  
+  
+update BiPatient_IntSync SET Salutation=tmp.TitleName  
+from  
+(  
+select p.Patientid,TitleName from BiPatient_IntSync P  
+inner join Salutation s on   
+s.TitleId=p.titlecode  
+  
+) tmp  
+where BiPatient_IntSync.PatientId=tmp.Patientid  
+  
+  
+UPDATE Sur   
+            SET      
+ORGID=TMP.ORGID,  
+LocationId=TMP.LocationId,  
+OrgName=TMP.OrgName,  
+LocationName=TMP.LocationName,  
+PatientId=TMP.PatientId,  
+PatientNumber=TMP.PatientNumber,  
+SEX=TMP.SEX,  
+RegistrationDTTM=TMP.RegistrationDTTM,  
+DOB=TMP.DOB,  
+Age=TMP.DOB,  
+ModifiedAt=@ServerDate,  
+ModifiedBy=1,  
+IsPorted='N',  
+OrgCode=TMP.OrgCode,  
+Salutation=Tmp.Salutation  
+FROM   BiPatient_IntSync tmp   
+INNER JOIN BiDashboardPatientDetail(nolock) Sur   
+ON Sur.patientid = tmp.patientid   
+  
+AND InstanceId=@InstanceId  
+          
+  
+INSERT INTO BiDashboardPatientDetail   
+(  
+ORGID,  
+LocationId,  
+OrgName,  
+LocationName,  
+PatientId,  
+PatientNumber,  
+SEX,  
+RegistrationDTTM,  
+DOB,  
+Age,  
+CreatedAt,  
+CreatedBy,  
+IsPorted,  
+OrgCode,  
+InstanceId,  
+Salutation  
+)   
+SELECT   
+TMP.ORGID,  
+TMP.LocationId,  
+TMP.OrgName,  
+TMP.LocationName,  
+TMP.PatientId,  
+TMP.PatientNumber,  
+TMP.SEX,  
+TMP.RegistrationDTTM,  
+TMP.DOB,  
+TMP.Age,  
+@ServerDate,  
+1,  
+'N',  
+TMP.OrgCode,  
+@InstanceId,  
+tmp.Salutation  
+FROM   BiPatient_IntSync tmp   
+LEFT JOIN BiDashboardPatientDetail(nolock) Sur   
+        ON Sur.patientid = tmp.patientid   
+WHERE  Sur.patientid IS NULL   
+                     
+  
+  
+  
+  
+  
+            IF EXISTS (SELECT TOP 1 1   
+                       FROM   BiPatient_IntSync)   
+              BEGIN   
+                  IF NOT EXISTS (SELECT 1   
+          FROM   integrationdatasync   
+                                 WHERE  servername = @ServerName   
+                                        AND dbname = @CurrentDatabase   
+                                        AND tablename = @TableName  
+          and OrgId=@pOrgId)   
+                    BEGIN   
+                        INSERT INTO integrationdatasync   
+                                    (ipaddress,   
+                                     servername,   
+                                     dbname,   
+                                     lastrun,   
+                                     tablename,   
+                                     syninterval,  
+          OrgId)   
+                        SELECT @ServerIP,   
+                               @ServerName,   
+                               @CurrentDatabase,   
+                               @P_ToDate,   
+                               @TableName,   
+                               30,  
+          @pOrgId  
+                    END   
+                  ELSE   
+                    BEGIN   
+                        UPDATE integrationdatasync   
+                        SET    lastrun = @P_ToDate   
+                        WHERE  servername = @ServerName   
+                               AND dbname = @CurrentDatabase   
+                             AND tablename = @TableName   
+        AND OrgId=@pOrgId  
+                    END   
+              END   
+  
+            ---Truncate TABLE BiPatient_IntSync   
+   EXECUTE dbo.pTruncateTableBySynonymName @SchemaName = 'dbo', @SynonymName = 'BiPatient_IntSync'  
+        END   
+  END   
+  
+  
+  
+  

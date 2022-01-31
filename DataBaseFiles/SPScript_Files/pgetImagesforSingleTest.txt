@@ -1,0 +1,88 @@
+CREATE PROCEDURE [dbo].[pgetImagesforSingleTest]                                                       
+(                                                         
+ @pVisitID bigint,                                                          
+ @OrgID int,                                                          
+ @TemplateID int ,                                                   
+ @InvestigationID NVARCHAR(2000)   
+ ,@TestInvID Int
+)                                                         
+                                                         
+AS BEGIN                                     
+                                   
+DECLARE @tblResultSelectID TABLE                                    
+ (                                    
+ AccessionNo BIGINT                                    
+ )                                      
+                                   
+Declare @InvId bigint                                   
+  INSERT INTO @tblResultSelectID (AccessionNo)                                    
+ SELECT item FROM fnSplit(@InvestigationID,',')                                
+                               
+                                      
+select @InvId = AccessionNumber from OrderedInvestigations                              
+ORD                              
+inner join @tblResultSelectID Tbl on Tbl.AccessionNo=ORD.AccessionNumber                              
+                                   
+where ORD.AccessionNumber = AccessionNo                              
+              declare    @resulttable table(id int identity(1,1),Row_Count bigint,Row_Rank int,PatientVisitID bigint,          
+InvestigationID bigint,          
+FilePath nvarchar(100),          
+CreatedBy bigint,          
+CreatedAt datetime,          
+ModifiedBy bigint,          
+ModifiedAt datetime,          
+OrgID int,          
+ImageSource varbinary(max),          
+Type nvarchar(400),          
+ImageID bigint,          
+statustype  nvarchar(400),          
+Description nvarchar(max))          
+if(@InvId is not null AND @InvId > 0)                                   
+BEGIN                                  
+                            
+  --select 'A'                     
+                       
+       ;with CTEimage as                
+       (              
+                    
+    
+select Distinct ROW_NUMBER() OVER(PARTITION BY PIF.InvestigationID  ORDER BY PIF.ImageID ASC) AS Row_Count                    
+,DENSE_RANK() OVER(ORDER BY PIF.InvestigationID) as Row_Rank     
+,IOM.OutputInvestigationCode as OutputCode ,PI.MedicalRemarks ,PI.InvestigationName                  
+,PIF.* from PatientInvestigation PI                                   
+inner join PatientInvestigationFiles PIF on PIF.PatientVisitID = PI.PatientVisitID and PIF.InvestigationID = PI.InvestigationID and PI.OrgID = PIF.OrgID                               
+INNER JOIN  @tblResultSelectID  Tbl on PI.AccessionNumber=Tbl.AccessionNo                              
+Inner JOIN InvestigationOrgMapping IOM on PI.InvestigationID=IOM.InvestigationID and PI.OrgID=IOM.OrgID and Isnull(IOM.IsNonReportable,'N')='N'                                    
+where PI.PatientVisitID = @pVisitID   and PI.Statustype is null                                 
+and PI.AccessionNumber = Tbl.AccessionNo  and PIF.InvestigationID=@TestInvID           
+                            
+        )            
+        --insert into @resulttable           
+        select Distinct * from  CTEimage order by  ImageID                
+                  
+     -- select * from @resulttable order by row_rank,ImageID asc          
+        --                 
+                      
+END                                   
+                                   
+ELSE                                   
+    --  select 'B'                                
+BEGIN                                 
+                                   
+select ROW_NUMBER() OVER(PARTITION BY PIF.InvestigationID  ORDER BY PIF.ImageID ASC) AS Row_Count                    
+,DENSE_RANK() OVER(ORDER BY PIF.InvestigationID) as Row_Rank     
+,IOM.OutputInvestigationCode as OutputCode ,PI.MedicalRemarks ,PI.InvestigationName                  
+,PIF.* from PatientInvestigation PI                                   
+inner join PatientInvestigationFiles PIF on PIF.PatientVisitID = PI.PatientVisitID and PIF.InvestigationID = PI.InvestigationID and PI.OrgID = PIF.OrgID                               
+INNER JOIN  @tblResultSelectID  Tbl on PI.AccessionNumber=Tbl.AccessionNo                              
+Inner JOIN InvestigationOrgMapping IOM on PI.InvestigationID=IOM.InvestigationID and PI.OrgID=IOM.OrgID and Isnull(IOM.IsNonReportable,'N')='N'                              
+where PI.PatientVisitID = @pVisitID   and PI.Statustype is null                                 
+and PI.AccessionNumber = Tbl.AccessionNo and PIF.InvestigationID=@TestInvID  
+order by ImageID      
+                                   
+END                          
+                                   
+END     
+    
+    
+    

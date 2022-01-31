@@ -1,0 +1,33 @@
+/****** Object:  StoredProcedure [dbo].[pGetinvestigationdrugfamilymasterHistory]    Script Date: 6/25/2018 11:25:48 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[pGetinvestigationdrugfamilymasterHistory]    
+ @pFamilyId [bigint],    
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN    
+
+;WITH tblDifference AS
+(
+    SELECT ROW_NUMBER() OVER(ORDER BY id) AS RowNumber, familyname,Familycode,OM.OrgID,modifiedby,familyID,Modifiedat 
+    FROM investigationdrugfamilymasterHistory OM WITH(NOLOCK)
+	INNER JOIN @ContextInfo UDT ON UDT.OrgID=OM.OrgID 
+	where FamilyId=@pFamilyId
+)
+
+SELECT cur.familyID,cur.Familyname,cur.Familycode,l.loginname  as LangCode,cur.Modifiedat, case when previous.familyname <> cur.familyname then ' Name Changed : '+previous.familyname +' to '+cur.familyname 
+when  previous.Familycode <> cur.Familycode then ' Code Changed : '+previous.Familycode +' to '+cur.Familycode end as Description
+FROM tblDifference cur WITH(NOLOCK)
+inner join login l WITH(NOLOCK)
+on cur.modifiedby=l.loginid  
+INNER JOIN @ContextInfo UDT ON UDT.OrgID=cur.OrgID
+LEFT OUTER JOIN tblDifference previous WITH(NOLOCK)
+ON cur.RowNumber = previous.RowNumber + 1
+ORDER BY cur.FamilyName            
+END
+GO

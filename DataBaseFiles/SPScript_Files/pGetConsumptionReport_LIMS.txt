@@ -1,0 +1,82 @@
+
+CREATE PROCEDURE pGetConsumptionReport_LIMS  
+(
+ @LocationCode Nvarchar(50),
+ @OrgCode Nvarchar(100)
+)
+AS 
+BEGIN 
+
+DECLARE @Orgid INT
+
+	SELECT @Orgid= AttuneOrgID FROM VendorOrgMapping WHERE IntegrationTypeCode=@OrgCode
+
+
+CREATE TABLE #LCMREPORT
+(
+  ORGID INT,INVESTIGATIONID BIGINT,PRODUCTID BIGINT,DEVICEID NVARCHAR(500),
+  ITEMBARCODENO NVARCHAR(255),CONSUMPTIONTYPE NVARCHAR(255),CONSUMPTIONCOUNT INT
+)
+
+INSERT INTO #LCMREPORT 
+SELECT 
+	OrgID,InvestigationID,
+	ProductID,DeviceID,ItemBarcodeNo,ConsumptionType,
+	SUM(ConsumptionCount ) as  ConsumptionCount
+FROM  IVYInvestigationConsumptionDetails ICD 
+Where ICD.OrgID = @Orgid
+AND ConsumptionType <>'Device'
+GROUP BY OrgID,InvestigationID,ProductID,DeviceID,ItemBarcodeNo,ConsumptionType
+
+INSERT INTO #LCMREPORT 
+SELECT 
+	ICD.OrgID,ICD.InvestigationID,
+	ICD.ProductID,ICD.DeviceID,ICD.ItemBarcodeNo,ISNULL(statustype,'Device') as ConsumptionType,
+	Sum(ICD.ConsumptionCount) as ConsumptionCount
+FROM  IVYInvestigationConsumptionDetails ICD 
+INNER JOIN InvestigationValues IV ON ICD.InvestigationValuesID = IV.InvestigationValueID
+Where ICD.OrgID = @Orgid
+AND ConsumptionType ='Device'
+GROUP BY ICD.OrgID,ICD.InvestigationID,ICD.ProductID,ICD.DeviceID,ICD.ItemBarcodeNo,ISNULL(statustype,'Device')
+
+
+SELECT 
+  @OrgCode OrgCode,OrgLocationCode,InventoryLocationCode,LOT as Barcode,ProductCode,Name,DeviceName,DeviceCode,Packaging as TestCount,[DateOpen] , 
+  [DateClose] as DateClose,CreatedAt,ModifiedAt,
+(ISNULL([Device],0)+ISNULL([RC],0)) as ActualTestsCount ,
+  ISNULL([Calibration],0) as Calibration, ISNULL([QC],0) as QC , ISNULL( [RR] ,0) as RR,
+  0 Others ,(ISNULL([Device],0)+ ISNULL([Calibration],0)+ISNULL([QC],0) +ISNULL([RC],0) +ISNULL( [RR] ,0)) as TotalTests,
+  (Packaging - (ISNULL([Device],0)+ ISNULL([Calibration],0)+ISNULL([QC],0) +ISNULL([RC],0) +ISNULL( [RR] ,0))) as Variance, 0 PatientCount
+  INTO #ConsumptionReport
+FROM  
+(SELECT 
+  @OrgCode OrgCode,OA.LocationCode as OrgLocationCode,L.LocationCode as InventoryLocationCode ,LR.ITEMBARCODENO as LOT,
+  P.ProductCode,IOM.DisplayText as Name,
+  InstrumentName as DeviceName,LR.DeviceID as DeviceCode,
+  UsageCount as Packaging,StartTime [DateOpen],EndTime  [DateClose],ConsumptionCount ,IDSU.CreatedAt,IDSU.ModifiedAt
+  ,ConsumptionType 
+FROM #LCMREPORT LR
+INNER JOIN InvestigationOrgMapping IOM ON LR.InvestigationID= IOM.InvestigationID AND IOM.Orgid=@Orgid
+INNER JOIN InvInstrumentMaster IIM ON IIM.OrgID=@Orgid AND IIM.ProductCode=LR.DeviceID
+INNER JOIN Products P ON P.ProductID = LR.ProductID AND P.ORgid=@Orgid
+INNER JOIN IVYDeviceStockUsageDetails IDSU ON LR.ProductID=IDSU.ProductID AND  IDSU.OrgID=@Orgid AND LR.DeviceID=IDSU.DeviceID
+                                              AND LR.ItemBarcodeNo=IDSU.ItemBarcodeNo 
+INNER JOIN StockreceivedBarcodeDetails SRBCD ON  SRBCD.StockReceivedBarcodeDetailsID=IDSU.StockReceivedBarcodeDetailsID AND LR.ITEMBARCODENO =SRBCD.BarcodeNo
+INNER JOIN Locations L ON L.LocationID = SRBCD.LocationID
+INNER JOIN OrganizationAddress OA ON OA.AddressID =L.OrgAddressID
+INNER JOIN Organization O ON O.OrgID = @Orgid
+
+) AS SourceTable  
+PIVOT  
+(  
+SUM(ConsumptionCount)  
+FOR ConsumptionType IN ([Device], [Calibration], [QC], [RC], [RR])  
+) AS PivotTable;  
+
+INSERT INTO SynConsumptionReportLIMS ( DeviceCode,ProductCode,Barcode,InventoryLocationCode,Status,CreatedBy,CreatedAt )
+Select DeviceCode,ProductCode,Barcode,InventoryLocationCode,'In-progress',-1,Getdate()  From #ConsumptionReport
+
+Select * From #ConsumptionReport
+
+END
+GO

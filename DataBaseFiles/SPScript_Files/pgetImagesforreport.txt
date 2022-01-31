@@ -1,0 +1,78 @@
+--pgetImagesforIMMULITE 105331,67,92,136327    
+--pgetImagesforElectro 105331,67,92,136327    
+CREATE PROCEDURE [dbo].[pgetImagesforreport] (@pVisitID        BIGINT,  
+                                                @OrgID           INT,  
+                                                @TemplateID      INT,  
+                                                @InvestigationID NVARCHAR(2000))  
+AS  
+  BEGIN  
+      DECLARE @tblResultSelectID TABLE  
+        (  
+           AccessionNo BIGINT  
+        )  
+      Declare @InvId BIGINT  
+  
+      INSERT INTO @tblResultSelectID  
+                  (AccessionNo)  
+      SELECT item  
+      FROM   fnSplit(@InvestigationID, ',')  
+  
+      select @InvId = AccessionNumber  
+      from   OrderedInvestigations ORD WITH(NOLOCK)  
+             inner join @tblResultSelectID Tbl  
+                     on Tbl.AccessionNo = ORD.ReferredAccessionNo  
+      where  ReferredAccessionNo = AccessionNo  
+             AND ISNULL(ORD.ReferredType, '')not in( 'F', 'ReflexTest' )  
+  
+      DECLARE @ApplicationURL NVARCHAR(MAX)  
+  
+      SELECT @ApplicationURL = COM.ConfigValue  
+      FROM   ConfigOrgMaster COM WITH(NOLOCK)  
+             INNER JOIN ConfigKeyMaster CKM WITH(NOLOCK)  
+                     ON CKM.ConfigKeyID = COM.ConfigKeyID  
+      WHERE  CKM.ConfigKey = 'ApplicationImagesURL'  
+             and COM.OrgID = @OrgID  
+  
+      SET @ApplicationURL=ISNULL(@ApplicationURL, '') + '/GRAPHS/'  
+  
+      --select @InvId                      
+      if( @InvId is not null  
+          AND @InvId > 0 )  
+        BEGIN  
+            select PIF.PatientVisitID,  
+                   PIF.FilePath                           as FilePath,  
+                   PIF.ImageSource,  
+                   @ApplicationURL + + PIF.ServerFilePath as ServerFilePath,  
+                   PIF.Type,  
+                   PIF.ImageID  
+            from   PatientInvestigation PI WITH(NOLOCK)  
+                   inner join PatientInvestigationFiles PIF WITH(NOLOCK)  
+                           on PIF.PatientVisitID = PI.PatientVisitID  
+                              and PIF.InvestigationID = PI.InvestigationID  
+            where  PI.AccessionNumber = @InvId  
+        END  
+      ELSE  
+        BEGIN  
+            INSERT INTO @tblResultSelectID  
+                        (AccessionNo)  
+            SELECT item  
+            FROM   fnSplit(@InvestigationID, ',')  
+  
+            select distinct PIF.PatientVisitID,  
+                            PIF.FilePath                           as FilePath,  
+                            PIF.ImageSource,  
+                            @ApplicationURL + + PIF.ServerFilePath as ServerFilePath,  
+                            PIF.Type,  
+                            PIF.ImageID  
+            from   PatientInvestigation PI WITH(NOLOCK)  
+                   inner join PatientInvestigationFiles PIF WITH(NOLOCK)  
+                           on PIF.PatientVisitID = PI.PatientVisitID  
+                              and PIF.InvestigationID = PI.InvestigationID  
+                              and PI.OrgID = PIF.OrgID  
+                   INNER JOIN @tblResultSelectID Tbl  
+                           on PI.AccessionNumber = Tbl.AccessionNo  
+            where  PI.PatientVisitID = @pVisitID  
+                   and PI.AccessionNumber = Tbl.AccessionNo  
+            order  BY PIF.ImageID desc  
+        END  
+  END 

@@ -1,0 +1,95 @@
+CREATE PROCEDURE PUpdateCaseNumber
+(
+@Id BIGINT,
+@Type VARCHAR(20),
+@SampleId INT,
+@ContainerId Int,
+@OrgID Bigint,
+@MLNo NVARCHAR(256)
+)
+AS
+BEGIN
+BEGIN TRY
+DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)        
+CREATE TABLE #Samplelists1
+(
+ rowid   INT IDENTITY(1, 1),
+sampleid BIGINT,
+pvisitid BIGINT
+)
+
+Declare @PatientVisitID Bigint
+
+
+Select top 1 @PatientVisitID=patientvisitid from patientinvsample where sampleid=@SampleId and orgid=@OrgID
+
+Insert Into #Samplelists1(sampleid,pvisitid)
+SELECT distinct PIS.Sampleid,PIS.PatientVisitID FROM PatientInvSampleMapping PISM 
+INNER JOIN PatientInvSample PIS on PIS.Patientvisitid=PISM.VisitID and PIS.SampleID=PISM.SID and PIS.SampleCode=PISM.SampleID
+Inner join sampletracker St WITH(NOLOCK) on ST.sampleid=  PIS.sampleid  
+Where  PISM.VisitID=@PatientVisitID and PISM.ID=@Id and PISM.Type=@Type and PIS.SampleContainerID= @ContainerId 
+ and  ST.invsamplestatusid not in(6,4)  order by PIS.Sampleid  
+DECLARE @COUNT    INT,
+		@i        INT =1
+		set @COUNT=1
+SELECT @COUNT = Count(sampleid) FROM   #Samplelists1
+
+While(@i<=@COUNT)
+Begin
+
+Declare @MLNNumber nvarchar(250)
+IF  Exists (select 1       
+FROM   ConfigKeyMaster CKM WITH (NOLOCK)       
+INNER JOIN ConfigOrgMaster COM WITH (NOLOCK)       
+ON CKM.ConfigKeyID = COM.ConfigKeyID       
+WHERE  CKM.ConfigKey = 'HideYearinCaseNumber'       
+AND COM.OrgID = @OrgID  )  
+BEGIN  
+--Set @MLNNumber=Ltrim(Rtrim(@MLNo+'-' +convert(nvarchar(10),@i)))   -- number logic    
+--Set @MLNNumber= Ltrim(Rtrim(@MLNo+'-'+RIGHT(YEAR(getdate()), 2)))    
+Set @MLNNumber=Ltrim(Rtrim(@MLNNumber+'-' +char(64+@i)))    -- Alphabet logic    
+--Set @MLNNumber= @MLNNumber+'-'+RIGHT(YEAR(getdate()), 2) -- Alphabet logic    
+END  
+ELSE  
+BEGIN  
+--Set @MLNNumber=Ltrim(Rtrim(@MLNo+'-' +convert(nvarchar(10),@i)))   -- number logic    
+Set @MLNNumber= Ltrim(Rtrim(@MLNo+'-'+RIGHT(YEAR(getdate()), 2)))    
+Set @MLNNumber=Ltrim(Rtrim(@MLNNumber+'-' +char(64+@i)))    -- Alphabet logic    
+--Set @MLNNumber= @MLNNumber+'-'+RIGHT(YEAR(getdate()), 2) -- Alphabet logic   
+END  
+
+Update PIS SET PIS.Barcodenumber=PIS.Barcodenumber+' / '+@MLNNumber,PIS.CaseNumber=@MLNNumber from PatientinvSample PIS 
+Inner Join #Samplelists1 s on s.sampleid=PIS.SampleID and s.pvisitid=PIS.PatientVisitid
+Where PIS.PatientVisitid=@PatientVisitID and s.rowid=@i and PIS.Orgid=@OrgID
+--and (PIS.CaseNumber is null or PIS.CaseNumber='')
+
+
+Update PISM SET PISM.Barcode= PISM.Barcode+' / '+@MLNNumber,PISM.CaseNumber=@MLNNumber from PatientinvSampleMapping PISM 
+Inner Join #Samplelists1 s on s.sampleid=PISM.SID and s.pvisitid=PISM.Visitid
+Where PISM.Visitid=@PatientVisitID and s.rowid=@i and PISM.Orgid=@OrgID
+and PISM.ID=@id and PISM.Type=@type
+
+  Declare @MLnumbers varchar(10)  
+  Set @MLnumbers=Right(@MLNo,4)  
+  Update PatientVisit Set HistoNumber= (select case  
+WHEN left(@MLnumbers, 3) = '000' THEN right(@MLnumbers, (len(@MLnumbers)-3))  
+  
+WHEN left(@MLnumbers, 2) = '00' THEN right(@MLnumbers, (len(@MLnumbers)-2))  
+  
+WHEN left(@MLnumbers, 1) = '0' THEN right(@MLnumbers, (len(@MLnumbers)-1))  
+  
+end)  
+ Where PatientVisitid=@PatientVisitID and orgid=@OrgID  
+    
+set @i=@i+1;    
+End    
+Drop Table #Samplelists1    
+    
+END TRY    
+BEGIN CATCH       
+                                  
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pg @Configvalue = '+cast('' as varchar)    
+      
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace;     
+END CATCH       
+END 

@@ -1,0 +1,235 @@
+CREATE Procedure pSaveDynamicInvValues
+(
+@pUDT [dbo].[UDTCovidReport] READONLY, 
+@GroupID bigint,         
+@Param1 Nvarchar(100),
+@Param2 Nvarchar(100),
+@Param3 Nvarchar(100),
+@Param4 Nvarchar(100),
+@Param5 bigint,        
+@ContextInfo [UDT_Context] READONLY  
+)
+
+AS 
+BEGIN
+
+ Declare @OrgID int,@RoleName Nvarchar(100),@Status Nvarchar(100)
+  set @OrgID = (select OrgID from @ContextInfo)
+ 
+  Declare @LoginID bigint
+  Set @LoginId =(Select LoginId from @ContextInfo)
+  Declare @AutoApproveInvestigationID bigint,@OrgGroupID bigint
+  Declare @AutoApproveValue Nvarchar(100)
+  
+  set @OrgGroupID = (select OrgGroupID from InvOrgGroup where ORgID=@OrgID and AttGroupID=@GroupID)
+   set @AutoApproveInvestigationID = (Select top 1 AutoApproveInvID from CovidReportGroup where GroupID=@OrgGroupID)
+   set @AutoApproveValue = (Select top 1 AutoApproveValue from CovidReportGroup where GroupID=@OrgGroupID)
+  set @RoleName = (select RoleName from @ContextInfo)
+  
+  
+ 
+  If (@RoleName= 'Lab Technician')
+  BEGIN
+  set @Status='Completed'
+  END
+  If (@RoleName= 'SrLabTech')
+  BEGIN
+  set @Status='Validate'
+  END
+
+Create table #InsertTempTable
+(
+VisitID bigint,
+Value Nvarchar(100),
+MedicalRemarks Nvarchar(200),
+PatientInvID bigint,
+InvestigationID bigint,
+AccessionNumber bigint,
+InvestigationValueID bigint,
+Status Nvarchar(100),
+OrgID bigint
+)
+
+Create table #UpdateTempTable
+(
+VisitID bigint,
+Value Nvarchar(100),
+MedicalRemarks Nvarchar(200),
+PatientInvID bigint,
+InvestigationID bigint,
+AccessionNumber bigint,
+InvestigationValueID bigint,
+Status Nvarchar(100),
+OrgID bigint
+)
+
+
+
+Insert into #InsertTempTable (VisitID,Value,MedicalRemarks,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,Status)
+select VisitID,Value,MedicalRemarksID,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,@Status from @pUDT where InvestigationValueID=0 and Value !=''
+
+Insert into #UpdateTempTable (VisitID,Value,MedicalRemarks,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,Status)
+select VisitID,Value,MedicalRemarksID,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,@Status from @pUDT where InvestigationValueID<>0 and Value!=''
+
+
+if Exists(select 1 from #InsertTempTable)
+BEGIN
+Insert into InvestigationValues 
+(
+Name,
+Value,InvestigationID,
+GroupID,PatientVisitID,
+UOMID,Status,CreatedBy,
+CreatedAt,UOMCode,GroupName,
+Orgid,PackageID,PackageName,SequenceNo,UID	,
+ConvValue,
+IsAbnormal)
+Select 
+PI.InvestigationNAme,IT.Value,IT.InvestigationID,PI.GroupID,IT.VisitID,0,IT.Status,@LoginId,Getdate(),IOM.UOMCode,
+PI.GroupName,PI.OrgID,PI.PackageID,PI.PackageName,0,PI.UID,0,PI.IsAbnormal
+from #InsertTempTable IT 
+Inner Join PatientInvestigation PI on IT.AccessionNumber=PI.AccessionNumber and IT.InvestigationID=PI.InvestigationID
+
+Inner Join InvestigationOrgMapping IOM on IOM.InvestigationID=IT.InvestigationID and IOM.OrgID=IT.OrgID
+
+--Update PI SEt PI.MedicalRemarks=UTT.MedicalRemarks from 
+--PatientInvestigation PI
+--Inner join #InsertTempTable UTT on UTT.AccessionNumber=PI.AccessionNumber and UTT.InvestigationID=PI.InvestigationID
+
+Update PI SEt PI.Status=UTT.Status from 
+PatientInvestigation PI
+Inner join #InsertTempTable UTT on UTT.AccessionNumber=PI.AccessionNumber 
+
+Update OI SEt OI.Status=UTT.Status from 
+OrderedInvestigations OI
+Inner join #InsertTempTable UTT on UTT.AccessionNumber=OI.AccessionNumber 
+
+END
+
+if Exists(select 1 from #UpdateTempTable)
+BEGIN
+INSERT INTO InvestigationValueHistory   
+		(InvestigationValueID,   
+		NAME,   
+		Value,   
+		InvestigationID,   
+		GroupID,   
+		PatientVisitID,   
+		UOMID,   
+		Status,   
+		CreatedBy,   
+		CreatedAt,   
+		ModifiedBy,   
+		ModifiedAt,   
+		UOMCode,   
+		GroupName,   
+		Orgid,   
+		PackageID,   
+		PackageName,   
+		UID,   
+		Dilution,   
+		DeviceID,   
+		DeviceValue,   
+		PRECISION,   
+		DeviceActualValue,   
+		ConvValue,   
+		DeviceErrorCode,
+		IsAbnormal) 
+
+		SELECT distinct iv.InvestigationValueID,   
+		iv.NAME,   
+		iv.Value,   
+		iv.InvestigationID,   
+		iv.GroupID,   
+		iv.PatientVisitID,   
+		iv.UOMID,   
+		iv.Status,   
+		iv.CreatedBy,   
+		iv.CreatedAt,   
+		iv.ModifiedBy,   
+		iv.ModifiedAt,   
+		iv.UOMCode,   
+		iv.GroupName,   
+		iv.Orgid,   
+		iv.PackageID,   
+		iv.PackageName,   
+		iv.UID,   
+		iv.Dilution,   
+		iv.DeviceID,   
+		iv.DeviceValue,   
+		iv.PRECISION,   
+		iv.DeviceActualValue,   
+		iv.ConvValue,   
+		iv.DeviceErrorCode ,
+		ISNULL(iv.IsAbnormal,'N')
+		   from 
+InvestigationValues IV 
+Inner join #UpdateTempTable UTT ON  IV.PatientvisitID = UTT.visitID and IV.OrgID=UTT.OrgID and UTT.InvestigationID=IV.InvestigationID and IV.Value!=UTT.Value
+
+Update IV Set IV.Value=UTT.Value from
+InvestigationValues IV 
+Inner join #UpdateTempTable UTT on UTT.InvestigationValueID=IV.InvestigationValueID
+
+--Update PI SEt PI.MedicalRemarks=UTT.MedicalRemarks from 
+--PatientInvestigation PI
+--Inner join #UpdateTempTable UTT on UTT.AccessionNumber=PI.AccessionNumber and UTT.InvestigationID=PI.InvestigationID
+
+Update PI SEt PI.Status=UTT.Status from 
+PatientInvestigation PI
+Inner join #UpdateTempTable UTT on UTT.AccessionNumber=PI.AccessionNumber 
+
+Update OI SEt OI.Status=UTT.Status from 
+OrderedInvestigations OI
+Inner join #UpdateTempTable UTT on UTT.AccessionNumber=OI.AccessionNumber 
+
+Update IV SEt IV.Status=UTT.Status from 
+InvestigationValues IV 
+Inner Join PatientInvestigation PI ON IV.PatientvisitID = PI.PatientvisitID and IV.OrgID=PI.OrgID and PI.InvestigationID=IV.InvestigationID
+Inner join #UpdateTempTable UTT ON UTT.AccessionNumber=PI.AccessionNumber 
+
+END
+
+if Exists(select 1 from @pUDT where Value=@AutoApproveValue and InvestigationID=@AutoApproveInvestigationID)
+BEGIN
+Create table #TempAutoApprove
+(
+RowID int,
+VisitID bigint,
+Value Nvarchar(100),
+MedicalRemarks Nvarchar(200),
+PatientInvID bigint,
+InvestigationID bigint,
+AccessionNumber bigint,
+InvestigationValueID bigint,
+Status Nvarchar(100),
+OrgID bigint
+)
+
+Insert into #TempAutoApprove (RowID,VisitID,Value,MedicalRemarks,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,Status)
+select Row_Number() OVER(ORDER BY VisitID), VisitID,Value,MedicalRemarksID,PatientInvID,InvestigationID,AccessionNumber,InvestigationValueID,OrgID,'Approve' from @pUDT 
+where InvestigationValueID<>0 and Value!='' and Value=@AutoApproveValue and InvestigationID=@AutoApproveInvestigationID
+
+
+Update PI SEt PI.Status=UTT.Status,PI.ApprovedAt=GETDATE(),PI.ApprovedBy=@LoginId,PI.ModifiedAt=GETDATE(),PI.ModifiedBy=@LoginID from 
+PatientInvestigation PI
+Inner join #TempAutoApprove UTT on UTT.AccessionNumber=PI.AccessionNumber 
+
+Update OI SEt OI.Status=UTT.Status,OI.ModifiedAt=GETDATE(),OI.ModifiedBy=@LoginID from 
+OrderedInvestigations OI
+Inner join #TempAutoApprove UTT on UTT.AccessionNumber=OI.AccessionNumber 
+
+Update IV SEt IV.Status=UTT.Status,IV.ModifiedAt=Getdate(),IV.ModifiedBy=@LoginID from 
+InvestigationValues IV 
+Inner Join PatientInvestigation PI ON IV.PatientvisitID = PI.PatientvisitID and IV.OrgID=PI.OrgID and PI.InvestigationID=IV.InvestigationID
+Inner join #TempAutoApprove UTT ON UTT.AccessionNumber=PI.AccessionNumber 
+
+Insert into CovidReportNotification
+select VisitID,@OrgID,0 from #TempAutoApprove
+
+END
+
+
+Drop table #InsertTempTable
+Drop table #UpdateTempTable
+END
+

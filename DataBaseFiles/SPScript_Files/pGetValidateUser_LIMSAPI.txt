@@ -1,0 +1,227 @@
+CREATE PROCEDURE [dbo].[pGetValidateUser_LIMSAPI] 
+     @pUserName [nvarchar] (255)
+	,@pPassword [nvarchar] (255)
+AS
+DECLARE @ServerDate DATETIME
+declare @p2 dbo.UDT_Context
+insert into @p2 values(0,NULL,N'',0,0,NULL,0,0,NULL,N'',0,0,N'',NULL,NULL,0,0,0,N'en-GB',0,NULL,NULL,NULL,NULL)
+
+DECLARE @pLoginID BIGINT
+
+SET @ServerDate = GETDATE()
+
+DECLARE @loginID BIGINT
+DECLARE @OrgAttempts BIGINT
+DECLARE @pOrgID INT
+DECLARE @OrgID [int]
+
+	DECLARE @Islocked [NVARCHAR] (1)
+	DECLARE @IsExpired [NVARCHAR] (1) 
+SET @Islocked = 'N'
+SET @IsExpired = 'N'
+
+DECLARE @pwdexpDate DATETIME
+DECLARE @transpwdexpdate DATETIME
+DECLARE @currentdate DATETIME
+DECLARE @login BIGINT
+
+SELECT @login = loginid
+FROM Users
+
+BEGIN
+	SELECT @loginID = L.LoginID
+	FROM [Login] L(NOLOCK)
+	WHERE L.LoginName = @pUserName
+		AND L.Password = @pPassword
+		AND L.STATUS != 'D'
+		AND L.IsLocked = 'N'
+
+	SELECT @Islocked = isnull(Islocked, 'N')
+	FROM LOGIN (NOLOCK)
+	WHERE loginID = @loginID
+
+	SELECT @OrgID = - 1
+	CREATE TABLE #TempLogin
+	(
+	LoginID BIGINT,
+	LoginName NVARCHAR(500),
+	IsLocked NVARCHAR(10) default '',
+	OrgID BIGINT,
+	Status NVARCHAR(1),
+	BlockedFrom DATETIME,
+	BlockedTo DATETIME,
+	BlockReason NVARCHAR(500) default '',
+	IsExpired NVARCHAR(1),
+	Token NVARCHAR(100),
+	OrganizationDisplayName NVARCHAR(500),
+	OrganizationName NVARCHAR(500),
+	OrgCode NVARCHAR(20) default '',
+	Password NVARCHAR(20) default '####'
+	)
+
+	IF (@loginID > 0)
+	BEGIN
+		DECLARE @Validto DATETIME
+		DECLARE @TodayDate DATETIME
+		DECLARE @BlockedDate DATETIME
+
+		DELETE LoggedInUsers
+		WHERE LoginID = @loginID
+			--OR SessionID = @SessionID
+
+		INSERT INTO LoggedInUsers (
+			LoginID
+			,SessionID
+			,CreatedAt
+			,createdby
+			)
+		VALUES (
+			@loginID
+			,NEWID() 
+			,@ServerDate
+			,@login
+			)
+
+		SELECT @TodayDate = DATEADD(d, DATEDIFF(d, 0, @ServerDate), 0)
+
+		SELECT @Validto = CONVERT(NVARCHAR(10), EndDTTM, 103)
+			,@pwdexpDate = CONVERT(NVARCHAR(10), LoginPwdExpDate, 103)
+			,@transpwdexpdate = CONVERT(NVARCHAR(10), TransPwdExpDate, 103)
+		FROM LOGIN (NOLOCK)
+		WHERE loginID = @loginID
+
+		SELECT @BlockedDate = CASE 
+				WHEN BlockedTo IS NULL
+					THEN CONVERT(NVARCHAR(10), BlockedFrom + 7, 103)
+				ELSE CONVERT(NVARCHAR(10), BlockedTo, 103)
+				END
+		FROM LOGIN (NOLOCK)
+		WHERE loginID = @loginID
+			AND @TodayDate BETWEEN CONVERT(NVARCHAR(10), BlockedFrom, 103)
+				AND CASE 
+						WHEN BlockedTo IS NULL
+							THEN CONVERT(NVARCHAR(10), BlockedFrom + 7, 103)
+						ELSE CONVERT(NVARCHAR(10), BlockedTo, 103)
+						END
+			OR (
+				@TodayDate = BlockedFrom
+				AND @TodayDate = BlockedTo
+				)
+
+		IF (@Validto <> '')
+		BEGIN
+			IF (@Validto < @TodayDate)
+			BEGIN
+				UPDATE LOGIN
+				SET IsFirstLogin = 'N'
+					,ModifiedAt = @ServerDate
+					,ModifiedBy = @login
+				WHERE loginID = @loginID
+			END
+		END
+
+		IF (@pwdexpDate <> '')
+		BEGIN
+			IF (@pwdexpDate < @TodayDate)
+			BEGIN
+				UPDATE LOGIN
+				SET IsFirstLogin = 'N'
+					,ModifiedAt = @ServerDate
+					,ModifiedBy = @login
+				WHERE loginID = @loginID
+
+				SET @IsExpired = 'Y'
+			END
+		END
+	END
+	ELSE
+	BEGIN
+		DECLARE @UserExist BIGINT
+
+		SET @UserExist = (
+				SELECT COUNT(LoginID)
+				FROM [Login](NOLOCK)
+				WHERE LoginName = @pUserName
+					AND IsLocked = 'N'
+					AND STATUS != 'D'
+				)
+
+		IF (@UserExist > 0)
+		BEGIN
+			DECLARE @NoOfFailure BIGINT
+
+			SET @NoOfFailure = (
+					SELECT isnull(NoOfFailureAttempts, 0)
+					FROM [Login](NOLOCK)
+					WHERE LoginName = @pUserName
+					)
+
+			SELECT @OrgID = (
+					SELECT OrgID
+					FROM [Login](NOLOCK)
+					WHERE LoginName = @pUserName
+					)
+
+			SELECT @OrgAttempts = ConfigValue
+			FROM ConfigOrgMaster COM(NOLOCK)
+			INNER JOIN ConfigKeyMaster CKM(NOLOCK) ON com.ConfigKeyID = ckm.ConfigKeyID
+			WHERE ConfigKey = 'NoOfHit'
+				AND OrgID = @OrgID
+
+			IF (@NoOfFailure = (@OrgAttempts - 1))
+				UPDATE [Login]
+				SET IsLocked = 'Y'
+					,NoOfFailureAttempts = @NoOfFailure + 1
+				WHERE LoginName = @pUserName
+			ELSE
+				UPDATE [Login]
+				SET NoOfFailureAttempts = @NoOfFailure + 1
+					,ModifiedAt = @ServerDate
+					,ModifiedBy = @login
+				WHERE LoginName = @pUserName
+		END
+	END
+	;
+
+	with cte
+	as
+	(
+	SELECT L.LoginID
+		,L.LoginName
+		,L.OrgID,
+		L.Status,
+	L.BlockedFrom,
+	L.BlockedTo,
+	IsNULL(L.BlockReason, '') as BlockReason,
+	@IsExpired as IsExpired,
+	SessionID as Token
+	FROM [Login] L(NOLOCK)
+	---JOIN ROLE R ON L.OrgID = R.OrgID
+	JOIN LoggedInUsers LIS ON L.loginID = LIS.LoginID
+	WHERE L.loginID = @loginID
+	AND L.STATUS != 'D'
+    AND L.IsLocked = 'N'
+	)
+	INSERT INTO #TempLogin(LoginID,LoginName,OrgID,Status,BlockedFrom,BlockedTo,IsExpired,Token,
+	OrganizationDisplayName,OrganizationName)
+	SELECT LoginID,LoginName,C.OrgID,Status,BlockedFrom,BlockedTo,IsExpired,C.Token,O.OrgDisplayName,O.Name FROM 
+	CTE C 
+	INNER JOIN Organization O ON O.ORGID=C.OrgID
+
+
+	SELECT * FROM #TempLogin
+
+	SELECT @pLoginID=LoginId from #TempLogin
+
+
+if @pLoginID > 0
+BEGIN
+EXEC pGetUserRoles @pLoginID=@pLoginID,@ContextInfo=@p2
+END
+
+
+
+DROP TABLE #TempLogin
+	
+
+END

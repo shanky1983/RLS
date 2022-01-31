@@ -1,0 +1,362 @@
+Create PROCEDURE pgetinterfacedvalue_worklist ( @pWorkListType NVARCHAR(50),   
+@pSearchID                                                     BIGINT,   
+@TestType                                                      NVARCHAR(20),   
+@pOrgID                                                        INT,   
+@pWLMode                                                       NVARCHAR(20),   
+@FromDate                                                      NVARCHAR(75),   
+@ToDate                                                        NVARCHAR(75),   
+@MinVistId                                                     BIGINT,   
+@MaxVistId                                                     BIGINT,   
+@visitnumber                                                   NVARCHAR (50),   
+@ContextInfo [UDT_CONTEXT] readonly )   
+AS   
+  BEGIN   
+    DECLARE @visitID BIGINT   
+    IF( Isnull(@visitnumber, '') <> '' )   
+    BEGIN   
+      SELECT @visitID = patientvisitid   
+      FROM   patientvisit   
+      WHERE  visitnumber = @visitnumber   
+    END   
+	
+	Declare @LoginID bigint
+	select @LoginID=LoginID from @ContextInfo
+
+	     
+		Declare @OrgGroupID int
+		select @OrgGroupID=OrgGroupID from InvOrgGroup where AttGroupID=@pSearchID and OrgID=@pOrgID
+
+		create table #tempsequence (ParentSequenceNumber int,SubGroupSequenceNumber int,InvestigationID bigint)
+
+		insert into #tempsequence (ParentSequenceNumber,SubGroupSequenceNumber,InvestigationID)
+		exec PGetGrpContentSequenceMaster @OrgGroupID=@OrgGroupID,@OrgID=@pOrgID
+
+    IF (@pWorkListType='Interface_value')   
+    BEGIN   
+	
+
+
+      DECLARE @CodeTypeID INT   
+      SELECT     @CodeTypeID=com.codetypeid   
+      FROM       codingschemeorgmapping CSOM WITH (nolock)   
+      INNER JOIN codingschememaster COM WITH (nolock)   
+      ON         com.codetypeid=csom.codetypeid   
+      WHERE      csom.orgid=@pOrgID   
+      AND        codingschemaname='ABBREVIATION CODE'   
+      CREATE TABLE #tblaccessionnos   
+                   (   
+                                accessionnumber   BIGINT,   
+                                patientvisitid    BIGINT,   
+                                orgid             INT,   
+                                investigationname NVARCHAR(255),   
+                                investigationid   INT,
+								ParentSequenceNumber  int,
+								SubSequenceNumber     int,
+								PatientInvID bigint  ,
+								Barcodenumber nvarchar(100)  
+                   )   
+                   If (ISnull(@visitID,'') <> '')
+                   BEGIN
+      INSERT INTO #tblaccessionnos   
+                  (   
+                              accessionnumber,   
+                              patientvisitid,   
+                              orgid,   
+                              investigationid,
+							  ParentSequenceNumber,
+							  SubSequenceNumber ,
+							  PatientInvID ,
+							  Barcodenumber
+                  )   
+      SELECT DISTINCT oi.accessionnumber,   
+                      oi.visitid,   
+                      oi.orgid,   
+                      pi.investigationid,
+					   ts.ParentSequenceNumber,
+					  ts.SubGroupSequenceNumber,
+					  pi.PatientInvID  ,
+					  PIV.BarcodeNumber
+		
+					 
+      FROM            orderedinvestigations OI   
+      INNER JOIN      patientinvestigation PI 
+      ON pi.accessionnumber=oi.accessionnumber 
+	  
+      Inner join Patientinvsample PIV on PIV.PatientvisitID=PI.PatientvisitID and 
+      PIV.Orgid=PI.Orgid and PIV.SampleCode=PI.SampleID
+	  inner join      #tempsequence ts on ts.InvestigationID=pi.InvestigationID 
+     
+ WHERE           oi.id = @pSearchID   
+      AND             oi.orgid = @pOrgID   
+      AND             oi.createdat BETWEEN coalesce(@FromDate, oi.createdat) AND COALESCE(@ToDate, oi.createdat)  
+      AND OI.visitID=@visitID
+      AND             oi.status IN ('SampleReceived',   
+                                    'Pending')   
+  END
+  Else IF(@visitnumber ='')
+  BEGIN
+   INSERT INTO #tblaccessionnos     
+                  (     
+                              accessionnumber,     
+                              patientvisitid,     
+                              orgid,     
+                              investigationid,  
+         ParentSequenceNumber,  
+         SubSequenceNumber ,  
+         PatientInvID ,  
+         Barcodenumber  
+                  )     
+      SELECT DISTINCT oi.accessionnumber,     
+                      oi.visitid,     
+                      oi.orgid,     
+                      pi.investigationid,  
+        ts.ParentSequenceNumber,  
+       ts.SubGroupSequenceNumber,  
+       pi.PatientInvID  ,  
+       PIV.BarcodeNumber  
+    
+        
+      FROM            orderedinvestigations OI     
+      INNER JOIN      patientinvestigation PI     
+        ON              pi.accessionnumber=oi.accessionnumber     
+     
+      Inner join Patientinvsample PIV on PIV.PatientvisitID=PI.PatientvisitID and PIV.Orgid=PI.Orgid and PIV.SampleCode=PI.SampleID  
+   inner join      #tempsequence ts on ts.InvestigationID=pi.InvestigationID   
+   
+      WHERE           oi.id = @pSearchID     
+      AND             oi.orgid = @pOrgID     
+      AND             oi.createdat BETWEEN coalesce(@FromDate, oi.createdat) AND COALESCE(@ToDate, oi.createdat)   
+  
+      AND             oi.status IN ('SampleReceived',     
+                                    'Pending')
+  END
+									
+
+									
+
+
+	 
+      UPDATE tba   
+      SET        tba.investigationname= (   
+                 CASE   
+                        WHEN Isnull(cm.codename,'')='' THEN pi.investigationname   
+                            ELSE cm.codename   
+                 END) FROM       #tblaccessionnos tba   
+      INNER JOIN patientinvestigation pi   
+      ON    pi.accessionnumber = tba.accessionnumber   
+      AND        pi.investigationid=tba.investigationid   
+      INNER JOIN codemapper cp   
+      ON         cp.identifyingid=pi.investigationid   
+      INNER JOIN codemaster cm   
+      ON         cm.codemasterid=cp.codemasterid   
+      AND        cm.codetype=cp.identifyingtype   
+      AND        cm.codeschemeid=@CodeTypeID   
+      WHERE      cm.codetype='Investigations'   
+
+      UPDATE tbs SET tbs.investigationname=iom.displaytext   
+      FROM       #tblaccessionnos TBS   
+      INNER JOIN investigationorgmapping IOM   
+      ON         iom.investigationid=tbs.investigationid   
+      AND        iom.orgid=tbs.orgid   
+      WHERE      isnull(tbs.investigationname,'')='' 
+
+
+ create table #tblsequence (InvestigationName varchar (100),ParentSequenceNumber int,SubSequenceNumber int)
+
+	  Insert into #tblsequence (InvestigationName,ParentSequenceNumber,SubSequenceNumber) 
+	  select Distinct T.InvestigationName,T.ParentSequenceNumber,T.SubSequenceNumber from #tblaccessionnos T order by T.ParentSequenceNumber,T.SubSequenceNumber asc
+
+	    
+      DECLARE @cols AS  NVARCHAR(max)   
+      DECLARE @query AS NVARCHAR(max)   
+
+
+
+      SET @cols = stuff(   
+      (   
+	              SELECT   ',' + quotename(investigationname)   
+         FROM   #tblsequence oi
+	order by OI.ParentSequenceNumber,OI.SubSequenceNumber asc
+		 
+		 FOR xml path(''), type ).value('.', 'NVARCHAR(MAX)'), 1, 1, '' )   
+
+      SET @cols = @cols + ',' + '[Performed By]'     
+
+            declare @NextWorkListID nvarchar(30), 
+                    @Curdate        datetime 
+
+            set @NextWorkListID='' 
+
+            SELECT @Curdate = dbo.fn_GetServerDate(@ContextInfo) 
+
+	   DECLARE @TempInvestigationStatus Table
+        (
+           Status     nvarchar(100)
+        )
+
+		 Insert into @TempInvestigationStatus
+                  (Status)
+      select 'SampleReceived'
+
+      Insert into @TempInvestigationStatus
+                  (Status)
+      select 'Pending'
+
+						 
+			 IF Exists(Select     1
+                From       PatientInvestigation PINV
+                INNER JOIN #tblaccessionnos T  ON T.Accessionnumber = PINV.Accessionnumber
+                LEFT join  WorklistDetail WLD  ON WLD.PatientInvId = T.PatientInvID
+                left JOIN  WorklistMaster WLM  ON WLM.WMID = wld.WMID AND T.OrgID = PINV.OrgID AND PINV.GroupID = ISNull(@OrgGroupID, PINV.GroupID)
+                AND Pinv.PatientVisitID = ISNull(@visitID, Pinv.PatientVisitID)
+				 inner join @TempInvestigationStatus TI on TI.Status=PINV.Status
+                where PINV.OrgID = @pOrgID AND WLD.PatientInvId IS NULL)
+                --AND  PINV.Status in (Select Status from   @TempInvestigationStatus)
+ BEGIN
+ 
+			  IF( @pWLMode = 'New' )
+              BEGIN
+
+
+	 Exec pGetNextID @pOrgID,'WLN',@NextWorkListID out
+
+                        Declare @ReturnId int =0 
+
+                        Insert into WorklistMaster 
+                                    (WorklistId, 
+                                     WorklistType, 
+                                     WorklistTypeId, 
+                                     Fromdate, 
+                                     ToDate, 
+                                     CreatedBy, 
+                                     CreatedAt, 
+                                     OrgId) 
+                        Select @NextWorkListID, 
+                               @pWorkListType, 
+                               @pSearchID, 
+                               @FromDate, 
+                               @ToDate, 
+						 @LoginID,
+                         --(select LoginID from   @ContextInfo),
+                         @Curdate,
+                         @pOrgID
+
+                  Select @ReturnId = IsNull(WMID, 0)
+                  from   WorklistMaster 
+   where  WorklistId = @NextWorkListID  and orgid=@pOrgID
+
+                  If( @ReturnId > 0 )
+                    Begin
+                        Insert into WorklistDetail
+                                    (WMID,
+                                     PatientInvId)
+                        Select     Distinct @ReturnId,
+                                            PINV.PatientInvID
+                        From       #tblaccessionnos T 
+                        INNER JOIN PatientInvestigation PINV ON PINV.Patientinvid = T.Patientinvid
+                        LEFT join  WorklistDetail WLD  ON WLD.PatientInvId = PINV.PatientInvID
+                        where      PINV.OrgID = @pOrgID
+                                    
+                    AND PINV.WorkListID is Null  
+					
+       Update PINV Set PINV.WorkListID=@NextWorkListID ,PINV.WorklistType=@pWorkListType,PINV.WorklistTypeID=@pSearchID,                                                                                                       
+                   PINV.WorklistCreatedby =@LoginID,PINV.WorklistCreatedAt = @Curdate  From PatientInvestigation PINV WITH(ROWLOCK)                                     
+                  INNER JOIN #tblaccessionnos T ON PINV.Patientinvid= T.Patientinvid                                              
+                  inner join InvestigationOrgMapping IOM  on IOM.InvestigationID = PINV.InvestigationID and IOM.Orgid = Pinv.Orgid                                              
+                  --inner join @TempDepart TD on TD.DeptID = IOM.DeptID                                                                              
+                  INNER JOIN PatientVisit PV  ON PV.PatientVisitId=PINV.PatientVisitID and PV.PatientVisitId= ISNULL(@visitID,PV.PatientVisitId)    
+                                  
+                  where PINV.Status in (Select Status from @TempInvestigationStatus)  AND PINV.OrgID=@pOrgID AND PINV.WorkListID is Null                                            
+                 END    
+				 End
+				 END
+	 
+	IF(@pWLMode = 'NEW')
+	BEGIN
+	IF (ISNULL(@NextWorkListID,'')<>'')
+	BEGIN
+      IF( Isnull(@visitID, '' ) <> '' )   
+
+	
+
+BEGIN   
+
+  SET @query = 'select Row_Number() over (order by Visitnumber) as ''SL.No'', *  from  
+   ( select Distinct (PV.VisitNumber + '+  '''  (''' +' + OI.Barcodenumber + '+  ''')''' +')  as VisitNumber,P.Name as ''Patient Name'',OI.InvestigationName,IV.Value as 
+   Result from Patientvisit PV    
+  Inner Join Patient P on P.PatientID=Pv.PatientID and P.OrgID=Pv.OrgID   
+  Inner Join #tblAccessionNos OI on Pv.PatientvisitID=OI.PatientvisitID and PV.ORgID=OI.OrgId   
+  Inner Join PatientInvestigation PI on PI.Accessionnumber=OI.Accessionnumber  
+   Inner join  WorklistDetail WLD  ON WLD.PatientInvId = PI.PatientInvID
+   Inner JOIN  WorklistMaster WLM  ON WLM.WMID = wld.WMID
+   Left join InvestigationValues IV on IV.PatientvisitID=OI.PatientvisitID      
+   and IV.InvestigationID=OI.InvestigationId and IV.Orgid=PI.OrgID where  WLM.WorklistID='+CONVERT(varchar,@NextWorkListID)+' and    
+   PV.PatientvisitID = '+CONVERT (VARCHAR,@visitID) +') as x  pivot(max(Result)for InvestigationName in (' + @cols + ')  ) p '   
+END   
+else   
+BEGIN  
+
+  SET @query = 'select Row_Number() over (order by Visitnumber) as ''SL.No'', *  from     
+  ( select Distinct (PV.VisitNumber + '+  '''  (''' +' + OI.Barcodenumber + '+  ''')''' +')  as VisitNumber,P.Name as ''Patient Name'',OI.InvestigationName,IV.Value as Result from Patientvisit PV    
+  Inner Join Patient P on P.PatientID=Pv.PatientID and P.OrgID=Pv.OrgID   
+  Inner Join #tblAccessionNos OI on Pv.PatientvisitID=OI.PatientvisitID and PV.ORgID=OI.OrgId   
+  Inner Join PatientInvestigation PI on  PI.Accessionnumber=OI.Accessionnumber  
+   inner join  WorklistDetail WLD  ON WLD.PatientInvId = PI.PatientInvID
+   inner JOIN  WorklistMaster WLM  ON WLM.WMID = wld.WMID
+   Left join InvestigationValues IV on IV.PatientvisitID=OI.PatientvisitID and IV.InvestigationID=OI.InvestigationId and IV.Orgid=PI.OrgID  where     
+    WLM.WorklistID='+CONVERT(varchar,@NextWorkListID)+' ) as x      
+   pivot(max(Result)for InvestigationName in (' + @cols + ') ) p '      
+END  
+
+END
+ end
+ ELSE BEGIN
+ 
+  IF( Isnull(@visitID, '' ) <> '' )   
+
+	
+
+BEGIN   
+
+  SET @query = 'select Row_Number() over (order by Visitnumber) as ''SL.No'', *  from   
+  ( select Distinct (PV.VisitNumber + '+  '''  (''' +' + OI.Barcodenumber + '+  ''')''' +')  as VisitNumber,P.Name as ''Patient Name'',ISNULL(WLM.WorkListID,'''') as WorkListID,OI.InvestigationName,IV.Value as Result from Patientvisit PV    
+  Inner Join Patient P on P.PatientID=Pv.PatientID and P.OrgID=Pv.OrgID   
+  Inner Join #tblAccessionNos OI on Pv.PatientvisitID=OI.PatientvisitID and PV.ORgID=OI.OrgId   
+  Inner Join PatientInvestigation PI on PI.Accessionnumber=OI.Accessionnumber  
+   Inner join  WorklistDetail WLD  ON WLD.PatientInvId = PI.PatientInvID
+   Inner JOIN  WorklistMaster WLM  ON WLM.WMID = wld.WMID
+   Left join InvestigationValues IV on IV.PatientvisitID=OI.PatientvisitID      
+   and IV.InvestigationID=OI.InvestigationId and IV.Orgid=PI.OrgID where      
+   PV.PatientvisitID = '+CONVERT (VARCHAR,@visitID) +') as x  pivot(max(Result)for InvestigationName in (' + @cols + ')  ) p '       
+     
+END   
+else   
+BEGIN  
+
+  SET @query = 'select Row_Number() over (order by Visitnumber) as ''SL.No'', *  from     
+  ( select Distinct (PV.VisitNumber + '+  '''  (''' +' + OI.Barcodenumber + '+  ''')''' +')  as VisitNumber,P.Name as ''Patient Name'',ISNULL(WLM.WorkListID,'''') as WorkListID,OI.InvestigationName,IV.Value as Result from Patientvisit PV    
+  Inner Join Patient P on P.PatientID=Pv.PatientID and P.OrgID=Pv.OrgID   
+  Inner Join #tblAccessionNos OI on Pv.PatientvisitID=OI.PatientvisitID and PV.ORgID=OI.OrgId   
+  Inner Join PatientInvestigation PI on  PI.Accessionnumber=OI.Accessionnumber  
+   Inner join  WorklistDetail WLD  ON WLD.PatientInvId = PI.PatientInvID
+   Inner JOIN  WorklistMaster WLM  ON WLM.WMID = wld.WMID
+   Left join InvestigationValues IV on IV.PatientvisitID=OI.PatientvisitID and IV.InvestigationID=OI.InvestigationId and IV.Orgid=PI.OrgID )    
+    as x  pivot(max(Result)for InvestigationName in (' + @cols + ') ) p '   
+
+	
+END  
+ END
+
+ 
+execute (@query)  
+IF( @pWLMode = 'New' and ISNULL(@NextWorkListID,'')<>'')
+
+begin
+select U.Name as LoginName,@NextWorkListID as WorkListID from @ContextInfo C
+inner join Users U on c.LoginID=U.LoginID and C.OrgID=U.OrgID
+end
+DROP TABLE #tblaccessionnos   
+DROP TABLE #tblsequence 
+DROP TABLE #tempsequence
+END   
+END

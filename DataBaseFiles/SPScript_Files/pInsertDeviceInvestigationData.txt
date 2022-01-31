@@ -1,0 +1,55 @@
+CREATE PROCEDURE [dbo].[pInsertDeviceInvestigationData]        
+@DeviceInvestigationData [UDT_DeviceInvestigationData] READONLY,                                
+@OrgID INT                                   
+WITH EXECUTE AS OWNER                                                            
+AS                                                            
+BEGIN          
+ DECLARE @pCreatedAt datetime                           
+      SET @pCreatedAt = GETDATE();                                                                                                               
+    INSERT INTO DeviceInvestigationData(UID
+,DeviceID
+,GroupID
+,MessageID
+,PatientID
+,SampleID
+,ContainerNo
+,OrderedDTTM
+,SpecimenCollectionDTTM
+,TestCode
+,Value
+,ValueUOM
+,ReferenceRange
+,AbnormalFlag
+,ResultType
+,ResultCompletedDTTM
+,CreatedAt
+,RawDataLogID
+,IsProcessed
+,OrgName
+,ProcessedAt)
+    SELECT UID
+,DeviceID
+,GroupID
+,MessageID
+,PatientID
+,SampleID
+,ContainerNo
+,OrderedDTTM
+,SpecimenCollectionDTTM
+,TestCode
+,Value
+,ValueUOM
+,ReferenceRange
+,AbnormalFlag
+,ResultType
+,ResultCompletedDTTM
+,@pCreatedAt
+,RawDataLogID
+,IsProcessed
+,OrgName
+,ProcessedAt FROM @DeviceInvestigationData   where TestCode not in('992','993','994')    
+END 
+
+
+
+GO

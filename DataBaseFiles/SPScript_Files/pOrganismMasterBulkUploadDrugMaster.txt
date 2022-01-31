@@ -1,0 +1,101 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO  
+CREATE PROCEDURE [dbo].[pOrganismMasterBulkUploadDrugMaster]  
+       @pOrgID INT,   
+       @pUploadXLMasterType [VARCHAR](50),  
+       @pUploadXLMasterCode [VARCHAR](50),  
+       @pUDTOrganismBulkUpload  [dbo].[UDTOrganismBulkUploadDrug] READONLY,  
+       @ContextInfo [UDT_Context] READONLY   
+WITH EXECUTE AS OWNER  AS   
+BEGIN  
+BEGIN TRY  
+      DECLARE @CreatedAt DATETIME=GETDATE(),@LanguageCode nvarchar(5), @CreatedBy BIGINT      
+      SELECT @CreatedBy = LoginID,@LanguageCode=LanguageCode  
+      FROM   @ContextInfo   
+  
+IF(@pUploadXLMasterType='DM')  
+BEGIN   
+CREATE TABLE #OrganismBulkUploadDrug  
+        (   
+           BrandName        VARCHAR(100),  
+     BrandCode        VARCHAR(100),  
+     FamilyName  VARCHAR(100),  
+           OrgID   INT,  
+     FamilyId   BIGINT DEFAULT 0,  
+     DrugID   BIGINT DEFAULT 0,  
+     IsValid   VARCHAR(10) DEFAULT 'YES',   
+     ErrorDescription NVARCHAR(250) NULL  
+        )   
+  
+      INSERT INTO #OrganismBulkUploadDrug(BrandName,BrandCode,FamilyName,OrgID)  
+      SELECT T.BrandName,   
+             T.BrandCode,   
+    T.FamilyName,  
+             @pOrgID   
+      FROM   @pUDTOrganismBulkUpload T   
+  
+   UPDATE T SET T.FamilyId=IDFM.FamilyId  
+          FROM #OrganismBulkUploadDrug T  
+             INNER JOIN InvestigationDrugFamilyMaster IDFM   
+                    ON IDFM.familyname = T.FamilyName  AND IDFM.OrgID = @pOrgID   
+     
+    
+  
+      UPDATE T SET T.DrugID=IDB.DrugID  
+          FROM #OrganismBulkUploadDrug T  
+             INNER JOIN InvestigationDrugBrand IDB   
+                    ON IDB.BrandName = T.BrandName AND IDB.Code=T.BrandCode   
+     AND IDB.FMID=T.FamilyId  AND  IDB.OrgID = @pOrgID   
+     WHERE T.FamilyId>0  
+        
+      DELETE from #OrganismBulkUploadDrug   
+      WHERE  ( BrandName = ''   
+                OR BrandName Is Null )   
+             and ( BrandCode = ''   
+                    OR BrandCode Is Null )   
+             and ( FamilyName = ''   
+                    OR FamilyName Is Null )   
+        
+    
+   UPDATE T1    
+      SET    T1.IsValid = 'NO',  
+          ErrorDescription=(CASE WHEN (T1.DrugID IS NOT NULL  AND T1.DrugID > 0 ) THEN 'BRAND NAME AND BRANDCODE AND FAMILY NAME ALREADY EXISTS' END)  
+      FROM   #OrganismBulkUploadDrug T1 with(NOLOCK)    
+      WHERE  DrugID <> 0  AND DrugID IS NOT NULL   
+  
+   UPDATE T1    
+      SET    T1.IsValid = 'NO',  
+          ErrorDescription=(CASE WHEN (T1.FamilyId IS NOT NULL  AND T1.FamilyId <= 0 ) THEN 'PROVIDE FAMILY NAME NOT IN MASTERS' END)  
+      FROM   #OrganismBulkUploadDrug T1 with(NOLOCK)    
+      WHERE  FamilyId <= 0 AND FamilyId IS NOT NULL  
+  
+  
+   INSERT INTO InvestigationDrugBrand  
+    (BrandName,  
+     FMID,  
+     OrgID,  
+     Code,  
+     CreatedAt,  
+     CreatedBy,  
+     LangCode)  
+       SELECT T.BrandName,  
+           T.FamilyId,  
+     @pOrgID,  
+     BrandCode,  
+           @CreatedAt,  
+     @CreatedBy,  
+     @LanguageCode  
+           FROM #OrganismBulkUploadDrug T WHERE ISNULL (T.IsValid,'')<> 'NO' --AND ISNULL(T.FamilyId,0)=0  
+       
+   SELECT BrandName, BrandCode,FamilyName,ErrorDescription  
+      FROM   #OrganismBulkUploadDrug    
+      WHERE  IsValid = 'NO'    
+  
+      DROP TABLE #OrganismBulkUploadDrug    
+END  
+END TRY  
+BEGIN CATCH  
+END CATCH  
+END  

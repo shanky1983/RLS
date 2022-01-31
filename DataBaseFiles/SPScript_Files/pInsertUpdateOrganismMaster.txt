@@ -1,0 +1,35 @@
+/****** Object:  StoredProcedure [dbo].[pInsertUpdateOrganismMaster]    Script Date: 6/25/2018 11:20:21 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE procedure [dbo].[pInsertUpdateOrganismMaster](@Id bigint, @Name Varchar(100),@Code Varchar(100),@ReturnId int out,@ContextInfo [UDT_Context] READONLY)
+as
+begin
+
+declare @CreatedBy bigint,@OrgId int
+
+select @OrgId=OrgID,@CreatedBy=LoginID from @ContextInfo
+
+if(@Id=0)
+begin
+--IF NOT EXISTS (SELECT Code FROM Organismmaster WHERE Code = @Code AND OrgID = @OrgID)
+--begin
+--select @ReturnId=1
+insert into Organismmaster values(@Name,@Code,@CreatedBy,GETDATE(),null,null,1,@OrgId)
+insert into OrganismmasterHistory values(@Name,@Code,@CreatedBy,GETDATE(),null,null,1,@OrgId,(select SCOPE_IDENTITY()))
+--end
+end
+else if(@Id is not null and @Id > 0)
+begin
+update Organismmaster set Name=@Name,Code=@Code,ModifiedBy=@CreatedBy,ModifiedAt=GETDATE() where OrgID=@OrgId and ID=@Id
+
+insert into OrganismmasterHistory(Name,Code,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,IsActive,OrgID,ID)
+select Name,Code,CreatedBy,CreatedAt,ModifiedBy,ModifiedAt,IsActive,OrgID,ID from Organismmaster where OrgID=@OrgId and ID=@Id
+end
+end
+GO
+
+

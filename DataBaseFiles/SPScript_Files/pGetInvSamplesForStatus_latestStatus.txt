@@ -1,0 +1,1692 @@
+CREATE PROCEDURE [dbo].[pGetInvSamplesForStatus_latestStatus] @OrgID             [INT],
+@pFromDate         [NVARCHAR] (50),
+@pToDate           [NVARCHAR] (50),
+@pStatusID         [INT],
+@pLocationID       [INT],
+@pLocationType     [NVARCHAR] (10),
+@visitID           [NVARCHAR] (255),
+@patientName       [NVARCHAR] (255),
+@VisitType         [INT],
+@priority          [INT],
+@sourceName        [NVARCHAR] (255),
+@InvestigationName [NVARCHAR] (255),
+@InvestigationID   [BIGINT],
+@InvestigationType [NVARCHAR] (10),
+@refPhyName        [NVARCHAR] (255),
+@refPhyID          [BIGINT],
+@refPhyOrg         [BIGINT],
+@SampleID          [BIGINT],
+@SearchType        [INT],
+@Preference        NVARCHAR(20),
+@ContextInfo       [UDT_CONTEXT] READONLY,
+@pageSize          INT,
+@startRowIndex     INT,
+@totalRows         INT OUTPUT,
+@pBarcodeFrom      [NVARCHAR] (20),
+@pBarcodeTo        [NVARCHAR] (20),
+@pUserLoginID      [NVARCHAR] (20),
+@SubStatus         NVARCHAR(50),
+@RegLocation       BIGINT,
+@OutLocation       [BIGINT],
+@pkgout            NVARCHAR(50),
+@PatientNumber     [NVARCHAR] (255)
+
+
+
+AS
+BEGIN
+SET NOCOUNT ON;
+DECLARE @LangCode NVARCHAR(max)
+DECLARE @RoleID NVARCHAR(10)
+Declare @IsHistoPrint varchar(20)
+DECLARE @Loginid BIGINT,@IsFranchisee NCHAR(2),@ClientId BIGINT
+
+SET @LoginId = (SELECT Loginid FROM @ContextInfo)
+SET @IsFranchisee = (SELECT IsFranchisee FROM Login WHERE LoginId = @Loginid)
+SET @ClientID = (SELECT ClientId FROM Login WHERE LoginId = @Loginid)
+    
+SELECT @LangCode = LanguageCode,@RoleID=RoleID
+FROM   @ContextInfo
+SET @IsHistoPrint=(Select AdditionalInfo from @ContextInfo);
+DECLARE @ServerDate DATETIME
+SELECT @ServerDate = (SELECT dbo.Fn_getserverdate(@ContextInfo))
+IF ( @visitID = '' )
+SET @visitID = NULL
+IF ( @pFromDate = '01/01/1900' )
+BEGIN
+SET @pFromDate = CONVERT(NVARCHAR, @ServerDate - 60, 103)
+END
+IF ( @pToDate = '01/01/2100' )
+BEGIN
+SET @pToDate = CONVERT(NVARCHAR, @ServerDate, 103)
+END
+--added by sudha for lal    
+--DEclare @oriorgid int    
+  -- select @oriorgid=orgid from Organization where name like '%LALPATH LABS%'   
+   declare  @config_val nvarchar(100)  
+  select @config_val=configvalue from ConfigOrgMaster where configkeyid=( select ConfigKeyID from ConfigKeyMaster where ConfigKey='LAL_Format')   
+   --Ended by sudha for lal    
+DECLARE @select AS NVARCHAR(MAX) = '';
+DECLARE @join AS NVARCHAR(MAX) = '';
+DECLARE @where AS NVARCHAR(MAX) = '';
+DECLARE @orderby AS NVARCHAR(MAX) = '';
+/***********Modified By Sathish.E*********/
+DECLARE @select1 AS NVARCHAR(MAX) = '';
+DECLARE @join1 AS NVARCHAR(MAX) = '';
+DECLARE @where1 AS NVARCHAR(MAX) = '';
+DECLARE @orderby1 AS NVARCHAR(MAX) = '';
+DECLARE @select2 AS NVARCHAR(MAX) = '';
+DECLARE @join2 AS NVARCHAR(MAX) = '';
+DECLARE @where2 AS NVARCHAR(MAX) = '';
+DECLARE @orderby2 AS NVARCHAR(MAX) = '';
+DECLARE @LocationID BIGINT
+SELECT @LocationID = LocationID
+FROM   @ContextInfo
+WHERE  OrgID = @OrgID
+--if(@OutLocation=0)                              
+IF ( Isnull(@OutLocation, 0) <= 0 )
+BEGIN
+SET @OutLocation = NULL
+END
+DECLARE @ConfigValue NVARCHAR(100) = ''
+SELECT @ConfigValue = COM.ConfigValue
+FROM   ConfigOrgMaster COM WITH (NOLOCK)
+JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+ON CKM.ConfigKeyID = COM.ConfigKeyID
+WHERE  ConfigKey = 'slidebarcode'
+AND OrgID = @OrgID
+--select @LocationID                                           
+--return                              
+DECLARE @ExternlaBarcodeConfig NVARCHAR(100) = ''
+SELECT @ExternlaBarcodeConfig = COM.ConfigValue
+FROM   ConfigOrgMaster COM WITH (NOLOCK)
+inner JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+ON CKM.ConfigKeyID = COM.ConfigKeyID
+WHERE  ConfigKey = 'ShowExternalBarcodeInsteadofBarcode'
+AND OrgID = @OrgID
+Create Table #tmptransfer_1 
+(
+Rowid                 INT IDENTITY(1, 1) PRIMARY KEY,
+ORDStatus             NVARCHAR(50),
+SampleDesc            NVARCHAR(250),
+[Status]              NVARCHAR(250),
+SampleContainerName   NVARCHAR(200),
+InvSampleStatusDesc   NVARCHAR(250),
+SampleTrackerID       INT,
+CreatedAt             DATETIME,
+BarcodeNumber         NVARCHAR(250),
+PatientName           NVARCHAR(500),
+PatientVisitID        BIGINT,
+SampleID              INT,
+[gUID]                NVARCHAR(500),
+Reason                NVARCHAR(500),
+InvSampleStatusID     BIGINT,
+InvestigationName     NVARCHAR(500),
+PatientStatus         NVARCHAR(500),
+CollectedLocationName NVARCHAR(500),
+OutSourcedOrgName     NVARCHAR(500),
+LocationName          NVARCHAR(500),
+LocationID            BIGINT,
+IsFranchisee          nchar(2),
+TaskID                BIGINT,
+PatientNumber         NVARCHAR(300),
+SamplePickupDate      DATETIME,
+InvestigationID       BIGINT,
+AccessionNumber       BIGINT,
+OutSourcingLocationID BIGINT,
+           CollectedDate         DATETIME,
+		   CollectedBy           BIGINT,
+		   ReceivedBy            BIGINT,
+		   ReceivedDate          DATETIME      
+)
+DECLARE @tmptrans_2 AS TABLE
+(
+ORDStatus             NVARCHAR(250),
+SampleDesc            NVARCHAR(500),
+[Status]              NVARCHAR(550),
+SampleContainerName   NVARCHAR(500),
+InvSampleStatusDesc   NVARCHAR(550),
+SampleTrackerID       INT,
+CreatedAt             DATETIME,
+BarcodeNumber         NVARCHAR(550),
+PatientName           NVARCHAR(500),
+PatientVisitID        BIGINT,
+SampleID              INT,
+[gUID]                NVARCHAR(300),
+Reason                NVARCHAR(500),
+InvSampleStatusID     BIGINT,
+InvestigationName     NVARCHAR(555),
+PatientStatus         NVARCHAR(500),
+CollectedLocationName NVARCHAR(550),
+OutSourcedOrgName     NVARCHAR(500),
+LocationName          NVARCHAR(500),
+LocationID            BIGINT,
+IsFranchisee          nchar(2),
+TaskID                BIGINT,
+PatientNumber         NVARCHAR(500),
+SamplePickupDate      DATETIME,
+InvestigationID       BIGINT,
+AccessionNumber       BIGINT,
+OutSourcingLocationID BIGINT,
+       CollectedDate         DATETIME,
+		   CollectedBy           BIGINT,
+		   ReceivedBy            BIGINT,
+		   ReceivedDate          DATETIME   
+)
+/*For slide barcode*/
+DECLARE @tmptrans_3 AS TABLE
+(
+Rowid                 INT IDENTITY(1, 1) PRIMARY KEY,
+ORDStatus             NVARCHAR(500),
+SampleDesc            NVARCHAR(550),
+[Status]              NVARCHAR(550),
+SampleContainerName   NVARCHAR(500),
+InvSampleStatusDesc   NVARCHAR(550),
+SampleTrackerID       INT,
+CreatedAt             DATETIME,
+BarcodeNumber         NVARCHAR(550),
+PatientName           NVARCHAR(500),
+PatientVisitID        BIGINT,
+SampleID              INT,
+[gUID]                NVARCHAR(500),
+Reason                NVARCHAR(500),
+InvSampleStatusID     BIGINT,
+InvestigationName     NVARCHAR(555),
+PatientStatus         NVARCHAR(500),
+CollectedLocationName NVARCHAR(550),
+OutSourcedOrgName     NVARCHAR(500),
+LocationName          NVARCHAR(500),
+LocationID            BIGINT,
+IsFranchisee          nchar(2),
+TaskID                BIGINT,
+PatientNumber         NVARCHAR(500),
+SamplePickupDate      DATETIME,
+InvestigationID       BIGINT,
+AccessionNumber       BIGINT,
+OutSourcingLocationID BIGINT,
+           CollectedDate         DATETIME,
+		   CollectedBy           BIGINT,
+		   ReceivedBy            BIGINT,
+		   ReceivedDate          DATETIME 
+)
+--arun changes
+DECLARE @tmpTestTable1 AS TABLE
+(
+Rowid1                 INT IDENTITY(1, 1) PRIMARY KEY,
+Rowid                 INT,
+ORDStatus             NVARCHAR(500),
+SampleDesc            NVARCHAR(550),
+[Status]              NVARCHAR(550),
+SampleContainerName   NVARCHAR(500),
+InvSampleStatusDesc   NVARCHAR(550),
+SampleTrackerID       INT,
+CreatedAt             DATETIME,
+BarcodeNumber         NVARCHAR(550),
+PatientName           NVARCHAR(500),
+PatientVisitID        BIGINT,
+SampleID              INT,
+[gUID]                NVARCHAR(500),
+Reason                NVARCHAR(500),
+InvSampleStatusID     BIGINT,
+InvestigationName     NVARCHAR(555),
+PatientStatus         NVARCHAR(500),
+CollectedLocationName NVARCHAR(550),
+OutSourcedOrgName     NVARCHAR(500),
+LocationName          NVARCHAR(500),
+LocationID            BIGINT,
+IsFranchisee          nchar(2),
+TaskID                BIGINT,
+PatientNumber         NVARCHAR(500),
+SamplePickupDate      DATETIME,
+InvestigationID       BIGINT,
+AccessionNumber       BIGINT,
+OutSourcingLocationID BIGINT,
+CollectedDate         DATETIME,
+CollectedBy           BIGINT,
+ReceivedBy            BIGINT,
+ReceivedDate          DATETIME 
+)
+----
+/*End slide Barcode*/
+CREATE TABLE #SampleTracker
+(
+ID                INT IDENTITY(1, 1),
+SampleTrackerID   INT,
+SampleID          INT,
+OrgID             INT,
+InvSampleStatusID INT,
+CreatedAt         DATETIME,
+PatientVisitID    BIGINT,
+Reason            NVARCHAR(550),
+           collectedin       BIGINT,
+		   CollectedBy           BIGINT,
+		   ReceivedBy            BIGINT,
+		   ReceivedDate          DATETIME 
+)
+--changes by arun -- in franchisee login specific client related data only shown in smaple search page by default
+CREATE TABLE #SampleTracker1
+(
+ID                INT IDENTITY(1, 1),
+SampleTrackerID   INT,
+SampleID          INT,
+OrgID             INT,
+InvSampleStatusID INT,
+CreatedAt         DATETIME,
+PatientVisitID    BIGINT,
+Reason            NVARCHAR(550),
+           collectedin       BIGINT,
+		   CollectedBy           BIGINT,
+		   ReceivedBy            BIGINT,
+		   ReceivedDate          DATETIME 
+)
+DECLARE @pname NVARCHAR(555) = NULL
+/* BEGIN | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+DECLARE @pnumber NVARCHAR(555) = NULL
+/* END | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+DECLARE @PatientDetails AS TABLE
+(
+PatientVisitID BIGINT
+)
+IF Isnull(@visitID, '') <> ''
+BEGIN
+INSERT INTO @PatientDetails
+SELECT PV.PatientVisitId
+FROM   PatientVisit PV(NOLOCK)
+WHERE  PV.OrgID = @OrgID
+AND PV.VisitNumber = @visitID
+--added by sudha from lal    
+ OR PV.ExternalVisitID = @visitID    
+ -- Ended by sudha from lal     
+IF NOT EXISTS (SELECT 1
+FROM   @PatientDetails)
+BEGIN
+INSERT INTO @PatientDetails
+VALUES      (0)
+END
+END
+IF Isnull(@patientName, '') <> ''
+BEGIN
+SELECT @pname = @patientName + '%'
+INSERT INTO @PatientDetails
+SELECT PV.PatientVisitId
+FROM   PatientVisit PV(NOLOCK)
+INNER JOIN Patient P(NOLOCK)
+ON PV.PatientID = P.PatientID
+WHERE  PV.OrgID = @OrgID
+AND P.NAME LIKE @pname
+IF NOT EXISTS (SELECT 1
+FROM   @PatientDetails)
+BEGIN
+INSERT INTO @PatientDetails
+VALUES      (0)
+END
+END
+/* BEGIN | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+IF Isnull(@PatientNumber, '') <> ''
+BEGIN
+SELECT @pnumber = @PatientNumber + '%'
+INSERT INTO @PatientDetails
+SELECT PV.PatientVisitId
+FROM   PatientVisit PV(NOLOCK)
+INNER JOIN Patient P(NOLOCK)
+ON PV.PatientID = P.PatientID
+WHERE  PV.OrgID = @OrgID
+AND P.PatientNumber LIKE @pnumber
+IF NOT EXISTS (SELECT 1
+FROM   @PatientDetails)
+BEGIN
+INSERT INTO @PatientDetails
+VALUES      (0)
+END
+END
+/* END | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+DECLARE @COUNT INT
+SELECT @COUNT = (SELECT Count(1)
+FROM   @PatientDetails)
+IF @pStatusID = -1
+OR @pStatusID = 4
+OR @pStatusID = 6
+OR @pStatusID = 7
+BEGIN
+IF Isnull(@pBarcodeFrom, '') <> ''
+AND Isnull(@PBarcodeto, '') <> ''
+AND @COUNT > 0
+BEGIN
+IF EXISTS (SELECT 1
+FROM   @PatientDetails)
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                    ST.CollectedIn,
+									ISNULL(PIS.CreatedBy,0),
+									ISNULL(ST.CreatedBy,0),
+									ISNULL(ST.CreatedAt,'')
+FROM   @PatientDetails PV
+INNER JOIN SampleTracker ST WITH (NOLOCK)
+ON PV.PatientVisitID = ST.PatientVisitID
+INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+ON PIS.SampleID = ST.SampleID
+WHERE  ST.orgid = @OrgID
+AND PIS.OrgID = @OrgID
+AND ST.InvSampleStatusID != 12
+AND PIS.BarcodeNumber BETWEEN @pBarcodeFrom AND @PBarcodeto
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION (MAXDOP 1)
+END
+ELSE IF Isnull(@pBarcodeFrom, '') <> ''
+AND Isnull(@PBarcodeto, '') <> ''
+AND @COUNT = 0
+BEGIN
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                  ST.CollectedIn,
+								ISNULL(PIS.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+ON PIS.SampleID = ST.SampleID
+WHERE  ST.orgid = @OrgID
+AND PIS.OrgID = @OrgID
+AND ST.InvSampleStatusID != 12
+AND PIS.BarcodeNumber BETWEEN @pBarcodeFrom AND @PBarcodeto
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION (MAXDOP 1)
+END
+else if  Isnull(@PatientNumber, '') <> '' AND @COUNT > 0
+begin
+INSERT INTO #SampleTracker  
+SELECT DISTINCT ST.SampleTrackerID,  
+ST.SampleID,  
+ST.OrgID,  
+ST.InvSampleStatusID,  
+ST.CreatedAt,  
+ST.PatientVisitID,  
+ST.Reason,  
+                                    ST.CollectedIn,  
+         0,  
+         ISNULL(ST.CreatedBy,0),  
+         ISNULL(ST.CreatedAt,'')  
+FROM   @PatientDetails PV  
+INNER JOIN SampleTracker ST WITH (NOLOCK)  
+ON PV.PatientVisitID = ST.PatientVisitID  
+--INNER JOIN PatientInvSample PIS WITH (NOLOCK)  
+--ON PIS.SampleID = ST.SampleID  
+WHERE  ST.orgid = @OrgID  
+--AND PIS.OrgID = 244  
+AND ST.InvSampleStatusID != 12  
+--AND PIS.BarcodeNumber BETWEEN @pBarcodeFrom AND @PBarcodeto  
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION (MAXDOP 1)  
+end
+ELSE
+BEGIN
+IF ( @pStatusID = 4
+OR @pStatusID = 6
+OR @pStatusID = 7 )
+BEGIN
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                        ST.CollectedIn,
+					ISNULL(ST.CreatedBy,0),
+					ISNULL(ST.CreatedBy,0),
+					ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+WHERE  ST.orgid = @OrgID
+AND ST.InvSampleStatusID = @pStatusID
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION ( MAXDOP 1, FORCE ORDER )
+END
+ELSE
+BEGIN
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                        ST.CollectedIn,
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+WHERE  ST.orgid = @OrgID --AND ST.InvSampleStatusID !=12
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION ( MAXDOP 1, FORCE ORDER )
+END
+END
+END
+ELSE IF @pStatusID = 12
+BEGIN
+IF Isnull(@pBarcodeFrom, '') <> ''
+AND Isnull(@PBarcodeto, '') <> ''
+AND @COUNT > 0
+BEGIN
+IF EXISTS (SELECT 1
+FROM   @PatientDetails)
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                    ST.CollectedIn,
+								ISNULL(PIS.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'') 
+FROM   @PatientDetails PV
+INNER JOIN SampleTracker ST WITH (NOLOCK)
+ON PV.PatientVisitID = ST.PatientVisitID
+INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+ON PIS.SampleID = ST.SampleID
+WHERE  ST.orgid = @OrgID
+AND PIS.OrgID = @OrgID
+AND ST.InvSampleStatusID = 12
+AND PIS.BarcodeNumber BETWEEN @pBarcodeFrom AND @PBarcodeto
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION (MAXDOP 1)
+END
+ELSE IF Isnull(@pBarcodeFrom, '') <> ''
+AND Isnull(@PBarcodeto, '') <> ''
+AND @COUNT = 0
+BEGIN
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                  ST.CollectedIn,
+								ISNULL(PIS.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+INNER JOIN PatientInvSample PIS WITH (NOLOCK)
+ON PIS.SampleID = ST.SampleID
+WHERE  ST.orgid = @OrgID
+AND PIS.OrgID = @OrgID
+AND ST.InvSampleStatusID = 12
+AND PIS.BarcodeNumber BETWEEN @pBarcodeFrom AND @PBarcodeto
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+OPTION (MAXDOP 1)
+END
+ELSE
+BEGIN
+INSERT INTO #SampleTracker
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                  ST.CollectedIn,
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+inner join OrderedInvestigations OI
+on OI.VisitID=st.PatientVisitID  
+left join InvestigationLocationMapping IOM
+on IOM.InvestigationID=OI.ID and IOM.FeeType=OI.Type  and IOM.OrgID=@OrgID and   IOM.Type=12
+inner join PatientInvSampleMapping PIS 
+ON PIS.ID=OI.ID AND PIS.SID=ST.SampleID
+WHERE  ST.orgid = @OrgID
+AND ST.InvSampleStatusID = 12
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+union 
+SELECT DISTINCT  ST.SampleTrackerID ,
+ST.SampleID,
+ST.OrgID,
+ST.InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                  ST.CollectedIn,
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'')
+FROM   SampleTracker ST WITH (NOLOCK)
+inner join OrderedInvestigations OI
+on OI.VisitID=st.PatientVisitID  
+inner join InvestigationLocationMapping IOM
+on IOM.InvestigationID=OI.ID and IOM.FeeType=OI.Type  and IOM.OrgID=@OrgID
+inner join PatientInvSampleMapping PIS 
+ON PIS.ID=OI.ID AND PIS.SID=ST.SampleID
+left outer join  OutsourcingDetail OSD  ON OSD.SampleTrackerID=st.SampleTrackerID and OSD.PatientVisitID=st.PatientVisitID 
+WHERE  ST.orgid = @OrgID
+AND ST.InvSampleStatusID = 3 AND  IOM.Type='12' AND OSD.SampleTrackerID is null
+AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+
+
+union 
+SELECT DISTINCT ST.SampleTrackerID,
+ST.SampleID,
+ST.OrgID,
+COalesce(CONVERT(int,IOM.Type),ST.InvSampleStatusID) InvSampleStatusID,
+ST.CreatedAt,
+ST.PatientVisitID,
+ST.Reason,
+                                    ST.CollectedIn,
+								ISNULL(OI.CreatedBy,0),
+								ISNULL(ST.CreatedBy,0),
+								ISNULL(ST.CreatedAt,'') 
+from SampleTracker st 
+inner join OrderedInvestigations OI
+on OI.VisitID=st.PatientVisitID  
+inner join InvestigationLocationMapping IOM
+on IOM.InvestigationID=OI.ID and IOM.FeeType=OI.Type
+inner join  OutsourcingDetail OSD  ON OSD.SampleTrackerID=st.SampleTrackerID and OSD.PatientVisitID=st.PatientVisitID 
+where OI.Status='SampleReceived' and st.InvSampleStatusID=3
+and IOM.Type='12' AND ST.CreatedAt BETWEEN CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ') AND CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
+AND OSD.Absolute=0 and ISNULL(OSD.Type,'')='Received'
+OPTION ( MAXDOP 1, FORCE ORDER )
+END
+END
+IF ( @SubStatus = 'Send'
+OR @SubStatus = NULL
+OR @SubStatus = '' )
+BEGIN
+
+--changes by arun -- in franchisee login specific client related data only shown in smaple search page by default
+/*If isnull(@ClientId,0) > 0 AND ISNULL(@IsFranchisee,'') = 'Y'
+BEGIN
+	INSERT INTO #SampleTracker1(SampleTrackerID,SampleID,OrgID,InvSampleStatusID,CreatedAt,PatientVisitID,Reason,collectedin,CollectedBy,ReceivedBy,ReceivedDate)
+	SELECT SampleTrackerID,SampleID,OrgID,InvSampleStatusID,CreatedAt,PatientVisitID,Reason,collectedin,CollectedBy,ReceivedBy,ReceivedDate FROM #SampleTracker
+	WHERE Collectedby IN(SELECT Loginid FROM LOGIN WHERE ISNULL(Clientid,0)=@ClientId AND Orgid = @OrgID)
+		
+	delete #SampleTracker
+	--reset the identity column
+	DBCC CHECKIDENT ('#SampleTracker', RESEED, 0)  
+
+	INSERT INTO #SampleTracker(SampleTrackerID,SampleID,OrgID,InvSampleStatusID,CreatedAt,PatientVisitID,Reason,collectedin,CollectedBy,ReceivedBy,ReceivedDate)
+	SELECT SampleTrackerID,SampleID,OrgID,InvSampleStatusID,CreatedAt,PatientVisitID,Reason,collectedin,CollectedBy,ReceivedBy,ReceivedDate FROM #SampleTracker1
+END*/
+
+
+--SELECT dbo.Fn_getserverdate(@ContextInfo) , '1'                                   
+--SELECT dbo.Fn_getserverdate(@ContextInfo) , '2'              
+SET @select = '
+Declare @ExternalBarcodeConfig1 Varchar(5)
+SELECT @ExternalBarcodeConfig1 = COM.ConfigValue
+FROM   ConfigOrgMaster COM WITH (NOLOCK)
+inner JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+ON CKM.ConfigKeyID = COM.ConfigKeyID
+WHERE  ConfigKey = ''ShowExternalBarcodeInsteadofBarcode''
+AND OrgID = ' + Convert(Varchar(30),@OrgID) +'
+SELECT  DISTINCT ORI.status,invsMaster.SampleDesc,isMaster.InvSampleStatusDesc AS Status,            
+ISNULL(ISC.ContainerName,'''') AS SampleContainerName,ISOP.DisplayText, sTracker.SampleTrackerID As SampleTrackerID,sTracker.CreatedAt,                         
+--CASE PIS.BarcodeNumber WHEN ''0'' THEN ''--'' ELSE PIS.BarcodeNumber END AS BarcodeNumber,                                          
+Case When @ExternalBarcodeConfig1=''Y'' Then (  Case When IsNull(PIS.ExternalBarcode,'''')='''' then (CASE          
+PIS.BarcodeNumber WHEN ''0'' THEN ''--'' ELSE PIS.BarcodeNumber END)
+Else (CASE          
+PIS.ExternalBarcode WHEN ''0'' THEN ''--'' ELSE PIS.ExternalBarcode END)  End
+) 
+Else 
+(CASE          
+PIS.BarcodeNumber WHEN ''0'' THEN ''-'' ELSE PIS.BarcodeNumber END)
+End
+AS BarcodeNumber,  
+------- End ------
+P.Name AS PatientName, PIS.PatientVisitID,PIS.SampleID,PIS.UID AS gUID,sTracker.Reason,isMaster.InvSampleStatusID ,ORI.Name AS InvestigationName                                                                    
+,P.PatientStatus, OADD.Location As CollectedLocationName,LRO.RefOrgName  As OutSourcedOrgName,                                                                                         
+--OAD.Location As LocationName,            
+(SELECT top 1  Location from OrganizationAddress  WITH (NOLOCK)             
+where AddressID = ORI.ResCaptureLoc) As LocationName,  
+(SELECT top 1  AddressID from OrganizationAddress  WITH (NOLOCK)             
+where AddressID = OADD.AddressID) As LocationID,
+(SELECT top 1  IsFranchisee from OrganizationAddress  WITH (NOLOCK)             
+where AddressID = OADD.AddressID) As IsFranchisee,                
+T.TaskID,PV.VisitNumber as             
+PatientNumber,PIS.CreatedAT as SamplePickupDate,ORI.ID,ORI.AccessionNumber, isnull(LRO.LabRefOrgID,ORI.referralid) as               
+			OutSourcingLocationID,PIS.CollectedDateTime,
+			--ISNULL(sTracker.CollectedBy,0) CollectedBy ,ISNULL(sTracker.ReceivedBy,0) ReceivedBy ,
+			(SELECT top 1 ISNULL(tmp.Receivedby,0) FROM #SampleTracker tmp where tmp.patientvisitid =PIS.patientvisitid and tmp.SampleID=PIS.SampleID and tmp.InvSampleStatusid = 3) CollectedBy ,
+			(SELECT top 1 ISNULL(tmp.Collectedby,0) FROM #SampleTracker tmp where tmp.patientvisitid =PIS.patientvisitid and tmp.SampleID=PIS.SampleID and tmp.InvSampleStatusid = 1) ReceivedBy ,
+			(SELECT top 1 tmp.ReceivedDate FROM #SampleTracker tmp where tmp.patientvisitid =PIS.patientvisitid and tmp.SampleID=PIS.SampleID and tmp.InvSampleStatusid = 3) ReceivedDate
+			--ISNULL(sTracker.ReceivedDate,0) ReceivedDate         
+FROM #SampleTracker sTracker with (nolock)'
+SET @join = @join
++ ' INNER JOIN PatientInvSample PIS with (nolock) ON PIS.SampleID=sTracker.SampleID  and sTracker.OrgID=PIS.OrgID                                    
+and PIS.PATIENTVISITID = sTracker.PATIENTVISITID '
+SET @join = @join
++ ' INNER JOIN InvSampleStatusmaster isMaster with (nolock) ON isMaster.InvSampleStatusID=sTracker.InvSampleStatusID  '
+SET @join = @join
++ ' INNER JOIN InvSampleMaster invsMaster with (nolock) ON invsMaster.SampleCode=PIS.SampleCode and invsMaster.OrgID= '
++ CONVERT(NVARCHAR, @OrgID)
++ ' AND isnull(invsMaster.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+SET @join = @join
++ ' INNER JOIN PatientInvSampleMapping PSM with (nolock) ON PIS.PatientVisitID=PSM.VisitID             
+AND PIS.SampleCode=PSM.SampleID                                             
+And PIS.SampleID=PSM.SID '
+SET @join = @join
++ ' INNER JOIN PatientVisit PV with (nolock) on PV.PatientVisitId = PIS.PatientVisitID '
+SET @join = @join
++ ' INNER JOIN VisitClientMapping VCM with (nolock) on VCM.VisitId = PIS.PatientVisitID AND VCM.ClientId = CASE WHEN '+CONVERT(NVARCHAR,ISNULL(@ClientID,0))+' > 0 THEN '+CONVERT(NVARCHAR,ISNULL(@ClientID,0))+' ELSE VCM.ClientId END'
+SET @join = @join
++ ' INNER JOIN Patient P with (nolock) on P.PatientID  = PV.PatientID '
+ if(@IsHistoPrint='OutSource')
+BEGIN           
+            
+SET @join = @join + ' INNER JOIN OrderedInvestigations ORI with (nolock) ON PSM.VisitID=ORI.VisitID AND PSM.ID=ORI.ID AND PSM.UID=ORI.UID  AND ORI.Type=PSM.Type'                 
+    
+                  
+ END
+ ELSE
+ BEGIN
+ SET @join = @join + ' INNER JOIN OrderedInvestigations ORI with (nolock) ON PSM.VisitID=ORI.VisitID AND PSM.ID=ORI.ID AND PSM.UID=ORI.UID  AND ORI.Type=PSM.Type and isMaster.InvSampleStatusDesc=         
+case when ORI.Status='+'''SampleReceived'''+' then '+'''Received'''+'             
+                 when ORI.Status='+'''Approve'''+' then '+'''Received'''+'            
+                  when ORI.Status='+'''Completed'''+' then '+'''Received'''+'            
+                 when ORI.Status='+'''Pending'''+' then '+'''Received'''+'          
+                   when ORI.Status='+'''SampleCollected'''+' then '+'''Collected'''+'       
+                    when ORI.Status='+'''SampleInTransist'''+' then '+'''SampleInTransit'''+'       
+                       else            
+                 ORI.Status End'; 
+				 if(@IsHistoPrint='HistoPrint') 
+begin      
+		SET @join = @join+'  inner join misordereddept  M  on      M.accessionnumber=ORI.accessionnumber
+        inner join InvDeptMaster DM on  DM.orgid=ORI.orgid and DM.Code=''histo'' and DM.DeptID=M.Deptid and DM.Deptid=4';	
+		END
+                  
+ END       
+SET @join = @join
++ ' INNER JOIN invstatusorgpagemapping ISOP with (nolock) ON ISOP.StatusID=sTracker.InvSampleStatusID and ISOP.OrgID= '
++ CONVERT(NVARCHAR, @OrgID)
++ ' AND isnull(ISOP.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+--set @join =@join + 'LEFT  JOIN OutsourcingDetail OSD with(nolock) on OSD.AccessionNumber=ORI.AccessionNumber             
+--and OSD.InvestigationID=ORI.ID and OSD.OrgId=ORI.OrgID and OSD.UID=ORI.UID AND OSD.Status <>''Send'' and OSD.Status<>''Received'' '            
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                               
+SET @join = @join
++ ' LEFT JOIN  InvestigationLocationMapping ILM with (nolock) on               
+ILM.InvestigationID=ORI.ID and ILM.OrgID=ORI.OrgID and ORI.Type =ILM.FeeType  and ILM.LocationID= '
++ CONVERT(NVARCHAR, @LocationID)
+SET @join = @join
++ ' LEFT JOIN LabReferenceOrg LRO with (nolock)  on  ILM.ProcessingOrgID=LRO.LabRefOrgID and LRO.OrgID=ILM.OrgID '
+SET @join = @join
++ 'LEFT  JOIN OutsourcingDetail OSD with(nolock) on OSD.AccessionNumber=ORI.AccessionNumber             
+and OSD.InvestigationID=ORI.ID and OSD.OrgId=ORI.OrgID and OSD.UID=ORI.UID AND OSD.Status in (''Send'',''OutSource'')'
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                                                                
+IF ( @Preference = 'STAT' )
+BEGIN
+SELECT @join = @join
++ 'INNER JOIN (Select  Distinct BD.LabNo FROM FinalBill FB  with (nolock)             
+INNER JOIN BillingDetails BD WITH (NOLOCK) on BD.FinalBillID=FB.FinalBillID AND BD.IsSTAT='
++ '''Y''' + ') As LNo On Lno.LabNo=ORI.LabNo'
+END
+--SET @join = @join + ' LEFT JOIN LabRefOrgAddress LROA ON ORI.ReferralID=LROA.AddressID '                                                                                                                                          
+--SET @join = @join + ' LEFT JOIN LabReferenceOrg LRO ON LROA.LabRefOrgID=LRO.LabRefOrgID '                                                    
+SET @join = @join
++ ' LEFT JOIN Tasks T with (nolock) ON T.PatientID=P.PatientID                                           
+AND T.PatientVisitId=PIS.PatientVisitID                                                                 
+AND PIS.UID=SUBSTRING(T.RedirectURL,(CHARINDEX(''gUID='', T.RedirectURL) + 5),            
+(CHARINDEX(''&taskactionid='', T.RedirectURL)-(CHARINDEX(''gUID='', T.RedirectURL) + 5)))      
+AND T.taskactionid=22 and T.RoleID ='+ @RoleID
+--select @select                                                                                                                             
+/* Investigation Name */
+
+SET @join = @join + ' AND ORI.VisitID = PV.PatientVisitId '                                                                                                                                                                                  
+
+SET @join = @join
++ ' INNER JOIN OrganizationAddress OADD with (nolock) on OADD.AddressID = PIS.CollectedLocID'
+--SET @join = @join + ' INNER JOIN OrganizationAddress OAD with (nolock) on OAD.AddressID = PIS.RecSampleLocID';                             
+SET @join = @join
++ ' LEFT JOIN InvestigationSampleContainer ISC with (nolock) ON ISC.SampleContainerID=PIS.SampleContainerID       
+and ISC.OrgID = PIS.OrgID'
++ ' AND isnull(ISC.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+SET @where = @where + ' WHERE PIS.OrgID = '
++ CONVERT(NVARCHAR, @OrgID)
++ ' AND isnull(invsMaster.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+--SET @where = @where + ' AND PIS.CollectedLocID = ' + CONVERT(nvarchar,@pLocationID)                                                                     
+-- SET @where = @where + ' AND PIS.RecSampleLocID = ' + CONVERT(nvarchar,@pLocationID)                                                        
+/* commented for notgiven scenario
+--SET @where = @where
+--                    + ' AND sTracker.SampleID NOT IN (SELECT ISNULL(SampleRelationshipID,0) 
+--	 FROM PatientInvSample with (nolock)   WHERE PatientVisitID=PIS.PatientVisitID) '
+*/
+--PRINT @pFromDate + ' 00:00:00 '
+--             PRINT @pToDate + ' 23:59:59 '
+/* From/To Date Sample Collected Date */
+
+IF ( @InvestigationName IS NOT NULL
+AND @InvestigationName <> ''
+AND @InvestigationID IS NOT NULL
+AND @InvestigationID <> -1
+AND @InvestigationType IS NOT NULL
+AND @InvestigationType <> '' )
+BEGIN
+SET @where = @where + ' AND  ORI.ID = '
++ CONVERT(NVARCHAR, @InvestigationID)
++ ' AND ORI.Type = '''
++ CONVERT(NVARCHAR, @InvestigationType)
++ '''  ';
+END
+
+
+IF ( @pFromDate IS NOT NULL
+AND @pFromDate <> ''
+AND @pToDate IS NOT NULL
+AND @pToDate <> '' )
+BEGIN
+IF ( @where = '' )
+BEGIN
+SET @where = @where + '  sTracker.CreatedAt BETWEEN '''
++ CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ')
++ ''' AND '''
++ CONVERT(NVARCHAR, @pToDate + ' 23:59:59')
++ ''''
+END
+ELSE
+BEGIN
+SET @where = @where
++ ' AND sTracker.CreatedAt BETWEEN '''
++ CONVERT(VARCHAR(30), @pFromDate + ' 00:00:00 ')
++ ''' AND '''
++ CONVERT(VARCHAR(30), @pToDate + ' 23:59:59')
++ ''''
+END
+END
+IF ( @pLocationID > 0 )
+BEGIN
+SET @where = @where + ' AND  PIS.CollectedLocID  = '
++ CONVERT(NVARCHAR, @pLocationID)
+END
+IF ( @pStatusID > 0
+AND @pStatusID != 12 )
+BEGIN
+---SET @where = @where + ' AND sTracker.InvSampleStatusID = ' + CONVERT(nvarchar,@pStatusID)                                                                                                                                    
+--- SET @where =@where                                                                     
+SET @where = @where
++ ' AND sTracker.InvSampleStatusID = '
++ CONVERT(NVARCHAR, @pStatusID)
+IF @pStatusID = 4
+BEGIN
+SET @where = @where + ' AND ORI.status=''Rejected'''
+END
+END
+--  ELSE
+--    BEGIN
+--        --SET @where = @where + ' AND sTracker.InvSampleStatusID NOT IN (8)'             
+--        SET @where = @where
+--                     + ' AND (sTracker.SampleTrackerID IN (SELECT TOP 1 SampleTrackerID FROM SampleTracker with (nolock)                                                                                                                         
+--WHERE PatientVisitID=sTracker.PatientVisitID AND SampleID=sTracker.SampleID   AND InvSampleStatusID in (1,2,3,4,6,7,12)                                                                                                                          
+--ORDER BY CreatedAt DESC)                   
+--AND sTracker.InvSampleStatusID<>8) '
+--        SET @where = @where
+--                     + ' AND EXISTS(SELECT COUNT(VISITID) AS INVCount FROM OrderedInvestigations              
+--with (nolock) WHERE OrgID=ORI.OrgID AND VisitID=ORI.VisitID                                                                                                                              
+----AND Status <> ''Approve''            
+--              GROUP BY VisitID) '
+--    END
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                                                                                                              
+IF ( @OutLocation <> '' )
+BEGIN
+SET @where = @where + ' AND LRO.LabRefOrgID='
++ CONVERT(NVARCHAR, @OutLocation)
+END
+IF ( @pStatusID = 12 )
+BEGIN
+----- SET @where=@where +'AND 1>(SELECT TOP1 FROM OutsourcingDetail WHERE OrgID= ' + @OrgID + ' and PatientVisitID=' + @visitID + ') '                                                                                               
+--SET @where=@where +'AND sTracker.SampleID not in(select SampleID from OutsourcingDetail where OrgId= '+CONVERT(nvarchar, @OrgID )+' ) '                                                                                                 
+SET @where = @where
++ ' AND ORI.Status in (''SampleReceived'',''SampleCollected'',''OutSource'') '   
+--  SET @where =@where + ' AND ORI.ReferralID not in(''-1'',''0'')'
+SET @where = @where
++ ' AND sTracker.InvSampleStatusID IN(''3'',''1'',''12'')'
+END
+IF (@pStatusID = 6)
+BEGIN
+SET @where = @where + ' AND ORI.status=''Not given'''
+END
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                                                                             
+/* External visitID / Patient Visit ID */
+IF ( @SearchType = 1
+AND @visitID IS NOT NULL
+AND @visitID <> '' )
+BEGIN
+IF ( EXISTS (SELECT CKM.ConfigKey
+FROM   ConfigOrgMaster COM WITH (NOLOCK)
+INNER JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+ON CKM.ConfigKeyID = COM.ConfigKeyID
+WHERE  COM.OrgID = @OrgID
+AND CKM.ConfigKey = 'ExternalVisitSearch'
+AND COM.ConfigValue = 'Y') )
+BEGIN
+SET @where = @where + ' AND (PV.ExternalVisitID='''  
++ @visitID + ''''  
++'OR  PV.VisitNumber = '''  + CONVERT(nvarchar, @visitID) + ''')'      
+--above or condition added by sudha for lal    
+END
+ELSE
+BEGIN
+SET @where = @where + ' AND (PV.VisitNumber=''' + @visitID  
++ ''''  
++'OR  PV.ExternalVisitID = '''  + CONVERT(nvarchar, @visitID) + ''')'      
+--above or condition added by sudha for lal    
+END
+END
+DECLARE @Pbarcode NVARCHAR(50) = NULL
+IF ( @SearchType = 2
+AND @visitID IS NOT NULL
+AND @visitID <> '' )
+BEGIN
+IF (@ExternlaBarcodeConfig='Y')
+Begin     
+SET @where = @where + ' AND  (Case when Isnull(PIS.ExternalBarcode,'''')<>'''' then PIS.ExternalBarcode when Isnull(PIS.ExternalBarcode,'''')='''' then PIS.BarcodeNumber End ) ='''      
++ @visitID + ''''  
+End
+Else
+Begin
+SET @where = @where + 'AND PIS.BarcodeNumber='''
++ @visitID + ''''
+SET @Pbarcode = @visitID
+END
+END
+/* case no */
+IF ( @SearchType = 3
+AND @visitID IS NOT NULL
+AND @visitID <> '' )
+BEGIN
+SET @where = @where + ' AND PIS.CaseNumber  like '''        
++ @visitID + '%'''-- or PIS.BarcodeNumber  like ''%'+@visitID+'%'')'                 
+SET @Pbarcode = @visitID
+END
+
+/* Patient Name */
+IF ( @patientName IS NOT NULL
+AND @patientName <> '' )
+BEGIN
+SET @where = @where + ' AND P.Name like ''%' + @patientName
++ '%'''
+END
+/* BEGIN | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+IF ( @PatientNumber IS NOT NULL
+AND @PatientNumber <> '' )
+BEGIN
+SET @where = @where + ' AND P.PatientNumber like ''%' + @PatientNumber
++ '%'''
+END
+/* END | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+/* Visit Type */
+IF ( @VisitType IS NOT NULL
+AND @VisitType <> -1 )
+BEGIN
+SET @where = @where + ' AND Pv.VisitType  ='
++ CONVERT(NVARCHAR, @VisitType)
+END
+/* Priority */
+IF ( @priority IS NOT NULL
+AND @priority <> -1 )
+BEGIN
+SET @where = @where + ' AND Pv.PriorityID  ='
++ CONVERT(NVARCHAR, @priority)
+END
+/* Source Name */
+IF ( @sourceName IS NOT NULL
+AND @sourceName <> '' )
+BEGIN
+SET @where = @where + ' AND VCM.ClientID  ='''
++ @sourceName + ''''
+END
+/* Ref.Dr Name */
+IF ( @refPhyName IS NOT NULL
+AND @refPhyName <> ''
+AND @refPhyID IS NOT NULL
+AND @refPhyID <> -1 )
+--AND                                                           
+--@refPhyOrg IS NOT NULL AND @refPhyOrg <> -1 )                                                
+BEGIN
+SET @where = @where + ' AND Pv.ReferingPhysicianID  = '
++ CONVERT(NVARCHAR, @refPhyID)
+END
+IF ( @SampleID IS NOT NULL
+AND @SampleID <> -1 )
+BEGIN
+SET @where = @where + ' AND PIS.SampleCode = '
++ CONVERT(NVARCHAR, @SampleID)
+END
+IF ( @pLocationType = 'CL' )
+BEGIN
+--sELECT 'A'                                                     
+SET @where = @where + ' AND sTracker.CollectedIn= '
++ CONVERT(NVARCHAR, @pLocationID)
+SET @where = @where + ' AND sTracker.SampleTrackerID=(select MAX(sa.SampleTrackerID)             
+from #SampleTracker sa with (nolock)                          
+where sa.PatientVisitID=PIS.PatientVisitID AND Sa.SampleID= sTracker.SampleID             
+AND  sa.InvSampleStatusID!=7 ) '
+END
+IF ( @pLocationType = 'OL' )
+BEGIN
+--sELECT 'B'                                                                          
+SET @where = @where + ' AND sTracker.CollectedIn<>'
++ CONVERT(NVARCHAR, @pLocationID)
+SET @where = @where
++ ' AND sTracker.SampleTrackerID=(select MAX(sa.SampleTrackerID)      
+from #SampleTracker sa with (nolock)             
+where sa.PatientVsisitID=PIS.PatientVisitID            
+AND Sa.SampleID= sTracker.SampleID AND  sa.InvSampleStatusID!=7 ) '
+END
+IF ( @pBarcodeFrom IS NOT NULL
+AND @pBarcodeFrom <> ''
+AND @pBarcodeTo IS NOT NULL
+AND @pBarcodeTo <> '' )
+BEGIN
+--SET @where = @where + ' AND sTracker.CreatedAt BETWEEN ''' + CONVERT(nvarchar,@pFromDate+' 00:00:00 ') + ''' AND ''' + CONVERT(nvarchar,@pToDate+ ' 23:59:59') + ''''                                   
+SET @where = @where
++ ' AND PIS.BarcodeNumber BETWEEN '''
++ @pBarcodeFrom + ''' AND ''' + @pBarcodeTo + ''''
+--SET @where = @where + ' AND PIS.BarcodeNumber=''' + @visitID + ''''                                                                                                           
+END
+IF ( @pUserLoginID IS NOT NULL
+AND @pUserLoginID <> '' )
+BEGIN
+SET @where = @where + ' AND PIS.CreatedBy = '''
++ @pUserLoginID + ''''
+END
+IF ( @RegLocation > 0 )
+BEGIN
+SET @where = @where + ' AND PV.OrgID = '
++ CONVERT(NVARCHAR, @OrgID)
+SET @where = @where + ' AND PV.OrgAddressID = '
++ CONVERT(NVARCHAR, @RegLocation)
+END
+SET @orderby = @orderby
++ ' ORDER BY sTracker.CreatedAt DESC option (MAXDOP 1,force order) '
+PRINT ( @select + @join + @where + @orderby );
+SET NOCOUNT ON
+-------------------------------------------------                   -----------------------------------------------       
+---------------------select (@select + @join + @where + @orderby);                                                              
+-------------------------------------------------                    -----------------------------------------------                                                        
+INSERT INTO #tmptransfer_1
+EXEC (@select + @join + @where + @orderby);
+--select @select + @join + @where + @orderby                                                                 
+--return     
+Delete tmp from #tmptransfer_1 tmp inner join  outsourcingdetail OS on   
+tmp.PatientvisitID=OS.PatientvisitID and tmp.AccessionNumber=OS.AccessionNumber   where  OS.Status in ('Send','OutSource')   
+END
+ELSE
+BEGIN
+SET @select2 = '
+Declare @ExternalBarcodeConfig1 Varchar(5)
+SELECT @ExternalBarcodeConfig1 = COM.ConfigValue
+FROM   ConfigOrgMaster COM WITH (NOLOCK)
+inner JOIN ConfigKeyMaster CKM WITH (NOLOCK)
+ON CKM.ConfigKeyID = COM.ConfigKeyID
+WHERE  ConfigKey = ''ShowExternalBarcodeInsteadofBarcode''
+AND OrgID = ' + Convert(Varchar(30),@OrgID) +'
+select  distinct OD.Status as ORDStatus, ISM.SampleDesc, ISSM.InvSampleStatusDesc as Status,      
+ISC.ContainerName as SampleContainerName,                                                 
+ISOP.DisplayText as  InvSampleStatusDesc,sTracker.SampleTrackerID As SampleTrackerID,sTracker.CreatedAt,                                       
+--CASE PIS.BarcodeNumber WHEN ''0'' THEN '''' ELSE PIS.BarcodeNumber END AS BarcodeNumber ,
+Case When @ExternalBarcodeConfig1=''Y'' Then (  Case When IsNull(PIS.ExternalBarcode,'''')='''' then (CASE          
+PIS.BarcodeNumber WHEN ''0'' THEN ''--'' ELSE PIS.BarcodeNumber END)
+Else (CASE          
+PIS.ExternalBarcode WHEN ''0'' THEN ''--'' ELSE PIS.ExternalBarcode END)  End
+) 
+Else 
+(CASE          
+PIS.BarcodeNumber WHEN ''0'' THEN ''-'' ELSE PIS.BarcodeNumber END)
+End
+AS BarcodeNumber,    
+--------- End -----
+P.Name as  PatientName,                  
+PIS.PatientVisitID as PatientVisitID ,PIS.SampleID as SampleID,PIS.UID AS [gUID],sTracker.Reason as Reason,            
+ISSM.InvSampleStatusID  as InvSampleStatusID,ODI.Name,                
+P.PatientStatus as  PatientStatus ,OADD.Location As CollectedLocationName,                           
+'''' As OutSourcedOrgName,                
+(SELECT Location from OrganizationAddress  with (nolock) where AddressID = ODI.ResCaptureLoc)             
+As LocationName,                                                                                                                                                                        
+(SELECT top 1  AddressID from OrganizationAddress  with (nolock) where AddressID = OADD.AddressID) As LocationID,
+(SELECT top 1  IsFranchisee from OrganizationAddress  with (nolock) where AddressID = OADD.AddressID) As IsFranchisee,
+T.TaskID                                                                          
+,PV.VisitNumber as PatientNumber,PIS.CreatedAT as SamplePickupDate,ODI.ID as InvestigationID,ODI.AccessionNumber as AccessionNumber,                                                                                                
+	  OD.OutSourcingLocationID as OutSourcingLocationID,PIS.CollectedDateTime,ISNULL(sTracker.CollectedBy,0) CollectedBy ,ISNULL(sTracker.ReceivedBy,0) ReceivedBy,ISNULL(sTracker.ReceivedDate,0) ReceivedDate                  
+from OutsourcingDetail OD'
+SET @join2 = @join2
++ ' INNER JOIN #SampleTracker sTracker with (nolock)  on sTracker.SampleID=OD.SampleID and sTracker.OrgID ='
++ CONVERT(NVARCHAR, @OrgID)
+SET @join2 = @join2
++ ' INNER JOIN  PatientInvSample PIS with (nolock)  on PIS.SampleID=sTracker.SampleID and PIS.OrgID='
++ CONVERT(NVARCHAR, @OrgID)
+SET @join2 = @join2
++ ' INNER JOIN InvSampleStatusmaster ISSM with (nolock) ON ISSM.InvSampleStatusID=sTracker.InvSampleStatusID'
+SET @join2 = @join2
++ ' INNER JOIN InvSampleMaster ISM with (nolock) ON ISM.SampleCode=PIS.SampleCode AND ISM.OrgID='
++ CONVERT(NVARCHAR, @OrgID)
++ ' AND isnull(ISM.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+SET @join2 = @join2
++ ' LEFT JOIN InvestigationSampleContainer ISC with (nolock) ON ISC.SampleContainerID=PIS.SampleContainerID       
+and ISC.OrgID = PIS.OrgID'
++ ' AND isnull(ISC.LangCode,''en-GB'') = '''
++ CONVERT(NVARCHAR, @LangCode) + ''''
+SET @join2 = @join2
++ ' INNER JOIN PatientInvSampleMapping PSM with (nolock) ON PIS.PatientVisitID=PSM.VisitID AND PIS.SampleCode=PSM.SampleID           
+And PIS.SampleID=PSM.SID and PSM.OrgID='
++ CONVERT(NVARCHAR, @OrgID)
+SET @join2 = @join2
++ ' INNER JOIN PatientVisit PV with (nolock) on PV.PatientVisitId = PIS.PatientVisitID and PV.OrgID='
++ CONVERT(NVARCHAR, @OrgID)
+SET @join2 = @join2
++ ' INNER JOIN OrderedInvestigations ODI with (nolock) ON ODI.VisitID=PV.PatientVisitId and ODI.Type=PSM.Type and ODI.OrgID='  
++ CONVERT(NVARCHAR, @OrgID)
++ 'and OD.InvestigationID=ODI.ID and ODI.AccessionNumber=OD.AccessionNumber'
+--INNER JOIN  InvestigationLocationMapping ILM on   ILM.InvestigationID=OD.InvestigationID  and ILM.OrgID=OD.OrgId  
+  if(@IsHistoPrint='HistoPrint')
+	begin
+	SET @join = @join+'inner join InvOrgGroup    INVG   on INVG.AttGroupID=ORI.ID  or ORI.TestCode=INVG.TestCode
+		               inner join InvGroupMapMaster  INVGM  on INVG.OrgGroupID=INVGM.GroupID 
+					   inner join InvestigationOrgMapping INVOM  on INVOM.InvestigationID=INVGM.InvestigationID and invom.OrgID=invg.OrgID 
+					   inner join InvDeptMaster DM on DM.DeptID=INVOM.DeptID and DM.orgid=INVOM.orgid and DM.Code=''histo'' and DM.DeptID=4';
+	End    
+SET @join2 = @join2    
++ ' INNER JOIN LabReferenceOrg LRO with (nolock)  on    LRO.OrgID=OD.OrgID  and OD.OutSourcingLocationID=LRO.LabRefOrgID'    
+SET @join2 = @join2    
++ ' INNER JOIN Patient P with (nolock) on P.PatientID  = PV.PatientID  and P.OrgID='    
++ CONVERT(NVARCHAR, @OrgID)    
+SET @join2 = @join2    
++ ' left JOIN Tasks T with (nolock) ON T.PatientID=P.PatientID  and t.patientvisitid=pv.patientvisitid and T.OrgID='    
++ CONVERT(NVARCHAR, @OrgID)    
++ ' and t.TaskActionID=''22'' and T.RoleID ='+ @RoleID    
+SET @join2 = @join2    
++ ' INNER JOIN OrganizationAddress OADD with (nolock) on OADD.AddressID = PIS.CollectedLocID '    
+SET @join2 = @join2    
++ ' INNER JOIN invstatusorgpagemapping ISOP with (nolock) ON ISOP.StatusID=sTracker.InvSampleStatusID and ISOP.OrgID= '    
++ CONVERT(NVARCHAR, @OrgID)    
++ ' AND isnull(ISOP.LangCode,''en-GB'') = '''    
++ CONVERT(NVARCHAR, @LangCode) + ''''    
+SET @where2 = @where2 + ' where OD.OrgId='    
++ CONVERT(NVARCHAR, @OrgID)    
++ ' AND isnull(ISM.LangCode,''en-GB'') = '''    
++ CONVERT(NVARCHAR, @LangCode) + ''''    
++ ' and OD.Status in (''Send'',''OutSource'') and ODI.Status in(''OutSource'',''Pending'',''Force OutSource'')                                      
+--  and OD.Absolute=''1''     
+and LRO.ReferringType=''OUT'''    
+--and OD.OutSourcingLocationID=ISNULL(@OutLocation,OutSourcingLocationID)                                                       
+--and ST.InvSampleStatusID=12                                                                  
+--and PV.VisitNumber = @visitID                                                   
+--and PV.VisitNumber =  Isnull(@visitID,PV.VisitNumber)                                                                                          
+/* From/To Date Sample Collected Date */    
+IF ( @pFromDate IS NOT NULL    
+AND @pFromDate <> ''    
+AND @pToDate IS NOT NULL    
+AND @pToDate <> '' )    
+BEGIN    
+IF ( @where2 = '' )    
+BEGIN    
+SET @where2 = @where2 + '  sTracker.CreatedAt BETWEEN '''    
++ CONVERT(NVARCHAR, @pFromDate + ' 00:00:00 ')    
++ ''' AND '''    
++ CONVERT(NVARCHAR, @pToDate + ' 23:59:59')    
++ ''''    
+END    
+ELSE    
+BEGIN    
+SET @where2 = @where2    
++ ' AND sTracker.CreatedAt BETWEEN '''    
++ CONVERT(VARCHAR(30), @pFromDate + ' 00:00:00 ')    
++ ''' AND '''    
++ CONVERT(VARCHAR(30), @pToDate + ' 23:59:59')    
++ ''''    
+END    
+END    
+IF ( @pLocationID > 0 )    
+BEGIN    
+SET @where2 = @where2 + ' AND  PIS.CollectedLocID =  '
++ CONVERT(NVARCHAR, @pLocationID)    
+END    
+IF ( @pStatusID > 0    
+AND @pStatusID != 12 )    
+BEGIN    
+---SET @where = @where + ' AND sTracker.InvSampleStatusID = ' + CONVERT(nvarchar,@pStatusID)                                         
+--- SET @where =@where                                                                             
+SET @where2 = @where2    
++ ' AND sTracker.InvSampleStatusID = '    
++ CONVERT(NVARCHAR, @pStatusID)    
+END    
+ELSE    
+BEGIN    
+--SET @where = @where + ' AND sTracker.InvSampleStatusID NOT IN (8)'                                                                
+SET @where2 = @where2    
++ ' AND (sTracker.SampleTrackerID IN (SELECT TOP 1 SampleTrackerID FROM #SampleTracker with (nolock)                                                                                                                              
+WHERE PatientVisitID=sTracker.PatientVisitID AND SampleID=sTracker.SampleID AND InvSampleStatusID in (1,2,3,4,6,7,12)                                            
+ORDER BY CreatedAt DESC)                                                                                                                                        
+AND sTracker.InvSampleStatusID<>8) '    
+SET @where2 = @where2    
++ ' AND EXISTS(SELECT COUNT(VISITID) AS INVCount FROM OrderedInvestigations  with (nolock) WHERE OrgID=ODI.OrgID                                
+AND VisitID=ODI.VisitID                              
+--AND Status <> ''Approve''                
+GROUP BY VisitID) '    
+END    
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                                                                                           
+----------------------For OutSource  Tests Only---------Sathish--------------6/9/13/----                                 
+/* External visitID / Patient Visit ID */    
+IF ( @SearchType = 1    
+AND @visitID IS NOT NULL    
+AND @visitID <> '' )    
+BEGIN    
+IF ( EXISTS (SELECT CKM.ConfigKey    
+FROM   ConfigOrgMaster COM    
+INNER JOIN ConfigKeyMaster CKM    
+ON CKM.ConfigKeyID = COM.ConfigKeyID    
+WHERE  COM.OrgID = @OrgID    
+AND CKM.ConfigKey = 'ExternalVisitSearch'    
+AND COM.ConfigValue = 'Y') )    
+BEGIN    
+SET @where2 = @where2 + ' AND PV.ExternalVisitID='''    
++ @visitID + ''''    
+END    
+ELSE    
+BEGIN    
+SET @where2 = @where2 + ' AND PV.VisitNumber=''' + @visitID    
++ ''''    
+END    
+END    
+IF ( @SearchType = 2    
+AND @visitID IS NOT NULL    
+AND @visitID <> '' )    
+BEGIN    
+IF (@ExternlaBarcodeConfig='Y')
+Begin     
+SET @where2 = @where2 + ' AND  (Case when Isnull(ExternalBarcode,'''')<>'''' then ExternalBarcode when Isnull(ExternalBarcode,'''')='''' then Barcode End ) ='''      
++ @visitID + ''''  
+End
+Else
+ begin
+SET @where2 = @where2 + ' AND PIS.BarcodeNumber='''    
++ @visitID + ''''    
+END    
+End
+/* Patient Name */    
+IF ( @patientName IS NOT NULL    
+AND @patientName <> '' )    
+BEGIN    
+SET @where2 = @where2 + ' AND P.Name like ''%'    
++ @patientName + '%'''    
+END    
+/* BEGIN | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+IF ( @PatientNumber IS NOT NULL
+AND @PatientNumber <> '' )
+BEGIN
+SET @where2 = @where2 + ' AND P.PatientNumber like ''%'
++ @PatientNumber + '%'''
+END
+/* END | NA | Sabari | 20190515 | Created | MRNNumberSearch */
+IF @pStatusID = 6    
+BEGIN    
+SET @where = @where + ' AND ORI.status=''Not given'''    
+END    
+/* Visit Type */    
+IF ( @VisitType IS NOT NULL    
+AND @VisitType <> -1 )    
+BEGIN    
+SET @where2 = @where2 + ' AND Pv.VisitType  ='    
++ CONVERT(NVARCHAR, @VisitType)    
+END    
+/* Priority */    
+IF ( @priority IS NOT NULL    
+AND @priority <> -1 )    
+BEGIN    
+SET @where2 = @where2 + ' AND Pv.PriorityID  ='    
++ CONVERT(NVARCHAR, @priority)    
+END    
+/* Source Name */    
+IF ( @sourceName IS NOT NULL    
+AND @sourceName <> '' )    
+BEGIN    
+SET @where2 = @where2 + ' AND VCM.ClientID  ='''    
++ @sourceName + ''''    
+END    
+/* Ref.Dr Name */    
+IF ( @refPhyName IS NOT NULL    
+AND @refPhyName <> ''    
+AND @refPhyID IS NOT NULL    
+AND @refPhyID <> -1 )    
+--AND                                                                                                                                           
+--@refPhyOrg IS NOT NULL AND @refPhyOrg <> -1 )                                        
+BEGIN    
+SET @where2 = @where2 + ' AND Pv.ReferingPhysicianID  = '    
++ CONVERT(NVARCHAR, @refPhyID)    
+END    
+IF ( @SampleID IS NOT NULL    
+AND @SampleID <> -1 )    
+BEGIN    
+SET @where2 = @where2 + ' AND PIS.SampleCode = '    
++ CONVERT(NVARCHAR, @SampleID)    
+END    
+IF ( @pLocationType = 'CL' )    
+BEGIN    
+--sELECT 'A'                        
+SET @where2 = @where2 + 'AND sTracker.CollectedIn= '    
++ CONVERT(NVARCHAR, @pLocationID)    
+SET @where2 = @where2    
++ ' AND sTracker.SampleTrackerID=(select MAX(sa.SampleTrackerID) from #SampleTracker sa with (nolock)                                                                                    
+where sa.PatientVisitID=PIS.PatientVisitID AND Sa.SampleID= sTracker.SampleID AND  sa.InvSampleStatusID!=7 ) '    
+END    
+IF ( @pLocationType = 'OL' )    
+BEGIN    
+--sELECT 'B'                                                                                                      
+SET @where2 = @where2 + ' AND sTracker.CollectedIn<>'    
++ CONVERT(NVARCHAR, @pLocationID)    
+SET @where2 = @where2    
++ ' AND sTracker.SampleTrackerID=(select MAX(sa.SampleTrackerID)                 
+from #SampleTracker sa with (nolock)                 
+where sa.PatientVisitID=PIS.PatientVisitID AND Sa.SampleID= sTracker.SampleID AND  sa.InvSampleStatusID!=7 ) '    
+END    
+IF ( @pBarcodeFrom IS NOT NULL    
+AND @pBarcodeFrom <> ''    
+AND @pBarcodeTo IS NOT NULL    
+AND @pBarcodeTo <> '' )    
+BEGIN    
+--SET @where = @where + ' AND sTracker.CreatedAt BETWEEN ''' + CONVERT(nvarchar,@pFromDate+' 00:00:00 ') + ''' AND ''' + CONVERT(nvarchar,@pToDate+ ' 23:59:59') + ''''                                                                         
+SET @where2 = @where2    
++ ' AND PIS.BarcodeNumber BETWEEN '''    
++ @pBarcodeFrom + ''' AND ''' + @pBarcodeTo + ''''    
+--SET @where = @where + ' AND PIS.BarcodeNumber=''' + @visitID + ''''                                                                                                                     
+END    
+IF ( @pUserLoginID IS NOT NULL    
+AND @pUserLoginID <> '' )    
+BEGIN    
+SET @where2 = @where2 + ' AND PIS.CreatedBy = '''    
++ @pUserLoginID + ''''    
+END    
+IF ( @RegLocation > 0 )    
+BEGIN    
+SET @where2 = @where2 + ' AND PV.OrgID = '    
++ CONVERT(NVARCHAR, @OrgID)    
+SET @where2 = @where2 + ' AND PV.OrgAddressID = '    
++ CONVERT(NVARCHAR, @RegLocation)    
+END    
+SET @orderby2 = @orderby2    
++ ' ORDER BY sTracker.CreatedAt DESC '    
+INSERT INTO #tmptransfer_1
+EXEC (@select2 + @join2 + @where2);    
+END    
+/* Rajagopalan  Start */
+
+Alter Table #tmptransfer_1 Add DeletedRow int
+
+UPDATE T1 SET
+	 T1.CollectedDate =T3.CollectedDate ,T1.CollectedBy=T3.CollectedBy	 
+FROM #tmptransfer_1 T1
+CROSS APPLY ( 
+		SELECT CollectedDate,CollectedBy
+		FROM #tmptransfer_1 T2 
+		WHERE T1.AccessionNumber=T2.AccessionNumber AND 
+		T1.PatientVisitID=T2.PatientVisitID AND T1.SampleID=T2.SampleID AND T2.InvSampleStatusID=1
+) T3
+WHERE  T1.InvSampleStatusID <>1 
+
+UPDATE T1 SET
+	 DeletedRow =1 
+FROM #tmptransfer_1 T1
+CROSS APPLY ( 
+		SELECT CollectedDate,CollectedBy,MAX(T2.InvSampleStatusID) as  InvSampleStatusID
+		FROM #tmptransfer_1 T2 
+		WHERE T1.AccessionNumber=T2.AccessionNumber AND 
+		T1.PatientVisitID=T2.PatientVisitID AND T1.SampleID=T2.SampleID --AND T2.InvSampleStatusID<>1
+		Group by CollectedDate,CollectedBy
+) T3
+WHERE    T1.InvSampleStatusID <>T3.InvSampleStatusID
+
+
+Delete From #tmptransfer_1 Where DeletedRow =1 
+
+
+/* Rajagopalan  End */
+IF ( @ConfigValue = 'Y' )    
+BEGIN    
+--codition added by sudha for lal        
+        
+ --If(@OrgID!='' and @OrgID!=@oriorgid )      
+  if( @config_val is  null or  @config_val!='Y')        
+ begin        
+INSERT INTO @tmptrans_3    
+SELECT a.ORDStatus  AS 'ClientName',    
+----------------a.SampleDesc,          
+-----case when sequenceno=0  then a.SampleDesc when sequenceno>0 and layercount is null then 'Block' else 'Slide' end as SampleDesc,         
+CASE WHEN ISNULL(b.sequenceno,0)=0  then a.SampleDesc    
+WHEN b.samples='Slide' and b.slidevalues =''  THEN 'Slide'     
+WHEN  b.slidevalues !='' THEN 'Slide : '+b.slidevalues     
+ELSE 'Block' END AS 'SampleDesc',         
+a.[Status],    
+a.SampleContainerName,    
+a.InvSampleStatusDesc,    
+a.SampleTrackerID,    
+a.CreatedAt,    
+Isnull((SELECT CASE    
+WHEN EXISTS (SELECT 1    
+FROM   PatientInvSampleAliquot) THEN b.BarcodeNumber    
+ELSE a.BarcodeNumber    
+END), a.BarcodeNumber) AS 'BarcodeNumber',    
+a.PatientName,    
+a.PatientVisitID,    
+a.SampleID,    
+a.[gUID],    
+a.Reason,    
+a.InvSampleStatusID,    
+a.InvestigationName,    
+a.PatientStatus,    
+a.CollectedLocationName,    
+a.OutSourcedOrgName,    
+a.LocationName,
+a.LocationID,
+a.IsFranchisee,    
+a.TaskID,    
+a.PatientNumber,    
+a.SamplePickupDate,    
+a.InvestigationID,    
+a.AccessionNumber,    
+a.OutSourcingLocationID,    
+                       a.CollectedDate,
+					   a.ReceivedBy,
+					   a.CollectedBy,
+					   a.ReceivedDate
+FROM   #tmptransfer_1 a
+LEFT JOIN PatientInvSampleAliquot b    
+ON a.PatientVisitID = b.PatientVisitID    
+AND a.SampleID = b.SampleID    
+end        
+else        
+begin        
+INSERT INTO @tmptrans_3          
+SELECT a.ORDStatus                           AS 'ClientName',          
+----------------a.SampleDesc,                
+-----case when sequenceno=0  then a.SampleDesc when sequenceno>0 and layercount is null then 'Block' else 'Slide' end as SampleDesc,               
+CASE WHEN ISNULL(b.sequenceno,0)=0  then a.SampleDesc          
+WHEN b.sequenceno>0 and ISNULL(b.slidevalues,'')!='' THEN           
+CASE WHEN  b.slidevalues !='' THEN 'Slide : '+b.slidevalues ELSE 'Slide' END  
+ELSE b.samples END AS 'SampleDesc',          
+--ELSE 'Block' END AS 'SampleDesc',               
+a.[Status],          
+a.SampleContainerName,          
+a.InvSampleStatusDesc,          
+a.SampleTrackerID,          
+a.CreatedAt,          
+Isnull((SELECT CASE          
+WHEN EXISTS (SELECT 1          
+FROM   PatientInvSampleAliquot) THEN b.BarcodeNumber          
+ELSE a.BarcodeNumber          
+END), a.BarcodeNumber) AS 'BarcodeNumber',          
+a.PatientName,          
+a.PatientVisitID,          
+a.SampleID,          
+a.[gUID],          
+a.Reason,          
+a.InvSampleStatusID,          
+a.InvestigationName,          
+a.PatientStatus,          
+a.CollectedLocationName,          
+a.OutSourcedOrgName,          
+a.LocationName,          
+a.LocationID,
+a.IsFranchisee, 
+a.TaskID,          
+a.PatientNumber,          
+a.SamplePickupDate,          
+a.InvestigationID,          
+a.AccessionNumber,          
+a.OutSourcingLocationID,          
+                       a.CollectedDate,
+					   a.ReceivedBy,
+					   a.CollectedBy,
+					   a.ReceivedDate 
+FROM   #tmptransfer_1 a      
+LEFT JOIN PatientInvSampleAliquot b          
+ON a.PatientVisitID = b.PatientVisitID          
+AND a.SampleID = b.SampleID         
+end        
+-- if condition ended by sudha for lal        
+END    
+--arun changes ---non franchisee records should not show as default when logon with main lab, while we select the specific registered location id then only franchisee records show
+IF ( @ConfigValue = 'Y' )    
+BEGIN    
+INSERT INTO @tmpTestTable1 (Rowid,ORDStatus,SampleDesc,[Status],SampleContainerName,InvSampleStatusDesc,SampleTrackerID,CreatedAt,BarcodeNumber,PatientName,PatientVisitID,SampleID              
+,[gUID],Reason,InvSampleStatusID,InvestigationName,PatientStatus,CollectedLocationName,OutSourcedOrgName,LocationName,LocationID,IsFranchisee,TaskID,PatientNumber         
+,SamplePickupDate,InvestigationID,AccessionNumber,OutSourcingLocationID,CollectedDate,CollectedBy,ReceivedBy,ReceivedDate)
+select Rowid,ORDStatus,SampleDesc,[Status],SampleContainerName,InvSampleStatusDesc,SampleTrackerID,CreatedAt,BarcodeNumber,PatientName,PatientVisitID,SampleID              
+,[gUID],Reason,InvSampleStatusID,InvestigationName,PatientStatus,CollectedLocationName,OutSourcedOrgName,LocationName,LocationID,IsFranchisee,TaskID,PatientNumber         
+,SamplePickupDate,InvestigationID,AccessionNumber,OutSourcingLocationID,CollectedDate,CollectedBy,ReceivedBy,ReceivedDate          
+ from @tmptrans_3
+ WHERE (((ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) <= 0 AND ISNULL(IsFranchisee,'')  <> 'Y') OR 
+	(ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) > 0  and Locationid = ISNULL(@RegLocation,0))) 
+OR (ISNULL(@IsFranchisee,'') = 'Y' AND (ISNULL(IsFranchisee,'')  = 'Y')))
+
+END
+else 
+begin
+	INSERT INTO @tmpTestTable1 (Rowid,ORDStatus,SampleDesc,[Status],SampleContainerName,InvSampleStatusDesc,SampleTrackerID,CreatedAt,BarcodeNumber,PatientName,PatientVisitID,SampleID              
+	,[gUID],Reason,InvSampleStatusID,InvestigationName,PatientStatus,CollectedLocationName,OutSourcedOrgName,LocationName,LocationID,IsFranchisee,TaskID,PatientNumber         
+	,SamplePickupDate,InvestigationID,AccessionNumber,OutSourcingLocationID,CollectedDate,CollectedBy,ReceivedBy,ReceivedDate)
+	select Rowid,ORDStatus,SampleDesc,[Status],SampleContainerName,InvSampleStatusDesc,SampleTrackerID,CreatedAt,BarcodeNumber,PatientName,PatientVisitID,SampleID              
+	,[gUID],Reason,InvSampleStatusID,InvestigationName,PatientStatus,CollectedLocationName,OutSourcedOrgName,LocationName,LocationID,IsFranchisee,TaskID,PatientNumber         
+	,SamplePickupDate,InvestigationID,AccessionNumber,OutSourcingLocationID,CollectedDate,CollectedBy,ReceivedBy,ReceivedDate          
+	from #tmptransfer_1
+	WHERE (((ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) <= 0 AND ISNULL(IsFranchisee,'')  <> 'Y') OR 
+	(ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) > 0  and Locationid = ISNULL(@RegLocation,0))) 
+	OR (ISNULL(@IsFranchisee,'') = 'Y' AND (ISNULL(IsFranchisee,'')  = 'Y')))	
+
+end
+---
+IF ( @pageSize > -1    
+AND @startRowIndex > -1 )    
+BEGIN    
+SET @startRowIndex = ( ( @startRowIndex - 1 ) * @pageSize ) + 1    
+IF @startRowIndex = 0    
+SET @startRowIndex = 1    
+END    
+IF ( @pageSize = -1    
+AND @startRowIndex = -1 )    
+BEGIN    
+SET ROWCOUNT 0    
+END    
+ELSE    
+BEGIN    
+SET ROWCOUNT @pageSize    
+END    
+------------------------------------------                                                   
+--select * from @tmptransfer_1 
+------------------------------------------        
+IF ( @ConfigValue = 'Y' )    
+BEGIN    
+INSERT INTO @tmptrans_2    
+SELECT ORDStatus,    
+SampleDesc,    
+[Status],    
+SampleContainerName,    
+InvSampleStatusDesc,    
+SampleTrackerID,    
+CreatedAt,    
+BarcodeNumber,    
+PatientName,    
+PatientVisitID,    
+SampleID,    
+[gUID],    
+Reason,    
+InvSampleStatusID,    
+InvestigationName,    
+PatientStatus,    
+CollectedLocationName,    
+OutSourcedOrgName,    
+LocationName,
+LocationID,
+IsFranchisee, 
+TaskID,    
+PatientNumber,    
+SamplePickupDate,    
+InvestigationID,    
+AccessionNumber,    
+OutSourcingLocationID,    
+                 CollectedDate,
+				 CollectedBy,
+				 ReceivedBy,
+				 ReceivedDate 
+FROM   @tmpTestTable1    
+WHERE  Rowid1 >= @startRowIndex    
+END    
+ELSE    
+BEGIN    
+INSERT INTO @tmptrans_2    
+SELECT ORDStatus,    
+SampleDesc,    
+[Status],    
+SampleContainerName,    
+InvSampleStatusDesc,    
+SampleTrackerID,    
+CreatedAt,    
+BarcodeNumber,    
+PatientName,    
+PatientVisitID,    
+SampleID,    
+[gUID],    
+Reason,    
+InvSampleStatusID,    
+InvestigationName,    
+PatientStatus,    
+CollectedLocationName,    
+OutSourcedOrgName,    
+LocationName,
+LocationID,
+IsFranchisee,     
+TaskID,    
+PatientNumber,    
+SamplePickupDate,    
+InvestigationID,    
+AccessionNumber,    
+OutSourcingLocationID,    
+                 CollectedDate,
+				 CollectedBy,
+				 ReceivedBy,
+				 ReceivedDate 
+FROM   @tmpTestTable1
+WHERE  Rowid1 >= @startRowIndex    
+END    
+SET ROWCOUNT 0    
+IF ( @ConfigValue = 'Y' )    
+BEGIN    
+SELECT distinct a.ORDStatus AS ClientName,    
+a.SampleDesc,    
+a.[Status],    
+a.SampleContainerName,    
+a.InvSampleStatusDesc,    
+a.SampleTrackerID,    
+a.CreatedAt,    
+a.BarcodeNumber,    
+a.PatientName,    
+a.PatientVisitID,    
+a.SampleID,    
+a.[gUID],    
+a.Reason,    
+a.InvSampleStatusID,    
+a.InvestigationName,    
+a.PatientStatus,    
+a.CollectedLocationName,    
+a.OutSourcedOrgName,    
+a.LocationName,    
+a.TaskID,    
+a.PatientNumber,    
+a.SamplePickupDate,    
+a.InvestigationID,    
+a.AccessionNumber,    
+a.OutSourcingLocationID,    
+                 a.CollectedDate,
+				 (SELECT Top 1 ISNULL(U.Name,'') FROM Users U (nolock)
+					WHERE U.LoginID=a.ReceivedBy  and OrgID=@OrgID) AS ReceivedBy,
+				 (SELECT top 1 ISNULL(U.Name,'') FROM Users U (nolock)
+					WHERE U.LoginID=a.CollectedBy  and OrgID=@OrgID) AS CollectedBy,
+				 a.ReceivedDate 
+FROM   @tmptrans_2 a
+ORDER  BY a.BarcodeNumber ASC
+
+----- In Main lab, franchisee records should show only if specific location got selected
+SET @totalRows = 0
+
+SELECT @totalRows = Count(1)
+FROM   #tmptransfer_1 a
+LEFT JOIN PatientInvSampleAliquot b    
+ON a.PatientVisitID = b.PatientVisitID    
+AND a.SampleID = b.SampleID   
+WHERE (((ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) <= 0 AND ISNULL(IsFranchisee,'')  <> 'Y') OR 
+	(ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) > 0 and Locationid = ISNULL(@RegLocation,0))) 
+OR (ISNULL(@IsFranchisee,'') = 'Y' AND (ISNULL(IsFranchisee,'')  = 'Y')))
+
+END    
+ELSE    
+BEGIN    
+SELECT ORDStatus AS 'ClientName',    
+SampleDesc,    
+[Status],    
+SampleContainerName,    
+InvSampleStatusDesc,    
+SampleTrackerID,    
+CreatedAt,    
+BarcodeNumber,    
+PatientName,    
+PatientVisitID,    
+SampleID,    
+[gUID],    
+Reason,    
+InvSampleStatusID,    
+InvestigationName,    
+PatientStatus,    
+CollectedLocationName,    
+OutSourcedOrgName,    
+LocationName,    
+TaskID,    
+PatientNumber,    
+SamplePickupDate,    
+InvestigationID,    
+AccessionNumber,    
+OutSourcingLocationID,    
+                 CollectedDate,
+				 
+			(SELECT Top 1 ISNULL(U.Name,'') FROM Users U (nolock)
+					WHERE U.LoginID=t.ReceivedBy  and OrgID=@OrgID ) AS ReceivedBy,
+				 (SELECT top 1 ISNULL(U.Name,'') FROM Users U (nolock)
+					WHERE U.LoginID=t.CollectedBy  and OrgID=@OrgID) AS CollectedBy,
+					ReceivedDate
+          FROM   @tmptrans_2 t 
+ORDER  BY SamplePickupDate DESC    
+
+SET @totalRows = 0
+----- In Main lab, franchisee records should show only if specific location got selected
+SELECT @totalRows = Count(1)                                   
+FROM   #tmptransfer_1 
+WHERE (((ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) <= 0 AND ISNULL(IsFranchisee,'')  <> 'Y') OR 
+	(ISNULL(@IsFranchisee,'') <> 'Y' AND ISNULL(@RegLocation,0) > 0)) 
+OR (ISNULL(@IsFranchisee,'') = 'Y' AND (ISNULL(IsFranchisee,'')  = 'Y')))
+
+END
+DROP TABLE #SampleTracker
+DROP TABLE #tmptransfer_1
+SET NOCOUNT OFF    
+END    
+    
+    

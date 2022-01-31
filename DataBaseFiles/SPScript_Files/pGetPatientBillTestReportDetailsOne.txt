@@ -1,0 +1,100 @@
+  
+CREATE PROCEDURE [dbo].[pGetPatientBillTestReportDetailsOne] (@pVisitID     [BIGINT],            
+                                               @pBillID      [BIGINT],            
+                                               @pOrgID       [BIGINT])            
+AS            
+  BEGIN     
+  DECLARE @BillType nvarchar(20)=''    
+  If Exists (Select * from VisitCLientMapping VCM (NOLOCK)   
+  Inner join ClientMaster CM (NOLOCK) ON CM.ClientID = VCM.ClientID and CM.OrgID=VCM.OrgID  
+  Inner join ClientAttributesDetails CAD (NOLOCK) On CAD.ClientID=CM.ClientID AND CAD.OrgID=CM.OrgID  
+  Inner join Clientattributes CA (NOLOCK) ON CA.AttributeID=CAD.AttributesID   
+  WHERE VCM.VisitID=@pVisitID AND VCM.FinalBillID=@pBillID AND CA.AttributeCode='MRPBILL' AND CA.AttributeID=32 AND VCM.OrgID=@pOrgID)    
+  BEGIN  
+  SET @BillType = 'MRPBill'  
+  END  
+  ELSE  
+  BEGIN  
+  SET @BillType = 'BillAmount'    
+  END  
+  --DECLARE @BillType nvarchar(20)=''           
+  --SELECT @BillType=CM.BillType          
+  -- FROM   VisitCLientMapping VCM WITH(NOLOCK)           
+  --           INNER JOIN CLIENTMASTER CM WITH(NOLOCK) ON           
+  --    CM.ClientID = VCM.ClientID           
+  --    WHERE VCM.FinalBillid=@pBillID           
+    SELECT @BillType=CM.BillType            
+   FROM   VisitCLientMapping VCM WITH(NOLOCK)             
+             INNER JOIN CLIENTMASTER CM WITH(NOLOCK) ON             
+      CM.ClientID = VCM.ClientID             
+      WHERE VCM.FinalBillid=@pBillID       
+                
+              
+     DECLARE @CancelledBillingDetails table (FinalBillID BIGINT,BillingID BIGINT, Status nvarchar(50))        
+             
+     INSERT into @CancelledBillingDetails        
+     SELECT AR.FInalbillID,AR.BillingDetailsID,'Cancelled'  from AmountRefunddetails AR where AR.FInalbillID =@pBillID AND RefundType='CANCELLED'        
+            
+ DECLARE @testdetails TABLE (SNo int Identity(1,1), FeeDescription Nvarchar(255), ReportDate DATETIME, AMOUNT Decimal(18,2), TestCode Nvarchar(50), ID Int, Type Nvarchar(10))         
+ IF(ISNULL(@BillType,'')='') SET @BillType='BillAmount'               
+           
+  IF(@BillType='BillAmount') -- or @BillType='MRPBill'           
+  BEGIN          
+    
+  INSERT INTO @testdetails (FeeDescription, ReportDate, AMOUNT, ID, Type)  
+      SELECT CASE when CB.STATUS is not null or CB.STATUS <> '' then BD.FeeDescription + ' (Cancelled) ' else BD.FeeDescription end as FeeDescription,            
+             ( CASE            
+                 WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''            
+                 ELSE BD.TatDateTime            
+               END )         AS ReportDate,            
+             BD.Amount AS AMOUNT  
+    ,BD.FeeID as ID  
+    ,BD.FeeType as Type  
+      FROM   FINALBILL FB WITH(NOLOCK)            
+             INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)            
+                     ON FB.FinalBillID = BD.FinalBillID            
+             LEFT join @CancelledBillingDetails CB         
+             ON BD.FinalBillID = CB.FinalBillID and BD.BillingDetailsID=CB.BillingID        
+      WHERE  FB.FinalBillID = @pBillID            
+             AND FB.VisitID = @pVisitID            
+             AND FB.OrgID = @pOrgID  
+   ORDER BY BD.BillingDetailsID     
+      
+    END          
+              
+    ELSE IF(@BillType='MRPBill' OR @BillType='Amount') --@BillType='ACTUALAMOUNT'         
+  BEGIN          
+  INSERT INTO @testdetails (FeeDescription, ReportDate, AMOUNT, ID, Type)  
+    SELECT BD.FeeDescription,            
+     ( CASE            
+      WHEN CONVERT(nvarchar, Isnull(BD.TatDateTime, '01/01/1753'), 103) = '01/01/1753' THEN ''            
+      ELSE BD.TatDateTime            
+       END )         AS ReportDate,            
+     BD.ActualAmount AS AMOUNT  
+  ,BD.FeeID as ID  
+  ,BD.FeeType as Type            
+    FROM   FINALBILL FB WITH(NOLOCK)            
+     INNER JOIN BILLINGDETAILS BD WITH(NOLOCK)            
+       ON FB.FinalBillID = BD.FinalBillID            
+    WHERE  FB.FinalBillID = @pBillID            
+     AND FB.VisitID = @pVisitID            
+     AND FB.OrgID = @pOrgID             
+  ORDER BY BD.BillingDetailsID            
+    END          
+   
+ UPDATE  TD SET TD.TestCode=IOM.TestCode FROM @testdetails TD  
+ LEFT JOIN INVESTIGATIONORGMAPPING IOM (NOLOCK) ON IOM.InvestigationID=TD.ID  
+ WHERE TD.Type='INV' AND IOM.OrgID=@pOrgID  
+   
+ UPDATE  TD SET TD.TestCode=IOM.TestCode FROM @testdetails TD  
+ LEFT JOIN INVORGGROUP IOM (NOLOCK) ON IOM.AttgroupID=TD.ID  
+ WHERE TD.Type in ('GRP','PKG') AND IOM.OrgID=@pOrgID    
+   
+ SELECT SNo as 'S.No', FeeDescription, ReportDate, AMOUNT, TestCode, Type FROM @testdetails  
+  END  
+  
+  
+  
+  
+  
+  

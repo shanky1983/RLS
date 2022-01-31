@@ -1,0 +1,16 @@
+CREATE Procedure [dbo].[PgetPhysicianmaster](
+@porgid BIGINT
+ ,@PparamType VARCHAR(20) = NULL
+ ,@Pparamvalue SMALLINT = NULL
+ ,@Debugflag BIT = 0
+
+)
+As 
+Begin
+select ReferingPhysicianID,PhysicianCode,PhysicianName,IsActive,Address1 as Address,isnull(Addr.EmailID,'') as EmailID,isnull(Addr.Mobile,'') as [Mobile Number] 
+from ReferingPhysician RP with(nolock) 
+left join Addressdetails Addr with(nolock) on RP.ReferingPhysicianID = Addr.ReferenceID and  RP.OrgID = Addr.OrgID and Addr.ReferenceType = 'Refphy'
+where RP.OrgID=@porgid and IsActive='Y' -- isnull(PhysicianCode,'')<>'' 
+ENd
+
+

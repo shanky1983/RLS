@@ -1,0 +1,1673 @@
+Create PROCEDURE [dbo].[pGetBarcodeAttributeNValues_HistoPrint] @pOrgId [int]            
+,@pPatientVisitId [nvarchar] (max)            
+,@plstSampleId [nvarchar] (max)            
+,@pBillId [bigint]            
+,@pCategoryCode [nvarchar] (50)            
+,@ContextInfo [UDT_Context] READONLY            
+--WITH EXECUTE AS OWNER                                                                                                  
+--WITH RECOMPILE                                                                                          
+AS            
+BEGIN            
+SET NOCOUNT ON        
+print @pCategoryCode     
+DECLARE @AdditionalInfo nvarchar(50)       
+if CHARINDEX('_',@pCategoryCode) > 0         
+begin        
+print @pCategoryCode    
+   SET @AdditionalInfo=(SELECT REVERSE(Right(REVERSE(@pCategoryCode),CHARINDEX('_',REVERSE(@pCategoryCode)))))      
+   SET @pCategoryCode=@AdditionalInfo;     
+   print @pCategoryCode     
+end      
+ELSE      
+BEGIN      
+SET @AdditionalInfo='';      
+END           
+DECLARE @tblPatientVisitID TABLE (VisitID BIGINT)            
+INSERT INTO @tblPatientVisitID (VisitID)            
+SELECT item            
+FROM fnSplit(@pPatientVisitId, ',')            
+DECLARE @maintbl TABLE (            
+HeaderLine1 NVARCHAR(MAX)            
+,HeaderLine2 NVARCHAR(MAX)            
+,FooterLine1 NVARCHAR(MAX)            
+,FooterLine2 NVARCHAR(MAX)            
+,HeaderLine3  NVARCHAR(MAX)            
+,HeaderLine4  NVARCHAR(MAX)            
+,FooterLine3  NVARCHAR(MAX)            
+,FooterLine4  NVARCHAR(MAX)            
+,Width NVARCHAR(15)            
+,Height NVARCHAR(15)            
+,HeaderFontFamily NVARCHAR(50)            
+,HeaderFontSize NVARCHAR(2)            
+,HeaderFontStyle NVARCHAR(25)            
+,FooterFontFamily NVARCHAR(50)            
+,FooterFontSize NVARCHAR(2)            
+,FooterFontStyle NVARCHAR(25)            
+,LeftVertical NVARCHAR(MAX)            
+)      
+         
+DECLARE @Temp TABLE (            
+KitID INT            
+,KitBacthNo NVARCHAR(100)            
+,IndentID INT            
+,EpisodeVisitName NVARCHAR(100)            
+,EpisodeName NVARCHAR(100)            
+,NoOfprint NVARCHAR(25)            
+)            
+INSERT INTO @maintbl (            
+HeaderLine1            
+,HeaderLine2            
+,FooterLine1            
+,FooterLine2            
+,HeaderLine3            
+,HeaderLine4            
+,FooterLine3            
+,FooterLine4            
+,Width            
+,Height            
+,LeftVertical            
+)            
+SELECT HeaderLine1            
+,HeaderLine2            
+,FooterLine1            
+,FooterLine2            
+,HeaderLine3            
+,HeaderLine4            
+,FooterLine3            
+,FooterLine4            
+,Width            
+,Height            
+,LeftVertical            
+FROM (            
+SELECT BOM.Value            
+,BMA.Code            
+FROM BarcodeOrgMapping BOM WITH (NOLOCK)            
+INNER JOIN BarcodeMainAttributes BMA WITH (NOLOCK) ON BMA.Id = BOM.BarcodeMainAttributeId            
+INNER JOIN BarcodeCategories BC WITH (NOLOCK) ON BC.Id = BOM.BarcodeCategoryId            
+WHERE BOM.OrgID = @pOrgId            
+AND BC.Code = @pCategoryCode            
+) MA            
+PIVOT(MAX(Value) FOR Code IN (            
+HeaderLine1            
+,HeaderLine2            
+,FooterLine1            
+,FooterLine2            
+,HeaderLine3            
+,HeaderLine4            
+,FooterLine3            
+,FooterLine4            
+,Width            
+,Height            
+,LeftVertical            
+)) AS MPVT            
+SELECT *            
+FROM @maintbl            
+IF @pCategoryCode = 'ContainerRg'            
+OR @pCategoryCode = 'ContainerCT'            
+BEGIN            
+DECLARE @BaseTable AS TABLE (            
+BarcodeNumber NVARCHAR(250)            
+,PatientName NVARCHAR(255)            
+,PatientNumber NVARCHAR(30)            
+,Age NVARCHAR(20)          
+,Sex NCHAR(1)            
+,RegisteredDateTime DATETIME            
+,TestCode NVARCHAR(500)            
+,CollectedDateTime DATETIME            
+,VisitType NVARCHAR(10)            
+,SampleType NVARCHAR(50)            
+,ContainerName NVARCHAR(255)            
+,Location NVARCHAR(50)            
+,DeptCode NVARCHAR(100)            
+,VisitNumber NVARCHAR(30)            
+,PatientStatus NVARCHAR(100)            
+,VisitCount NVARCHAR(10)            
+,VisitID BIGINT            
+,SampleID INT            
+,TestStatus NVARCHAR(250)            
+,IsStat NVARCHAR(5)            
+,SampleContainerID INT            
+,SampleTypeID INT            
+,FeeID BIGINT            
+,FeeType NVARCHAR(50)            
+,DeptID BIGINT            
+,OrgAddressID INT            
+,ResCaptureLoc INT            
+,OrgID INT            
+,TestName NVARCHAR(255)       
+,AccessionNumber BIGINT            
+,SequenceNo INT            
+,ExternalVisitID NVARCHAR(500)            
+,IPOPNumber nVARCHAR(500)            
+,ReceivedDatetime Datetime            
+)            
+DECLARE @GrpBaseTable AS TABLE (            
+BarcodeNumber NVARCHAR(250)            
+,PatientName NVARCHAR(255)            
+,PatientNumber NVARCHAR(30)            
+,Age NVARCHAR(20)            
+,Sex NCHAR(1)            
+,RegisteredDateTime DATETIME            
+,TestCode NVARCHAR(500)            
+,CollectedDateTime DATETIME            
+,VisitType NVARCHAR(10)            
+,SampleType NVARCHAR(50)            
+,ContainerName NVARCHAR(50)            
+,Location NVARCHAR(50)            
+,DeptCode NVARCHAR(100)            
+,VisitNumber NVARCHAR(30)            
+,PatientStatus NVARCHAR(100)            
+,VisitCount NVARCHAR(10)            
+,VisitID BIGINT            
+,SampleID INT            
+,TestStatus NVARCHAR(250)            
+,IsStat NVARCHAR(5)            
+,SampleContainerID INT            
+,SampleTypeID INT            
+,FeeID BIGINT            
+,FeeType NVARCHAR(50)            
+,DeptID BIGINT            
+,OrgAddressID INT            
+,ResCaptureLoc INT            
+,OrgID INT            
+,TestName NVARCHAR(255)            
+,GroupContent BIGINT            
+,AccessionNumber BIGINT,            
+ExternalVisitID nvarchar(200)            
+,IPOPNumber nVARCHAR(500)            
+,ReceivedDatetime Datetime            
+)            
+DECLARE @FinalResult AS TABLE (            
+Sno INT            
+,BarcodeNumber NVARCHAR(250)            
+,PatientName NVARCHAR(255)            
+,PatientNumber NVARCHAR(30)            
+,Age NVARCHAR(20)            
+,Sex NCHAR(1)            
+,RegisteredDateTime DATETIME            
+,TestCode NVARCHAR(500)            
+,CollectedDateTime DATETIME            
+,VisitType NVARCHAR(10)            
+,SampleType NVARCHAR(50)            
+,ContainerName NVARCHAR(50)            
+,Location NVARCHAR(50)            
+,DeptCode NVARCHAR(100)            
+,VisitNumber NVARCHAR(30)            
+,PatientStatus NVARCHAR(100)            
+,VisitCount NVARCHAR(10)            
+,VisitID BIGINT            
+,SampleID INT            
+,TestStatus NVARCHAR(250)            
+,IsStat NVARCHAR(5)            
+,SampleContainerID INT            
+,SampleTypeID INT            
+,FeeID BIGINT            
+,FeeType NVARCHAR(50)            
+,DeptID BIGINT            
+,OrgAddressID INT            
+,ResCaptureLoc INT            
+,OrgID INT            
+,TestName NVARCHAR(255)            
+,SequenceNo INT,            
+ExternalVisitID nvarchar(200)            
+,IPOPNumber nVARCHAR(500)            
+,ReceivedDatetime Datetime            
+)            
+DECLARE @StringSeperation AS TABLE (            
+BarcodeNumber NVARCHAR(255)            
+,PatientName NVARCHAR(255)            
+,PatientNumber NVARCHAR(30)            
+,Age NVARCHAR(20)            
+,Sex NCHAR(1)            
+,RegisteredDateTime DATETIME            
+,TestCode NVARCHAR(500)            
+,CollectedDateTime DATETIME            
+,VisitType NVARCHAR(10)            
+,SampleType NVARCHAR(50)            
+,ContainerName NVARCHAR(50)            
+,Location NVARCHAR(50)            
+,DeptCode NVARCHAR(100)            
+,VisitNumber NVARCHAR(30)            
+,PatientStatus NVARCHAR(100)            
+,VisitCount NVARCHAR(255)            
+,VisitID BIGINT            
+,SampleID INT            
+,TestStatus NVARCHAR(250)            
+,IsStat NVARCHAR(5)            
+,SampleContainerID INT            
+,SampleTypeID INT            
+,FeeID BIGINT            
+,FeeType NVARCHAR(50)            
+,DeptID BIGINT            
+,OrgAddressID INT            
+,ResCaptureLoc INT            
+,OrgID INT            
+,TestName NVARCHAR(255),            
+ExternalVisitID nvarchar(200)            
+,IPOPNumber nVARCHAR(500)            
+,ReceivedDatetime Datetime            
+)  
+--DECLARE @StringSeperation1 AS TABLE (            
+--BarcodeNumber NVARCHAR(255)            
+--,PatientName NVARCHAR(255)            
+--,PatientNumber NVARCHAR(30)            
+--,Age NVARCHAR(20)            
+--,Sex NCHAR(1)            
+--,RegisteredDateTime DATETIME            
+--,TestCode NVARCHAR(500)            
+--,CollectedDateTime DATETIME            
+--,VisitType NVARCHAR(10)            
+--,SampleType NVARCHAR(50)            
+--,ContainerName NVARCHAR(50)            
+--,Location NVARCHAR(50)            
+--,DeptCode NVARCHAR(100)            
+--,VisitNumber NVARCHAR(30)            
+--,PatientStatus NVARCHAR(100)            
+--,VisitCount NVARCHAR(255)            
+--,VisitID BIGINT            
+--,SampleID INT            
+--,TestStatus NVARCHAR(250)            
+--,IsStat NVARCHAR(5)            
+--,SampleContainerID INT            
+--,SampleTypeID INT            
+--,FeeID BIGINT            
+--,FeeType NVARCHAR(50)            
+--,DeptID BIGINT            
+--,OrgAddressID INT            
+--,ResCaptureLoc INT            
+--,OrgID INT            
+--,TestName NVARCHAR(255),            
+--ExternalVisitID nvarchar(200)            
+--,IPOPNumber nVARCHAR(500)            
+--,ReceivedDatetime Datetime            
+--)                 
+DECLARE @tblSampleID TABLE (SampleID BIGINT)            
+INSERT INTO @tblSampleID (SampleID)            
+SELECT item            
+FROM fnSplit(@plstSampleId, ',')            
+update tmp set tmp.SampleId=ps.Sampleid from  @tblSampleID tmp inner join patientinvSample ps on ps.Sampleid=tmp.sampleid   
+   inner join @tblPatientVisitID tmpvid on tmpvid.Visitid=ps.patientvisitid and ps.casenumber is not null             
+DECLARE @CodeSchemeID INT          --SELECT  @CodeSchemeID=CodeTypeID from codingschemeorgmapping WITH(NOLOCK) where  orgid=@pOrgId and isprimary='N'                
+SELECT @CodeSchemeID = CSM.CodeTypeID            
+FROM CodingSchemeMaster csm            
+INNER JOIN CodingSchemeOrgMapping csom ON csm.CodeTypeID = csom.CodeTypeID            
+WHERE CodingSchemaName = 'ABBREVIATION CODE'            
+AND OrgID = @pOrgId            
+/**** For Investigation  *****/            
+/** Transaction Data **/  
+if Exists(Select 1 from patientinvSampleAliquot PINVA INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PINVA.PatientVisitId ) 
+BEGIN         
+INSERT INTO @BaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,CollectedDateTime            
+,VisitType            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,FeeID            
+,FeeType            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,SampleTypeID            
+,SampleContainerID            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber             
+            
+)            
+SELECT DISTINCT ISNULL(PINVA.BarcodeNumber, PS.BarcodeNumber) AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,(         
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + 'Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + 'M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + 'D'            
+ELSE ''            
+END            
+) AS Age         
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,ISNULL(PS.CollectedDateTime, PS.CreatedAt) AS CollectedDateTime            
+,CASE             
+WHEN PV.VisitType = 0            
+THEN 'OP'            
+ELSE 'IP'            
+END AS VisitType            
+,PV.VisitNumber AS VisitNumber            
+,P.PatientStatus            
+,ISNULL(PV.TodaysVisitNo, '0') VisitCount            
+,PV.PatientVisitId AS VisitID            
+,PS.SampleID            
+,CASE             
+WHEN ORD.referredtype = 'Retest'            
+THEN 'RC'            
+ELSE ''            
+END AS TestStatus            
+,ORD.IsStat            
+,ORD.ID            
+,ORD.Type            
+,PV.OrgAddressID            
+,ORD.ResCaptureLoc            
+,P.OrgID            
+,PS.SampleCode            
+,PS.SampleContainerID            
+,ORD.NAME            
+,ORD.AccessionNumber,            
+pv.ExternalvisitID            
+,Pv.PreviousLabNumber            
+FROM PatientInvSample PS WITH (NOLOCK)            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'INV'            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID          
+INNER JOIN PatientInvSampleAliquot PINVA ON   PINVA.PatientVisitId=PS.patientvisitid        
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId          
+        
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID           
+      
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)      
+END
+ELSE
+BEGIN
+INSERT INTO @BaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,CollectedDateTime            
+,VisitType            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,FeeID            
+,FeeType            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,SampleTypeID            
+,SampleContainerID            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber             
+            
+)            
+SELECT DISTINCT ISNULL(PS.BarcodeNumber, '') AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,(            
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + 'Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + 'M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + 'D'            
+ELSE ''            
+END            
+) AS Age         
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,ISNULL(PS.CollectedDateTime, PS.CreatedAt) AS CollectedDateTime            
+,CASE             
+WHEN PV.VisitType = 0            
+THEN 'OP'            
+ELSE 'IP'            
+END AS VisitType            
+,PV.VisitNumber AS VisitNumber            
+,P.PatientStatus            
+,ISNULL(PV.TodaysVisitNo, '0') VisitCount            
+,PV.PatientVisitId AS VisitID            
+,PS.SampleID            
+,CASE             
+WHEN ORD.referredtype = 'Retest'            
+THEN 'RC'            
+ELSE ''            
+END AS TestStatus            
+,ORD.IsStat            
+,ORD.ID            
+,ORD.Type            
+,PV.OrgAddressID            
+,ORD.ResCaptureLoc            
+,P.OrgID            
+,PS.SampleCode            
+,PS.SampleContainerID            
+,ORD.NAME            
+,ORD.AccessionNumber,            
+pv.ExternalvisitID            
+,Pv.PreviousLabNumber            
+FROM PatientInvSample PS WITH (NOLOCK)            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'INV'            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID          
+--INNER JOIN PatientInvSampleAliquot PINVA ON   PINVA.PatientVisitId=PS.patientvisitid        
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId          
+        
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID           
+      
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)      
+END      
+--and Pv.patientvisitid=@pPatientVisitId              
+/** Master Data**/            
+UPDATE temp1            
+SET temp1.DeptID = IOM.DeptID            
+,temp1.DeptCode = ISNULL(IDM.Code, IDM.DeptName)            
+FROM @BaseTable temp1            
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID = temp1.OrgID            
+AND IOM.InvestigationID = temp1.FeeID            
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IOM.OrgID = IDM.OrgID          
+AND IDM.DeptID = IOM.DeptID            
+WHERE temp1.FeeType = 'INV'            
+UPDATE temp1            
+SET temp1.ContainerName = CASE             
+WHEN ISC.Code = ''            
+OR ISC.Code IS NULL            
+THEN ISC.ContainerName            
+ELSE ISC.Code            
+END            
+FROM @BaseTable temp1            
+INNER JOIN InvestigationSampleContainer ISC WITH (NOLOCK) ON ISC.OrgID = temp1.OrgID            
+AND ISC.SampleContainerID = temp1.SampleContainerID            
+WHERE temp1.FeeType = 'INV'      
+UPDATE temp1            
+SET temp1.SampleType = CASE             
+WHEN ISM.Code = ''            
+OR ISM.Code IS NULL            
+THEN ISM.SampleDesc            
+ELSE ISM.Code            
+END            
+FROM @BaseTable temp1            
+INNER JOIN InvSampleMaster ISM WITH (NOLOCK) ON ISM.OrgID = temp1.OrgID            
+AND ISM.SampleCode = temp1.SampleTypeID            
+WHERE temp1.FeeType = 'INV'            
+UPDATE temp1            
+SET temp1.Location = OA.Location            
+FROM @BaseTable temp1            
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.OrgID = temp1.OrgID            
+AND OA.AddressID = ISNULL(temp1.ResCaptureLoc, temp1.OrgAddressID)    
+WHERE temp1.FeeType = 'INV'            
+UPDATE temp1            
+SET temp1.TestCode = UPPER(ISNULL(LTRIM(RTRIM(CM.CodeName)), temp1.TestName))            
+FROM @BaseTable temp1            
+INNER JOIN CodeMapper CMM WITH (NOLOCK) ON CMM.IdentifyingID = temp1.FeeID            
+AND CMM.IdentifyingType = 'Investigations'            
+INNER JOIN CodeMaster CM WITH (NOLOCK) ON CM.CodeMasterID = CMM.CodeMasterID            
+AND CM.CodeType = CMM.IdentifyingType            
+WHERE CM.CodeSchemeID = @CodeSchemeID            
+AND temp1.FeeType = 'INV'            
+            
+update temp1             
+set temp1.ReceivedDatetime =ISNULL(ST.ModifiedAt, ST.CreatedAt)             
+FROM @BaseTable temp1 inner join PatientInvSample PS WITH (NOLOCK) on temp1.VisitID=PS.PatientVisitID            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID             
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'INV'            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID            
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId            
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID            
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID IN (3)            
+/**** For Group  *****/            
+/** Transaction Data **/            
+if exists(Select 1 from patientinvSampleAliquot  PINVA  INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PINVA.PatientVisitId  )
+BEGIN
+INSERT INTO @GrpBaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,CollectedDateTime            
+,VisitType            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,FeeID            
+,FeeType            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,SampleTypeID            
+,SampleContainerID            
+,GroupContent            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber            
+)            
+SELECT DISTINCT ISNULL(PINVA.BarcodeNumber, PS.BarcodeNumber) AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,(            
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + 'Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + 'M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + 'D'            
+ELSE ''            
+END            
+) AS Age            
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,ISNULL(PS.CollectedDateTime, PS.CreatedAt) AS CollectedDateTime            
+,CASE             
+WHEN PV.VisitType = 0            
+THEN 'OP'            
+ELSE 'IP'            
+END AS VisitType            
+,PV.VisitNumber AS VisitNumber            
+,P.PatientStatus            
+,ISNULL(PV.TodaysVisitNo, '0') VisitCount            
+,PV.PatientVisitId AS VisitID            
+,PS.SampleID            
+,CASE             
+WHEN ORD.referredtype = 'Retest'            
+THEN 'RC'            
+ELSE ''           
+END AS TestStatus            
+,ORD.IsStat            
+,ORD.ID            
+,'GRP'            
+,PV.OrgAddressID            
+,ORD.ResCaptureLoc            
+,P.OrgID            
+,PS.SampleCode            
+,PS.SampleContainerID            
+,PI.InvestigationID            
+,ORD.NAME            
+,ORD.AccessionNumber,            
+PV.ExternalVisitID            
+,PV.PreviousLabNumber            
+FROM PatientInvSample PS WITH (NOLOCK)            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'GRP'            
+INNER JOIN PatientInvestigation PI WITH (NOLOCK) ON PI.PatientVisitID = ORD.VisitID            
+AND PI.OrgID = PS.OrgID            
+AND PI.AccessionNumber = ORD.AccessionNumber            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID       
+ INNER JOIN PatientInvSampleAliquot PINVA ON   PINVA.PatientVisitId=PS.PatientVisitID           
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID            
+  INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId         
+           
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)    
+END
+ELSE
+BEGIN
+INSERT INTO @GrpBaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,CollectedDateTime            
+,VisitType            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,FeeID            
+,FeeType            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,SampleTypeID            
+,SampleContainerID            
+,GroupContent            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber            
+)            
+SELECT DISTINCT ISNULL(PS.BarcodeNumber, '') AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,(            
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + 'Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + 'M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + 'D'            
+ELSE ''            
+END            
+) AS Age            
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,ISNULL(PS.CollectedDateTime, PS.CreatedAt) AS CollectedDateTime            
+,CASE             
+WHEN PV.VisitType = 0            
+THEN 'OP'            
+ELSE 'IP'            
+END AS VisitType            
+,PV.VisitNumber AS VisitNumber            
+,P.PatientStatus            
+,ISNULL(PV.TodaysVisitNo, '0') VisitCount            
+,PV.PatientVisitId AS VisitID            
+,PS.SampleID            
+,CASE             
+WHEN ORD.referredtype = 'Retest'            
+THEN 'RC'            
+ELSE ''            
+END AS TestStatus            
+,ORD.IsStat            
+,ORD.ID            
+,'GRP'            
+,PV.OrgAddressID            
+,ORD.ResCaptureLoc            
+,P.OrgID            
+,PS.SampleCode            
+,PS.SampleContainerID            
+,PI.InvestigationID  
+,ORD.NAME            
+,ORD.AccessionNumber,            
+PV.ExternalVisitID            
+,PV.PreviousLabNumber            
+FROM PatientInvSample PS WITH (NOLOCK)            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'GRP'            
+INNER JOIN PatientInvestigation PI WITH (NOLOCK) ON PI.PatientVisitID = ORD.VisitID            
+AND PI.OrgID = PS.OrgID            
+AND PI.AccessionNumber = ORD.AccessionNumber            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID       
+ --INNER JOIN PatientInvSampleAliquot PINVA ON   PINVA.PatientVisitId=PS.PatientVisitID           
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID            
+  INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId         
+           
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)  
+END        
+   --AND Pv.patientvisitid = @pPatientVisitId            
+/** Master Data**/            
+UPDATE temp1            
+SET temp1.DeptID = IOM.DeptID            
+,temp1.DeptCode = ISNULL(IDM.Code, IDM.DeptName)            
+FROM @GrpBaseTable temp1            
+INNER JOIN InvestigationOrgMapping IOM WITH (NOLOCK) ON IOM.OrgID = temp1.OrgID            
+AND IOM.InvestigationID = temp1.GroupContent            
+INNER JOIN InvDeptMaster IDM WITH (NOLOCK) ON IOM.OrgID = IDM.OrgID            
+AND IDM.DeptID = IOM.DeptID            
+WHERE temp1.FeeType = 'GRP'            
+UPDATE temp1            
+SET temp1.ContainerName = CASE             
+WHEN ISC.Code = ''            
+OR ISC.Code IS NULL            
+THEN ISC.ContainerName            
+ELSE ISC.Code            
+END            
+FROM @GrpBaseTable temp1            
+INNER JOIN InvestigationSampleContainer ISC WITH (NOLOCK) ON ISC.OrgID = temp1.OrgID            
+AND ISC.SampleContainerID = temp1.SampleContainerID            
+WHERE temp1.FeeType = 'GRP'            
+UPDATE temp1            
+SET temp1.SampleType = CASE             
+WHEN ISM.Code = ''            
+OR ISM.Code IS NULL            
+THEN ISM.SampleDesc            
+ELSE ISM.Code            
+END            
+FROM @GrpBaseTable temp1            
+INNER JOIN InvSampleMaster ISM WITH (NOLOCK) ON ISM.OrgID = temp1.OrgID            
+AND ISM.SampleCode = temp1.SampleTypeID            
+WHERE temp1.FeeType = 'GRP'            
+UPDATE temp1            
+SET temp1.Location = OA.Location            
+FROM @GrpBaseTable temp1            
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.OrgID = temp1.OrgID            
+AND OA.AddressID = ISNULL(temp1.ResCaptureLoc, temp1.OrgAddressID)            
+WHERE temp1.FeeType = 'GRP'            
+         
+    
+update temp1            
+set temp1.Receiveddatetime=ISNULL(ST.ModifiedAt, ST.CreatedAt)            
+From @GrpBaseTable temp1 inner join             
+            
+PatientInvSample PS WITH (NOLOCK) on temp1.VisitID=PS.PatientVisitID            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+AND ORD.Type = 'GRP'            
+INNER JOIN PatientInvestigation PI WITH (NOLOCK) ON PI.PatientVisitID = ORD.VisitID            
+AND PI.OrgID = PS.OrgID            
+AND PI.AccessionNumber = ORD.AccessionNumber            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID            
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID            
+  INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId            
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)            
+INSERT INTO @BaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,TestCode            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,SampleContainerID            
+,SampleTypeID            
+,FeeID            
+,FeeType            
+,DeptID            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber            
+,ReceivedDatetime            
+)            
+SELECT DISTINCT BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,TestCode            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+,IsStat            
+,SampleContainerID            
+,SampleTypeID            
+,FeeID            
+,FeeType            
+,DeptID            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,TestName            
+,AccessionNumber,            
+ExternalVisitID            
+,IPOPNumber            
+,ReceivedDatetime            
+FROM @GrpBaseTable            
+UPDATE temp1            
+SET temp1.TestCode = UPPER(ISNULL(LTRIM(RTRIM(CM.CodeName)), temp1.TestName))            
+FROM @BaseTable temp1            
+INNER JOIN InvOrgGroup IOG WITH (NOLOCK) ON IOG.AttGroupID = temp1.FeeID            
+AND IOG.OrgID = @pOrgId            
+INNER JOIN CodeMapper CMM WITH (NOLOCK) ON CMM.IdentifyingID = IOG.OrgGroupID            
+AND CMM.IdentifyingType = 'GRP'            
+INNER JOIN CodeMaster CM WITH (NOLOCK) ON CM.CodeMasterID = CMM.CodeMasterID            
+AND CM.CodeType = CMM.IdentifyingType            
+WHERE CM.CodeSchemeID = @CodeSchemeID            
+AND temp1.FeeType = 'GRP'            
+/*If Test Code IS Empty showing Test Name or Group Name*/            
+UPDATE @BaseTable            
+SET TestCode = UPPER(TestName)            
+WHERE isnull(Testcode, '') = ''       
+/*If Test Code IS Empty showing Test Name or Group Name*/            
+UPDATE BT            
+SET BT.SequenceNo = TB.ID            
+FROM @BaseTable BT            
+INNER JOIN (            
+SELECT SampleID            
+,AccessionNumber            
+,DENSE_RANK() OVER (            
+ORDER BY SampleID            
+) AS ID            
+FROM @BaseTable            
+) TB ON BT.SampleID = TB.SampleID            
+AND BT.AccessionNumber = TB.AccessionNumber            
+--select * from @BaseTable                
+--return               
+INSERT INTO @FinalResult (            
+Sno            
+,BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime  
+,PatientStatus            
+,VisitCount            
+,TestCode            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,VisitID            
+,SampleID            
+,TestStatus            
+,SequenceNo,            
+TestName,            
+ExternalVisitID            
+,IPOPNumber            
+,ReceivedDatetime            
+)            
+SELECT DISTINCT ROW_NUMBER() OVER (            
+ORDER BY SequenceNo            
+)            
+,D.*            
+FROM (            
+SELECT DISTINCT A.BarcodeNumber            
+,CASE             
+WHEN LEN(A.PatientName) > 18            
+THEN SUBSTRING(A.PatientName, 0, 18)            
+ELSE A.PatientName            
+END AS PatientName            
+,A.PatientNumber            
+,A.Age            
+,A.Sex            
+,A.RegisteredDateTime            
+,A.PatientStatus            
+,A.VisitCount            
+    ,substring (STUFF((            
+SELECT '-' + CASE ISNULL(B.IsStat, 'N')            
+WHEN 'Y'            
+THEN B.TestCode + '*'            
+ELSE B.TestCode            
+END AS [text()]            
+FROM @BaseTable B            
+WHERE A.BarcodeNumber = B.BarcodeNumber            
+AND ISNULL(A.Location, '') = ISNULL(B.Location, '') -- AND A.DeptCode=B.DeptCode                
+GROUP BY B.TestCode            
+,B.IsStat            
+,B.SampleType            
+,B.ContainerName            
+,B.AccessionNumber --,B.DeptCode                                                                 
+ORDER BY B.AccessionNumber DESC            
+FOR XML PATH('')            
+,root('TC')            
+,type            
+      ).value('/TC[1]', 'nvarchar(max)'), 1, 1, ''),0,500) AS TestCode            
+,A.CollectedDateTime            
+,A.VisitType            
+,LTRIM(RTRIM((            
+CASE             
+WHEN LEN(A.SampleType) > 6            
+THEN SUBSTRING(A.SampleType, 0, 6)            
+ELSE A.SampleType            
+END            
+))) + '/' + LTRIM(RTRIM((            
+CASE             
+WHEN LEN(A.ContainerName) > 6            
+THEN SUBSTRING(A.ContainerName, 0, 6)            
+ELSE A.ContainerName            
+END            
+))) AS SampleType            
+,(            
+CASE             
+WHEN LEN(A.ContainerName) > 6            
+THEN SUBSTRING(A.ContainerName, 0, 6)            
+ELSE A.ContainerName            
+END            
+) AS ContainerName            
+,CASE             
+WHEN LEN(A.Location) > 5            
+THEN SUBSTRING(A.Location, 0, 5)            
+ELSE A.Location            
+END AS Location            
+,STUFF((            
+SELECT '-' + CASE             
+WHEN LEN(C.DeptCode) > 6            
+THEN SUBSTRING(C.DeptCode, 0, 6)            
+ELSE C.DeptCode            
+END AS [text()]            
+FROM @BaseTable C            
+WHERE A.BarcodeNumber = C.BarcodeNumber            
+AND A.Location = C.Location            
+GROUP BY C.DeptCode            
+FOR XML PATH('')            
+), 1, 1, '') AS DeptCode            
+,A.VisitNumber            
+,A.VisitID            
+,A.SampleID            
+,STUFF((            
+SELECT '-' + CASE             
+WHEN LEN(D.TestStatus) > 6            
+THEN SUBSTRING(D.TestStatus, 0, 6)            
+ELSE D.TestStatus            
+END AS [text()]            
+FROM @BaseTable D            
+WHERE A.BarcodeNumber = D.BarcodeNumber            
+AND A.Location = D.Location            
+GROUP BY D.TestStatus            
+FOR XML PATH('')            
+), 1, 1, '') AS TestStatus            
+,A.SequenceNo,A.TestName,A.ExternalVisitID,A.IPOPNumber,A.ReceivedDatetime            
+FROM @BaseTable A            
+GROUP BY A.BarcodeNumber            
+,A.PatientName            
+,A.PatientNumber            
+,A.Age            
+,A.Sex            
+,A.RegisteredDateTime            
+,A.CollectedDateTime            
+,A.VisitType            
+,A.SampleType            
+,A.ContainerName            
+,A.Location            
+,A.VisitNumber            
+,A.PatientStatus            
+,A.VisitCount            
+,A.VisitID            
+,A.SampleID            
+,A.TestStatus            
+,A.DeptCode            
+,A.SequenceNo,            
+A.TestName            
+,            
+A.ExternalVisitID            
+,A.IPOPNumber,A.ReceivedDatetime            
+) D            
+/** Seperate Tcode if Length is more than 36**/            
+DECLARE @Count INT = 0            
+,@i INT = 1            
+SELECT @Count = COUNT(1)            
+FROM @FinalResult            
+WHILE (@Count >= @i)            
+BEGIN            
+   DECLARE @Name NVARCHAR(4000)            
+            
+   DECLARE @NewName1 NVARCHAR(4000)            
+            
+    ,@NewName2 NVARCHAR(4000)            
+DECLARE @Length INT            
+DECLARE @LengthLimit INT = 36            
+DECLARE @LoopCount INT = 1            
+DECLARE @StartIndex INT = 1            
+DECLARE @EndIndex INT = @LengthLimit            
+DECLARE @j INT = 1            
+   DECLARE @ID NVARCHAR(4000)            
+SELECT @Name = ISNULL(TestCode, '')            
+,@ID = BarcodeNumber            
+FROM @FinalResult            
+WHERE Sno = @i            
+SET @Length = LEN(@Name)            
+IF (@Length = 0)            
+BEGIN            
+SET @Length = 1            
+END            
+SET @LoopCount = @Length / @LengthLimit            
+IF ((@Length % @LengthLimit) > 0)            
+BEGIN            
+SET @LoopCount = @LoopCount + 1            
+END            
+WHILE (@LoopCount >= @j)            
+BEGIN            
+SELECT @NewName1 = SUBSTRING(@Name, @StartIndex, @EndIndex)            
+SELECT @NewName2 = NULL            
+IF (@LoopCount > @j)            
+BEGIN            
+SET @StartIndex = @StartIndex + @LengthLimit            
+SET @j = @j + 1            
+SELECT @NewName2 = SUBSTRING(@Name, @StartIndex, @EndIndex)            
+END            
+INSERT INTO @StringSeperation (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,PatientStatus            
+,VisitCount            
+,TestCode            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,VisitID            
+,SampleID            
+,TestStatus,            
+TestName            
+,            
+ExternalVisitID            
+,IPOPNumber            
+,ReceivedDatetime            
+)            
+SELECT REPLACE(SUBSTRING([BarcodeNumber], CHARINDEX('/', [BarcodeNumber]), LEN([BarcodeNumber])), '', '')   AS [BarcodeNumber]          
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,PatientStatus            
+,@NewName2            
+,@NewName1            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,VisitID            
+,SampleID            
+,CASE             
+WHEN ISNULL(TestStatus, '') = ''            
+THEN ''            
+ELSE '(' + TestStatus + ')'            
+END AS TestStatus,TestName,ExternalVisitID,IPOPNumber,ReceivedDatetime            
+FROM @FinalResult            
+WHERE Sno = @i            
+SET @StartIndex = @StartIndex + @LengthLimit            
+SET @j = @j + 1            
+END            
+SELECT @Name = ''            
+,@Length = 0            
+,@LoopCount = 1            
+,@StartIndex = 1            
+,@EndIndex = @LengthLimit            
+SET @i = @i + 1            
+END  
+             
+SELECT STUFF([BarcodeNumber], CHARINDEX('/', [BarcodeNumber]), LEN('/'), '')  AS [BarcodeNumber]   
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,PatientStatus            
+,VisitCount            
+,TestCode       
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,VisitID            
+,SampleID            
+,TestStatus,            
+TestName,            
+ExternalVisitID as BatchNo,            
+IPOPNumber,            
+ReceivedDatetime            
+FROM @StringSeperation  
+
+      
+END            
+ELSE IF @pCategoryCode = 'TRF'            
+BEGIN            
+SELECT PV.PatientVisitId AS VisitID            
+,CONVERT(NVARCHAR(250), ISNULL(PV.VisitNumber, PV.PatientVisitId)) AS BarcodeNumber            
+,(            
+CASE             
+WHEN LEN(P.NAME) > 20            
+THEN SUBSTRING(p.NAME, 0, 20)            
+ELSE P.NAME            
+END            
+) AS PatientName            
+,(            
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + '/Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + '/M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + '/D'            
+ELSE ''            
+END            
+) AS Age            
+,P.Sex AS Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,(            
+SELECT CASE             
+WHEN LEN(Location) > 5            
+THEN SUBSTRING(Location, 0, 5)            
+ELSE Location            
+END AS Location            
+FROM OrganizationAddress  WHERE AddressID = PV.OrgAddressID            
+) AS Location            
+,'TRF' AS VisitType,PV.ExternalVisitID as BatchNo,            
+PV.VisitNumber as 'VisitNumber'              
+FROM Patient P WITH (NOLOCK)            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON P.PatientID = PV.PatientID            
+AND P.OrgID = PV.OrgID            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = PV.PatientVisitId            
+WHERE P.OrgID = @pOrgID            
+END            
+ELSE IF @pCategoryCode = 'MRD_Number'            
+BEGIN            
+SELECT P.PatientNumber AS BarcodeNumber            
+,LEFT(P.NAME, 35) AS 'PatientName'            
+   ------------------------------------------------------------------------  
+   -- Changed Join condition here  
+   ------------------------------------------------------------------------  
+FROM Patient P              
+INNER JOIN PatientVisit PV WITH (NOLOCK)   ON   PV.PatientID = P.PatientID         
+inner JOIN @tblPatientVisitID TPV ON TPV.VisitID = PV.PatientVisitId    
+where PV.OrgID = @pOrgId  AND P.OrgID = @pOrgId              
+END            
+ELSE IF @pCategoryCode = 'Visit_Number'            
+BEGIN            
+SELECT PV.VisitNumber AS BarcodeNumber            
+,P.PatientNumber            
+,LEFT(P.NAME, 35) AS 'PatientName'            
+,P.DOB AS 'CreatedDate'            
+,PV.VisitNumber AS 'VisitID'            
+   ------------------------------------------------------------------------  
+   -- Changed Join condition here  
+   ------------------------------------------------------------------------  
+FROM Patient P              
+INNER JOIN PatientVisit PV WITH (NOLOCK)  ON   PV.PatientID = P.PatientID          
+inner JOIN @tblPatientVisitID TPV ON TPV.VisitID = PV.PatientVisitId              
+where PV.OrgID = @pOrgId              
+           
+AND P.OrgID = @pOrgId            
+END            
+ELSE IF @pCategoryCode = 'Bill'            
+BEGIN            
+DECLARE @ConfigValue NVARCHAR(100) = ''            
+SELECT @ConfigValue = COM.ConfigValue            
+FROM ConfigOrgMaster COM WITH (NOLOCK)            
+JOIN ConfigKeyMaster CKM WITH (NOLOCK) ON CKM.ConfigKeyID = COM.ConfigKeyID            
+WHERE ConfigKey = 'ShowVisitNoAsBarcodeInBill'            
+AND OrgID = @pOrgId            
+SELECT @pBillId = FB.FinalBillID            
+FROM FinalBill FB            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = FB.VisitID            
+AND FB.OrgID = @pOrgId            
+SELECT DISTINCT CASE             
+WHEN @ConfigValue = 'Y'            
+THEN CONVERT(NVARCHAR(max), ISNULL(PV.VisitNumber, PV.PatientVisitId))            
+ELSE FB.BillNumber            
+END AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,P.Age            
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,convert(NVARCHAR(20), PV.PatientVisitId) AS VisitNumber            
+FROM Patient P WITH (NOLOCK)            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientID = P.PatientID            
+INNER JOIN FinalBill FB WITH (NOLOCK) ON FB.VisitID = PV.PatientVisitId            
+AND FB.OrgID = PV.OrgID            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = PV.PatientVisitId            
+WHERE PV.OrgID = @pOrgId            
+AND FB.FinalBillID = @pBillId            
+END            
+ELSE IF @pCategoryCode = 'KitBatchNo'            
+OR @pCategoryCode = 'KitBatchNo'            
+BEGIN            
+--select * from KitPrepMaster                                                                                                          
+INSERT INTO @Temp (            
+KitID            
+,KitBacthNo            
+,IndentID            
+,EpisodeVisitName            
+,EpisodeName            
+,NoOfprint            
+)            
+SELECT Ks.KitID            
+,Ks.KitBacthNo            
+,Ks.IndentID            
+,EV.EpisodeVisitName            
+,E.EpisodeName            
+,CONVERT(NVARCHAR(25), (            
+SELECT CONVERT(INT, Quantity)            
+FROM IntendReceivedDetail            
+WHERE IntendReceivedID = (            
+SELECT MAX(IntendReceivedID)            
+FROM IntendReceived WITH (NOLOCK)            
+WHERE IntendID = KS.IndentID            
+)            
+))            
+--KS.RaisedQty                                                               
+FROM KitStudyDetails KS WITH (NOLOCK)            
+INNER JOIN EpisodeVisitDetails EV ON KS.EpisodeVisitId = EV.EpisodeVisitId            
+INNER JOIN Episode E ON E.EpisodeID = ev.EpisodeID            
+WHERE KS.IndentID = @pBillId            
+AND Ks.KitBacthNo = @plstSampleId            
+SELECT DISTINCT P.KitBatchNo AS BarcodeNumber            
+,P.MasterKitID AS ProductID            
+,PV.ProductName AS ProductName            
+,P.KitBatchNo AS BatchNo            
+,P.ExpiryDate AS ExpDate            
+,P.CreatedAt AS CreatedDate            
+,P.CreatedAt AS AssemblyDate            
+,(            
+SELECT OrgDisplayName            
+FROM Organization O            
+WHERE O.OrgID = @pOrgID            
+) AS OrgName            
+,T.EpisodeVisitName VName           
+,T.EpisodeName AS ProtoCol            
+,T.NoOfprint            
+FROM KitPrepMaster P WITH (NOLOCK)            
+INNER JOIN Products PV WITH (NOLOCK) ON PV.ParentProductID = P.MasterKitID            
+INNER JOIN @Temp T ON T.KitID = PV.ProductID            
+AND T.KitBacthNo = P.KitBatchNo            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = P.MasterKitID            
+WHERE P.KitBatchNo = @plstSampleId            
+AND P.OrgID = @pOrgId            
+END            
+ELSE IF @pCategoryCode = 'IndentNo'            
+OR @pCategoryCode = 'IndentNo'            
+BEGIN            
+--select * from intend                                                                                               
+SELECT DISTINCT P.IntendNo AS BarcodeNumber            
+,P.IntendNo AS IndentNo  ,P.DespatchDate AS DespatchDate            
+,PV.IndentReceivedNo AS IssuedIndentNo            
+,(            
+SELECT TOP 1 L.LocationName            
+FROM Locations L WITH (NOLOCK)            
+WHERE L.LocationID = P.LocationID            
+) AS Location            
+,PV.IntendIssuedDate AS AssemblyDate            
+,P.CreatedAt AS CreatedDate            
+,(            
+SELECT TOP 1 L.LocationName            
+FROM Locations L WITH (NOLOCK)            
+WHERE L.LocationID = P.ToLocationID            
+) AS LocationName            
+,(            
+SELECT OrgDisplayName            
+FROM Organization O WITH (NOLOCK)            
+WHERE O.OrgID = @pOrgID            
+) AS OrgName            
+FROM Intend P WITH (NOLOCK)            
+INNER JOIN IntendReceived PV WITH (NOLOCK) ON PV.IntendID = P.IntendID            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = P.IntendID        INNER JOIN TrustedOrgDetails TD WITH (NOLOCK) ON TD.SharingOrgID = P.OrgID            
+WHERE P.IntendNo = @plstSampleId            
+AND TD.LoggedOrgID = @pOrgId            
+--AND P.OrgID  in (Select SharingOrgID  from TrustedOrgDetails Where LoggedOrgID =@pOrgID )                                                                    
+AND PV.IntendReceivedID = @pBillId            
+END            
+ELSE IF @pCategoryCode = 'VisitLevelKit'            
+OR @pCategoryCode = 'VisitLevelKit'            
+BEGIN            
+SELECT DISTINCT KitBacthNo AS BarcodeNumber            
+,KitBacthNo AS IndentNo            
+,P.DespatchDate AS DespatchDate            
+,PV.IndentReceivedNo AS IssuedIndentNo            
+,(            
+SELECT TOP 1 L.LocationName            
+FROM Locations L WITH (NOLOCK)            
+WHERE L.LocationID = P.LocationID            
+) AS Location            
+,PV.IntendIssuedDate AS AssemblyDate            
+,P.CreatedAt AS CreatedDate            
+,(            
+SELECT TOP 1 L.LocationName            
+FROM Locations L WITH (NOLOCK)            
+WHERE L.LocationID = P.ToLocationID            
+) AS LocationName            
+,(            
+SELECT OrgDisplayName            
+FROM Organization O WITH (NOLOCK)            
+WHERE O.OrgID = @pOrgID            
+) AS OrgName            
+,EV.EpisodeVisitName VName            
+FROM Intend P WITH (NOLOCK)            
+INNER JOIN IntendReceived PV WITH (NOLOCK) ON PV.IntendID = P.IntendID            
+INNER JOIN KitStudyDetails K WITH (NOLOCK) ON K.IndentID = P.IntendID            
+INNER JOIN Episode E ON E.EpisodeID = k.StudyID            
+INNER JOIN EpisodeVisitDetails EV WITH (NOLOCK) ON E.EpisodeID = EV.EpisodeID            
+JOIN @tblPatientVisitID TPV ON TPV.VisitID = P.IntendID            
+INNER JOIN TrustedOrgDetails TD WITH (NOLOCK) ON TD.SharingOrgID = P.OrgID            
+WHERE P.IntendNo = @plstSampleId            
+AND TD.LoggedOrgID = @pOrgId            
+--AND P.OrgID  in (Select SharingOrgID  from TrustedOrgDetails WITH (NOLOCK) Where LoggedOrgID =@pOrgID )                                                          
+AND PV.IntendReceivedID = @pBillId            
+END            
+ELSE IF @pCategoryCode = 'SlideBarcode'            
+BEGIN            
+INSERT INTO @tblSampleID (SampleID)            
+SELECT item            
+FROM fnSplit(@plstSampleId, ',')            
+--SELECT  @CodeSchemeID=CodeTypeID from codingschemeorgmapping WITH(NOLOCK) where  orgid=@pOrgId and isprimary='N'                
+SELECT @CodeSchemeID = CSM.CodeTypeID            
+FROM CodingSchemeMaster csm            
+INNER JOIN CodingSchemeOrgMapping csom ON csm.CodeTypeID = csom.CodeTypeID            
+WHERE CodingSchemaName = 'ABBREVIATION CODE'            
+AND OrgID = @pOrgId            
+/**** For Investigation  *****/            
+/** Transaction Data **/            
+INSERT INTO @BaseTable (            
+BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,CollectedDateTime            
+,VisitType            
+,VisitNumber            
+,PatientStatus            
+,VisitCount            
+,VisitID            
+,SampleID            
+,TestStatus            
+--,IsStat            
+,FeeID            
+,FeeType            
+,OrgAddressID            
+,ResCaptureLoc            
+,OrgID            
+,SampleTypeID            
+,SampleContainerID            
+,TestName            
+,AccessionNumber            
+)            
+SELECT DISTINCT ISNULL(pisa.BarcodeNumber, pisa.BarcodeNumber) AS BarcodeNumber            
+,P.NAME AS PatientName            
+,P.PatientNumber            
+,(            
+CASE             
+WHEN right(P.Age, 7) = 'Year(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 8) + 'Y'            
+WHEN right(P.Age, 8) = 'Month(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 9) + 'M'            
+WHEN right(P.Age, 6) = 'Day(s)'            
+THEN SUBSTRING(P.Age, 1, LEN(P.Age) - 7) + 'D'            
+ELSE ''            
+END           
+) AS Age            
+,P.Sex            
+,PV.CreatedAt AS RegisteredDateTime            
+,ISNULL(PS.CollectedDateTime, PS.CreatedAt) AS CollectedDateTime            
+,CASE             
+WHEN PV.VisitType = 0            
+THEN 'OP'            
+ELSE 'IP'            
+END AS VisitType            
+,PV.VisitNumber AS VisitNumber            
+,P.PatientStatus            
+,ISNULL(PV.TodaysVisitNo, '0') VisitCount            
+,PV.PatientVisitId AS VisitID            
+,PS.SampleID,            
+--,CASE             
+-- WHEN ORD.referredtype = 'Retest'            
+--  THEN 'RC'            
+-- ELSE ''            
+-- END AS TestStatus            
+--,ORD.IsStat            
+pisa.slidevalues as TestStatus            
+,ORD.ID            
+,ORD.Type            
+,PV.OrgAddressID            
+,ORD.ResCaptureLoc            
+,P.OrgID            
+,PS.SampleCode            
+,PS.SampleContainerID            
+,ORD.NAME            
+,ORD.AccessionNumber            
+FROM  dbo.PatientInvSampleAliquot pisa WITH(NOLOCK)             
+INNER JOIN PatientInvSample PS WITH (NOLOCK) ON  PS.PatientVisitID=pisa.PatientVisitID            
+INNER JOIN PatientInvSampleMapping PSM WITH (NOLOCK) ON PSM.VisitID = PS.PatientVisitID            
+AND PSM.OrgID = PS.OrgID            
+AND PS.SampleID = PSM.SID            
+INNER JOIN OrderedInvestigations ORD WITH (NOLOCK) ON ORD.Visitid = PSM.VisitID            
+AND ORD.OrgID = PS.OrgID            
+AND PSM.Type = ORD.Type            
+AND PSM.ID = ORD.ID            
+-- AND ORD.Type = 'INV'            
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitID = ORD.VisitID            
+AND PV.OrgID = PS.OrgID            
+INNER JOIN Patient P WITH (NOLOCK) ON P.OrgID = PS.OrgID            
+AND P.PatientID = PV.PatientID            
+INNER JOIN SampleTracker ST WITH (NOLOCK) ON ST.SampleID = PS.SampleID            
+AND ST.PatientVisitID = PV.PatientVisitId            
+AND ST.OrgID = PS.OrgID            
+INNER JOIN @tblPatientVisitID TEMP ON TEMP.VisitID = PS.PatientVisitId            
+INNER JOIN @tblSampleID tempSmpl ON tempSmpl.SampleID = PS.SampleID            
+WHERE PS.OrgID = @pOrgId            
+AND ST.InvSampleStatusID NOT IN (6)            
+--and Pv.patientvisitid=@pPatientVisitId              
+--select * from @BaseTable           
+--return                
+INSERT INTO @FinalResult (            
+Sno            
+,BarcodeNumber            
+,PatientName            
+,PatientNumber            
+,Age            
+,Sex            
+,RegisteredDateTime            
+,PatientStatus            
+,VisitCount            
+,TestCode            
+,CollectedDateTime            
+,VisitType            
+,SampleType            
+,ContainerName            
+,Location            
+,DeptCode            
+,VisitNumber            
+,VisitID            
+,SampleID            
+,TestStatus            
+,SequenceNo            
+)            
+SELECT DISTINCT ROW_NUMBER() OVER (            
+ORDER BY SequenceNo            
+)            
+,D.*            
+FROM (            
+SELECT DISTINCT A.BarcodeNumber            
+,CASE             
+WHEN LEN(A.PatientName) > 20            
+THEN SUBSTRING(A.PatientName, 0, 20)            
+ELSE A.PatientName            
+END AS PatientName            
+,A.PatientNumber            
+,A.Age            
+,A.Sex            
+,A.RegisteredDateTime            
+,A.PatientStatus            
+,A.VisitCount            
+,STUFF((            
+SELECT '-' + CASE ISNULL(B.IsStat, 'N')            
+WHEN 'Y'            
+THEN B.TestCode + '*'            
+ELSE B.TestCode            
+END AS [text()]            
+FROM @BaseTable B            
+WHERE A.BarcodeNumber = B.BarcodeNumber            
+AND ISNULL(A.Location, '') = ISNULL(B.Location, '') -- AND A.DeptCode=B.DeptCode                                                                
+GROUP BY B.TestCode            
+,B.IsStat            
+,B.SampleType            
+,B.ContainerName            
+,B.AccessionNumber --,B.DeptCode                                                                 
+ORDER BY B.AccessionNumber DESC            
+FOR XML PATH('')            
+,root('TC')            
+,type            
+).value('/TC[1]', 'nvarchar(max)'), 1, 1, '') AS TestCode            
+,A.CollectedDateTime            
+,A.VisitType            
+,LTRIM(RTRIM((            
+CASE             
+WHEN LEN(A.SampleType) > 6            
+THEN SUBSTRING(A.SampleType, 0, 6)            
+ELSE A.SampleType            
+END            
+))) + '/' + LTRIM(RTRIM((            
+CASE             
+WHEN LEN(A.ContainerName) > 6            
+THEN SUBSTRING(A.ContainerName, 0, 6)            
+ELSE A.ContainerName            
+END            
+))) AS SampleType            
+,(            
+CASE             
+WHEN LEN(A.ContainerName) > 6            
+THEN SUBSTRING(A.ContainerName, 0, 6)            
+ELSE A.ContainerName            
+END            
+) AS ContainerName            
+,CASE             
+WHEN LEN(A.Location) > 5            
+THEN SUBSTRING(A.Location, 0, 5)            
+ELSE A.Location            
+END AS Location            
+,STUFF((            
+SELECT '-' + CASE             
+WHEN LEN(C.DeptCode) > 6            
+THEN SUBSTRING(C.DeptCode, 0, 6)            
+ELSE C.DeptCode            
+END AS [text()]            
+FROM @BaseTable C            
+WHERE A.BarcodeNumber = C.BarcodeNumber            
+AND A.Location = C.Location            
+GROUP BY C.DeptCode            
+FOR XML PATH('')            
+), 1, 1, '') AS DeptCode            
+,A.VisitNumber            
+,A.VisitID            
+,A.SampleID            
+,A.TestStatus            
+,A.SequenceNo            
+FROM @BaseTable A            
+GROUP BY A.BarcodeNumber            
+,A.PatientName            
+,A.PatientNumber            
+,A.Age            
+,A.Sex            
+,A.RegisteredDateTime            
+,A.CollectedDateTime            
+,A.VisitType            
+,A.SampleType            
+,A.ContainerName            
+,A.Location            
+,A.VisitNumber            
+,A.PatientStatus            
+,A.VisitCount            
+,A.VisitID            
+,A.SampleID  
+,A.TestStatus            
+,A.DeptCode            
+,A.SequenceNo            
+) D            
+SELECT * FROM @FinalResult            
+END            
+SET NOCOUNT OFF            
+END 
+

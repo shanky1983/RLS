@@ -1,0 +1,278 @@
+ --EXEC [pSearchFinancialDetailsReport] 168,287,'27/12/2018','27/12/2018',-1,'D'
+ 
+ CREATE PROCEDURE [dbo].[pSearchFinancialDetailsReport] 
+ @pOrgID          [INT],
+ @pOrgAddID       [INT],
+ @pFromDate       [DATETIME],
+ @pToDate         [DATETIME],
+ @ClientID        [INT]
+ --,@ReportType      VARCHAR(25)
+ WITH EXECUTE AS OWNER
+ AS
+ BEGIN
+ declare @Fdate varchar(25)
+ declare @Tdate varchar(25)
+ Declare @pbusinessTypeID int
+  Declare @InvoceNo varchar(10)=''
+ select @pToDate=dateadd(ms,-3,dateadd(DAY,1,@pToDate))
+ select @Fdate =  CONVERT(VARCHAR(24),@pFromDate,113)
+ select @Tdate=  CONVERT(VARCHAR(24),@pToDate,113)
+ --select @Fdate,@Tdate
+ --return
+ IF @InvoceNo = ''
+ SET @InvoceNo=NULL
+ --SET @pToDate = @pToDate + ' 23:59:59'                                                                                  
+ IF @ClientID = 0 OR @ClientID = -1
+ SET @ClientID=NULL
+ IF @pbusinessTypeID = 0
+ SET @pbusinessTypeID=NULL
+ DECLARE @ZonalID BIGINT
+ DECLARE @HubID BIGINT
+ DECLARE @CycleID NVARCHAR(5)
+
+ IF @ZonalID IS NULL
+ SET @ZonalID=0
+ IF @HubID IS NULL
+ SET @HubID=0
+ IF @pbusinessTypeID IS NULL
+ SET @pbusinessTypeID=0
+ DECLARE @tmpBill_1 AS TABLE
+ (
+ ---Karthick----------  
+ Rowid            INT IDENTITY(1, 1),
+ InvoiceID        BIGINT,
+ InvoiceNumber    NVARCHAR(30),
+ CreatedAt        DATETIME,
+ NetValue         MONEY,
+ GrossValue       MONEY,
+ ClientName       NVARCHAR(500),
+ Due              MONEY,
+ ClientID         INT,
+ ReportTemplateID INT,
+ BusinessType     NVARCHAR(500),
+ BusinessTypeID   BIGINT,
+ ZoneName         NVARCHAR(500),
+ SaPLabCode       NVARCHAR(50),
+ ZoneCode         NVARCHAR(20),
+ Discount         NVARCHAR(30),
+ InvoicePeriod    VARCHAR(130),
+ ReceivedAmt	     MONEY,
+ CreditAmount     MONEY,
+ DebitAmount      MONEY,
+ WriteOff         MONEY,
+ outstanding      MONEY,
+ TotalOutStanding  MONEY
+ ---Karthick----------  
+ )
+ DECLARE @tmpBill_2 AS TABLE
+ (
+ InvoiceID        BIGINT,
+ InvoiceNumber    NVARCHAR(30),
+ CreatedAt        DATETIME,
+ NetValue         MONEY,
+ GrossValue       MONEY,
+ ClientName       NVARCHAR(500),
+ Due              MONEY,
+ ClientID         INT,
+ ReportTemplateID INT,
+ BusinessType     NVARCHAR(500),
+ BusinessTypeID   BIGINT,
+ ZoneName         NVARCHAR(500),
+ SaPLabCode       NVARCHAR(50),
+ ZoneCode         NVARCHAR(20),
+ Discount         NVARCHAR(30),
+ InvoicePeriod    VARCHAR(130),
+ ReceivedAmt	     MONEY,
+ CreditAmount     MONEY,
+ DebitAmount      MONEY,
+ WriteOff         MONEY,
+ outstanding      MONEY,
+ TotalOutStanding  MONEY
+ )
+ DECLARE @SELECTQUERY NVARCHAR(MAX)
+ DECLARE @WHEREQUERY NVARCHAR(MAX)
+
+ IF @InvoceNo = ''
+ SET @InvoceNo = NULL
+ --SET @pToDate = @pToDate + ' 23:59:59'                                                                                                  
+ IF @ClientID = 0
+ SET @ClientID = NULL
+ IF @pbusinessTypeID = 0
+ SET @pbusinessTypeID = NULL
+ --SELECT @CycleID = AdditionalInfo
+ --FROM   @ContextInfo
+ ----PRINT @CycleID                
+ --SELECT @ZonalID = StateID,
+ --@HubID = ThemeID
+ --FROM   @ContextInfo
+ IF @ZonalID IS NULL
+ SET @ZonalID = 0
+ IF @HubID IS NULL
+ SET @HubID = 0
+ IF @pbusinessTypeID IS NULL
+ SET @pbusinessTypeID = 0
+ SELECT @SELECTQUERY = 'SELECT distinct  IV.InvoiceID,IV.InvoiceNumber,IV.ToDate,IV.NetValue,Iv.GrossValue, CM.ClientName,                                  
+ CASE
+ WHEN (ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0))-SUM(ISNULL(IR.WriteOffAmt,0)) < 0  
+ THEN 0.00 
+ ELSE (ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0))-SUM(ISNULL(IR.WriteOffAmt,0))
+ END AS Due,IV.ClientID,CM.ReportTemplateID,MV.Value                     
+ AS BusinessType,MV.MetaValueID AS BusinessTypeID,L.Locality_Value,CM.SapCode,L.Locality_Code,isnull(dbo.fn_SplitExact(IV.Discount,''~'',3),0.00)  as Discount ,(CONVERT(VARCHAR(100),IV.FromDate,103) + ''  to  '' +CONVERT(VARCHAR(100),IV.ToDate,103)) 
+ InvoicePeriod,isnull(IV.ReceivedAmt,''0.00'') as   ReceivedAmt 
+ ,ISNULL(IV.CreditAmount,''0.00'') as CreditAmount  ,ISNULL(IV.DebitAmount,''0.00'')  as DebitAmount       ,    SUM(ISNULL(IR.WriteOffAmt,0))   as WriteOff  ,
+ (SUM((ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0)) - SUM(ISNULL(IR.WriteOffAmt,0)) )   over(partition by CM.ClientID Order by IV.Invoiceid))-((ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0)) - SUM(ISNULL(IR.WriteOffAmt,0)) ) as outstanding ,
+ ((ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0)) ) + (SUM((ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0)) - SUM(ISNULL(IR.WriteOffAmt,0)) )   over(partition by CM.ClientID Order by IV.Invoiceid))
+ - ((ISNULL(IV.NetValue,0)-ISNULL(IV.ReceivedAmt,0))) as TotalOutStanding    
+ FROM Invoice IV WITH (NOLOCK) LEFT JOIN   InvoiceReceipts IR ON   IV.InvoiceID=IR.InvoiceID    
+ INNER JOIN ClientMaster CM WITH (NOLOCK) ON IV.ClientID=CM.ClientID   AND IV.OrgID=CM.OrgID                
+ INNER JOIN MetaValue_Common MV WITH (NOLOCK)ON CM.CustomerType= MV.MetaValueID   AND IV.OrgID=MV.OrgID                    
+ LEFT JOIN MetaType_Common MT WITH (NOLOCK)ON MV.MetaTypeId= MT.MetaTypeId  AND IV.OrgID=MT.OrgID                 
+ LEFT JOIN Localities L WITH (NOLOCK) ON CM.ZonalID=L.Locality_ID
+ Inner join InvoiceDetails ID  (nolock) on IV.invoiceid=ID.invoiceid '
+ SELECT @WHEREQUERY = Nchar(13) + ' WHERE IV.OrgID = '
+ + CONVERT(NVARCHAR(20), @pOrgID) + Nchar(13)
+ IF( Isnull(@InvoceNo, '') <> '' )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND IV.InvoiceNumber= ''' + @InvoceNo +''''
+ END
+ IF( Isnull(@ClientID, '') <> '' )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND IV.ClientID = '
+ + CONVERT(NVARCHAR(20), @ClientID)
+ END
+ IF( @pbusinessTypeID <> 0 )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND MV.MetaValueID= '
+ + CONVERT(NVARCHAR(20), @pbusinessTypeID )
+ PRINT 'yes'
+ END
+ IF( @pFromDate <> '01-01-1753 12:00:00' )
+ BEGIN
+ --SELECT @WHEREQUERY=@WHEREQUERY+   nchar(13) +' AND CONVERT(nvarchar,IV.ToDate,103) BETWEEN '+ ''''+CONVERT(nvarchar,@pFromDate,103) +''''+' AND '+''''+ CONVERT(nvarchar,@pToDate,103)+''''                         
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND IV.ToDate BETWEEN ' + ''''
+ + @Fdate + ''''
+ + ' AND ' + ''''
+ + @Tdate+ ''''
+ END
+ IF( @CycleID != '--Select--' )
+ BEGIN
+ IF( @CycleID = '1' )
+ BEGIN
+ --PRINT 1
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND ISNULL(CM.InvoiceCycle,1.0)=''1.0'' '
+ END
+ ELSE IF( @CycleID = '0.5' )
+ BEGIN
+ --PRINT '0.5'
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND ISNULL(CM.InvoiceCycle,0.5)=''0.5'' '
+ END
+ ---Karthick----------   
+ ELSE IF( @CycleID = '-1' )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13)
+ + ' AND ISNULL(CM.InvoiceCycle,1.0) IN (''1.0'',''0.5'') '
+ END
+ END
+ ---Karthick----------                         
+ IF( @ZonalID <> 0 )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13) + ' AND CM.ZonalID= '
+ + CONVERT(NVARCHAR(10), @ZonalID)
+ END
+ IF( @HubID <> 0 )
+ BEGIN
+ SELECT @WHEREQUERY = @WHEREQUERY + Nchar(13) + ' AND CM.HubID= '
+ + CONVERT(NVARCHAR(10), @HubID)
+ END
+ Select @WHEREQUERY = @WHEREQUERY + Nchar(13) +' GROUP BY IV.InvoiceID,IV.InvoiceNumber,IV.ToDate,IV.NetValue,Iv.GrossValue, CM.ClientName  
+ ,IV.ClientID,CM.ReportTemplateID,L.Locality_Value,CM.SapCode,L.Locality_Code,Discount,IV.ReceivedAmt    
+ ,IV.CreditAmount   ,IV.DebitAmount ,MV.Value ,MV.MetaValueID,IV.FromDate,CM.ClientID'
+ INSERT INTO @tmpBill_1
+ EXEC (@SELECTQUERY+@WHEREQUERY)
+ PRINT @WHEREQUERY
+ UPDATE T SET T.CreditAmount=CDD.Amount from @tmpBill_1 T INNER JOIN CreditDebitSummary CDS ON T.InvoiceID=CDS.InvoiceID 
+ INNER JOIN CreditDebitDetails CDD ON CDS.SummaryID = CDD.SummaryID where CDS.OrgID=CDD.OrgID
+
+ INSERT INTO @tmpBill_2
+ SELECT InvoiceID,
+ InvoiceNumber,
+ CreatedAt,
+ NetValue,
+ GrossValue,
+ ClientName,
+ Due,
+ ClientID,
+ ReportTemplateID,
+ BusinessType,
+ BusinessTypeID,
+ ZoneName,
+ SaPLabCode,
+ ZoneCode,
+Discount,
+ InvoicePeriod,
+ ReceivedAmt,
+ CreditAmount     ,
+ DebitAmount      ,
+ WriteOff    ,
+ outstanding      ,
+ TotalOutStanding       
+ FROM   @tmpBill_1
+ SET ROWCOUNT 0
+
+ --IF (@ReportType='S')
+ --BEGIN
+ --SELECT  
+ --       CONVERT(NVARCHAR(11), CreatedAt, 103)           AS 'Invoice Date',
+ --       InvoicePeriod As 'Invoice Duration',
+ --       InvoiceNumber,
+ --       ClientName AS 'Client Name',
+ --       NetValue AS  'Invoice Amount',
+ --       ReceivedAmt AS  'Received Amount',
+ --       Due  AS Due,
+ --       CreditAmount  AS 'Credit Amount',
+ --       DebitAmount    AS 'Debit Amount'  ,
+ --       WriteOff  AS 'Write-Off',
+ --       outstanding    as 'Pending OutStanding'  ,
+ --       TotalOutStanding  as 'Total OutStanding' 
+ --FROM   @tmpBill_2
+ --ORDER  BY InvoiceID
+ --END
+ --ELSE
+ --BEGIN 
+     SELECT  
+        CONVERT(NVARCHAR(11), TEMP.CreatedAt, 103)           AS 'Invoice Date',
+  InvoicePeriod As 'Invoice Duration',
+   InvoiceNumber,
+ TEMP.ClientName                                      AS 'Client Name',
+ FB.BillNumber,
+ P.Name AS 'Patient Name',
+ PV.Visitnumber AS 'Visit Number',
+ CONVERT(NVARCHAR(11), FB.CreatedAt, 103) AS 'Bill Date',
+ FB.NetValue AS 'Bill Amount',
+ PT.PaymentName AS 'Payment Type',
+ IR.ChequeorCardNumber AS 'Cheque/Card/DD No',
+ CASE WHEN CONVERT(NVARCHAR(11), IR.ChequeDate, 103)='01/01/1900' THEN NULL ELSE CONVERT(NVARCHAR(11), IR.ChequeDate, 103) END as 'Cheque Date',
+  CONVERT(NVARCHAR(11), IR.CreatedAt, 103) as 'Payment ackowledge Date',
+  --U.Name AS 'User Name',  
+ 'Financial Controller' AS 'Role'
+ FROM   @tmpBill_2 TEMP
+ INNER JOIN InvoiceDetails ID WITH (NOLOCK) ON TEMP.InvoiceID=ID.InvoiceID
+ INNER JOIN FinalBill FB WITH (NOLOCK) ON FB.FinalBillID=ID.FinalBillID
+ INNER JOIN PatientVisit PV WITH (NOLOCK) ON PV.PatientVisitId=FB.VisitID AND PV.OrgID=FB.OrgID
+ INNER JOIN Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID AND P.OrgID=PV.OrgID
+ INNER JOIN InvoiceReceipts IR WITH (NOLOCK) ON TEMP.InvoiceID=IR.InvoiceID
+ INNER JOIN PaymentType PT WITH (NOLOCK) ON PT.PaymentTypeID=IR.PaymentTypeID
+ --INNER JOIN Login L WITH (NOLOCK) ON L.loginID=ID.CreatedBy  
+ --INNER JOIN Users U WITH (NOLOCK) ON U.loginID=L.loginID  
+ GROUP BY   TEMP.CreatedAt,InvoicePeriod,InvoiceNumber,TEMP.ClientName,
+ FB.BillNumber,P.Name,PV.Visitnumber,FB.CreatedAt,FB.NetValue,PT.PaymentName,IR.ChequeorCardNumber,IR.ChequeDate,IR.CreatedAt --,U.Name  
+ --END
+ END
+
+

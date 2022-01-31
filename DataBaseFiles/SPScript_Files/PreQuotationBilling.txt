@@ -1,0 +1,21 @@
+CREATE Procedure PreQuotationBilling
+@BookingID bigint,
+@OrgID  int,  
+@ContextInfo [UDT_Context] READONLY  
+
+As
+Begin                
+
+select B.BookingID, B.PatientName, B.Sex as SEX, B.DOB, B.Age, CM.ClientName, B.OrgID 
+from Bookings B
+inner join ClientMaster CM on B.ClientID = CM.ClientID and B.OrgID = CM.OrgID
+where B.BookingID=@BookingID and B.OrgID=@OrgID
+
+select PRO.QuotationId as FinalBillID, PRO.Name, PRO.Type as FeeType, IRM.Rate 
+from PreOrderedInvestigations PRO
+inner join Bookings B on B.BookingID=PRO.QuotationId and B.OrgID=PRO.OrgID
+inner join InvClientMaster ICM on ICM.ClientID = B.ClientID and ICM.OrgID = B.OrgID
+inner join InvRateMaster IRM on IRM.ID=PRO.ID and ICM.RateID=IRM.RateID and IRM.OrgID=PRO.OrgID
+where PRO.OrgID=@OrgID and Pro.QuotationId=@BookingID
+End
+

@@ -1,0 +1,34 @@
+ 
+/****** Object:  StoredProcedure [dbo].[pLoadMetaDataOrgMappingTAT]    Script Date: 2/12/2019 2:00:52 PM ******/
+SET ANSI_NULLS ON
+GO
+
+CREATE PROCEDURE [dbo].[pLoadMetaDataOrgMappingTAT]              
+ @pDomain [dbo].[UDTMetaData] READONLY,              
+ @pOrgID [bigint],              
+ @pLangCode [nvarchar](10),              
+ @ContextInfo [UDT_Context] READONLY              
+WITH EXECUTE AS OWNER              
+AS              
+BEGIN              
+ IF EXISTS (SELECT 1 FROM MetaDataOrgMapping MDM  WITH(NOLOCK)
+   INNER JOIN MetaData MD WITH(NOLOCK) ON MDM.MetadataID= MD.MetaDataID        
+   INNER JOIN @pDomain D ON MD.Domain=D.Domain)          
+ BEGIN           
+   SELECT distinct  MD.Domain +'~'+ MDM.LangCode, MD.Code+'~'+ MDM.DisplayText          
+   FROM  MetaDataOrgMapping MDM WITH(NOLOCK)
+   INNER JOIN Metadata MD  WITH(NOLOCK) on MDM.MetadataID =MD.MetaDataID                 
+   INNER JOIN @pDomain  UMD on MD.Domain =UMD.Domain              
+   INNER JOIN  @ContextInfo Ctx ON Ctx.LanguageCode = ISNULL(MDM.LangCode, 'en-GB')       and MDM.OrgID=  @pOrgID    
+   --ORDER BY   MDM.MetaDataID                
+ END             
+ ELSE            
+ BEGIN           
+   SELECT  distinct MD.Domain+'~'+ MD.LangCode ,MD.Code+'~'+MD.DisplayText          
+   FROM MetaData MD  WITH(NOLOCK) INNER JOIN @pDomain PD ON MD.Domain = PD.Domain  
+   -- ORDER BY  MD.MetaDataID            
+ END          
+END  
+
+
+

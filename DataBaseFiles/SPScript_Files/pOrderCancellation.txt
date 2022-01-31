@@ -1,0 +1,24 @@
+Create procedure pOrderCancellation
+(
+@BookingID BIGINT
+)
+AS
+BEGIN
+SET NOCOUNT ON;
+DECLARE @Success CHAR(1)
+IF EXISTS(Select 1 from bookings where BookingID=@BookingID)
+BEGIN
+UPDATE BOOKINGS SET BOOKINGSTATUS='C' WHERE BOOKINGID=@BookingID
+SET @Success='Y'
+END 
+IF(@Success='Y')
+BEGIN
+SELECT @Success
+RETURN
+END
+ELSE
+BEGIN
+SET @Success='N'
+END
+SELECT @Success
+END

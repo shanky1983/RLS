@@ -1,0 +1,479 @@
+/****** Object:  StoredProcedure [dbo].[PGetEODReport_Igenetic]    Script Date: 3/28/2018 12:13:53 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+--STRAT | Commented | SELVA | 16-09-2020  
+--IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[PGetEODReport_Igenetic]') AND type in (N'P', N'PC'))  
+--BEGIN  
+--EXEC dbo.sp_executesql @statement = N'CREATE PROCEDURE [dbo].[PGetEODReport_Igenetic] AS'   
+--END  
+--GO  
+--END | Commented | SELVA | 16-09-2020  
+ Create PROC [dbo].[PGetEODReport_Igenetic] (@Orgid INT) 
+ AS
+ /*                                        
+ --Exec PGetEODReport_Igenetic_Testing  @Orgid = 159                             
+ Drop table EODClient                      
+ --Create table EODClient (clientName varchar(100),SampleCount varchar(20),GrossAmount varchar(20),NetAmount varchar(20))                      
+ */
+ BEGIN
+ SET NOCOUNT ON
+ DECLARE @orgNames VARCHAR(50)
+ SELECT @orgNames = NAME
+ FROM Organization
+ WHERE orgid = @Orgid
+ DECLARE @Curdate DATE = Getdate() 
+ ,@Orgname VARCHAR(100) = ''
+ DECLARE @net DECIMAL(18, 2) = 0
+ ,@Col DECIMAL(18, 2) = 0
+ ,@DueToday DECIMAL(18, 2) = 0
+ ,@AllDue DECIMAL(18, 2) = 0
+ ,@Dueold DECIMAL(18, 2) = 0
+ DECLARE @ClientTotal INT = 0
+ ,@ClientNewcount INT = 0
+ ,@SampleCount INT = 0
+ DECLARE @ApprovedCount INT = 0
+ ,@DelayTat INT = 0
+ ,@Outsamplecount INT = 0
+ ,@OutBill DECIMAL(18, 2) = 0
+ ,@Retest INT = 0
+ DECLARE @WalkClient INT = 0
+ ,@DummyClient INT = 0
+ DECLARE @patientcount INT = 0
+ SELECT @WalkClient = Clientid
+ FROM Clientmaster(NOLOCK)
+ WHERE Orgid = @Orgid
+ AND ClientCode = 'GENERAL'
+ SELECT @DummyClient = Clientid
+ FROM Clientmaster(NOLOCK)
+ WHERE Orgid = @Orgid
+ AND ClientCode = 'A0001'
+ SELECT @Orgname = NAME
+ FROM Organization
+ WHERE orgid = @Orgid
+ DECLARE @Temp AS TABLE (
+ ITEMS VARCHAR(255)
+ ,VALUE DECIMAL(18, 2)
+ )
+ SELECT @patientcount = Count(1)
+ FROM PatientVisit PV
+ INNER JOIN VisitClientMapping VCM ON VCM.VisitID = PV.PatientVisitId
+ WHERE PV.OrgID = @Orgid
+ AND CAST(visitdate AS DATE) = @Curdate
+ AND ClientID <> @DummyClient
+  
+  Declare @TodayVID as Table (Visitid int)
+  insert into @TodayVID
+ SELECT  distinct PV.PAtientVisitid
+ FROM  PatientVisit PV (NOLOCK) 
+ Inner join OrderedInvestigations OI (NOLOCK) ON OI.Visitid=PV.PatientVisitid and OI.Orgid=PV.Orgid 
+ WHERE PV.Orgid = @Orgid
+ AND cast(PV.CreatedAt AS DATE) = @Curdate
+
+ SELECT @net = SUM(tmp.Net)
+ FROM (
+ SELECT isnull(Tp.BillAmount, 0)-- - isnull(FB.DiscountAmount, 0)
+  AS Net
+ FROM 
+ Finalbill FB(NOLOCK)
+ CROSS APPLY (
+ SELECT SUM((isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)) ) --- isnull(BD.DiscountAmount, 0))
+  AS BillAmount
+ FROM BillingDetails BD(NOLOCK)
+ WHERE BD.FinalBillID = Fb.FinalBillID
+ AND BD.ClientID <> @DummyClient
+ ) tp
+ WHERE Fb.Orgid = @Orgid
+ AND cast(FB.CreatedAt AS DATE) = @Curdate and FB.Visitid in (select Visitid from @TodayVID)
+ ) tmp
+
+
+ SELECT @Col = SUM(ARD.AmtReceived)
+ FROM AmountReceivedDetails ARD(NOLOCK)
+ INNER JOIN FinalBill FB(NOLOCK) ON FB.FinalBillID = ARD.FinalBillID
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.VisitID = VCM.VisitID
+ WHERE ARD.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(ARD.CreatedAt AS DATE) = @Curdate
+ SELECT @DueToday = SUM(isnull(Due.DueAmount, 0) - ISNULL(due.DuePaidAmt, 0))
+ FROM FinalBill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ INNER JOIN PatientDueDetails Due(NOLOCK) ON FB.FinalBillID = Due.FinalBillID
+ WHERE FB.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(FB.CreatedAt AS DATE) = @Curdate
+ --and VCM.ClientID = @WalkClient                                        
+ SELECT @AllDue = SUM(isnull(Due.DueAmount, 0) - ISNULL(due.DuePaidAmt, 0))
+ FROM FinalBill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ INNER JOIN PatientDueDetails Due(NOLOCK) ON FB.FinalBillID = Due.FinalBillID
+ WHERE FB.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ --And cast(FB.CreatedAt as date ) = @Curdate                                                         
+ SELECT @Dueold = SUM(isnull(Due.DueAmount, 0) - ISNULL(due.DuePaidAmt, 0))
+ FROM FinalBill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ INNER JOIN PatientDueDetails Due(NOLOCK) ON FB.FinalBillID = Due.FinalBillID
+ WHERE FB.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(FB.CreatedAt AS DATE) BETWEEN dateadd(day, - 15, @Curdate)
+ AND @Curdate
+ --and VCM.ClientID = @WalkClient                                        
+ SELECT @ClientTotal = count(ClientID)
+ FROM (
+ SELECT DISTINCT VCM.ClientID AS ClientID
+ FROM FinalBill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ WHERE FB.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(FB.CreatedAt AS DATE) = @Curdate
+ ) T
+ SELECT @ClientNewcount = Count(VCM.ClientID)
+ FROM FinalBill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ INNER JOIN ClientMaster CM(NOLOCK) ON VCM.Clientid = CM.ClientID
+ WHERE FB.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(FB.CreatedAt AS DATE) = @Curdate
+ AND cast(CM.CreatedAt AS DATE) = @Curdate
+ SELECT @SampleCount = COunt(DISTINCT sam.BarcodeNumber)
+ FROM PatientInvSample SAM(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON VCM.VisitID = SAM.PatientVisitID
+ WHERE SAM.ORgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(SAM.CreatedAt AS DATE) = @Curdate
+ SELECT @ApprovedCount = Count(DISTINCT PatientVisitID)
+ FROM PatientInvestigation PINV(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON VCM.VisitID = PINV.PatientVisitID
+ WHERE PINV.OrgID = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(Pinv.Approvedat AS DATE) = @Curdate
+ SELECT @OutBill = isnull(SUM(isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)), 0)
+ FROM (
+ SELECT DISTINCT OD.AccessionNumber
+ FROM OutsourcingDetail OD(NOLOCK)
+ WHERE OD.Orgid = @Orgid
+ AND cast(OD.CreatedAt AS DATE) = @Curdate
+ ) tmp
+ INNER JOIN OrderedInvestigations ORD(NOLOCK) ON Tmp.AccessionNumber = ORD.AccessionNumber
+ INNER JOIN FinalBill FB(NOLOCK) ON ORD.VisitID = FB.VisitID
+ INNER JOIN Billingdetails BD(NOLOCK) ON FB.FinalBillID = BD.FinalBillID
+ AND ORD.type = BD.FeeType
+ AND ORD.id = BD.FeeId
+ WHERE isnull(ORD.PkgID, 0) = 0
+ AND BD.ClientID <> @DummyClient
+ SELECT @OutBill = isnull(@OutBill, 0) + isnull(SUM(isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)), 0)
+ FROM (
+ SELECT DISTINCT OD.AccessionNumber
+ FROM OutsourcingDetail OD(NOLOCK)
+ WHERE OD.Orgid = @Orgid
+ AND cast(OD.CreatedAt AS DATE) = @Curdate
+ ) tmp
+ INNER JOIN OrderedInvestigations ORD(NOLOCK) ON Tmp.AccessionNumber = ORD.AccessionNumber
+ INNER JOIN FinalBill FB(NOLOCK) ON ORD.VisitID = FB.VisitID
+ INNER JOIN Billingdetails BD(NOLOCK) ON FB.FinalBillID = BD.FinalBillID
+ AND ORD.PkgID = BD.FeeId
+ WHERE isnull(ORD.PkgID, 0) > 0
+ AND BD.ClientID <> @DummyClient
+ SELECT @Retest = Count(DISTINCT ORD.AccessionNumber)
+ FROM PatientInvestigation ORD(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON VCM.VisitID = ORD.PatientVisitID
+ WHERE Ord.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(ORD.Createdat AS DATE) = @Curdate
+ AND ISNULL(ORD.statustype, '') = 'RC'
+ SELECT DISTINCT @Outsamplecount = COUNT(DISTINCT SampleID)
+ FROM OutsourcingDetail OSD(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON VCM.VisitID = OSD.PatientVisitID
+ WHERE OSD.Orgid = @Orgid
+ AND VCM.ClientID <> @DummyClient
+ AND cast(OSD.Createdat AS DATE) = @Curdate
+ INSERT INTO @Temp
+ SELECT 'Total registered patient today' AS Item
+ ,ISnull(@patientcount, 0) AS Value
+ UNION ALL
+ SELECT 'Total billed amount today' AS Item
+ ,isnull(@net, 0) AS Value
+ UNION ALL
+ SELECT 'Total collected amount today' AS Item
+ ,isnull(@Col, 0) AS Value
+ --UNION ALL
+ --SELECT 'Total outstanding due amount today' AS Item
+ --,isnull(@DueToday, 0) AS Value
+ --UNION ALL
+ --SELECT 'Total outstanding due amount till date' AS Item
+ --,isnull(@AllDue, 0) AS Value
+ --UNION ALL
+ --SELECT 'Total outstanding due amount older than 15 days' AS Item
+ --,isnull(@Dueold, 0) AS Value
+ UNION ALL
+ SELECT 'No.of samples collected today' AS Item
+ ,isnull(@SampleCount, 0) AS Value
+ UNION ALL
+ SELECT 'No.of pickup points Today(Existing Client)' AS Item
+ ,isnull(@ClientTotal, 0) AS Value
+ --UNION ALL
+ --SELECT 'No.of new pickup points today(New Client Today)' AS Item
+ --,isnull(@ClientNewcount, 0) AS Value
+ UNION ALL
+ SELECT 'No.of report issued today' AS Item
+ ,isnull(@ApprovedCount, 0) AS Value
+ --UNION ALL
+ --SELECT 'TAT where it is >3 hours today' AS Item
+ --,isnull(@DelayTat, 0) AS Value
+ --UNION ALL
+ --SELECT 'No.of samples outsourced today' AS Item
+ --,isnull(@Outsamplecount, 0) AS Value
+ --UNION ALL
+ --SELECT 'Total billed amount for outsourced test today' AS Item
+ --,isnull(@OutBill, 0) AS Value
+ --UNION ALL
+ --SELECT 'No.of repeated results today' AS Item
+ --,isnull(@Retest, 0) AS Value
+ TRUNCATE TABLE EODdata
+ INSERT EODdata
+ SELECT convert(VARCHAR, @Curdate, 103) AS items
+ ,'' AS value
+ UNION ALL
+ SELECT 'Items' AS Items
+ ,'Value' AS Value
+ UNION ALL
+ SELECT ITEMS
+ ,cast(VALUE AS VARCHAR)
+ FROM @temp
+ DECLARE @tableHTML1 NVARCHAR(1000) = ''
+ DECLARE @FilePath VARCHAR(500) = 'F:\Attune\EODTracker\EOD.xls'
+ ,@UID VARCHAR(50) = 'attune'
+ ,@PWD VARCHAR(50) = 'A$$une'
+ SELECT @tableHTML1 = ' BCP "Select  * From liskernel.dbo.Eoddata " queryout ' + @FilePath + ' -c -w -T ' + ' -U ' + @UID + ' -P ' + @PWD + '","-CRAW'
+ --EXEC xp_cmdshell @tableHTML1
+ TRUNCATE TABLE EODClient
+ INSERT EODClient
+ SELECT 'ClientName' AS ClientName
+ ,'SampleCount' AS SampleCount
+ ,'GrossAmount' AS GrossAmount
+ ,'Net Amount' AS NetAmount
+ UNION ALL
+ SELECT CASE 
+ WHEN ClientName = 'GENERAL'
+ THEN 'Walk-In'
+ ELSE ClientName
+ END AS ClientName
+ ,CAST(SUM(sampleCount) AS VARCHAR) AS SampleCount
+ ,cast(SUM(Gross) AS VARCHAR) AS GrossAmount
+ ,cast(SUM(Net) AS VARCHAR) AS NetAmount
+ FROM (
+ SELECT CM.ClientName
+ ,isnull(Tp.BillAmount, 0) AS Gross
+ ,isnull(Tp.BillAmount, 0) - isnull(FB.DiscountAmount, 0) AS Net
+ ,isnull(tp2.SampleCount, 0) AS SampleCount
+ FROM Finalbill FB(NOLOCK)
+ INNER JOIN VisitClientMapping VCM(NOLOCK) ON FB.FinalBillID = VCM.FinalBillID
+ INNER JOIN ClientMaster CM(NOLOCK) ON VCM.ClientID = CM.ClientID
+ CROSS APPLY (
+ SELECT SUM((isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)) - isnull(BD.DiscountAmount, 0)) AS BillAmount
+ FROM BillingDetails BD(NOLOCK)
+ WHERE BD.FinalBillID = Fb.FinalBillID
+ ) tp
+ CROSS APPLY (
+ SELECT Count(DISTINCT sam.BarcodeNumber) AS SampleCount
+ FROM PatientInvSample Sam(NOLOCK)
+ WHERE sam.PatientVisitID = fb.visitid
+ ) tp2
+ WHERE Fb.Orgid = @Orgid
+ AND cast(FB.CreatedAt AS DATE) = @Curdate
+ AND VCM.ClientID NOT IN (
+ @DummyClient
+ ,@WalkClient
+ )
+ ) tmp
+ GROUP BY ClientName
+ DECLARE @FilePath1 VARCHAR(100) = 'F:\Attune\EODTracker\EODClient.xls'
+ SELECT @tableHTML1 = ' BCP "Select  * From liskernel.dbo.EODClient " queryout ' + @FilePath1 + ' -c -w -T ' + ' -U ' + @UID + ' -P ' + @PWD + ' -CRAW'
+ --EXEC xp_cmdshell @tableHTML1
+
+ --declare @Curdate Date =getdate()
+--Declare @temp1 as table(OrgName varchar(260),Orgid bigint, type varchar(30),Deptname varchar(250),AccessionNumber bigint,visitid bigint,ID bigint)
+--insert into @temp1
+--Select distinct O.Name ,O.orgid, OI.Type as Type,
+-- Case when IDM.DepartmentCode='BHID' THen 'BHID' else  IDM.DeptName end as DeptName,0,PV.PatientVisitID, 
+--OI.ID  
+--from PatientVisit PV(Nolock) 
+--inner join Orderedinvestigations OI(Nolock) on OI.visitid=PV.Patientvisitid and PV.orgid=OI.orgid 
+--inner join MISordereddept MD (Nolock)on md.AccessionNumber=OI.AccessionNumber
+--inner join Invdeptmaster IDM(Nolock) on IDM.Deptid=MD.deptid and IDM.orgid=PV.orgid
+--Inner Join Organization O (Nolock)ON O.orgid=PV.orgid 
+--Where O.orgid in (@Orgid) and  CAST(PV.CreatedAt AS DATE)=@Curdate
+--Group By O.Name ,O.orgid
+--,IDM.DeptName,IDM.DepartmentCode,PV.PatientVisitID,OI.Type,OI.ID
+ 
+-- union all
+
+-- Select distinct O.Name ,O.orgid, 'Pkg'   as Type,'PKG' as DeptName,0 as AccessionNumber,PV.PatientVisitID, 
+--OI.PkgID 
+--from PatientVisit PV(Nolock) 
+--inner join Orderedinvestigations OI(Nolock) on OI.visitid=PV.Patientvisitid and PV.orgid=OI.orgid  
+--Inner Join Organization O (Nolock)ON O.orgid=PV.orgid 
+--Where O.orgid in (@Orgid)  and  CAST(PV.CreatedAt AS DATE)=@Curdate
+----PV.createdAT between '01-Dec-2017' and '02-Dec-2017'  
+--and oi.pkgid is not null    
+--Group By O.Name ,O.orgid 
+--,PV.PatientVisitID,oi.pkgid  
+--insert into @Temp
+--select OG.Name,OG.Orgid,OI.Type,Case when IDM.DepartmentCode='BHID' THen 'BHID' else  IDM.DeptName end as DeptName,0 , PV.PatientVisitid,OI.ID
+--from PatientVisit PV WITH(NOLOCK)
+-- inner join OrderedInvestigations OI WITH(NOLOCK) ON OI.Visitid=PV.Patientvisitid and OI.Orgid=PV.Orgid
+-- inner join VW_TestwithDept TestDept WITH(NOLOCK) ON testdept.ORgid =OI.Orgid AND testdept.Testtype =OI.Type AND testdept.Investigationid = OI.ID
+-- inner join InvDeptMaster IDM WITH(NOLOCK) ON IDM.Orgid=testdept.OrgId and IDM.Orgid=PV.Orgid and IDM.DeptName=TestDept.Deptname
+-- inner join Organization OG WITH(NOLOCK) ON OG.Orgid=OI.Orgid
+-- where PV.Orgid=159 and PV.CreatedAt between '01-Dec-2017' and '01-Dec-2017 23:59:59'-- and PV.Patientvisitid=1526269
+-- and PKGID is null and PV.PatientVisitId not in (select VisitID from @temp )
+  --Declare @Temp2 Table(DeptName Varchar(250),Amount Bigint)
+
+
+  Declare @temp1 as table(OrgName varchar(260),Orgid bigint, type varchar(30),Deptname varchar(250),visitid bigint,ID bigint)
+insert into @temp1
+Select distinct O.Name ,O.orgid, OI.Type as Type,'',PV.PatientVisitID, OI.ID 
+from PatientVisit PV(Nolock) 
+inner join Orderedinvestigations OI(Nolock) on OI.visitid=PV.Patientvisitid and PV.orgid=OI.orgid
+Inner Join Organization O (Nolock)ON O.orgid=PV.orgid 
+Where O.orgid in (@Orgid) and OI.PKGID is null and  CAST(PV.CreatedAt AS DATE)=@Curdate
+Group By O.Name ,O.orgid,PV.PatientVisitID,OI.Type,OI.ID
+Union All
+Select distinct O.Name ,O.orgid,'PKG' as Type, '',PV.PatientVisitID,OI.PkgID  
+from PatientVisit PV(Nolock) 
+inner join Orderedinvestigations OI(Nolock) on OI.visitid=PV.Patientvisitid and PV.orgid=OI.orgid
+Inner Join Organization O (Nolock)ON O.orgid=PV.orgid 
+Where O.orgid in (@Orgid) and OI.PKGID is not null and  CAST(PV.CreatedAt AS DATE)=@Curdate
+Group By O.Name ,O.orgid,PV.PatientVisitID,OI.PkgID
+
+
+;Merge @temp1  as TARGET
+Using
+(
+Select tmp.Orgid,tmp.OrgName,tmp.type,tmp.ID,tmp.visitid,IOM.BillingDeptName from @temp1 tmp  
+Inner Join InvestigationOrgMapping IOM (NOLOCK) on IOM.Orgid=tmp.Orgid and IOM.Investigationid=tmp.ID 
+where tmp.Type='INV' and tmp.Orgid=@Orgid 
+) as SOURCE on TARGET.Orgid = SOURCE.Orgid and TARGET.visitid = SOURCE.visitid and TARGET.type = SOURCE.type and TARGET.ID = SOURCE.ID
+WHEN MATCHED THEN
+UPDATE SET TARGET.DeptName = SOURCE.BillingDeptName;
+
+;Merge @temp1  as TARGET
+Using
+(
+Select tmp.Orgid,tmp.OrgName,tmp.type,tmp.ID,tmp.visitid,IOM.BillingDeptName from @temp1 tmp  
+Inner Join InvOrggroup IOM (NOLOCK) on IOM.Orgid=tmp.Orgid and IOM.Attgroupid=tmp.ID 
+where tmp.Type<>'INV' and tmp.Orgid=@Orgid 
+) as SOURCE on TARGET.Orgid = SOURCE.Orgid and TARGET.visitid = SOURCE.visitid and TARGET.type = SOURCE.type and TARGET.ID = SOURCE.ID
+WHEN MATCHED THEN
+UPDATE SET TARGET.DeptName = SOURCE.BillingDeptName;
+
+
+  truncate table EODDeptAmount 
+  insert into EODDeptAmount (DeptName)
+  select 'DeptName' 
+
+  insert into EODDeptAmount 
+   select * from (
+
+select T.Deptname,SUM(( isnull(Tp.BillAmount, 0))) as Net
+ from @temp1 t
+inner join Finalbill FB (NOLOCK) ON FB.VisitID=t.visitid and FB.OrgID =t.Orgid
+
+ CROSS APPLY (
+ SELECT SUM((isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)))-- - isnull(BD.DiscountAmount, 0)) 
+ AS BillAmount
+ FROM BillingDetails BD(NOLOCK)
+ WHERE BD.FinalBillID = Fb.FinalBillID and t.ID=BD.FeeId and t.type=BD.FeeType and  BD.ClientID <> @DummyClient --and cast(BD.CreatedAt AS DATE)= '01-Dec-2017'
+--and BD.Feetype='GRP'@Temp1
+ ) TP 
+ WHERE Fb.Orgid = @Orgid and CAST(FB.CreatedAt AS DATE)=@Curdate --FB.CreatedAt between '01-Dec-2017' and '01-Dec-2017 23:59:59'
+ group by T.Deptname
+ Union All
+  
+  select 'GEN(Home Collection / Delivery charges)' as DeptName, SUM((isnull(BD.Amount, 0) * isnull(BD.Quantity, 0)))-- - isnull(BD.DiscountAmount, 0))
+   AS Net 
+  from FinalBill FB WITH (NOLOCK)
+  inner join BillingDetails BD WITH (NOLOCK) ON BD.FinalBillID=FB.FinalBillID and FB.OrgID=BD.OrgID 
+  where FB.VisitID in (Select Visitid from @temp1) and FB.OrgID=@Orgid and
+  BD.FeeType='GEN' and CAST(FB.CreatedAt AS DATE)=@Curdate and  BD.ClientID <> @DummyClient-- FB.CreatedAt between '01-Dec-2017' and '01-Dec-2017 23:59:59'
+   ) TT
+
+   insert into EODDeptAmount   (DeptName) 
+   Select '' 
+   union All
+   select 'BANames'   
+   
+   insert into EODDeptAmount  
+   select CM.BANames,SUM((isnull(BD.Amount, 0) * isnull(BD.Quantity, 0))) --from patientvisit PV (NOLOCK)
+--inner join VisitClientMapping  VCM (NOLOCK) ON VCM.Visitid=PV.PatientVisitId and VCM.Orgid=PV.OrgID
+ from Finalbill FB (NOLOCK) --ON --FB.Visitid=PV.PatientVisitId and FB.Orgid=PV.Orgid --and FB.FinalBillID=VCM.FinalBillID
+Inner join BillingDetails BD (NOLOCK) on BD.FinalBillID=FB.FinalBillID and BD.OrgID=FB.OrgID
+inner join ClientMaster CM (NOLOCK) ON CM.ClientID=BD.ClientID and CM.Orgid=BD.Orgid
+where FB.orgid=@Orgid and  CAST(FB.createdat AS DATE)=@Curdate and  BD.ClientID <> @DummyClient
+and FB.VisitID in (select Visitid from @temp1) --PV.createdat>'29-Jan-2018'
+group by Cm.BANames
+
+ DECLARE @FilePath2 VARCHAR(150) = 'F:\Attune\EODTracker\Department_BA_wise_sale.xls'
+ SELECT @tableHTML1 = ' BCP "Select  * From liskernel.dbo.EODDeptAmount " queryout ' + @FilePath2 + '  -c -w -T ' + ' -U ' + @UID + ' -P ' + @PWD + ' -CRAW'
+ --EXEC xp_cmdshell @tableHTML1
+
+ SELECT @FilePath = @FilePath + ';' + @FilePath1  + ';' + @FilePath2
+
+
+ DECLARE @email_id NVARCHAR(450)
+ ,@id BIGINT
+ ,@Count BIGINT
+ ,@query NVARCHAR(1000)
+ CREATE TABLE #TempMailid (
+ id INT Identity(1, 1)
+ ,Email VARCHAR(50)
+ )
+ INSERT INTO #TempMailid
+ SELECT Email
+ FROM NotificationEmailID 
+ WHERE Orgid = @Orgid
+ SELECT @Count = COUNT(*)
+ FROM #TempMailid(NOLOCK)
+ SET @id = 1
+ WHILE @id <= @Count
+ BEGIN
+ SELECT @email_id = Email
+ FROM #TempMailid(NOLOCK)
+ WHERE ID = @id
+ DECLARE @tableHTML NVARCHAR(MAX);
+ DECLARE @TblHeader NVARCHAR(MAX);
+ IF (
+ (
+ SELECT count(1)
+ FROM @Temp
+ ) > 0
+ )
+ BEGIN
+ SET @tableHTML = N'<P>Dear All<br>The following are EOD Updates from Lab  for ' + @orgNames + '-' + convert(VARCHAR(11), @Curdate, 6) + N'<table border="2" cellpadding="1" cellspacing="1">' +
+ --N'<tr><th colspan=2>' + 'IGENETIC Diagnostics Report'+'-'+ Convert-(varchar,@Curdate ,103)+ '</th></tr>' +                 
+ N'<tr><th>ITEMS</th><th>VALUE</th></tr>' + CAST((
+ SELECT td = Items
+ ,''
+ ,td = Value
+ ,''
+ FROM @Temp
+ FOR XML PATH('tr')
+ ,TYPE
+ ) AS NVARCHAR(MAX)) + N'</table>';
+ EXEC msdb.dbo.sp_send_dbmail @profile_name = 'DatabaseMail'
+ ,@recipients = @email_id
+ ,@body_format = 'HTML'
+ ,@body = @tableHTML
+ ,@subject = 'Lab EOD Tracker'
+ ,@file_attachments = @FilePath
+ --  select @Subject                                   
+ END
+ SET @id = @id + 1                                        
+ END
+ DROP TABLE #TempMailid
+ END
+
+
+GO

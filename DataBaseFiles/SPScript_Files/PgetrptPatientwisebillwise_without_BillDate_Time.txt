@@ -1,0 +1,219 @@
+       
+ CREATE Procedure [dbo].[PgetrptPatientwisebillwise_without_BillDate_Time]                
+ (                
+ @orgid int,                
+ @Fromdate date,                
+ @ToDate Date,                
+ @Locationid bigint = NULL                
+ )                
+ as                
+  
+ Begin              
+ /*                
+ Exec PgetrptPatientwisebillwise @orgid = 117,@Fromdate = '20170701',@ToDate = '20170710',@Locationid = null                
+ */                
+ Set nocount ON                
+ Declare @fdate date,@tdate date,@Cnt int                
+ select @fdate = @fromdate,@tdate = dateadd(day,1,@Todate)                
+                 
+ Declare @TmpVisit as table(Patientid bigint,Visitid bigint,VisitNo varchar(100),Billdate datetime,OrgAddressID bigint,ReferingPhysicianName nvarchar(100),Add2 varchar(500))                        
+ Declare @TmpRpt as table                        
+ (                        
+ sno int identity(1,1),Visitid bigint,BillDate date,BillNo varchar(100),VisitNo varchar(100),PatientNumber nvarchar(30),LocationName varchar(100),ClientName varchar(100),ClientCode varchar(100),                        
+ ClientType nvarchar(50),PatientName varchar(100),age varchar(100),RefPhy varchar(255),Feeid int,FeeType varchar(100),TestName varchar(100),TestCode varchar(100),DeptName varchar(100),                        
+ Mrp decimal(18,2),Clientdis decimal(18,2),specdis decimal(18,2),Cancel decimal(18,2),netAmt decimal(18,2),Sampleby varchar(255),Approvedby varchar(255),                        
+ OutLab varchar(255),Orgid int,Locid int,ExternalPatientNumber nvarchar(200),Add2 nvarchar(500) ,DeptHeaderName nvarchar(200),PhlebotomistName nvarchar(100),Businesstype VARCHAR(1000),TelephoneNumber VARCHAR(50)                   
+ )                        
+ Insert @TmpVisit(patientid,Visitid,VIsitno,Billdate,OrgAddressID,ReferingPhysicianName,Add2  )                
+ Select                
+ PV.Patientid,PV.PatientVisitid,PV.VisitNumber,PV.VisitDate,PV.OrgAddressID,Pv.ReferingPhysicianName,PA.Add2                
+ From PatientVisit PV (nolock)                
+ inner join PatientAddress PA on PA.Patientid=PV.Patientid and PA.Addresstype='P'                
+ Where PV.OrgID = @Orgid                
+ and PV.Orgaddressid = isnull(@locationid,PV.Orgaddressid)                
+ And PV.Visitdate between @Fdate and @Tdate                
+ Insert @tmpRpt                
+ (                
+ Locid,Orgid,Visitid,Visitno,PatientNumber,ClientCode,ClientName,ClientType,Billno,Billdate,PatientName,Age,LocationName,RefPhy,                        
+ Feeid,Feetype,TestName,MRP,Clientdis,Specdis,netAmt,Cancel,ExternalPatientNumber,Add2,Businesstype,TelephoneNumber                      
+ )                        
+ select                         
+ tp.OrgAddressID,P.Orgid ,tp.Visitid,tp.Visitno,P.PatientNumber,CM.ClientCode,CM.ClientName,IC.ClientTypename as ClientType,FB.Billnumber,isnull(FB.Billdate,tp.Billdate) as Billdate,P.Name,P.Age+'/'+P.SEX,Orgadd.Location,tp.ReferingPhysicianName,         
+  
+    
+      
+        
+               
+ BD.Feeid,BD.Feetype,BD.FeeDescription,isnull(BD.ActualAmount,0) as MRP,isnull(BD.ActualAmount,0) - (isnull(BD.Amount,0)* isnull(BD.Quantity,0)) as ClientDis,BD.DiscountAmount as specdis,                        
+ (isnull(BD.Amount,0)* isnull(BD.Quantity,0))-isnull(BD.Discountamount,0) as NetAmt,                        
+ case when ARF.AmtRefund=0 then (Isnull(ARF.AmtRefund,0) + Isnull(ARF.CancelAmount,0)) else ARF.AmtRefund end as Refund ,P.ExternalPatientNumber,tp.Add2,Mc.value as Businesstype,pa.landlinenumber                     
+ From @tmpVisit tp                        
+ Inner join patient P(nolock) on tp.Patientid = P.Patientid             
+ inner  join  patientaddress pa on pa.patientid=p.patientid                      
+ Inner join OrganizationAddress OrgAdd (nolock) on tp.OrgAddressID = Orgadd.AddressID                        
+ --Left join ReferingPhysician RP (nolock) on tp.ReferingPhysicianID = RP.ReferingPhysicianID                        
+ Inner join VisitClientMapping VCM (nolock) on tp.VIsitid = VCM.Visitid                        
+ Inner join ClientMaster CM (nolock) on VCM.CLientid = CM.CLientid and CM.Orgid = @Orgid               
+ LEFT JOIN Metavalue_common MC(NOLOCK) ON MC.metavalueid = CM.customertype                     
+ Inner Join InvClientType IC (nolock) on IC.Clienttypeid=CM.Clienttypeid                        
+ Inner join Finalbill FB (nolock) on tp.Visitid = FB.Visitid                        
+Inner join Billingdetails BD (nolock) on FB.Finalbillid = BD.Finalbillid and BD.ClientID=CM.CLientId                        
+ Left join AmountRefunddetails ARF (nolock) on BD.Billingdetailsid = ARF.Billingdetailsid                        
+where Isnull(VCM.IsActive, 'Y') != 'N'                         
+ Group By tp.OrgAddressID ,ARF.CancelAmount,P.Orgid ,tp.Visitid,tp.Visitno,P.PatientNumber,CM.ClientCode,CM.ClientName,IC.ClientTypename,FB.Billnumber,                        
+ FB.Billdate,tp.Billdate,P.Name,P.Age,P.SEX,Orgadd.Location,tp.ReferingPhysicianName,                        
+ BD.Feeid,BD.Feetype,BD.FeeDescription,BD.ActualAmount,BD.Amount,BD.Quantity,BD.DiscountAmount,ARF.AmtRefund,P.ExternalPatientNumber,tp.Add2,Mc.value,pa.landlinenumber                     
+  --- select * from  InvestigationHeader                     
+                         
+ UPDATE tp Set DeptName = Dept.DeptName,TestCode = IOM.testCode  ,DeptHeaderName=ih.HeaderName                      
+ From @tmpRpt tp                        
+ Inner join InvestigationOrgmapping IOM (nolock) on Tp.Feeid = IOM.Investigationid and IOM.Orgid = @Orgid                        
+ left join InvestigationHeader ih on ih.headerid=iom.HeaderID                      
+ Inner join Invdeptmaster Dept (nolock) on IOM.Deptid = Dept.Deptid and Dept.Orgid = @Orgid                        
+ Where Tp.FeeType = 'INV'                        
+ update BD set DeptName='General Billing Items'                         
+ from   @tmpRpt BD                          
+ where bd.feetype='GEN'                        
+ UPDATE BD Set DeptName = Dept.DeptName                    
+ From @tmpRpt BD                       
+ Cross apply                        
+ (                        
+ Select                        
+ Min(INV.Deptid) as Deptid                       
+ From InvOrggroup grp                      
+                     
+ Inner join Invgroupmapmaster GMap (nolock) on grp.Orggroupid = Gmap.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                       
+ left join InvestigationHeader ihh on ihh.headerid=INV.HeaderID                      
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'N' and isnull(GMap.Active,'Y') = 'Y'                        
+ ) tp(Deptid)                        
+ Cross apply                        
+ (                        
+ Select                        
+ Min(INV.Deptid) as Deptid                       
+ From InvOrggroup grp                        
+ Inner join Invgroupmapmaster GMap (nolock) on grp.Orggroupid = Gmap.Groupid                        
+ Inner join Invgroupmapmaster GMap2 (nolock) on Gmap.Investigationid = Gmap2.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap2.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                      
+ left join InvestigationHeader ihh on ihh.headerid=INV.HeaderID                      
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'Y' and isnull(GMap.Active,'Y') = 'Y'                         
+ and isnull(Gmap2.Parent,'N')= 'N' and isnull(GMap2.Active,'Y') = 'Y'                        
+ ) tp2(Deptid)                        
+ Left join Invdeptmaster Dept (nolock) on isnull(tp.Deptid,tp2.Deptid) = Dept.Deptid and Dept.Orgid = @orgid                        
+ Where BD.FeeType = 'GRP'                        
+ Update BD Set DeptName ='PACKAGE' ,DeptHeaderName='PACKAGE'                    
+ From @tmpRpt BD                        
+ Cross apply                        
+ (                        
+ Select                        
+ Min(INV.Deptid) as Deptid                        
+ From InvOrggroup grp                        
+ Inner join InvPackageMapping Pack (nolock) on grp.Orggroupid = pack.Packageid and pack.type = 'GRP'                        
+ Inner join Invgroupmapmaster GMap (nolock) on pack.ID = Gmap.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                        
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'N' and isnull(GMap.Active,'Y') = 'Y'                        
+ ) tp(Deptid)                        
+ Cross apply                        
+ (                        
+ Select                        
+ Min(INV.Deptid) as Deptid                        
+ From InvOrggroup grp                        
+ Inner join InvPackageMapping Pack (nolock) on grp.Orggroupid = pack.Packageid and pack.type = 'GRP'                        
+ Inner join Invgroupmapmaster GMap (nolock) on pack.ID = Gmap.Groupid                        
+ Inner join Invgroupmapmaster GMap2 (nolock) on Gmap.Investigationid = Gmap2.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap2.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                        
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'Y' and isnull(GMap.Active,'Y') = 'Y'                         
+ and isnull(Gmap2.Parent,'N')= 'N' and isnull(GMap2.Active,'Y') = 'Y'                        
+ ) tp2(Deptid)                        
+ Left join Invdeptmaster Dept (nolock) on isnull(tp.Deptid,tp2.Deptid) = Dept.Deptid and Dept.Orgid = @orgid                        
+ Where BD.FeeType = 'PKG'                  
+                     
+                    
+ UPDATE BD Set DeptHeaderName =COALESCE(tp.HeaderName,tp2.HeaderName)--(CASE WHEN tp.HeaderName IS NULL THEN tp2.HeaderName ELSE tp.HeaderName END)                    
+ From @tmpRpt BD                       
+ Cross apply                        
+ (                        
+ Select                        
+ Min(Ihh.HeaderName) as HeaderName                         
+ From InvOrggroup grp                      
+                    
+                    
+ Inner join Invgroupmapmaster GMap (nolock) on grp.Orggroupid = Gmap.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                       
+ left join InvestigationHeader ihh on ihh.headerid=INV.HeaderID                      
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'N' and isnull(GMap.Active,'Y') = 'Y'                        
+ ) tp(HeaderName)                        
+ Cross apply                        
+ (                        
+ Select                        
+ Min(Ihh.HeaderName) as HeaderName                        
+ From InvOrggroup grp                        
+ Inner join Invgroupmapmaster GMap (nolock) on grp.Orggroupid = Gmap.Groupid                        
+ Inner join Invgroupmapmaster GMap2 (nolock) on Gmap.Investigationid = Gmap2.Groupid                        
+ Inner join InvestigationOrgMapping INV (nolock) on Gmap2.Investigationid = INv.InvestigationID and INV.Orgid = @Orgid                      
+ left join InvestigationHeader ihh on ihh.headerid=INV.HeaderID                      
+ Where  BD.Feeid = Grp.Attgroupid and BD.Orgid = Grp.Orgid and isnull(Gmap.Parent,'N')= 'Y' and isnull(GMap.Active,'Y') = 'Y'                         
+ and isnull(Gmap2.Parent,'N')= 'N' and isnull(GMap2.Active,'Y') = 'Y'                        
+ ) tp2(HeaderName)                        
+ Where BD.FeeType = 'GRP'                     
+                    
+                    
+                    
+                    
+                    
+ Update tp Set Sampleby=  LG.Name,Approvedby = LG2.Name                  
+ --,OutLab = case when tp.locid <> ord.ResCaptureLoc then (Select OADD.Location From OrganizationAddress OADD (nolock) where Addressid = ord.ResCaptureLoc) else '' end                        
+ From @tmpRpt tp                        
+ Inner join MISOrderedinvestigations Ord (nolock) on tp.VIsitid = ord.Visitid and tp.Feetype = ORD.Type and tp.Feeid = Ord.Id                        
+ left join Users LG (nolock) on Ord.Receivedby = LG.Loginid       
+ left join Users LG2 (nolock) on Ord.ApprovedBy = LG2.Loginid                        
+ Where tp.Feetype in ('INV','GRP')                        
+ Update tp Set Sampleby=  LG.Name,Approvedby = LG2.Name                        
+ --,OutLab = case when tp.locid <> ord.ResCaptureLoc then (Select OADD.Location From OrganizationAddress OADD (nolock) where Addressid = ord.ResCaptureLoc) else '' end                        
+ From @tmpRpt tp                        
+ Inner join MISOrderedinvestigations Ord (nolock) on tp.VIsitid = ord.Visitid and ORD.Pkgid = tp.Feeid                        
+ left join Users LG (nolock) on Ord.Receivedby = LG.Loginid                        
+ left join Users LG2 (nolock) on Ord.ApprovedBy = LG2.Loginid                        
+ Where tp.Feetype in ('PKG')                        
+ --select * From @tmprpt where visitid = 943537                        
+ --return                        
+ Update tp set TestCode = IGP.TestCode                        
+ From @tmpRpt tp                        
+ Inner join Invorggroup IGP (nolock) on tp.Feeid = IGP.Attgroupid and IGP.Orgid = @Orgid                        
+ Where Tp.Feetype in ('GRP','PKG')                        
+ Select @Cnt = Count(1) From @tmprpt                        
+ update tmp set tmp.OutLab=LFO.RefOrgName from @TmpRpt tmp                        
+ inner join OutsourcingDetail OSD on OSD.PatientVisitID=tmp.Visitid and tmp.feeid=OSD.InvestigationID                        
+ inner join OrderedInvestigations OI on OI.VisitID=tmp.visitid and OI.accessionnumber=OSD.accessionnumber                        
+ inner join LabReferenceOrg LFO on LFO.LabRefOrgID=OSD.OutSourcingLocationID                         
+ where isnull(OI.Pkgid,0)=0                        
+ update tmp set tmp.OutLab=LFO.RefOrgName from @TmpRpt tmp                        
+ inner join OutsourcingDetail OSD on OSD.PatientVisitID=tmp.Visitid                         
+ inner join OrderedInvestigations OI on OI.VisitID=tmp.visitid and OI.accessionnumber=OSD.accessionnumber and tmp.feeid=OI.Pkgid                        
+ inner join LabReferenceOrg LFO on LFO.LabRefOrgID=OSD.OutSourcingLocationID                         
+ where isnull(OI.Pkgid,0)<>0                  
+              
+update tmp set tmp.PhlebotomistName=erm.Name from @tmprpt tmp              
+ inner join  AdditionalVisitDetails ad on ad.PatientVisitID=tmp.Visitid              
+ inner join  EmployeeRegMaster erm on erm.EmpID=ad.PhlebetomyID              
+              
+ Select                        
+ sno ,convert(varchar,Billdate,103) as BillDate,BillNo,PatientNumber ,VisitNo ,LocationName ,ClientName ,ClientCode ,ClientType,                        
+ PatientName ,age  AS 'Age/Sex',RefPhy ,TestName ,TestCode ,DeptName ,Mrp ,Clientdis as ClientDiscount,specdis [Special Discount],Cancel [Cancel Amount],                        
+ netAmt [Net Amount],Sampleby [Sample Billed by],Approvedby [Approved by ],OutLab [Outsource Lab Name],[ExternalPatientNumber],Add2 [LRN],DeptHeaderName,PhlebotomistName,Businesstype,TelephoneNumber                           
+ From @tmprpt                      
+ union all                        
+ select @Cnt+1,null BillDate ,null BillNo , null VisitNo,null PatientNumber ,null LocationName , null ClientName , null ClientCode ,null ClientType,                        
+ null PatientName ,null age , null RefPhy ,null TestName ,null TestCode ,null DeptName ,SUM(Mrp) as MRP ,SUM(Clientdis) as ClientDiscount,                        
+ SUM(specdis) [Special Discount],SUM(Cancel) [Cancel Amount],SUM(netAmt) [Net Amount],null [Sample Billed by],null [Approved by ],            
+ null [Outsource Lab Name],null [ExternalPatientNumber],null [LRN],null DeptHeaderName ,null PhlebotomistName,null Businesstype,null TelephoneNumber                        
+ from @tmprpt                        
+ order by sno                        
+ End              
+    
+       
+      
+      
+       
+    
+    

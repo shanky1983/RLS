@@ -1,0 +1,4179 @@
+CREATE PROCEDURE [dbo].[pGetInvestigationValuesReportCommonSummary_Kernal_API](@pVisitID         BIGINT,
+                                                                    @OrgID            INT,
+                                                                    @TemplateID       INT,
+                                                                    @InvestigationID  VARCHAR(max),
+                                                                    @GroupOrgIDs      VARCHAR(255),
+                                                                    @IsServiceRequest VARCHAR(10))
+--WITH recompile           
+AS
+  BEGIN
+      SET nocount ON
+
+      INSERT INTO GetInvestigationValuesReportCommonSummary_Paramerer
+                  (VisitID,
+                   OrgID,
+                   TemplateID,
+                   InvestigationID,
+                   GroupOrgIDs,
+                   IsServiceRequest,
+                   CalledAt)
+      SELECT @pVisitID,
+             @OrgID,
+             @TemplateID,
+             @InvestigationID,
+             @GroupOrgIDs,
+             @IsServiceRequest,
+             Getdate()
+
+      IF Isnull(@IsServiceRequest, '') = ''
+        SET @IsServiceRequest = 'N'
+
+      DECLARE @tblInvestigationValues TABLE
+        (
+           [investigationvalueid]          [BIGINT],
+           [name]                          [VARCHAR](max) NULL,
+           [value]                         [NVARCHAR](max) NULL,
+           [investigationid]               [BIGINT] NULL,
+           [groupid]                       [INT] NULL,
+           [patientvisitid]                [BIGINT] NULL,
+           [uomid]                         [INT] NULL,
+           [status]                        [VARCHAR](100) NULL,
+           [createdby]                     [BIGINT] NULL,
+           [createdat]                     [DATETIME] NULL,
+           [modifiedby]                    [BIGINT] NULL,
+           [modifiedat]                    [DATETIME] NULL,
+           [uomcode]                       [VARCHAR](50) NULL,
+           [groupname]                     [VARCHAR](max) NULL,
+           [orgid]                         [INT] NULL,
+           [ipinvsamplecollectionmasterid] [BIGINT] NULL,
+           [packageid]                     [INT] NULL,
+           [packagename]                   [VARCHAR](max),
+           [sequenceno]                    [INT],
+           [uid]                           [VARCHAR](255),
+           [newvalue]                      [NVARCHAR](20) NULL,
+           [convvalue]                     [NVARCHAR](max) NULL,
+           convuomcode                     [VARCHAR](50) NULL
+        )
+      DECLARE @tblPatientInvestigation TABLE
+        (
+           [patientvisitid]                 [BIGINT],
+           [investigationid]                [BIGINT],
+           [investigationname]              [VARCHAR](max),
+           [createdby]                      [BIGINT],
+           [createdat]                      [DATETIME],
+           [modifiedby]                     [BIGINT],
+           [modifiedat]                     [DATETIME],
+           [investigationmethodid]          [BIGINT],
+           [investigationsamplecontainerid] [INT],
+           [sampleid]                       [INT],
+           [investigationsiteid]            [INT],
+           [iscompleted]                    [CHAR](1),
+           [collecteddatetime]              [DATETIME],
+           [status]                         [VARCHAR](100),
+           [complaintid]                    [INT],
+           [groupid]                        [INT],
+           [groupname]                      [VARCHAR](max),
+           [reason]                         [VARCHAR](max),
+           [reportstatus]                   [VARCHAR](500),
+           [referencerange]                 [VARCHAR](max),
+           [methodname]                     [VARCHAR](max),
+           [ipinvsamplecollectionmasterid]  [BIGINT],
+           [orgid]                          [INT],
+           [worklistdeletedstatus]          [VARCHAR](50),
+           [performingphysicainname]        [VARCHAR](500),
+           [kitid]                          [BIGINT],
+           [kitname]                        [VARCHAR](255),
+           [instrumentid]                   [BIGINT],
+           [instrumentname]                 [VARCHAR](max),
+           [interpretation]                 [VARCHAR](max),
+           [principleid]                    [BIGINT],
+           [principlename]                  [VARCHAR](max),
+           [qcdata]                         [VARCHAR](max),
+           [packageid]                      [INT],
+           [packagename]                    [VARCHAR](max),
+           [approvedby]                     [BIGINT],
+           [patientinvid]                   [BIGINT],
+           [orderedat]                      [DATETIME],
+           [uid]                            [VARCHAR](255),
+           [groupcomment]                   [VARCHAR](max),
+           [approvedat]                     [DATETIME],
+           [accessionnumber]                [BIGINT],
+           [isabnormal]                     [VARCHAR](80),
+           [medicalremarks]                 [NVARCHAR](max),
+           [groupmedicalremarks]            [NVARCHAR](max),
+           refsuffixtext                    VARCHAR(max),
+           [isnonreportable]                [CHAR] (1),
+           [authorizedby]                   [BIGINT],
+           [convreferencerange]             [NVARCHAR](max),
+           printablerange                   VARCHAR(max),
+           OrginOrgID                       [INT]
+        )
+      DECLARE @tblRecheckTestDetails TABLE
+        (
+           [patientvisitid]    [BIGINT],
+           [investigationid]   [BIGINT],
+           [investigationname] [VARCHAR](max),
+           oldaccessionnumber  BIGINT,
+           [olduid]            [VARCHAR](255),
+           [orgid]             [INT],
+           newaccessionnumber  BIGINT,
+           [newuid]            [VARCHAR](255),
+           groupid             INT,
+           packageid           INT,
+           [oldvalues]         [NVARCHAR](max) NULL,
+           [newvalue]          [NVARCHAR](max) NULL,
+           [oldconvvalues]     [NVARCHAR](max) NULL,
+           [newconvvalue]      [NVARCHAR](max) NULL
+        )
+      DECLARE @tblRetestDetails TABLE
+        (
+           [patientvisitid]    [BIGINT],
+           [investigationid]   [BIGINT],
+           [investigationname] [VARCHAR](max),
+           oldaccessionnumber  BIGINT,
+           [olduid]            [VARCHAR](255),
+           [orgid]             [INT],
+           newaccessionnumber  BIGINT,
+           [newuid]            [VARCHAR](255),
+           groupid             INT,
+           packageid           INT,
+           [oldvalues]         [NVARCHAR](max) NULL,
+           [newvalue]          [NVARCHAR](max) NULL,
+           [oldconvvalues]     [NVARCHAR](max) NULL,
+           [newconvvalue]      [NVARCHAR](max) NULL
+        )
+      DECLARE @tblOrdPerfOrgGrpInvDtls TABLE
+        (
+           orderedorgid        INT,
+           performedorgid      INT,
+           attunegroupid       INT,
+           invtype             VARCHAR(10),
+           performedorggroupid INT,
+           performedorguid     VARCHAR(max),
+           orderedorggroupid   INT,
+           orderedorguid       VARCHAR(max)
+        )
+      DECLARE @tblAffectedVisits TABLE
+        (
+           visitid BIGINT,
+           orgid   BIGINT
+        )
+      DECLARE @OrderedPatientInv TABLE
+        (
+           [patientvisitid]                 [BIGINT],
+           [investigationid]                [BIGINT],
+           [investigationname]              [VARCHAR](250),
+           [investigationmethodid]          [BIGINT],
+           [investigationsamplecontainerid] [INT],
+           [sampleid]                       [INT],
+           [groupid]           BIGINT,
+           [groupname]                      [VARCHAR](250),
+           [reason]                         [VARCHAR](250),
+           [referencerange]                 [VARCHAR](max),
+           [methodname]                     [VARCHAR](255),
+           [orgid]                          [INT],
+           [worklistdeletedstatus]          [VARCHAR](50),
+           [performingphysicainname]        [VARCHAR](500),
+           [kitid]                          [BIGINT],
+           [kitname]                        [VARCHAR](255),
+           [instrumentid]                   [BIGINT],
+           [instrumentname]                 [VARCHAR](255),
+           [interpretation]                 [VARCHAR](max),
+           [principleid]                    [BIGINT],
+           [principlename]                  [VARCHAR](255),
+           [qcdata]                         [VARCHAR](max),
+           [packageid]                      [INT],
+           [packagename]                    [VARCHAR](255),
+           [approvedby]                     [BIGINT],
+           [patientinvid]                   [BIGINT],
+           [uid]                            [VARCHAR](255),
+           [groupcomment]                   [VARCHAR](255),
+           [approvedat]                     [DATETIME],
+           [accessionnumber]                [BIGINT],
+           refrangesuffixtest               VARCHAR(max),
+           [authorizedby]                   [BIGINT],
+           convreferencerange               [NVARCHAR](max),
+           printablerange                   VARCHAR(max),
+           [isabnormal]                     [VARCHAR](80)
+        )
+      DECLARE @tblResultSelectID TABLE
+        (
+           accessionno BIGINT
+        )
+      DECLARE @tblAffectedVisitsForSummary TABLE
+        (
+           VisitID BIGINT,
+           OrgID   BIGINT
+        )
+      DECLARE @tblGrpOrgIDs TABLE
+        (
+           GrpOrgID INT
+        )
+
+      IF( @GroupOrgIDs = 'N' )
+        BEGIN
+            SET @GroupOrgIDs=''
+        END
+
+      INSERT INTO @tblGrpOrgIDs
+                  (GrpOrgID)
+      SELECT DISTINCT item
+      FROM   Fnsplit(Ltrim(Rtrim(@GroupOrgIDs)), ',')
+
+      INSERT @tblAffectedVisitsForSummary
+             (VisitID,
+              OrgID)
+      SELECT PV2.patientvisitID,
+             PV2.OrgID
+      FROM   PatientVisit PV1 (NOLOCK)
+             INNER JOIN patientvisit PV2(NOLOCK)
+                     ON PV2.refervisitid = PV1.patientvisitID
+      WHERE  PV1.refervisitid = @pVisitID
+             AND PV1.OrgID IN (SELECT GrpOrgID
+                                        FROM   @tblGrpOrgIDs)
+             AND PV2.OrgID IN (SELECT GrpOrgID
+                                        FROM   @tblGrpOrgIDs)
+
+      INSERT INTO @tblAffectedVisits
+      SELECT @pVisitID,
+             @OrgID
+      UNION
+      SELECT patientvisitid,
+             OrgID
+      FROM   patientvisit PV1 WITH(NOLOCK)
+      WHERE  refervisitid = @pVisitID
+             AND PV1.OrgID IN (SELECT GrpOrgID
+                                        FROM   @tblGrpOrgIDs)
+      UNION
+      SELECT DISTINCT VisitID,
+                      OrgID
+      FROM   @tblAffectedVisitsForSummary
+
+      IF( Isnull(@InvestigationID, '0') = '0' )
+        BEGIN
+            INSERT INTO @tblResultSelectID
+                        (accessionno)
+            SELECT DISTINCT AccessionNumber
+            FROM   OrderedInvestigations OI (nolock)
+                   INNER JOIN @tblAffectedVisits T2
+                           ON OI.VisitID = T2.VisitID
+                              AND OI.OrgID = T2.OrgID
+        END
+
+      INSERT INTO @OrderedPatientInv
+      SELECT [patientvisitid],
+             investigationid,
+             [investigationname],
+             [investigationmethodid],
+             [investigationsamplecontainerid],
+             [sampleid],
+             [groupid],
+             [groupname],
+             [reason],
+    [referencerange],
+             [methodname],
+             orgid,
+             [worklistdeletedstatus],
+             [performingphysicainname],
+             [kitid],
+             [kitname],
+             [instrumentid],
+             [instrumentname],
+             [interpretation],
+             [principleid],
+             [principlename],
+             [qcdata],
+             [packageid],
+             [packagename],
+             [approvedby],
+             [patientinvid],
+             uid,
+             [groupcomment],
+             [approvedat],
+             accessionnumber,
+             groupmedicalremarks,
+             authorizedby,
+             convreferencerange,
+             printablerange,
+             [isabnormal]
+      FROM   patientinvestigation (nolock)
+      WHERE  accessionnumber IN (SELECT accessionnumber
+                                 FROM   orderedinvestigations OI WITH(nolock)
+                                        INNER JOIN @tblResultSelectID tbl
+                                                ON tbl.accessionno = OI.referredaccessionno)
+             AND Isnull(isabnormal, '') <> 'N'
+
+      DECLARE @tblResultSelectUID TABLE
+        (
+           uid VARCHAR(255)
+        )
+
+      INSERT INTO @tblResultSelectUID
+                  (uid)
+      SELECT DISTINCT OI.uid
+      FROM   orderedinvestigations OI WITH(nolock)
+             INNER JOIN @tblResultSelectID trs
+                     ON OI.accessionnumber = trs.accessionno
+
+      --WHERE  OI.visitid = @pVisitID
+      --       AND OI.orgid = @OrgID
+      INSERT INTO @tblInvestigationValues
+      SELECT [investigationvalueid],
+             [name] + ' ' + ( CASE
+                                WHEN IOA.isnabl = 'Y' THEN '<b>*</b>'
+                                ELSE ''
+                              END ) + ' ' + ( CASE
+                                                WHEN IOA.iscap = 'Y' THEN '<b>#</b>'
+                                                ELSE ''
+                                              END ) AS [Name],
+             [value],
+             INV1.[investigationid]                 AS [InvestigationID],
+             [groupid],
+             [patientvisitid],
+             [uomid],
+             [status],
+             [createdby],
+             [createdat],
+             [modifiedby],
+             [modifiedat],
+             [uomcode],
+             [groupname],
+             INV1.[orgid],
+             [ipinvsamplecollectionmasterid],
+             [packageid],
+             [packagename],
+             [sequenceno],
+             [uid],
+             '',
+             [convvalue],
+             convuomcode
+      FROM   investigationvalues INV1 WITH(nolock)
+             INNER JOIN @tblAffectedVisits v2
+                     ON INV1.patientvisitid = v2.visitid
+             INNER JOIN invreportmapping IRM WITH(nolock)
+                     ON IRM.investigationid = INV1.investigationid
+             --AND IRM.templateid = @TemplateID  
+             LEFT JOIN investigationorgattributes IOA WITH(nolock)
+                    ON INV1.orgid = IOA.orgid
+                       AND INV1.investigationid = IOA.investigationid
+      WHERE  INV1.value <> ''
+
+  /*Recheck Investigations Order Merging with Parent Group Order Start*/
+      /*Select Recheck Type based on statustype column instead of status column in patientinvestigation table                   
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                                 
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        Modified by :Prasanna.S                                       
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                                 
+      
+   
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        Modified on : 10-Sep-2013               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                 
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      */
+      INSERT INTO @tblRecheckTestDetails
+                  ([patientvisitid],
+                   [investigationid],
+                   [investigationname],
+                   oldaccessionnumber,
+                   [olduid],
+                   [orgid],
+                   groupid,
+                   packageid)
+      SELECT PINV.[patientvisitid],
+             [PINV].investigationid,
+             [investigationname],
+             PINV.[accessionnumber],
+             PINV.[uid],
+             PINV.[orgid],
+             PINV.groupid,
+             PINV.packageid
+      FROM   patientinvestigation PINV WITH(nolock)
+             INNER JOIN @tblResultSelectID tbl
+                     ON tbl.accessionno = PINV.accessionnumber
+      WHERE  PINV.statustype = 'RC'
+      UNION ALL
+      SELECT PINV.[patientvisitid],
+             [PINV].investigationid,
+             [investigationname],
+             PINV.[accessionnumber],
+             PINV.[uid],
+             PINV.[orgid],
+             PINV.groupid,
+             PINV.packageid
+      FROM   patientinvestigation PINV WITH(nolock)
+      WHERE  PINV.statustype = 'RC'
+             AND accessionnumber IN (SELECT accessionnumber
+                                     FROM   orderedinvestigations OI (NOLOCK) --where OI.VisitID=@pVisitID and 
+                                            INNER JOIN @tblResultSelectID tbl
+                                                    ON tbl.accessionno = OI.referredaccessionno
+                                                       AND OI.orgid != @OrgID)
+
+      /*Update NewAccessionNumber based on statustype column in patientinvestigation table instead of referred type column in orderedinvestigations table*/
+      UPDATE t1
+      SET    t1.newaccessionnumber = tmp.accessionnumber
+      FROM   @tblRecheckTestDetails t1
+             INNER JOIN (SELECT t.investigationid,
+                                Max(PIV.accessionnumber) AS AccessionNumber
+                         FROM   orderedinvestigations OI
+                                INNER JOIN @tblRecheckTestDetails t
+                                        ON t.patientvisitid = OI.visitid
+                                           AND t.orgid = OI.orgid
+                                INNER JOIN patientinvestigation PIV WITH(nolock)
+                                        ON PIV.patientvisitid = OI.visitid
+                                           AND piv.orgid = OI.orgid
+                         WHERE  statustype = 'RC'
+                         GROUP  BY t.investigationid) AS tmp
+                     ON tmp.investigationid = t1.investigationid
+
+      UPDATE t1
+      SET    t1.newuid = OI.uid
+      FROM   @tblRecheckTestDetails t1
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = t1.newaccessionnumber
+                        AND OI.orgid = t1.orgid
+
+      /*Add Condition IV.statustype='RC' to get the old values                                                                                                     
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      Modified by :Prasanna.S                                                                                                    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      Modified on : 12-Sep-2013                                                       
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      */
+      UPDATE t
+      SET    t.oldvalues = IV.value,
+             t.oldconvvalues = IV.convvalue
+      FROM   @tblRecheckTestDetails T
+             INNER JOIN investigationvalues IV WITH(nolock)
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.groupid = IV.groupid
+                        AND T.packageid = IV.packageid
+                        AND T.orgid = IV.orgid
+                        AND T.olduid = IV.uid
+                        AND IV.statustype = 'RC'
+
+      /*Add Condition isnull(IV.statustype,'') not in ('RC','RR') to get the New values                                                                                                  
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      Modified by :Prasanna.S                                                                                        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      Modified on : 12-Sep-2013                                                                                                   
+      
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      
+      
+        
+      
+                               
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+      */
+      UPDATE t
+      SET    t.newvalue = IV.value,
+             t.newconvvalue = IV.convvalue
+      FROM   @tblRecheckTestDetails T
+             INNER JOIN investigationvalues IV WITH(nolock)
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.orgid = IV.orgid
+                        AND T.newuid = IV.uid
+                        AND Isnull(IV.statustype, '') NOT IN ( 'RC', 'RR' )
+
+      UPDATE iv
+      SET    iv.value = T.newvalue,
+             iv.newvalue = ' (RC)',
+             iv.convvalue = T.newconvvalue
+      FROM   @tblInvestigationValues IV
+             INNER JOIN @tblRecheckTestDetails T
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.olduid = IV.uid
+
+      --Delete @tblInvestigationValues where Value is Null--if Investigation Value is Null,it will not disploy in Report                                                                                                                                      
+
+      --Select * from @tblRecheckTestDetails                                                     
+      --select * from @tblInvestigationValues                                                
+  /*Recheck Investigations Order Merging with Parent Group Order Start*/
+      /*Retest Investigations Order Merging with Parent Group Order Start*/
+      INSERT INTO @tblRetestDetails
+                  ([patientvisitid],
+                   [investigationid],
+                   [investigationname],
+                   oldaccessionnumber,
+                   [olduid],
+                   [orgid],
+                   groupid,
+                   packageid,
+                   newaccessionnumber)
+      SELECT PINV.[patientvisitid],
+             [PINV].investigationid,
+             [investigationname],
+             PINV.[accessionnumber],
+             PINV.[uid],
+             PINV.[orgid],
+             PINV.groupid,
+             PINV.packageid,
+             PINV.accessionnumber
+      FROM   patientinvestigation PINV WITH(nolock)
+             INNER JOIN @tblResultSelectID tbl
+                     ON tbl.accessionno = PINV.accessionnumber
+      WHERE  PINV.statustype = 'RR'
+
+      UPDATE t1
+      SET    t1.newaccessionnumber = tmp.accessionnumber
+      FROM   @tblRetestDetails t1
+             INNER JOIN (SELECT investigationid,
+                                Max(OI.accessionnumber) AS AccessionNumber
+                         FROM   orderedinvestigations OI
+                                INNER JOIN @tblRetestDetails t
+                                        ON t.patientvisitid = OI.visitid
+                                           AND t.investigationid = OI.id
+                                           AND t.orgid = OI.orgid
+                         WHERE  referredtype = 'Retest'
+                         GROUP  BY t.investigationid) AS tmp
+                     ON tmp.investigationid = t1.investigationid
+
+      UPDATE t1
+      SET    t1.newuid = OI.uid
+      FROM   @tblRetestDetails t1
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = t1.newaccessionnumber
+                        AND OI.orgid = t1.orgid
+
+      UPDATE t
+      SET    t.oldvalues = IV.value,
+             t.oldconvvalues = IV.convvalue
+      FROM   @tblRetestDetails T
+             INNER JOIN investigationvalues IV WITH(nolock)
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.groupid = IV.groupid
+                        AND T.packageid = IV.packageid
+                        AND T.orgid = IV.orgid
+                        AND T.olduid = IV.uid
+
+      UPDATE t
+      SET    t.newvalue = IV.value,
+             t.newconvvalue = IV.convvalue
+      FROM   @tblRetestDetails T
+             INNER JOIN investigationvalues IV WITH(nolock)
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.orgid = IV.orgid
+                        AND T.newuid = IV.uid
+
+      UPDATE iv
+      SET    iv.value = T.newvalue,
+             iv.newvalue = ' (RT)',
+             iv.convvalue = T.newconvvalue
+      FROM   @tblInvestigationValues IV
+             INNER JOIN @tblRetestDetails T
+                     ON T.patientvisitid = IV.patientvisitid
+                        AND T.investigationid = IV.investigationid
+                        AND T.olduid = IV.uid
+
+      --Delete @tblInvestigationValues where Value is Null--if Investigation Value is Null,it will not disploy in Report                                                                                                                                      
+
+      --Select * from @tblRecheckTestDetails                                                                   
+      --select * from @tblInvestigationValues                                              
+      --return                                
+      /*Retest Investigations Order Merging with Parent Group Order Start*/
+      INSERT INTO @tblPatientInvestigation
+      SELECT [patientvisitid],
+             [PINV].investigationid,
+             [investigationname],
+             PINV.[createdby],
+             PINV.[createdat],
+             PINV.[modifiedby],
+             PINV.[modifiedat],
+             [investigationmethodid],
+             [investigationsamplecontainerid],
+             [sampleid],
+             [investigationsiteid],
+             [iscompleted],
+             [collecteddatetime],
+             [status],
+             [complaintid],
+             [groupid],
+             [groupname],
+             [reason],
+             [reportstatus],
+             Replace(PINV.[referencerange], '<?xml version="1.0" encoding="utf-16"?>', ''),
+             [methodname],
+             [ipinvsamplecollectionmasterid],
+             PINV.[orgid],
+             [worklistdeletedstatus],
+             [performingphysicainname],
+             PINV.[kitid],
+             [kitname],
+             PINV.[instrumentid],
+             [instrumentname],
+             PINV.[interpretation],
+             PINV.[principleid],
+             [principlename],
+             PINV.[qcdata],
+             [packageid],
+             [packagename],
+             [approvedby],
+             [patientinvid],
+             [orderedat],
+             [uid],
+             [groupcomment],
+             [approvedat],
+             PINV.[accessionnumber],
+             PINV.isabnormal,
+             PINV.medicalremarks,
+             PINV.groupmedicalremarks,
+             PINV.refsuffixtext,
+             IOM.isnonreportable,
+             PINV.authorizedby,
+             PINV.convreferencerange,
+             PINV.printablerange,
+             PINV.orgid
+      FROM   patientinvestigation PINV WITH(nolock)
+             INNER JOIN @tblResultSelectID tbl
+                     ON tbl.accessionno = PINV.accessionnumber
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON IOM.investigationid = PINV.investigationid
+                        AND IOM.orgid = PINV.orgid
+                        AND PINV.status IN ( 'Pending', 'Completed', 'Approve', 'Validate',
+                                             'PartiallyApproved', 'PartiallyValidated', 'PartiallyCompleted', 'ReflexWithSameSample',
+                                             'ReflexWithNewSample', 'Reject', 'Co-authorize', 'With Held' )
+             INNER JOIN invreportmapping IRM WITH(nolock)
+                     ON IRM.investigationid = PINV.investigationid
+                        --AND IRM.templateid = @TemplateID  
+                        AND Isnull(PINV.isabnormal, '') <> 'N'
+                        AND PINV.isabnormal <> ''
+
+      UPDATE @tblPatientInvestigation
+      SET    referencerange = ORDBTL.referencerange,
+             methodname = ORDBTL.methodname,
+             reason = ORDBTL.reason,
+             interpretation = ORDBTL.interpretation,
+             kitname = ORDBTL.kitname,
+             convreferencerange = ORDBTL.convreferencerange,
+             printablerange = ORDBTL.printablerange,
+             isabnormal = ORDBTL.[isabnormal]
+      FROM   @tblPatientInvestigation TBL1
+             INNER JOIN @OrderedPatientInv ORDBTL
+                     ON ORDBTL.investigationid = TBL1.investigationid
+
+      INSERT INTO @tblOrdPerfOrgGrpInvDtls
+                  (orderedorgid,
+                   performedorgid,
+                   attunegroupid,
+                   invtype,
+                   performedorggroupid)
+      SELECT T2.OrgID,
+             OA.OrgID,
+             OI.id,
+             OI.type,
+             CASE
+               WHEN OI.type = 'GRP' THEN IOG.orggroupid
+               ELSE OI.id
+             END
+      FROM   orderedinvestigations OI WITH(nolock)
+             INNER JOIN organizationaddress OA WITH(nolock)
+                     ON OI.rescaptureloc = OA.addressid
+             LEFT JOIN invorggroup IOG WITH(nolock)
+                    ON IOG.attgroupid = OI.id
+            AND IOG.orgid = OA.OrgID
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.VisitID = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+
+      --WHERE  OI.visitid = @pVisitID
+      UPDATE t
+      SET    t.orderedorggroupid = IOG.orggroupid
+      FROM   @tblOrdPerfOrgGrpInvDtls T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON T.attunegroupid = IOG.attgroupid
+                        AND IOG.orgid IN (SELECT OrgID
+                                          FROM   @tblAffectedVisits)
+      WHERE  t.invtype != 'INV'
+
+      UPDATE t
+      SET    t.performedorguid = OI.uid
+      FROM   @tblOrdPerfOrgGrpInvDtls T
+             INNER JOIN orderedinvestigations OI
+                     ON T.performedorgid = OI.orgid
+                        AND T.attunegroupid = OI.id
+                        AND t.invtype = OI.type
+             INNER JOIN @tblResultSelectID TRS
+                     ON TRS.accessionno = OI.referredaccessionno
+             INNER JOIN @tblAffectedVisits TAV
+                     ON TAV.visitid = OI.visitid
+                        AND TAV.orgid = T.performedorgid
+
+      UPDATE t
+      SET    t.performedorguid = OI.uid
+      FROM   @tblOrdPerfOrgGrpInvDtls T
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON T.performedorgid = OI.orgid
+                        AND T.attunegroupid = OI.id
+                        AND t.invtype = OI.type
+             INNER JOIN @tblResultSelectID TRS
+                     ON TRS.accessionno = OI.referredaccessionno
+             INNER JOIN @tblAffectedVisits TAV
+                     ON TAV.visitid = OI.visitid
+                        AND TAV.orgid = T.performedorgid
+
+      UPDATE t
+      SET    t.orderedorguid = OI.uid
+      FROM   @tblOrdPerfOrgGrpInvDtls T
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON T.orderedorgid = OI.orgid
+                        AND T.attunegroupid = OI.id
+                        AND OI.visitid IN (SELECT VisitID
+                                           FROM   @tblAffectedVisits)
+             INNER JOIN @tblAffectedVisits TAV
+                     ON TAV.visitid = OI.visitid
+                        AND TAV.orgid = T.orderedorgid
+
+      UPDATE @tblOrdPerfOrgGrpInvDtls
+      SET    performedorguid = orderedorguid
+      WHERE  orderedorgid = performedorgid
+
+      IF( 1 < (SELECT Count(1)
+               FROM   @tblAffectedVisits) )
+        BEGIN
+            UPDATE t
+            SET    patientvisitid = T2.VisitID,
+                   orgid = T2.OrgID,
+                   --groupid = T1.orderedorggroupid,
+                   uid = T1.orderedorguid
+            FROM   @tblInvestigationValues T
+                   INNER JOIN @tblOrdPerfOrgGrpInvDtls T1
+                           ON T.uid = T1.performedorguid
+                              AND T.groupid = T1.performedorggroupid
+                   INNER JOIN @tblAffectedVisits T2
+                           ON T.PatientVisitID = T2.VisitID
+                              AND T.OrgID = T2.OrgID
+            WHERE  T1.invtype != 'INV'
+
+            UPDATE t
+            SET    patientvisitid = T2.VisitID,
+                   orgid = T2.OrgID,
+                   uid = T1.orderedorguid
+            FROM   @tblInvestigationValues T
+                   INNER JOIN @tblOrdPerfOrgGrpInvDtls T1
+                           ON T.uid = T1.performedorguid
+                              AND T.investigationid = T1.performedorggroupid
+                   INNER JOIN @tblAffectedVisits T2
+                           ON T.PatientVisitID = T2.VisitID
+                              AND T.OrgID = T2.OrgID
+            WHERE  T1.invtype = 'INV'
+        END
+
+      DECLARE @tblTempGrp TABLE
+        (
+           invid                VARCHAR(10),
+           grpid                VARCHAR(10),
+           accessionno          VARCHAR(10),
+           parentgrpid          VARCHAR(10),
+           isgroup              CHAR(1),
+           atlevel              INT,
+           grpcontentseq        INT,
+           [uid]                VARCHAR(500),
+           patientvisitid       BIGINT,
+           actualgrpid          BIGINT,
+           deptname             VARCHAR(255),
+           methodname           VARCHAR(255),
+           notes                VARCHAR(max),
+           referencerange       VARCHAR(max),
+           sampleid             BIGINT,
+           samplename           VARCHAR(500),
+           uomcode              VARCHAR(100),
+           comments             VARCHAR(max),
+           pkgid                INT,
+           packagename          VARCHAR(255),
+           childprintseparately CHAR(1),
+           convreferencerange   NVARCHAR(max),
+           printablerange       VARCHAR(max)
+        )
+      DECLARE @tblOrdInvExploded TABLE
+        (
+           invid                  VARCHAR(10),
+           grpid                  VARCHAR(10),
+           accessionno            VARCHAR(10),
+           parentgrpid            VARCHAR(10),
+           deptid                 BIGINT,
+           grpdeptid              VARCHAR(10),
+           isgroup                CHAR(1),
+           atlevel                INT,
+           deptseq                INT,
+           firstlvlseq            INT,
+           grpcontentseq          INT,
+           rootgroupid            VARCHAR(10),
+           innercontentseq        INT,
+           uid                    VARCHAR(500),
+           patientvisitid         BIGINT,
+           actualgrpid            BIGINT,
+           deptname               VARCHAR(255),
+           methodname             VARCHAR(500),
+           notes                  VARCHAR(max),
+           referencerange         VARCHAR(max),
+           sampleid               BIGINT,
+           samplename             VARCHAR(500),
+           uomcode                VARCHAR(255),
+           comments               VARCHAR(max),
+           patternid              BIGINT,
+           patternname            VARCHAR(200),
+           uomid                  INT,
+           validationtext         VARCHAR(max),
+           isabnormal             VARCHAR(50),
+           invvalidationtext      VARCHAR(max),
+           [groupcomment]         [VARCHAR](255),
+           [groupmedicalremarks]  [VARCHAR](255),
+           resultvaluetype        NVARCHAR(200),
+           decimalplaces          VARCHAR(20),
+           pkgid                  INT,
+           packagename            VARCHAR(255),
+           rootgrpname            VARCHAR(250),
+           result                 VARCHAR(max),
+           medicalremarks         NVARCHAR(max),
+           l2contentseq           INT,
+           parentgrpname          VARCHAR(250),
+           isnonreportable        CHAR(1),
+           parentprintseparately  CHAR(1),
+           parentpagenumber       INT,
+           childprintseparately   CHAR(1),
+           childpagenumber        INT,
+           isrejected             CHAR(1),
+           referredtype           VARCHAR(50),
+           convreferencerange     NVARCHAR(max),
+           convresult             VARCHAR(max),
+           iswithheld             CHAR(1),
+           newvalue               NVARCHAR(20),
+           convuomcode            VARCHAR(50),
+           subgroupinterpretation NVARCHAR(max),
+           printablerange         VARCHAR(max),
+           IsShowName             BIT,
+           ParentDeptID           INT
+        )
+      DECLARE @tblSeq TABLE
+        (
+           invid         VARCHAR(10),
+           grpid         VARCHAR(10),
+           accessionno   VARCHAR(10),
+           parentgrpid   VARCHAR(10),
+           deptid        VARCHAR(10),
+           explodedseq   INT,
+           overallseq    INT,
+           indcontentseq INT
+        )
+      /****************** Explode the Groups ordered to get the investigation to be performed along with the levels *********************************/
+      ;
+
+      WITH c1
+           AS (SELECT OI.id                           AS GrpID,
+                      IGM.investigationid             AS InvID,
+                      OI.id                           AS ParentGrpID,
+                      IGM.parent,
+                      OI.accessionnumber,
+                      0                               AS [level],
+                      IGM.sequenceno,
+                      OI.[uid],
+                      OI.visitid,
+                      CONVERT(BIGINT, IOG.orggroupid) AS OrgGroupID,
+                      ''                              AS DeptName,
+                      ''                              AS MethodName,
+                      ''                              AS Interpretation,
+                      ''                              AS ReferenceRange,
+                      ''                              AS SampleID,
+                      ''                              AS Reason,
+                      IGM.printseparately             AS ChildPrintSeparately,
+                      ''                              AS ConvReferenceRange,
+                      ''                              AS PrintableRange
+               FROM   orderedinvestigations OI WITH(nolock)
+                      INNER JOIN invorggroup IOG WITH(nolock)
+                              ON IOG.attgroupid = OI.id
+                                 AND OI.orgid = IOG.orgid
+                      INNER JOIN invgroupmapmaster IGM WITH(nolock)
+                              ON IOG.orggroupid = IGM.groupid
+                      INNER JOIN @tblResultSelectID TRS
+                              ON TRS.accessionno = OI.accessionnumber
+               WHERE  OI.type = 'GRP'
+                      AND Isnull(oi.pkgid, 0) = 0
+               UNION ALL
+               SELECT CONVERT(BIGINT, IOG.attgroupid) AS GrpID,
+                      IGM.investigationid             AS InvID,
+                      OI.grpid                        AS ParentGrpID,
+                      IGM.parent,
+                      OI.accessionnumber,
+                      [level] + 1,
+                      CASE
+                        WHEN OI.grpid IN(SELECT OI1.id
+                                         FROM   orderedinvestigations OI1 WITH( nolock )
+                                         WHERE  type = 'GRP') THEN OI.sequenceno
+                        ELSE OI.sequenceno
+                      --+ 1 -- + [level]                                      
+                      END                             AS SequenceNo,
+                      OI.[uid],
+                      OI.visitid,
+                      OI.invid                        AS OrgGroupID,
+                      methodname,
+                      interpretation,
+                      referencerange,
+                      sampleid,
+                      '',
+                      reason,
+                      IGM.printseparately             AS ChildPrintSeparately,
+                      convreferencerange,
+                      printablerange
+               FROM   c1 OI
+                      INNER JOIN invorggroup IOG WITH(nolock)
+                              ON IOG.orggroupid = OI.invid
+                      --AND IOG.orgid = @OrgID
+                      INNER JOIN invgroupmapmaster IGM WITH(nolock)
+                              ON OI.invid = IGM.groupid
+                      INNER JOIN @tblResultSelectID TRS
+                              ON TRS.accessionno = OI.accessionnumber
+               WHERE  OI.parent = 'Y'
+                      AND IGM.active <> 'N'
+                      AND IOG.OrgID IN (SELECT OrgID
+                                        FROM   @tblAffectedVisits T2))
+      INSERT INTO @tblTempGrp
+                  (invid,
+                   grpid,
+                   accessionno,
+                   parentgrpid,
+                   isgroup,
+  atlevel,
+                   grpcontentseq,
+                   [uid],
+                   patientvisitid,
+                   actualgrpid,
+                   deptname,
+                   methodname,
+                   notes,
+                   referencerange,
+                   sampleid,
+                   samplename,
+                   uomcode,
+                   comments,
+                   pkgid,
+                   packagename,
+                   childprintseparately,
+                   convreferencerange,
+                   printablerange)
+      SELECT invid,
+             grpid,
+             accessionnumber,
+             parentgrpid,
+             'Y',
+             [level],
+             sequenceno,
+             uid,
+             visitid,
+             orggroupid,
+             deptname,
+             methodname,
+             interpretation,
+             referencerange,
+             sampleid,
+             '',
+             '',
+             reason,
+             0,
+             '',
+             childprintseparately,
+             convreferencerange,
+             printablerange
+      FROM   c1
+      WHERE  Isnull(parent, 'N') = 'N'
+      ORDER  BY parentgrpid
+
+      ----------------                                                                                                                                                                   
+      DECLARE @InvGroupMapMasterForOrderedPkg TABLE
+        (
+           groupid              BIGINT,
+           investigationid      BIGINT,
+           parent               CHAR(1),
+           sequenceno           INT,
+           pkgseqno             INT,
+           orderedid            BIGINT,
+           uid                  VARCHAR(255),
+           orgid                INT,
+           accessionnumber      BIGINT,
+           pkgid                BIGINT,
+           pkgname              VARCHAR(255),
+           childprintseparately CHAR(1),
+           VisitID              BIGINT
+        )
+
+      INSERT INTO @InvGroupMapMasterForOrderedPkg
+      --select IOG.OrgGroupID,IPM.ID,Case When IPM.Type='GRP' Then 'Y' Else 'N' End As Parent,IPM.SequenceNo,IPM.PrintSeparately 
+      --from OrderedInvestigations OI WITH(NOLOCK)                                                                                                                                        
+      --INNER JOIN InvOrgGroup IOG WITH(NOLOCK)ON IOG.AttGroupID=OI.ID And IOG.OrgID=OI.OrgID           
+      --INNER JOIN InvPackageMapping IPM WITH(NOLOCK)ON IPM.PackageID=IOG.OrgGroupID And IPM.Type In('INV','GRP')                                    
+      --INNER JOIN @tblResultSelectID TRS ON TRS.AccessionNo=OI.AccessionNumber                                        
+      --Where OI.Type='PKG'                                             
+      SELECT IOG.orggroupid,
+             IPM.id,
+             'N' AS Parent,
+             IPM.sequenceno,
+             IOG.sequenceno,
+             IPM.id,
+             OI.uid,
+             OI.orgid,
+             OI.accessionnumber,
+             OI.pkgid,
+             OI.pkgname,
+             IPM.printseparately,
+             T2.VisitID
+      FROM   orderedinvestigations OI WITH(nolock)
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = OI.pkgid
+             INNER JOIN invpackagemapping IPM WITH(nolock)
+                     ON IPM.packageid = IOG.orggroupid
+                        AND IPM.id = OI.id
+                        AND IPM.type = OI.type
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.VisitID = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+      WHERE  IOG.orgid = T2.OrgID
+             AND OI.visitid = T2.VisitID
+             AND IPM.type = 'INV'
+             AND oi.accessionnumber IN (SELECT accessionno
+                                        FROM   @tblResultSelectID)
+      UNION ALL
+      SELECT IOG.orggroupid,
+   IPM.id,
+             'Y' AS Parent,
+             IPM.sequenceno,
+             IOG.sequenceno,
+             IOG1.attgroupid,
+             OI.uid,
+             OI.orgid,
+             OI.accessionnumber,
+             OI.pkgid,
+             OI.pkgname,
+             IPM.printseparately,
+             T2.VisitID
+      FROM   orderedinvestigations OI WITH(nolock)
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = OI.pkgid
+             INNER JOIN invpackagemapping IPM WITH(nolock)
+                     ON IPM.packageid = IOG.orggroupid
+             INNER JOIN invorggroup IOG1 WITH(nolock)
+                     ON IOG1.attgroupid = OI.id
+                        AND OI.type = 'GRP'
+                        AND IOG1.orggroupid = IPM.id
+                        AND IPM.type = OI.type
+                        AND IOG1.orgid IN(SELECT OrgID
+                                          FROM   @tblAffectedVisits)
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.VisitID = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+      WHERE  IOG.orgid = T2.OrgID
+             AND OI.visitid = T2.VisitID
+             AND IPM.type = 'GRP'
+             AND oi.accessionnumber IN (SELECT accessionno
+                                        FROM   @tblResultSelectID);
+
+      WITH c2
+           AS (SELECT CASE
+                        WHEN IGM.parent = 'Y' THEN IGM.orderedid
+                        ELSE 0
+                      END                                                    AS GrpID,
+                      IGM.investigationid                                    AS InvID,
+                      IGM.pkgid                                              AS ParentGrpID,
+                      IGM.parent,
+                      IGM.accessionnumber,
+                      0                                                      AS [level],
+                      IGM.sequenceno,
+                      IGM.[uid],
+                      VisitID                                                AS VisitID,
+                      CASE
+                        WHEN IGM.parent = 'Y' THEN CONVERT(BIGINT, IGM.investigationid)
+                        ELSE 0
+                      END                                                    AS OrgGroupID
+                      --,IDM.DeptName               
+                      ,
+                      ''                                                     AS DeptName,
+                      ''                                                     AS MethodName,
+                      ''                                                     AS Interpretation,
+                      ''                                                     AS ReferenceRange,
+                      ''                                                     AS SampleID
+                      --,'' as UomCode                                                           
+                      ,
+                      ''                                                     AS Reason,
+                      ''                                                     AS PrintableRange,
+                      IGM.pkgid                                              AS PKGID,
+                      IGM.pkgname,
+                      Cast(Isnull(IGM.childprintseparately, 'N') AS CHAR(1)) AS ChildPrintSeparately,
+                      ''                                                     AS ConvReferenceRange
+               FROM   @InvGroupMapMasterForOrderedPkg IGM
+               UNION ALL
+               SELECT CONVERT(BIGINT, IOG.attgroupid)                   AS GrpID,
+                      IGM.investigationid                               AS InvID,
+                      OI.grpid                                          AS ParentGrpID,
+                      CONVERT(CHAR(1), IGM.parent)                      AS Parent,
+                      OI.accessionnumber,
+                 [level] + 1,
+                      CASE
+                        WHEN OI.grpid IN(SELECT OI1.id
+                                         FROM   orderedinvestigations OI1 WITH( nolock )
+                                         WHERE  type = 'GRP') THEN OI.sequenceno
+                        ELSE OI.sequenceno
+                      --+ 1 -- + [level]                                                             
+                      END                                               AS SequenceNo,
+                      OI.[uid],
+                      OI.visitid,
+                      OI.invid                                          AS OrgGroupID,
+                      methodname,
+                      interpretation,
+                      referencerange,
+                      sampleid,
+                      '',
+                      reason,
+                      printablerange,
+                      OI.pkgid,
+                      OI.pkgname,
+                      Cast(Isnull(IGM.printseparately, 'N') AS CHAR(1)) AS ChildPrintSeparately,
+                      convreferencerange
+               FROM   c2 OI
+                      INNER JOIN invorggroup IOG WITH(nolock)
+                              ON IOG.orggroupid = OI.invid
+                                 AND IOG.orgid IN(SELECT OrgID
+                                                  FROM   @tblAffectedVisits)
+                      INNER JOIN invgroupmapmaster IGM WITH(nolock)
+                              ON OI.invid = IGM.groupid
+               --INNER JOIN @tblResultSelectID tblUID  
+               --        ON tblUID.accessionno = oi.accessionnumber  
+               WHERE  OI.parent = 'Y')
+      INSERT INTO @tblTempGrp
+                  (invid,
+                   grpid,
+                   accessionno,
+                   parentgrpid,
+                   isgroup,
+                   atlevel,
+                   grpcontentseq,
+                   [uid],
+                   patientvisitid,
+                   actualgrpid,
+                   deptname,
+                   methodname,
+                   notes,
+                   referencerange,
+                   sampleid,
+                   samplename,
+                   uomcode,
+                   comments,
+                   pkgid,
+                   packagename,
+                   childprintseparately,
+                   convreferencerange,
+                   printablerange)
+      SELECT invid,
+             grpid,
+             accessionnumber,
+             parentgrpid,
+             'Y',
+             [level],
+             sequenceno,
+             uid,
+             visitid,
+             orggroupid,
+             deptname,
+             methodname,
+             interpretation,
+             referencerange,
+             sampleid,
+             '',
+             '',
+             reason,
+             pkgid,
+             pkgname,
+             childprintseparately,
+             convreferencerange,
+             printablerange
+      FROM   c2
+      WHERE  Isnull(parent, 'N') = 'N'
+      ORDER  BY parentgrpid
+
+      ----------------                        
+  /****************** Explode the Groups ordered to get the investigation to be performed along with theie levels *********************************/
+      /********** Insert ordered investigations and exploded group contents into a temp table *******************************************************/
+      INSERT INTO @tblOrdInvExploded
+                  (invid,
+                   grpid,
+                   accessionno,
+                   parentgrpid,
+                   deptid,
+                   grpdeptid,
+                   isgroup,
+                   atlevel,
+                   deptseq,
+                   firstlvlseq,
+                   grpcontentseq,
+                   rootgroupid,
+                   innercontentseq,
+                   uid,
+                   patientvisitid,
+            actualgrpid,
+                   deptname,
+                   methodname,
+                   notes,
+                   referencerange,
+                   sampleid,
+                   samplename,
+                   uomcode,
+                   comments,
+                   patternid,
+                   patternname,
+                   uomid,
+                   validationtext,
+                   invvalidationtext,
+                   groupcomment,
+                   groupmedicalremarks,
+                   resultvaluetype,
+                   decimalplaces,
+                   pkgid,
+                   packagename,
+                   medicalremarks,
+                   isnonreportable,
+                   childprintseparately,
+                   parentprintseparately,
+                   referredtype,
+                   convreferencerange,
+                   printablerange,
+                   ParentDeptID)
+      SELECT OI.id,
+             '0',
+             OI.accessionnumber,
+             '0',
+             IOM.deptid,
+             IOM.deptid,
+             'N',
+             0,
+             0,
+             IOM.sequenceno,
+             0,
+             '',
+             0,
+             OI.uid,
+             OI.visitid,
+             0,
+             IDM.deptname,
+             piv.methodname,
+             PIV.interpretation,
+             PIV.referencerange,
+             PIV.sampleid,
+             '',
+             '',
+             reason,
+             0,
+             '',
+             IOM.uomid,
+             '',
+             '',
+             groupcomment,
+             groupmedicalremarks,
+             '',
+             0,
+             0,
+             '',
+             PIV.medicalremarks,
+             IOM.isnonreportable,
+             '',
+             IOM.printseparately,
+             OI.referredtype,
+             PIV.convreferencerange,
+             printablerange,
+             IOM.deptid
+      FROM   orderedinvestigations OI WITH(nolock)
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON OI.id = IOM.investigationid
+                        AND OI.orgid = IOM.orgid
+             INNER JOIN invdeptmaster IDM WITH(nolock)
+                     ON IDM.deptid = IOM.deptid
+                        AND OI.orgid = IDM.orgid
+             INNER JOIN @tblPatientInvestigation PIV
+                     ON Piv.investigationid = IOM.investigationid
+                        AND piv.patientvisitid = OI.visitid
+                        AND PIV.uid = oi.uid
+						 
+      --INNER JOIN @tblResultSelectID TRS  
+      --        ON TRS.accessionno = OI.accessionnumber  
+      WHERE  type NOT IN( 'GRP', 'PKG' ) and OI.status IN ( 'Pending', 'Completed', 'Approve', 'Validate',
+                                             'PartiallyApproved', 'PartiallyValidated', 'PartiallyCompleted', 'ReflexWithSameSample',
+                                             'ReflexWithNewSample', 'Reject', 'Co-authorize', 'With Held' )
+             AND Isnull(OI.pkgid, 0) = 0
+      UNION
+      SELECT invid,
+             grpid,
+             accessionno,
+             parentgrpid,
+             '0',
+             '0',
+             isgroup,
+             atlevel,
+             0,
+             0,
+             grpcontentseq,
+             '',
+             0,
+             uid,
+             patientvisitid,
+             actualgrpid,
+             deptname,
+             methodname,
+             notes,
+             referencerange,
+             sampleid,
+             '',
+             '',
+             comments,
+             0,
+             '',
+             0,
+             '',
+             '',
+             '',
+             '',
+             '',
+             0,
+             pkgid,
+             packagename,
+             '',
+             'N',
+             childprintseparately,
+             '',
+             '',
+             convreferencerange,
+     printablerange,
+             '0'
+      FROM   @tblTempGrp
+
+      UPDATE t
+      SET    methodname = PIV.methodname,
+             notes = PIV.interpretation,
+             referencerange = PIV.referencerange,
+             comments = reason,
+             deptid = IM.deptid,
+             deptname = IDM.deptname,
+             t.samplename = ISm.sampledesc,
+             patternid = PM.patternid,
+             patternname = IPM.patternname,
+             --uomid = IM.uomid,           
+             --uomcode = IM.uomcode,           
+             isabnormal = PIV.isabnormal,
+             invvalidationtext = Isnull(IM.invvalidationtext, ''),
+             groupcomment = PIV.groupcomment,
+             groupmedicalremarks = PIV.groupmedicalremarks,
+             resultvaluetype = Isnull(IOA.resultvaluetype, 'AN'),
+             decimalplaces = IOA.decimalplaces,
+             medicalremarks = PIV.medicalremarks,
+             isnonreportable = IM.isnonreportable,
+             t.patientvisitid = piv.patientvisitid,
+             t.convreferencerange = PIV. convreferencerange,
+             t.printablerange = PIV.printablerange,
+             T.ParentDeptID = IM.deptid
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblPatientInvestigation PIV
+                     ON Piv.investigationid = t.invid
+                        AND piv.patientvisitid = t.patientvisitid
+                        AND PIV.uid = t.uid
+             INNER JOIN investigationorgmapping IM WITH(nolock)
+                     ON T.invid = IM.investigationid
+                        AND IM.orgid = PIV.OrgID
+             LEFT JOIN invsamplemaster ISm WITH(nolock)
+                    ON ism.samplecode = PIV.sampleid
+                       --AND ism.orgid = @OrgID
+                       AND ISm.orgid = PIV.orgid
+             INNER JOIN invdeptmaster IDM WITH(nolock)
+                     ON IDM.deptid = IM.deptid
+                        AND IM.orgid = IDM.orgid
+             INNER JOIN patternmapping PM WITH(nolock)
+                     ON PM.investigationid = t.invid
+             INNER JOIN investigationpattern IPM WITH(nolock)
+                     ON ipm.patternid = PM.patternid
+                        AND ipm.orgid = PIV.OrgID
+             LEFT JOIN investigationorgattributes IOA WITH(nolock)
+                    ON IOA.orgid = PIV.OrgID
+                       AND IOA.investigationid = IM.investigationid
+
+      UPDATE t
+      SET    uomid = INV.uomid,
+             uomcode = INV.uomcode,
+             T.Result = INV.Value
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblInvestigationValues INV
+                     ON INV.investigationid = T.invid
+                        AND T.patientvisitid = INV.patientvisitid
+             INNER JOIN @tblAffectedVisits T2
+                     ON INV.PatientVisitID = T2.VisitID
+                        AND INV.OrgID = T2.OrgID
+      WHERE  INV.patientvisitid = T2.VisitID
+             AND INV.orgid = T2.OrgID
+
+      UPDATE t
+      SET    t.groupid = t.packageid,
+             t.groupname = Isnull(IOG.displaytext, IG.groupname)
+      FROM   @tblPatientInvestigation T
+             INNER JOIN invorggroup IOG
+                     ON IOG.orggroupid = T.packageid
+                        AND IOG.orgid = T.orgid
+             INNER JOIN invgroupmaster IG
+                     ON IG.groupid = IOG.attgroupid
+      WHERE  t.packageid > 0
+             AND ( t.groupid = 0
+                    OR t.groupid IS NULL )
+
+  /*********************** Update the departments for all the investigations ***********************/
+      /***************************************  Get the Root GroupID for all the Groups/Inner Groups **********************************************/
+      DECLARE @tblRootGrpID TABLE
+        (
+           accessionno VARCHAR(10),
+           parentgrpid VARCHAR(10)
+        )
+
+      INSERT INTO @tblRootGrpID
+      SELECT accessionno,
+             parentgrpid
+      FROM   @tblOrdInvExploded
+      --WHERE Atlevel=0                                                              
+      GROUP  BY accessionno,
+                parentgrpid
+
+      UPDATE t
+      SET    t.parentgrpid = t.grpid
+      FROM   @tblOrdInvExploded T
+      WHERE  t.atlevel = 1
+
+      UPDATE t
+      SET    t.parentgrpname = Isnull(IOG.displaytext, IGM.groupname)
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invgroupmaster IGM WITH(nolock)
+                     ON IGM.groupid = T.parentgrpid
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = IGM.groupid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+      WHERE  IOG.orgid IN (SELECT DISTINCT OrgID
+                           FROM   @tblAffectedVisits)
+
+      UPDATE t
+      SET    t.rootgroupid = T1.parentgrpid,
+             t.parentprintseparately = Isnull(IOG.printseparately, 'N')
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblRootGrpID T1
+                     ON T.accessionno = T1.accessionno
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = T1.accessionno
+                        AND T1.parentgrpid = OI.id
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = OI.id
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+      WHERE  OI.type IN( 'GRP', 'PKG' )
+             AND Isnull(OI.pkgid, 0) = 0
+
+      UPDATE t
+      SET    t.rootgrpname = T1.name
+      FROM   @tblOrdInvExploded T
+             INNER JOIN orderedinvestigations T1 WITH(nolock)
+                     ON T.accessionno = T1.accessionnumber
+                        AND T.rootgroupid = T1.id
+      WHERE  Isnull(T1.pkgid, 0) = 0
+
+      UPDATE t
+      SET    t.rootgroupid = OI.pkgid
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblRootGrpID T1
+                     ON T.accessionno = T1.accessionno
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = T1.accessionno
+      --AND T1.ParentGrpID=OI.ID                                                                          
+      WHERE  Isnull(OI.pkgid, 0) <> 0
+
+      UPDATE t
+      SET    t.rootgrpname = T1.pkgname
+      FROM   @tblOrdInvExploded T
+             INNER JOIN orderedinvestigations T1 WITH(nolock)
+                     ON T.accessionno = T1.accessionnumber
+                        AND T.rootgroupid = T1.pkgid
+      WHERE  Isnull(T1.pkgid, 0) <> 0
+
+      UPDATE t
+      SET    t.parentprintseparately = Isnull(IOG.printseparately, 'N')
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblRootGrpID T1
+                     ON T.accessionno = T1.accessionno
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = T1.accessionno
+             --AND T1.ParentGrpID=OI.ID      
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = OI.id
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+      WHERE  Isnull(OI.pkgid, 0) <> 0
+             AND OI.type = 'GRP'
+
+      UPDATE t
+      SET    t.parentprintseparately = Isnull(IOM.printseparately, 'N')
+      FROM   @tblOrdInvExploded T
+             INNER JOIN orderedinvestigations OI WITH(nolock)
+                     ON OI.accessionnumber = T.accessionno
+             --AND T1.ParentGrpID=OI.ID                         
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON IOM.investigationid = OI.id
+                        AND IOM.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+    WHERE  Isnull(OI.pkgid, 0) <> 0
+             AND OI.type = 'INV'
+
+  /*************************** RootGroup populating ends ********************************************************************/
+      /******************************************* Assign DeptID for Groups based on Max no. depts in a group ************************************/
+      DECLARE @tblDeptGrp TABLE
+        (
+           rootgroupid VARCHAR(10),
+           deptid      VARCHAR(10),
+           deptcnt     INT
+        )
+      DECLARE @tblDeptGrpAdjusted TABLE
+        (
+           rootgroupid VARCHAR(10),
+           deptid      VARCHAR(10)
+        )
+
+      INSERT INTO @tblDeptGrp
+      SELECT rootgroupid,
+             deptid,
+             Count(deptid)
+      FROM   @tblOrdInvExploded
+      WHERE  rootgroupid != '0'
+             AND rootgroupid <> ''
+             AND Isnull(parentgrpid, '') <> ''
+             AND deptid != '0'
+      GROUP  BY rootgroupid,
+                deptid
+      ORDER  BY rootgroupid
+
+      INSERT INTO @tblDeptGrpAdjusted
+      SELECT rootgroupid,
+             Min(deptid)
+      FROM   @tblDeptGrp t1
+      WHERE  deptcnt = (SELECT Max(deptcnt)
+                        FROM   @tblDeptGrp t2
+                        WHERE  t2.rootgroupid = t1.rootgroupid)
+      GROUP  BY rootgroupid
+
+      UPDATE t
+      SET    t.grpdeptid = T1.deptid
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblDeptGrpAdjusted T1
+                     ON T.rootgroupid = T1.rootgroupid
+
+      UPDATE t
+      SET    t.deptname = T1.deptname,
+             t.deptid = T1.deptid
+      FROM   @tblOrdInvExploded T
+             INNER JOIN @tblAffectedVisits Tvisit
+                     ON Tvisit.VisitID = T.PatientVisitID
+             INNER JOIN invdeptmaster T1 WITH(nolock)
+                     ON T1.deptid = T.grpdeptid
+                        AND T1.orgid = Tvisit.orgid
+
+      UPDATE @tblOrdInvExploded
+      SET    grpdeptid = deptid
+      WHERE  grpdeptid = '0'
+
+      UPDATE t
+      SET    t.deptname = IH.headername,
+             t.deptid = T1.deptid
+      --select       T.DeptName ,IH.HeaderName ,IH.HeaderID         ,T1.DeptID  ,  IOM.OutputInvestigationCode, IOM.InvestigationID,T.InvID                                       
+      FROM   @tblOrdInvExploded T
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON iom.investigationid = T.invid
+             INNER JOIN invdeptmaster T1 WITH(nolock)
+                     ON T1.deptid = T.grpdeptid
+                        AND T1.orgid IN (SELECT DISTINCT OrgID
+                                         FROM   @tblAffectedVisits)
+             LEFT JOIN investigationheader IH WITH(nolock)
+                    ON IH.headerid = iom.headerid
+      WHERE  IOM.orgid IN (SELECT DISTINCT OrgID
+                           FROM   @tblAffectedVisits)
+             AND Isnull(IOM.isheader, '') = 'Y'
+
+  /******************************************* Assign DeptID for Groups based on Max no. depts in a group ************************************/
+      /******************************************* Update Dept Sequence ************************************/
+      UPDATE t
+      SET    t.deptseq = D.sequenceno
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invdeptmaster D WITH (nolock)
+                     ON T.grpdeptid = D.deptid
+                        AND D.orgid IN (SELECT DISTINCT OrgID
+                                        FROM   @tblAffectedVisits)
+
+  /******************************************* Update Dept Sequence ************************************/
+      /* Order Investigation by seq */
+      UPDATE t
+      SET    t.firstlvlseq = IOG.sequenceno
+      FROM   @tblOrdInvExploded T
+             INNER JOIN investigationorgmapping IOG WITH (nolock)
+                     ON T.invid = IOG.investigationid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+    FROM   @tblAffectedVisits)
+      WHERE  t.isgroup != 'Y'
+
+      /* Order Group by group Seq */
+      UPDATE t
+      SET    t.firstlvlseq = IOG.sequenceno,
+             validationtext = iog.validationtext
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON T.rootgroupid = IOG.attgroupid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+
+      /* Order Inner Content Sequence */
+      UPDATE t
+      SET    innercontentseq = IGM.sequenceno
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.attgroupid = t.grpid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+             INNER JOIN invgroupmapmaster IGM WITH (nolock)
+                     ON IGM.groupid = IOG.orggroupid
+                        AND T.invid = IGM.investigationid
+      WHERE  t.atlevel IN( 0, 1 )
+
+      UPDATE t
+      SET    innercontentseq = IGM.sequenceno
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.attgroupid = t.parentgrpid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+             INNER JOIN invgroupmapmaster IGM WITH (nolock)
+                     ON IGM.groupid = IOG.orggroupid
+                        AND IGM.investigationid = t.actualgrpid
+      WHERE  t.atlevel IN( 2 )
+
+      UPDATE t
+      SET    l2contentseq = IGM.sequenceno,
+             validationtext = iog.validationtext
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.orggroupid = t.actualgrpid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+                        AND T.atlevel = 2
+             INNER JOIN invgroupmapmaster IGM WITH (nolock)
+                     ON IGM.groupid = T.actualgrpid
+                        AND T.invid = IGM.investigationid
+                        AND T.atlevel = 2
+
+      UPDATE t
+      SET    t.result = Isnull(t1.value, '')
+      FROM   @tblOrdInvExploded t
+             INNER JOIN @tblInvestigationValues t1
+                     ON t.invid = t1.investigationid
+                        AND t.uid = t1.uid
+                        AND t.patientvisitid = t1.patientvisitid
+                        AND T.invid = t1.investigationid
+                        AND t1.orgid IN (SELECT DISTINCT OrgID
+                                         FROM   @tblAffectedVisits)
+
+      UPDATE t1
+      SET    t1.result = t2.value,
+             t1.newvalue = t2.newvalue,
+             t1.convresult = t2.convvalue,
+             t1.convuomcode = t2.convuomcode
+      --  + Case When t1.ReferredType='Recheck' Then ' (RC)' When t1.ReferredType='Retest' Then ' (RT)' Else '' End                   
+      FROM   @tblOrdInvExploded t1
+             INNER JOIN @tblInvestigationValues t2
+                     ON t1.invid = t2.investigationid
+                        AND ( t1.actualgrpid = t2.groupid
+                               OR t1.grpid = t2.groupid )
+                        AND t1.pkgid = t2.packageid
+                        AND t1.uid = t2.uid
+                        AND t2.status NOT IN( 'Reject', 'With Held' )
+
+      UPDATE t1
+      SET    t1.result = '-',
+             t1.referencerange = '-',
+             t1.uomcode = '',
+             t1.isrejected = 'Y',
+             t1.convresult = '-',
+             t1.convreferencerange = '-',
+             t1.printablerange = '-'
+      FROM   @tblOrdInvExploded t1
+             INNER JOIN @tblInvestigationValues t2
+                     ON t1.invid = t2.investigationid
+                        AND ( t1.actualgrpid = t2.groupid
+                               OR t1.grpid = t2.groupid )
+                        AND t1.pkgid = t2.packageid
+                        AND t1.uid = t2.uid
+                        AND t2.status IN( 'Reject' )
+
+      UPDATE t1
+      SET    t1.result = '-',
+             t1.referencerange = '-',
+             t1.uomcode = '',
+             t1.iswithheld = 'Y',
+             t1.convresult = '-',
+             t1.convreferencerange = '-',
+             t1.printablerange = '-'
+      FROM   @tblOrdInvExploded t1
+             INNER JOIN @tblInvestigationValues t2
+                     ON t1.invid = t2.investigationid
+                        AND ( t1.actualgrpid = t2.groupid
+                               OR t1.grpid = t2.groupid )
+                        AND t1.pkgid = t2.packageid
+                        AND t1.uid = t2.uid
+                        AND t2.status IN( 'With Held' )
+
+      UPDATE t
+      SET    t.childprintseparately = Isnull(IGM.printseparately, 'N')
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.attgroupid = T.rootgroupid
+                        AND IOG.orgid IN(SELECT OrgID
+                                         FROM   @tblAffectedVisits)
+             INNER JOIN invgroupmapmaster IGM WITH (nolock)
+                     ON IGM.groupid = IOG.orggroupid
+                        AND IGM.parent = 'Y'
+                        AND IGM.investigationid = T.actualgrpid
+
+      UPDATE t
+      SET    t.childprintseparately = Isnull(IGM.printseparately, 'N')
+      FROM   @tblOrdInvExploded T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.attgroupid = T.rootgroupid
+                        AND IOG.orgid IN (SELECT DISTINCT OrgID
+                                          FROM   @tblAffectedVisits)
+             INNER JOIN invgroupmapmaster IGM WITH (nolock)
+                     ON IGM.groupid = IOG.orggroupid
+                        AND IGM.parent = 'Y'
+             INNER JOIN invorggroup IOG1 WITH (nolock)
+                     ON IOG1.orggroupid = IGM.investigationid
+                        AND IOG1.orgid IN (SELECT DISTINCT OrgID
+                                           FROM   @tblAffectedVisits)
+             INNER JOIN invgroupmapmaster IGM1 WITH (nolock)
+                     ON IGM1.groupid = IOG1.orggroupid
+                        AND IGM1.parent = 'Y'
+                        AND IGM1.investigationid = T.actualgrpid
+
+      DECLARE @tblTempOrdInvExploded TABLE
+        (
+           rowid                   INT,
+           accessionno             VARCHAR(10),
+           actualgrpid             BIGINT,
+           grpid                   VARCHAR(10),
+           firstlvlseq             INT,
+           grpcontentseq           INT,
+           innercontentseq         INT,
+           invid                   BIGINT,
+           parentgrpid             BIGINT,
+           rootgroupid             VARCHAR(10),
+           deptname                VARCHAR(255),
+           valuesgrpid             BIGINT,
+           groupname               VARCHAR(max),
+           investigationvalueid    BIGINT,
+           name                    VARCHAR(max),
+           value                   VARCHAR(max),
+           sequenceno              INT,
+           methodname              VARCHAR(500),
+           notes                   VARCHAR(max),
+           referencerange          VARCHAR(max),
+           sampleid                BIGINT,
+           samplename              VARCHAR(500),
+           comments                VARCHAR(max),
+           units                   VARCHAR(100),
+           patternid               BIGINT,
+           patternname             VARCHAR(200),
+           deptid                  BIGINT,
+           validationtext          VARCHAR(max),
+           isabnormal              VARCHAR(50),
+           invvalidationtext       VARCHAR(max),
+   [groupcomment]          [VARCHAR](255),
+           [groupmedicalremarks]   [VARCHAR](255),
+           resultvaluetype         NVARCHAR(200),
+           decimalplaces           VARCHAR(20),
+           pkgid                   INT,
+           packagename             VARCHAR(255),
+           rootgrpname             VARCHAR(250),
+           result                  VARCHAR(max),
+           medicalremarks          NVARCHAR(max),
+           parentgrpname           VARCHAR(250),
+           isnonreportable         CHAR(1),
+           childprintseparately    CHAR(1),
+           approvedby              BIGINT,
+           approvername            NVARCHAR(500),
+           approverqualification   NVARCHAR(500),
+           childpagenumber         INT,
+           parentprintseparately   CHAR(1),
+           parentpagenumber        INT,
+           isgroup                 CHAR(1),
+           authorizedby            BIGINT,
+           authorizername          NVARCHAR(500),
+           authorizerqualification NVARCHAR(500),
+           deptprintseparately     CHAR(1),
+           deptpagenumber          INT,
+           patientvisiid           BIGINT,
+           isrejected              CHAR(1),
+           iswithheld              CHAR(1),
+           newvalue                NVARCHAR(20),
+           convreferencerange      VARCHAR(max),
+           convvalue               VARCHAR(max),
+           uid                     VARCHAR(255),
+           convuomcode             VARCHAR(50),
+           subgroupinterpretation  NVARCHAR(max),
+           printablerange          VARCHAR(max),
+           IsShowName              BIT,
+           OriginOrgID             INT,
+           ParentDeptID            INT,
+           Status                  VARCHAR(255)
+        )
+      DECLARE @tblTempOrdInvExplodedResult TABLE
+        (
+           temprowid               BIGINT IDENTITY(1, 1),
+           rowid                   INT,
+           accessionno             VARCHAR(10),
+           actualgrpid             INT,
+           grpid                   VARCHAR(10),
+           firstlvlseq             INT,
+           grpcontentseq           INT,
+           innercontentseq         INT,
+           invid                   BIGINT,
+           parentgrpid             BIGINT,
+           rootgroupid             VARCHAR(10),
+           deptname                VARCHAR(255),
+           valuesgrpid             BIGINT,
+           groupname               VARCHAR(max),
+           investigationvalueid    BIGINT,
+           name                    VARCHAR(max),
+           value                   VARCHAR(max),
+           sequenceno              INT,
+           methodname              VARCHAR(500),
+           notes                   VARCHAR(max),
+           referencerange          VARCHAR(max),
+           sampleid                BIGINT,
+           samplename              VARCHAR(500),
+           technicalremarks        NVARCHAR(max),
+           units                   VARCHAR(100),
+           patternid               BIGINT,
+           patternname             VARCHAR(200),
+           deptid                  BIGINT,
+           validationtext          VARCHAR(max),
+           isabnormal              VARCHAR(50),
+           invvalidationtext       VARCHAR(max),
+           [medicalremarks]        [NVARCHAR](max),
+           resultvaluetype         NVARCHAR(200),
+           decimalplaces           VARCHAR(20),
+           pkgid                   INT,
+           packagename             VARCHAR(255),
+           rootgrpname             VARCHAR(250),
+           result                  VARCHAR(max),
+           attgroupid              BIGINT,
+           parentgrpname           VARCHAR(250),
+           isnonreportable         CHAR(1),
+           childprintseparately    CHAR(1),
+           approvedby              BIGINT,
+           approvername            NVARCHAR(500),
+           approverqualification   NVARCHAR(500),
+ childpagenumber         INT,
+           parentprintseparately   CHAR(1),
+           parentpagenumber        INT,
+           isgroup                 CHAR(1),
+           authorizedby            BIGINT,
+           authorizername          NVARCHAR(500),
+           authorizerqualification NVARCHAR(500),
+           deptprintseparately     CHAR(1),
+           deptpagenumber          INT,
+           patientvisitid          BIGINT,
+           isrejected              CHAR(1),
+           iswithheld              CHAR(1),
+           newvalue                NVARCHAR(20),
+           convreferencerange      VARCHAR(max),
+           convvalue               VARCHAR(max),
+           uid                     VARCHAR(255),
+           convuomcode             VARCHAR(50),
+           codename                VARCHAR(100),
+           subgroupinterpretation  NVARCHAR(max),
+           printablerange          VARCHAR(max),
+           IsShowName              BIT,
+           IsSummary               CHAR(1),
+           ParentDeptID            INT,
+           Status                  VARCHAR(255),
+           OIStatus                VARCHAR(255)
+        )
+      DECLARE @tblTempOrdInvExplodedResultOrderbyRowID TABLE
+        (
+           temorowid               BIGINT,
+           rowid                   INT,
+           accessionno             VARCHAR(10),
+           actualgrpid             INT,
+           grpid                   VARCHAR(10),
+           firstlvlseq             INT,
+           grpcontentseq           INT,
+           innercontentseq         INT,
+           invid                   BIGINT,
+           parentgrpid             BIGINT,
+           rootgroupid             VARCHAR(10),
+           deptname                VARCHAR(255),
+           valuesgrpid             BIGINT,
+           groupname               VARCHAR(max),
+           investigationvalueid    BIGINT,
+           name                    VARCHAR(max),
+           value                   VARCHAR(max),
+           sequenceno              INT,
+           methodname              VARCHAR(500),
+           notes                   VARCHAR(max),
+           referencerange          VARCHAR(max),
+           sampleid                BIGINT,
+           samplename              VARCHAR(500),
+           technicalremarks        NVARCHAR(max),
+           units                   VARCHAR(100),
+           patternid               BIGINT,
+           patternname             VARCHAR(200),
+           deptid                  BIGINT,
+           validationtext          VARCHAR(max),
+           isabnormal              VARCHAR(50),
+           invvalidationtext       VARCHAR(max),
+           [medicalremarks]        [NVARCHAR](max),
+           resultvaluetype         NVARCHAR(200),
+           decimalplaces           VARCHAR(20),
+           pkgid                   INT,
+           packagename             VARCHAR(255),
+           rootgrpname             VARCHAR(250),
+           result                  VARCHAR(max),
+           attgroupid              BIGINT,
+           parentgrpname           VARCHAR(250),
+           isnonreportable         CHAR(1),
+           childprintseparately    CHAR(1),
+           approvedby              BIGINT,
+           approvername            NVARCHAR(500),
+           approverqualification   NVARCHAR(500),
+           childpagenumber         INT,
+           parentprintseparately   CHAR(1),
+           parentpagenumber        INT,
+           isgroup                 CHAR(1),
+           authorizedby            BIGINT,
+           authorizername          NVARCHAR(500),
+           authorizerqualification NVARCHAR(500),
+           deptprintseparately     CHAR(1),
+           deptpagenumber          INT,
+           patientvisiid           BIGINT,
+           isrejected              CHAR(1),
+           iswithheld              CHAR(1),
+           retestrecheck           NVARCHAR(20),
+           convreferencerange      VARCHAR(max),
+      convvalue               VARCHAR(max),
+           uid                     VARCHAR(255),
+           convuomcode             VARCHAR(50),
+           codename                VARCHAR(100),
+           subgroupinterpretation  NVARCHAR(max),
+           printablerange          VARCHAR(max),
+           IsShowName              BIT,
+           IsSummary               CHAR(1),
+           ParentDeptID            INT,
+           Status                  VARCHAR(255),
+           OIStatus                VARCHAR(255)
+        )
+
+      INSERT INTO @tblTempOrdInvExploded
+                  (rowid,
+                   accessionno,
+                   actualgrpid,
+                   grpid,
+                   firstlvlseq,
+                   grpcontentseq,
+                   innercontentseq,
+                   invid,
+                   parentgrpid,
+                   rootgroupid,
+                   deptname,
+                   valuesgrpid,
+                   groupname,
+                   investigationvalueid,
+                   name,
+                   value,
+                   sequenceno,
+                   methodname,
+                   notes,
+                   referencerange,
+                   sampleid,
+                   samplename,
+                   comments,
+                   units,
+                   patternid,
+                   patternname,
+                   deptid,
+                   validationtext,
+                   isabnormal,
+                   invvalidationtext,
+                   groupcomment,
+                   groupmedicalremarks,
+                   resultvaluetype,
+                   decimalplaces,
+                   pkgid,
+                   packagename,
+                   rootgrpname,
+                   result,
+                   medicalremarks,
+                   parentgrpname,
+                   isnonreportable,
+                   childprintseparately,
+                   approvedby,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   patientvisiid,
+                   isrejected,
+                   iswithheld,
+                   newvalue,
+                   convreferencerange,
+                   convvalue,
+                   uid,
+                   convuomcode,
+                   subgroupinterpretation,
+                   printablerange,
+                   OriginOrgID,
+                   ParentDeptID,
+                   Status)
+      SELECT Row_number()
+               OVER (
+                 ORDER BY deptseq, firstlvlseq, grpcontentseq, innercontentseq, l2contentseq),
+             tbl.accessionno,
+             CASE
+               WHEN Isnull(PIV.packageid, 0) > 0 THEN PIV.groupid
+               ELSE tbl.actualgrpid
+             END,
+             PIV.groupid,
+             tbl.firstlvlseq,
+             tbl.grpcontentseq,
+             tbl.innercontentseq,
+             tbl.invid,
+             tbl.parentgrpid,
+             tbl.rootgroupid,
+             tbl.deptname,
+             PIV.groupid AS ValuesGRpID,
+             PIV.groupname,
+             0,
+             CASE
+               WHEN tbl.isrejected = 'Y' THEN '* ' + PIV.investigationname
+               WHEN tbl.iswithheld = 'Y' THEN '* ' + PIV.investigationname
+               ELSE PIV.investigationname
+             END,
+             '',
+             0,
+             tbl.methodname,
+             tbl.notes,
+             tbl.referencerange,
+             tbl.sampleid,
+             tbl.samplename,
+             tbl.comments,
+             tbl.uomcode,
+             patternid,
+             patternname,
+             deptid,
+             tbl.validationtext,
+             PIV.isabnormal,
+             tbl.invvalidationtext,
+             PIV.groupcomment,
+             PIV.groupmedicalremarks,
+             tbl.resultvaluetype,
+             tbl.decimalplaces,
+             tbl.pkgid,
+             tbl.packagename,
+             tbl.rootgrpname,
+             tbl.result,
+             tbl.medicalremarks,
+             tbl.parentgrpname,
+             PIV.isnonreportable,
+             tbl.childprintseparately,
+             PIV.approvedby,
+             tbl.parentprintseparately,
+             tbl.isgroup,
+             PIV.authorizedby,
+             tbl.patientvisitid,
+             tbl.isrejected,
+             tbl.iswithheld,
+             tbl.newvalue,
+             tbl.convreferencerange,
+             tbl.convresult,
+             PIV.uid,
+             tbl.convuomcode,
+             tbl.subgroupinterpretation,
+             tbl.printablerange,
+             PIV.OrgID,
+             tbl.ParentDeptID,
+             PIV.Status
+      FROM   @tblOrdInvExploded tbl
+             INNER JOIN @tblPatientInvestigation PIV
+                     ON PIV.investigationid = tbl.invid
+                        AND ( PIV.groupid = tbl.actualgrpid
+                               OR PIV.groupid = tbl.grpid )
+                        --and PIV.PackageID= tbl.PKGID                                                                                                          
+                        AND PIV.patientvisitid = tbl.patientvisitid
+                        AND PIV.uid = tbl.uid
+             INNER JOIN @tblInvestigationValues IV
+                     ON IV.investigationid = PIV.investigationid
+                        AND IV.groupid = PIV.groupid
+                        --AND IV.PackageID=PIV.PackageID                                                           
+                        --AND IV.uid = PIV.uid
+                        AND PIV.patientvisitid = IV.patientvisitid
+      ORDER  BY deptseq,
+                firstlvlseq,
+                grpcontentseq,
+                innercontentseq,
+                l2contentseq
+
+      DECLARE @RowID BIGINT
+
+      INSERT INTO @tblTempOrdInvExplodedResult
+      SELECT rowid,
+             accessionno,
+             actualgrpid,
+             grpid,
+             firstlvlseq,
+             grpcontentseq,
+             innercontentseq,
+             invid,
+             parentgrpid,
+             rootgroupid,
+             deptname,
+             valuesgrpid,
+             groupname,
+             investigationvalueid,
+             name,
+             value,
+             sequenceno,
+             methodname,
+             notes,
+             referencerange,
+             sampleid,
+             samplename,
+             comments,
+             units,
+             patternid,
+             patternname,
+             deptid,
+             validationtext,
+             isabnormal,
+             invvalidationtext MedicalRemarks,
+             resultvaluetype,
+             decimalplaces,
+             pkgid,
+             packagename,
+             rootgrpname,
+             result,
+             medicalremarks,
+             0,
+             parentgrpname,
+             isnonreportable,
+             childprintseparately,
+             approvedby,
+             approvername,
+             approverqualification,
+             childpagenumber,
+             parentprintseparately,
+             parentpagenumber,
+             isgroup,
+             authorizedby,
+             authorizername,
+             authorizerqualification,
+             deptprintseparately,
+             deptpagenumber,
+             patientvisiid,
+             isrejected,
+             iswithheld,
+             newvalue,
+             convreferencerange,
+             convvalue,
+             uid,
+             convuomcode,
+             '',
+             subgroupinterpretation,
+             printablerange,
+             IsShowName,
+             'N',
+             ParentDeptID,
+             Status,
+             NULL
+      FROM   @tblTempOrdInvExploded
+      WHERE  1 = 2
+
+      DECLARE rowidcursor CURSOR FOR
+        SELECT rowid
+        FROM   @tblTempOrdInvExploded
+        ORDER  BY rowid
+
+      OPEN rowidcursor
+
+      FETCH next FROM rowidcursor INTO @RowID
+
+      WHILE @@FETCH_STATUS = 0
+        BEGIN
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         deptname,
+                         name,
+                         deptid,
+                         rootgroupid,
+                         childprintseparately,
+                         approvedby,
+                         parentgrpid,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         accessionno,
+                         pkgid,
+                         packagename,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   deptname,
+                   '',
+                   deptid,
+                   Isnull(rootgroupid, invid),
+                   childprintseparately,
+                   approvedby,
+                   parentgrpid,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   accessionno,
+                   pkgid,
+                   packagename,
+                   ParentDeptID,
+                   Status
+            FROM   @tblTempOrdInvExploded
+            WHERE  rowid = @RowID
+
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         deptname,
+                         name,
+                         deptid,
+                         rootgroupid,
+                         childprintseparately,
+                         approvedby,
+                         parentgrpid,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         accessionno,
+                         pkgid,
+                         packagename,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   deptname,
+                   '',
+                   --'<B><U>'      
+                   --+ Upper(Ltrim(Rtrim(Isnull(deptname, ''))))      
+                   --+ '</U></B>',      
+                   deptid,
+                   Isnull(rootgroupid, invid),
+                   childprintseparately,
+                   approvedby,
+                   parentgrpid,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   accessionno,
+                   pkgid,
+                   packagename,
+                   ParentDeptID,
+                   Status
+            FROM   @tblTempOrdInvExploded
+            WHERE  rowid = @RowID
+
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         rootgrpname,
+                         name,
+                         rootgroupid,
+                         technicalremarks,
+                         medicalremarks,
+                         deptid,
+                         grpid,
+                         childprintseparately,
+                         approvedby,
+                         parentgrpid,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         accessionno,
+                         actualgrpid,
+                         pkgid,
+                         packagename,
+                         IsShowName,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   rootgrpname,
+                   '<B><I><U>'
+                   + Ltrim(Rtrim(Isnull(rootgrpname, '')))
+                   + '</U></I></B>',
+                   rootgroupid,
+                   groupcomment,
+                   groupmedicalremarks,
+                   deptid,
+                   grpid,
+                  childprintseparately,
+                   approvedby,
+                   parentgrpid,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   accessionno,
+                   actualgrpid,
+                   pkgid,
+                   packagename,
+                   0,
+                   ParentDeptID,
+                   T.Status
+            FROM   @tblTempOrdInvExploded T
+                   LEFT JOIN InvOrgGroup IOG
+                          ON rootgroupid = IOG.AttGroupID
+                             AND IOG.OrgID = T.OriginOrgID
+            WHERE  rowid = @RowID
+                   AND Isnull(rootgrpname, 'NULL') != 'NULL'
+
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         parentgrpname,
+                         name,
+                         parentgrpid,
+                         technicalremarks,
+                         medicalremarks,
+                         deptid,
+                         grpid,
+                         rootgroupid,
+                         childprintseparately,
+                         approvedby,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         accessionno,
+                         pkgid,
+                         packagename,
+                         IsShowName,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   parentgrpname,
+                   CASE
+                     WHEN Isnull(rootgrpname, '') <> parentgrpname THEN '<B><I><U>'
+                                                                        + Ltrim(Rtrim(Isnull(parentgrpname, '')))
+                                                                        + '</U></I></B>'
+                     ELSE NULL
+                   END,
+                   parentgrpid,
+                   groupcomment,
+                   groupmedicalremarks,
+                   deptid,
+                   grpid,
+                   rootgroupid,
+                   childprintseparately,
+                   approvedby,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   accessionno,
+                   pkgid,
+                   packagename,
+                   0 ,
+                   ParentDeptID,
+                   T.Status
+            FROM   @tblTempOrdInvExploded T
+                   LEFT JOIN InvOrgGroup IOG
+                          ON parentgrpid = IOG.AttGroupID
+                             AND IOG.OrgID = T.OriginOrgID
+            WHERE  rowid = @RowID
+                   AND Isnull(parentgrpname, 'NULL') != 'NULL'
+                   AND parentgrpname != ''
+
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         groupname,
+                         name,
+                         actualgrpid,
+                         technicalremarks,
+                         medicalremarks,
+                         deptid,
+                         grpid,
+                         rootgroupid,
+                         childprintseparately,
+                         approvedby,
+                         parentgrpid,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         accessionno,
+                         pkgid,
+                         packagename,
+                         IsShowName,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   groupname,
+                   CASE
+                     WHEN Isnull(rootgrpname, '') <> groupname
+                          AND Isnull(parentgrpname, '') <> groupname THEN '<B><I><U>'
+                                                                     + Ltrim(Rtrim(Isnull(groupname, '')))
+                                                                          + '</U></I></B>'
+                     ELSE NULL
+                   END,
+                   actualgrpid,
+                   groupcomment,
+                   groupmedicalremarks,
+                   deptid,
+                   grpid,
+                   rootgroupid,
+                   childprintseparately,
+                   approvedby,
+                   parentgrpid,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   accessionno,
+                   pkgid,
+                   packagename,
+                   0 ,
+                   ParentDeptID,
+                   T.Status
+            FROM   @tblTempOrdInvExploded T
+                   LEFT JOIN InvOrgGroup IOG
+                          ON grpid = IOG.OrgGroupID
+                             AND IOG.OrgID = T.OriginOrgID
+            WHERE  rowid = @RowID
+                   AND Isnull(groupname, 'NULL') != 'NULL'
+                   AND groupname != ''
+
+            INSERT INTO @tblTempOrdInvExplodedResult
+                        (rowid,
+                         accessionno,
+                         actualgrpid,
+                         grpid,
+                         firstlvlseq,
+                         grpcontentseq,
+                         innercontentseq,
+                         invid,
+                         parentgrpid,
+                         rootgroupid,
+                         deptname,
+                         valuesgrpid,
+                         groupname,
+                         investigationvalueid,
+                         name,
+                         value,
+                         sequenceno,
+                         sampleid,
+                         samplename,
+                         technicalremarks,
+                         units,
+                         methodname,
+                         notes,
+                         referencerange,
+                         patternid,
+                         patternname,
+                         deptid,
+                         validationtext,
+                         isabnormal,
+                         invvalidationtext,
+                         medicalremarks,
+                         resultvaluetype,
+                         decimalplaces,
+                         pkgid,
+                         packagename,
+                         rootgrpname,
+                         result,
+                         parentgrpname,
+                         isnonreportable,
+                         childprintseparately,
+                         approvedby,
+                         parentprintseparately,
+                         isgroup,
+                         authorizedby,
+                         patientvisitid,
+                         isrejected,
+                         iswithheld,
+                         newvalue,
+                         convreferencerange,
+                         convvalue,
+                         uid,
+                         convuomcode,
+                         printablerange,
+                         IsShowName,
+                         ParentDeptID,
+                         Status)
+            SELECT rowid,
+                   accessionno,
+                   actualgrpid,
+                   grpid,
+                   firstlvlseq,
+                   grpcontentseq,
+                   innercontentseq,
+                   invid,
+                   parentgrpid,
+                   rootgroupid,
+                   Isnull(deptname, ''),
+                   valuesgrpid,
+                   Isnull(groupname, ''),
+                   investigationvalueid,
+                   name,
+                   value,
+                   sequenceno,
+                   sampleid,
+                   samplename,
+                   comments,
+                   units,
+                   methodname,
+                   notes,
+                   referencerange,
+                   patternid,
+                   patternname,
+                   deptid,
+                   validationtext,
+                   isabnormal,
+                   invvalidationtext,
+                   medicalremarks,
+                   resultvaluetype,
+                   decimalplaces,
+                   pkgid,
+                   packagename,
+                   rootgrpname,
+                   result,
+                   parentgrpname,
+                   isnonreportable,
+                   childprintseparately,
+                   approvedby,
+                   parentprintseparately,
+                   isgroup,
+                   authorizedby,
+                   patientvisiid,
+                   isrejected,
+                   iswithheld,
+                   newvalue,
+                   convreferencerange,
+                   convvalue,
+                   uid,
+                   convuomcode,
+                   printablerange,
+                   IsShowName,
+                   ParentDeptID,
+                   Status
+            FROM   @tblTempOrdInvExploded
+            WHERE  rowid = @RowID
+            ORDER  BY rowid
+
+            FETCH next FROM rowidcursor INTO @RowID
+        END
+
+      CLOSE rowidcursor
+
+      DEALLOCATE rowidcursor
+
+      DELETE FROM tmp1
+      FROM   @tblTempOrdInvExplodedResult tmp1
+             LEFT JOIN (SELECT Min(temprowid) AS id,
+                               invid,
+                               accessionno
+                        FROM   @tblTempOrdInvExplodedResult
+                        WHERE  accessionno IS NOT NULL
+                               AND invid IS NOT NULL
+                        GROUP  BY invid,
+                                  accessionno,
+                                  parentgrpid) tmp2
+                    ON tmp1.invid = tmp2.invid
+                       AND tmp1.accessionno = tmp2.accessionno
+                       AND tmp1.temprowid = tmp2.id
+      WHERE  tmp2.id IS NULL
+             AND tmp1.accessionno IS NOT NULL
+             AND tmp1.invid IS NOT NULL
+
+      INSERT INTO @tblTempOrdInvExplodedResultOrderbyRowID
+      SELECT *
+      FROM   @tblTempOrdInvExplodedResult
+      ORDER  BY temprowid
+
+      DECLARE @tblUnqDept TABLE
+        (
+           rowid    BIGINT,
+           deptname VARCHAR(max)
+        )
+
+      INSERT INTO @tblUnqDept
+      SELECT Min(rowid),
+             deptname
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+      WHERE  rowid = (SELECT Min(rowid)
+                      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t1
+                      WHERE  t.deptname = t1.deptname)
+      GROUP  BY deptname
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  deptname IN (SELECT deptname
+                          FROM   @tblUnqDept)
+             AND rowid NOT IN (SELECT rowid
+                               FROM   @tblUnqDept)
+             AND ( grpid IS NULL
+                    OR invid IS NULL )
+
+      DECLARE @tblRootGrp TABLE
+        (
+           rowid       BIGINT,
+           rootgrpname VARCHAR(max)
+        )
+
+      INSERT INTO @tblRootGrp
+      SELECT Min(rowid),
+             rootgrpname
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+      WHERE  rowid = (SELECT Min(rowid)
+                      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t1
+                      WHERE  t.rootgrpname = t1.rootgrpname)
+      GROUP  BY rootgrpname
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  rootgrpname IN (SELECT rootgrpname
+                             FROM   @tblRootGrp)
+             AND rowid NOT IN (SELECT rowid
+                               FROM   @tblRootGrp)
+             AND ( grpid IS NULL
+      OR invid IS NULL )
+
+      DECLARE @tblParentGrp TABLE
+        (
+           rowid         BIGINT,
+           parentgrpname VARCHAR(max)
+        )
+
+      INSERT INTO @tblParentGrp
+      SELECT Min(rowid),
+             parentgrpname
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+      WHERE  rowid = (SELECT Min(rowid)
+                      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t1
+                      WHERE  t.parentgrpname = t1.parentgrpname
+                             AND t.rootgrpname = t1.rootgrpname)
+      GROUP  BY parentgrpname,
+                rootgrpname
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  parentgrpname IN (SELECT parentgrpname
+                               FROM   @tblParentGrp)
+             AND rowid NOT IN (SELECT rowid
+                               FROM   @tblParentGrp)
+             AND ( grpid IS NULL
+                    OR invid IS NULL )
+
+      DECLARE @tblUnqGrp TABLE
+        (
+           rowid         BIGINT,
+           parentgrpname VARCHAR(max),
+           grpname       VARCHAR(max)
+        )
+
+      INSERT INTO @tblUnqGrp
+      SELECT Min(rowid),
+             parentgrpname,
+             groupname
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+      WHERE  rowid = (SELECT Min(rowid)
+                      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t1
+                      WHERE  t.groupname = t1.groupname
+                             AND t.parentgrpname = t1.parentgrpname
+                             AND t.rootgrpname = t1.rootgrpname)
+      --t.GroupName=t1.GroupName AND t.ParentGrpName=t1.ParentGrpName)                  
+      GROUP  BY parentgrpname,
+                groupname,
+                rootgrpname
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  groupname IN (SELECT groupname
+                           FROM   @tblUnqGrp)
+             AND rowid NOT IN (SELECT rowid
+                               FROM   @tblUnqGrp)
+             AND ( grpid IS NULL
+                    OR invid IS NULL )
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  Isnull(name, 'NULL') = 'NULL'
+
+      DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  name = ''
+
+      /***CODE Added For Show Method Name And Sample Name in Group Level***/
+      IF EXISTS(SELECT COM.configkeyid
+                FROM   configorgmaster COM
+                       INNER JOIN configkeymaster CKM
+                               ON CKM.configkeyid = COM.configkeyid
+                WHERE  CKM.configkey = 'GroupTestSeperator'
+                       AND COM.orgid IN(SELECT OrgID
+                                        FROM   @tblAffectedVisits))
+        BEGIN
+            DECLARE @SampleCountTable AS TABLE
+              (
+                 countvalue INT
+              )
+            DECLARE @MethodCountTable AS TABLE
+              (
+                 countvalue INT
+              )
+            DECLARE @SampleName NVARCHAR(500)
+            DECLARE @MethodName NVARCHAR(500)
+
+            UPDATE tt1
+            SET    tt1.attgroupid = IOG.attgroupid
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID TT1
+                   INNER JOIN invorggroup IOG WITH(nolock)
+                           ON IOG.orggroupid = TT1.actualgrpid
+            WHERE  orgid IN(SELECT OrgID
+                            FROM   @tblAffectedVisits)
+
+            UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+            SET    methodname = Isnull(methodname, ''),
+                   samplename = Isnull(samplename, '')
+
+            DECLARE @GrpID BIGINT
+            DECLARE rowidcursor CURSOR FOR
+              SELECT grpid
+              FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+              WHERE  Isnull(grpid, '0') <> '0'
+              GROUP  BY grpid
+              ORDER  BY grpid
+
+            OPEN rowidcursor
+
+            FETCH next FROM rowidcursor INTO @GrpID
+
+            WHILE @@FETCH_STATUS = 0
+              BEGIN
+                  --select @GrpID                             
+                  --SELECT * FROM @tblTempOrdInvExplodedResultOrderbyRowID where GrpID= @GrpID and ISNULL(InvID,'')<>''                                                   
+                  INSERT INTO @SampleCountTable
+                  SELECT Count(DISTINCT( samplename ))
+                  FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                  WHERE  grpid = @GrpID
+                         AND Isnull(invid, '') <> ''
+                  GROUP  BY samplename
+
+                  INSERT INTO @MethodCountTable
+                  SELECT Count(DISTINCT( methodname ))
+                  FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                  WHERE  grpid = @GrpID
+                         AND Isnull(invid, '') <> ''
+                  GROUP  BY methodname
+
+                  --select * from @SampleCountTable                                            
+                  --select * from @MethodCountTable                                                                                                                                                                                
+                  IF ( (SELECT Count(1)
+                        FROM   @SampleCountTable) = 1
+                       AND (SELECT Count(1)
+                            FROM   @MethodCountTable) = 1 )
+                    BEGIN
+                        SELECT @SampleName = samplename
+                        FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                        WHERE  grpid = @GrpID
+                               AND Isnull(invid, '') <> ''
+                        GROUP  BY samplename
+
+                        --UPDATE T SET T.SampleName=@SampleName FROM @tblTempOrdInvExplodedResultOrderbyRowID T where T.GrpID= @GrpID and ISNULL(InvID,'')=''                                                                                                 
+
+                        --Update Unique Sample Name as null                                                              
+                        IF EXISTS(SELECT groupid
+                                  FROM   invgroupmapmaster
+                                  WHERE  groupid = @GrpID
+                                         AND parent = 'Y')
+                          BEGIN
+                              UPDATE t
+                              SET    t.samplename = ''
+                              FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+                              WHERE  t.grpid = @GrpID
+                                     AND Isnull(invid, '') <> ''
+                                     AND t.parentgrpid <> t.attgroupid
+
+                              UPDATE t
+                              SET    t.samplename = ''
+                              FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+                              WHERE  t.grpid = @GrpID
+                                     AND Isnull(invid, '') <> ''
+                          END
+                        ELSE
+                          BEGIN
+                              UPDATE t
+                              SET    t.samplename = ''
+                              FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+                              WHERE  t.grpid = @GrpID
+                                     AND Isnull(invid, '') <> ''
+                          END
+
+                        --Update test Unique Sample name to Group Smaple Name      
+                        DECLARE @Scount INT
+
+                        SELECT @Scount = Count(grpid)
+                        FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                        WHERE  grpid = @GrpID
+                               AND Isnull(invid, '') = ''
+
+                        UPDATE t
+                        SET    t.samplename = @SampleName
+                        FROM   (SELECT grpid,
+                                       samplename,
+                                       Row_number()
+                                         OVER (
+                                           partition BY grpid
+                                           ORDER BY grpid DESC) AS RN
+                                FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                                WHERE  grpid = @GrpID
+                                       AND Isnull(invid, '') = '') AS t
+                        WHERE  rn = @Scount
+                    END
+
+                  IF ( (SELECT Count(1)
+                        FROM   @SampleCountTable) = 1
+                       AND (SELECT Count(1)
+                            FROM   @MethodCountTable) = 1 )
+                    BEGIN
+                        SELECT @MethodName = methodname
+                        FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                        WHERE  grpid = @GrpID
+                               AND Isnull(invid, '') <> ''
+                        GROUP  BY methodname
+
+                        --Update Unique Sample Name as null                                                      
+                        IF EXISTS(SELECT groupid
+                                  FROM   invgroupmapmaster
+                                  WHERE  groupid = @GrpID
+                                         AND parent = 'Y')
+                          BEGIN
+                              UPDATE t
+                              SET    t.methodname = ''
+                              FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+                              WHERE  t.grpid = @GrpID
+                                     AND Isnull(invid, '') <> ''
+                                     AND t.parentgrpid <> t.attgroupid
+                          END
+                        ELSE
+                          BEGIN
+                              UPDATE t
+                              SET    t.methodname = ''
+                              FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+                              WHERE  t.grpid = @GrpID
+                                     AND Isnull(invid, '') <> ''
+                          END
+
+                        --Update test Unique Sample name to Group Smaple Name                                                                                         
+                        DECLARE @Mcount INT
+
+                        SELECT @Mcount = Count(grpid)
+                        FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                        WHERE  grpid = @GrpID
+                               AND Isnull(invid, '') = ''
+
+                        UPDATE t
+                        SET    t.methodname = @MethodName
+                        FROM   (SELECT grpid,
+                                       methodname,
+                                       Row_number()
+                                         OVER (
+                                           partition BY grpid
+                                           ORDER BY grpid DESC) AS RN
+                                FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                                WHERE  grpid = @GrpID
+                                       AND Isnull(invid, '') = '') AS t
+                        WHERE  rn = @Mcount
+                    END
+
+                  --UPDATE T SET T.Name='  ~'+T.Name FROM @tblTempOrdInvExplodedResultOrderbyRowID T where T.GrpID= @GrpID and ISNULL(InvID,'')<>'' AND T.RootGroupID<>T.AttGroupID                                           
+                  DELETE @SampleCountTable
+
+                  DELETE @MethodCountTable
+
+                  FETCH next FROM rowidcursor INTO @GrpID
+              END
+
+            CLOSE rowidcursor
+
+            DEALLOCATE rowidcursor
+        END
+
+      UPDATE t
+      SET    t.deptprintseparately = Isnull(IDM.printseparately, 'N')
+FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invdeptmaster IDM
+                     ON IDM.deptid = T.deptid
+                        AND IDM.orgid IN(SELECT OrgID
+                                         FROM   @tblAffectedVisits)
+
+      UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+      SET    rootgroupid = invid,
+             actualgrpid = invid
+      WHERE  isgroup = 'N'
+
+      UPDATE t
+      SET    t.rootgroupid = T1.rootgroupid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN @tblTempOrdInvExplodedResultOrderbyRowID T1
+                     ON T1.rowid = T.rowid
+      WHERE  Isnull(t.rootgroupid, '') = ''
+
+      DECLARE @tblDeptID TABLE
+        (
+           deptid              BIGINT,
+           sequenceno          INT,
+           deptprintseparately CHAR(1)
+        )
+
+      INSERT INTO @tblDeptID
+      SELECT DISTINCT T.deptid,
+                      Max(T.rowid)               AS SequenceNo,
+                      Max(T.deptprintseparately) AS DeptPrintSeparately
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+      GROUP  BY T.deptid
+      ORDER  BY sequenceno
+
+      DECLARE @DeptID BIGINT
+      DECLARE @DeptPrintSeparately CHAR(1)
+      DECLARE @DeptPageNumber INT
+
+      SET @DeptPageNumber = 1
+
+      DECLARE deptdetailcursor CURSOR FOR
+        SELECT deptid
+        FROM   @tblDeptID
+        ORDER  BY sequenceno
+
+      OPEN deptdetailcursor
+
+      FETCH next FROM deptdetailcursor INTO @DeptID
+
+      WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SELECT @DeptPrintSeparately = deptprintseparately
+            FROM   @tblDeptID
+            WHERE  deptid = @DeptID
+
+            IF( @DeptPrintSeparately = 'Y' )
+              BEGIN
+                  SET @DeptPageNumber = @DeptPageNumber + 1
+
+                  UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                  SET    deptpagenumber = @DeptPageNumber
+                  WHERE  deptid = @DeptID
+
+                  SET @DeptPageNumber = @DeptPageNumber + 1
+              END
+            ELSE
+              BEGIN
+                  UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                  SET    deptpagenumber = @DeptPageNumber
+                  WHERE  deptid = @DeptID
+              END
+
+            FETCH next FROM deptdetailcursor INTO @DeptID
+        END
+
+      CLOSE deptdetailcursor
+
+      DEALLOCATE deptdetailcursor
+
+      DECLARE @TBLTEMPORDINVEXPLODEDRESULTORDERBYROWID_TEMP TABLE
+        (
+           temorowid               BIGINT,
+           rowid                   INT,
+           accessionno             VARCHAR(10),
+           actualgrpid             INT,
+           grpid                   VARCHAR(10),
+           firstlvlseq             INT,
+           grpcontentseq           INT,
+           innercontentseq         INT,
+           invid                   BIGINT,
+           parentgrpid             BIGINT,
+           rootgroupid             VARCHAR(10),
+           deptname                VARCHAR(255),
+           valuesgrpid             BIGINT,
+           groupname               VARCHAR(max),
+           investigationvalueid    BIGINT,
+           name                    VARCHAR(max),
+           value                   VARCHAR(max),
+           sequenceno              INT,
+           methodname              VARCHAR(500),
+           notes                   VARCHAR(max),
+           referencerange          VARCHAR(max),
+           sampleid                BIGINT,
+           samplename              VARCHAR(500),
+           technicalremarks        NVARCHAR(max),
+           units                   VARCHAR(100),
+           patternid               BIGINT,
+           patternname             VARCHAR(200),
+           deptid                  BIGINT,
+           validationtext          VARCHAR(max),
+           isabnormal              VARCHAR(50),
+           invvalidationtext       VARCHAR(max),
+        [medicalremarks]        [NVARCHAR](max),
+           resultvaluetype         NVARCHAR(200),
+           decimalplaces           VARCHAR(20),
+           pkgid                   INT,
+           packagename             VARCHAR(255),
+           rootgrpname             VARCHAR(250),
+           result                  VARCHAR(max),
+           attgroupid              BIGINT,
+           parentgrpname           VARCHAR(250),
+           isnonreportable         CHAR(1),
+           childprintseparately    CHAR(1),
+           approvedby              BIGINT,
+           approvername            NVARCHAR(500),
+           approverqualification   NVARCHAR(500),
+           childpagenumber         INT,
+           parentprintseparately   CHAR(1),
+           parentpagenumber        INT,
+           isgroup                 CHAR(1),
+           authorizedby            BIGINT,
+           authorizername          NVARCHAR(500),
+           authorizerqualification NVARCHAR(500),
+           deptprintseparately     CHAR(1),
+           deptpagenumber          INT,
+           patientvisiid           BIGINT,
+           isrejected              CHAR(1),
+           iswithheld              CHAR(1),
+           retestrecheck           NVARCHAR(20),
+           convreferencerange      VARCHAR(max),
+           convvalue               VARCHAR(max),
+           uid                     VARCHAR(255),
+           convuomcode             VARCHAR(50),
+           codename                VARCHAR(100),
+           subgroupinterpretation  NVARCHAR(max),
+           printablerange          VARCHAR(max),
+           IsShowName              BIT,
+           IsSummary               CHAR(1),
+           ParentDeptID            INT,
+           Status                  VARCHAR(255),
+           OIStatus                VARCHAR(255)
+        )
+
+      INSERT INTO @TBLTEMPORDINVEXPLODEDRESULTORDERBYROWID_TEMP
+      SELECT *
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  Isnull(pkgid, 0) <> 0
+
+      UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+      SET    rootgroupid = parentgrpid
+      WHERE  Isnull(pkgid, 0) <> 0
+
+      UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+      SET    rootgroupid = Isnull(invid, parentgrpid)
+      WHERE  Isnull(pkgid, 0) <> 0
+             AND grpid = 0
+
+      DECLARE @tblRootID TABLE
+        (
+           rootid                BIGINT,
+           sequenceno            INT,
+           parentprintseparately CHAR(1),
+           pkgid                 BIGINT
+        )
+
+      UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+      SET    pkgid = 0
+      WHERE  pkgid IS NULL
+              OR pkgid = ''
+
+      INSERT INTO @tblRootID
+      SELECT DISTINCT T.rootgroupid,
+                      Max(T.rowid)                 AS SequenceNo,
+                      Max(T.parentprintseparately) AS ParentPrintSeparately,
+                      pkgid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN investigationorgmapping IOM WITH (nolock)
+                     ON IOM.investigationid = T.invid
+                        AND IOM.orgid IN(SELECT OrgID
+                                         FROM   @tblAffectedVisits)
+      WHERE  T.isgroup = 'N'
+      GROUP  BY T.rootgroupid,
+                T.pkgid
+      ORDER  BY sequenceno
+
+      INSERT INTO @tblRootID
+      SELECT DISTINCT T.rootgroupid,
+                      Max(T.rowid)                 AS SequenceNo,
+                      Max(T.parentprintseparately) AS ParentPrintSeparately,
+                      pkgid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH (nolock)
+                     ON IOG.attgroupid = T.rootgroupid
+                        AND IOG.orgid IN(SELECT OrgID
+                                         FROM   @tblAffectedVisits)
+      WHERE  T.isgroup != 'N'
+      GROUP  BY T.rootgroupid,
+                pkgid
+      ORDER  BY sequenceno
+
+      INSERT INTO @tblRootID
+      SELECT DISTINCT T.rootgroupid,
+                      Max(T.rowid)                 AS SequenceNo,
+                      Max(T.parentprintseparately) AS ParentPrintSeparately,
+                      pkgid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN investigationorgmapping IOM WITH (nolock)
+                     ON IOM.investigationid = T.rootgroupid
+                        AND IOM.orgid IN(SELECT OrgID
+                                         FROM   @tblAffectedVisits)
+      WHERE  T.grpid = 0
+             AND Isnull(T.pkgid, 0) <> 0
+      GROUP  BY T.rootgroupid,
+                pkgid
+      ORDER  BY sequenceno
+
+      --select * from @tblRootID                                                                                                       
+      DECLARE @tblParentID TABLE
+        (
+           parentid   BIGINT,
+           sequenceno INT
+        )
+      DECLARE @tblGroupChildList TABLE
+        (
+           childprintseparately CHAR(1),
+           sequenceno           INT
+        )
+      DECLARE @ParentID BIGINT
+      DECLARE @ChildID INT
+      DECLARE @ChildPrintSeparately CHAR(1)
+      DECLARE @ParentPrintSeparately NVARCHAR(10)
+      DECLARE @ParentPageNumber INT
+      DECLARE @ChildPageNumber INT
+
+      SET @ParentPageNumber = 1
+      SET @ChildPageNumber = 1
+
+      DECLARE @RootID BIGINT
+      DECLARE @PKGID BIGINT
+
+      UPDATE t
+      SET    t.rootgroupid = T1.rootgroupid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN @tblTempOrdInvExplodedResultOrderbyRowID T1
+                     ON T1.rowid = T.rowid
+
+      DECLARE invdetailcursor CURSOR FOR
+        SELECT rootid,
+               pkgid
+        FROM   @tblRootID
+        ORDER  BY sequenceno
+
+      OPEN invdetailcursor
+
+      FETCH next FROM invdetailcursor INTO @RootID, @PKGID
+
+      WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SELECT @ParentPrintSeparately = parentprintseparately
+            FROM   @tblRootID
+            WHERE  rootid = @RootID
+                   AND pkgid = @PKGID
+
+            IF( @ParentPrintSeparately = 'Y' )
+              BEGIN
+                  SET @ParentPageNumber = @ParentPageNumber + 1
+
+                  UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                  SET    parentpagenumber = @ParentPageNumber
+                  WHERE  rootgroupid = @RootID
+                         AND pkgid = @PKGID
+
+                  SET @ParentPageNumber = @ParentPageNumber + 1
+              END
+            ELSE
+              BEGIN
+                  UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                  SET    parentpagenumber = @ParentPageNumber
+                  WHERE  rootgroupid = @RootID
+                         AND pkgid = @PKGID
+              END
+
+            INSERT INTO @tblParentID
+            SELECT DISTINCT parentgrpid,
+                            Max(rowid) AS SequenceNo
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+            WHERE  rootgroupid = @RootID
+                   AND pkgid = @PKGID
+            GROUP  BY parentgrpid
+            ORDER  BY sequenceno
+
+            DECLARE grpdetailcursor CURSOR FOR
+              SELECT parentid
+              FROM   @tblParentID
+              ORDER  BY sequenceno
+
+            OPEN grpdetailcursor
+
+            FETCH next FROM grpdetailcursor INTO @ParentID
+
+            WHILE @@FETCH_STATUS = 0
+              BEGIN
+                  INSERT INTO @tblGroupChildList
+                              (childprintseparately,
+                               sequenceno)
+                  SELECT childprintseparately,
+                         rowid
+                  FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+                  WHERE  rootgroupid = @RootID
+                         AND pkgid = @PKGID
+                         AND parentgrpid = @ParentID
+
+                  DECLARE grpchilddetailcursor CURSOR FOR
+                    SELECT sequenceno
+                    FROM   @tblGroupChildList
+                    ORDER  BY sequenceno
+
+                  OPEN grpchilddetailcursor
+
+                  FETCH next FROM grpchilddetailcursor INTO @ChildID
+
+                  WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        SELECT @ChildPrintSeparately = childprintseparately
+                        FROM   @tblGroupChildList
+                        WHERE  sequenceno = @ChildID
+
+                        IF( @ChildPrintSeparately = 'Y' )
+                          BEGIN
+                              SET @ChildPageNumber = @ChildPageNumber + 1
+
+                              UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                              SET    childpagenumber = @ChildPageNumber
+                              WHERE  rootgroupid = @RootID
+                                     AND parentgrpid = @ParentID
+                                     AND rowid = @ChildID
+                                     AND pkgid = @PKGID
+
+                              SET @ChildPageNumber = @ChildPageNumber + 1
+                          END
+                        ELSE
+                          BEGIN
+                              UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+                              SET    childpagenumber = @ChildPageNumber
+                              WHERE  rootgroupid = @RootID
+                                     AND parentgrpid = @ParentID
+                                     AND rowid = @ChildID
+                                     AND pkgid = @PKGID
+                          END
+
+                        FETCH next FROM grpchilddetailcursor INTO @ChildID
+                    END
+
+                  DELETE FROM @tblGroupChildList
+
+                  CLOSE grpchilddetailcursor
+
+                  DEALLOCATE grpchilddetailcursor
+
+                  FETCH next FROM grpdetailcursor INTO @ParentID
+              END
+
+            CLOSE grpdetailcursor
+
+            DEALLOCATE grpdetailcursor
+
+            FETCH next FROM invdetailcursor INTO @RootID, @PKGID
+        END
+
+      CLOSE invdetailcursor
+
+      DEALLOCATE invdetailcursor
+
+      ----------                              
+      UPDATE t
+      SET    t.rootgroupid = t1.rootgroupid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+             INNER JOIN @TBLTEMPORDINVEXPLODEDRESULTORDERBYROWID_TEMP t1
+                     ON t.temorowid = t1.temorowid
+                        AND t.pkgid = t1.pkgid
+      WHERE  Isnull(t.pkgid, 0) <> 0
+
+      UPDATE t
+      SET    t.rootgroupid = t1.rootgroupid
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+             INNER JOIN @TBLTEMPORDINVEXPLODEDRESULTORDERBYROWID_TEMP t1
+                     ON t.temorowid = t1.temorowid
+                        AND t.pkgid = t1.pkgid
+      WHERE  Isnull(t.pkgid, 0) <> 0
+             AND t.grpid = 0
+
+      UPDATE t
+      SET    t.approvername = Isnull(S.titlename, '') + ' ' + U.name,
+             t.approverqualification = U.qualification
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN login L WITH (nolock)
+                     ON L.loginid = T.approvedby
+             INNER JOIN users U WITH (nolock)
+                     ON U.loginid = L.loginid
+                        AND U.OrgID IN(SELECT OrgID
+                                                FROM   @tblAffectedVisits)
+             LEFT JOIN salutation S WITH (nolock)
+                    ON S.titleid = U.titlecode
+
+      UPDATE t
+      SET    t.authorizername = Isnull(S.titlename, '') + ' ' + U.name,
+             t.authorizerqualification = U.qualification
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN login L WITH (nolock)
+                     ON L.loginid = T.authorizedby
+             INNER JOIN users U WITH (nolock)
+        ON U.loginid = L.loginid
+                        AND U.OrgID IN(SELECT OrgID
+                                                FROM   @tblAffectedVisits)
+             LEFT JOIN salutation S WITH (nolock)
+                    ON S.titleid = U.titlecode
+
+      UPDATE t
+      SET    packagename = OI.pkgname
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN orderedinvestigations OI WITH (nolock)
+                     ON OI.accessionnumber = T.accessionno
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.VisitID = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+      WHERE  OI.orgid = T2.OrgID
+             AND OI.visitid = T2.VisitID
+             AND Isnull(OI.pkgname, '') <> ''
+
+      /***Code End***/
+      DECLARE @ClientId BIGINT
+      DECLARE @ClientTempTable TABLE
+        (
+           blockfrom DATETIME,
+           blockto   DATETIME,
+           status    CHAR(10)
+        )
+
+      SELECT @ClientId = VCM.clientid
+      FROM   patient P
+             INNER JOIN patientvisit PV
+                     ON P.patientid = PV.patientid
+             INNER JOIN visitclientmapping VCM WITH(nolock)
+                     ON VCM.visitid = pv.patientvisitid
+      WHERE  VCM.visitid = @pVisitID
+             AND VCM.orgid = @OrgID
+
+      --select @ClientId                               
+      INSERT INTO @ClientTempTable
+      SELECT cm.blockfrom,
+             cm.blockto,
+             CM.status
+      FROM   clientmaster CM WITH(nolock)
+      WHERE  CM.clientid = @ClientId
+             AND cm.orgid = @OrgID
+             AND CM.status = 'S'
+
+      DECLARE @Cstatus CHAR(10)
+
+      SELECT @Cstatus = status
+      FROM   @ClientTempTable
+
+      IF( Isnull(@Cstatus, '') = '' )
+        SET @Cstatus='XX'
+
+      DECLARE @tempResult TABLE
+        (
+           rowid                   INT,
+           name                    VARCHAR(max),
+           result                  VARCHAR(max),
+           units                   VARCHAR(100),
+           description             VARCHAR(max),
+           referencerange          VARCHAR(max),
+           investigationid         BIGINT,
+           methodname              VARCHAR(500),
+           notes                   VARCHAR(max),
+           samplename              VARCHAR(500),
+           isabnormal              VARCHAR(50),
+           medicalremarks          VARCHAR(max),
+           refrangesuffixtest      VARCHAR(max),
+           deptid                  BIGINT,
+           grpid                   BIGINT,
+           isnonreportable         CHAR(1),
+           approvedby              BIGINT,
+           approvername            NVARCHAR(500),
+           approverqualification   NVARCHAR(500),
+           rootgroupid             BIGINT,
+           parentgrpid             BIGINT,
+           deptprintseparately     CHAR(1),
+           deptpagenumber          INT,
+           parentprintseparately   CHAR(1),
+           parentpagenumber        INT,
+           childprintseparately    CHAR(1),
+           childpagenumber         INT,
+           authorizedby            BIGINT,
+           authorizername          NVARCHAR(500),
+           authorizerqualification NVARCHAR(500),
+           patientvisiid           BIGINT,
+           packagename             NVARCHAR(max),
+           applicationurl          NVARCHAR(max),
+           isrejected              CHAR(1),
+           iswithheld              CHAR(1),
+           recheckretest           NVARCHAR(20),
+           convreferencerange      NVARCHAR(max),
+           convvalue               VARCHAR(max),
+           convuomcode             VARCHAR(50),
+           codename                VARCHAR(100),
+           subgroupinterpretation  VARCHAR(max),
+           printablerange          VARCHAR(max),
+           IsShowName              BIT,
+           IsSummary               CHAR(1),
+           Status                  VARCHAR(255),
+        OIStatus                VARCHAR(255),
+           accessionno             VARCHAR(10)
+        )
+      --select @Cstatus                                                                                                      
+      DECLARE @ApplicationURL NVARCHAR(max)
+
+      SELECT @ApplicationURL = COM.configvalue
+      FROM   configorgmaster COM
+             INNER JOIN configkeymaster CKM WITH(nolock)
+                     ON CKM.configkeyid = COM.configkeyid
+      WHERE  CKM.configkey = 'ApplicationURL'
+             AND COM.orgid = @OrgID
+
+      SET @ApplicationURL=Isnull(@ApplicationURL, '')
+                          + '/Images/Signature/ID'
+
+      UPDATE t
+      SET    t.codename = CM.codename
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID t
+             INNER JOIN codemapper CMP WITH(nolock)
+                     ON CMP.identifyingid = t.grpid
+                        AND CMP.identifyingtype = 'GRP'
+             INNER JOIN codemaster CM WITH(nolock)
+                     ON Cm.codemasterid = CMP.codemasterid
+      WHERE  CM.codeschemeid = 1
+
+      UPDATE t
+      SET    t.subgroupinterpretation = IOG.groupinterpretation
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.orggroupid = T.grpid
+      -- AND T.RootGroupID<>T.ParentGrpID  
+      WHERE  IOG.orgid IN (SELECT DISTINCT ORGID
+                           FROM   @tblAffectedVisits)
+             AND Isnull(invid, '') <> ''
+             AND Isnull(patientvisiid, '') <> ''
+             AND Isnull(isnonreportable, 'N') <> 'Y'
+
+      DECLARE @tblSubGroupInterpretation AS TABLE
+        (
+           sno                 BIGINT IDENTITY (1, 1),
+           rootgroupid         BIGINT,
+           accessionno         BIGINT,
+           rowid               INT,
+           groupid             BIGINT,
+           groupinterpretation VARCHAR(max)
+        )
+
+      INSERT INTO @tblSubGroupInterpretation
+      SELECT rootgroupid,
+             accessionno,
+             Max(rowid),
+             grpid,
+             subgroupinterpretation
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+      GROUP  BY rootgroupid,
+                accessionno,
+                grpid,
+                subgroupinterpretation
+      HAVING ( subgroupinterpretation <> '' )
+
+      UPDATE t
+      SET    subgroupinterpretation = ''
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+      WHERE  t.rowid NOT IN (SELECT rowid
+                             FROM   @tblSubGroupInterpretation)
+
+      UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+      SET    retestrecheck = ''
+
+      UPDATE t
+      SET    samplename = ''
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON IOM.investigationid = T.invid
+      WHERE  IOM.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOM.outputinvestigationcode IN( 'WithOutSample' )
+
+      UPDATE t
+      SET    samplename = ''
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.orggroupid = T.grpid
+      WHERE  IOG.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOG.outputgroupingcode IN( 'WithOutSample' )
+
+      DELETE T
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attGroupid = T.rootGroupid
+             INNER JOIN InvGroupMaster IGM
+                     ON IGM.GroupID = IOG.AttGroupID
+             INNER JOIN CodeMapper CMP
+                     ON CMP.IdentifyingID = IOG.OrgGroupID
+             INNER JOIN CodeMaster CM
+                     ON CM.CodeMasterID = CMP.CodeMasterID
+                        AND CM.CodeType = 'PKG'
+                      AND CM.CodeSchemeID = 1
+      WHERE  IOG.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOG.outputgroupingcode IN( 'SPKG' )
+             AND T.name LIKE '%<B><I><U>%'
+             AND T.packagename <> '' --and  T.groupname IS NULL  
+             AND T.rootgrpname <> ''
+
+      --UPDATE t  
+      --SET    t.name = '<B><I><U>Haemogram</U></I></B>'  
+      --FROM   @tblTempOrdInvExplodedResultOrderbyRowID T  
+      --WHERE  name = '<B><I><U>CBC Haemogram</U></I></B>'  
+      UPDATE t
+      SET    t.patternid = 0
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN investigationorgmapping IOM WITH(nolock)
+                     ON IOM.investigationid = T.invid
+      WHERE  IOM.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOM.outputinvestigationcode IN( 'NoPattern' )
+
+      UPDATE t
+      SET    t.patternid = 0
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN investigationorgattributes IOM WITH(nolock)
+                     ON IOM.investigationid = T.invid
+      WHERE  Isnull(IOM.resultvaluetype, '') = 'NTS'
+             AND IOM.orgid IN(SELECT DISTINCT OrgID
+                              FROM   @tblAffectedVisits)
+
+      --SELECT * FROM       @tblTempOrdInvExplodedResultOrderbyRowID               
+      --return               
+      UPDATE t
+      SET    result = dbo.[Udf_titlecase](result)
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = T.parentgrpid
+      WHERE  IOG.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOG.outputgroupingcode IN( 'TitleCase' )
+             AND result IS NOT NULL
+
+      UPDATE t
+      SET    result = dbo.[Udf_titlecase](result)
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN invorggroup IOG WITH(nolock)
+                     ON IOG.attgroupid = T.rootgroupid
+      WHERE  IOG.orgid IN(SELECT DISTINCT OrgID
+                          FROM   @tblAffectedVisits)
+             AND IOG.outputgroupingcode IN( 'TitleCase' )
+             AND result IS NOT NULL
+
+  /*BEGIN | 31 | Moovendan | 20160406 | M | Summary report format Requirement */
+      /****************** Altered for Dept wise , Group wise , Inv wise filter for summary report ***********/
+      UPDATE t
+      SET    T.IsSummary = 'Y'
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN OrderedInvestigations OI (NOLOCK)
+                     ON T.Accessionno = OI.AccessionNumber
+             INNER JOIN InvestigationOrgmapping IOM (NOLOCK)
+                     ON IOM.InvestigationID = OI.ID
+                        AND OI.OrgID = IOM.OrgID
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.Visitid = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+      WHERE  OI.Type = 'INV'
+             AND Isnull(T.pkgid, 0) = 0
+
+      UPDATE t
+      SET    T.IsSummary = 'Y'
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN OrderedInvestigations OI (NOLOCK)
+                     ON T.Accessionno = OI.AccessionNumber
+             INNER JOIN INVORGGROUP IOG (NOLOCK)
+                     ON IOG.AttGroupID = OI.ID
+                        AND IOG.OrgID = OI.OrgID
+             INNER JOIN @tblAffectedVisits T2
+                     ON OI.Visitid = T2.VisitID
+                        AND OI.OrgID = T2.OrgID
+      WHERE  OI.Type = 'GRP'
+             AND Isnull(T.pkgid, 0) = 0
+
+      UPDATE t
+      SET    T.IsSummary = 'Y'
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN INVORGGROUP IOG (NOLOCK)
+                     ON IOG.AttGroupID = T.PkgID
+             INNER JOIN @tblAffectedVisits T2
+                     ON T.PatientVisiid = T2.VisitID
+                        AND IOG.OrgID = T2.OrgID
+      WHERE  Isnull(T.pkgid, 0) > 0
+
+      UPDATE t
+      SET    T.IsSummary = 'Y'
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID T
+             INNER JOIN InvDeptMaster IDM
+                     ON T.ParentDeptID = IDM.DeptID
+                        AND IDM.OrgID IN(SELECT DISTINCT OrgID
+                                         FROM   @tblAffectedVisits)
+      WHERE  T.IsSummary = 'Y'
+
+  /******************Altered for Dept wise , Group wise , Inv wise filter for summary report***********/
+  /*END | 31 | Moovendan | 20160406 | M | Summary report format Requirement */
+      --UPDATE T SET T.parentpageNumber=NULL,T.ChildpageNumber=NULL,ParentPrintSeparately='N',ChildPrintSeparately=NULL                               
+      --From @tblTempOrdInvExplodedResultOrderbyRowID T where --Name Like'%%' OR              
+      --Name LIKE '%%' AND isnull(T.PackageName,'')<>'' and isnull(T.grpid,0)=0             
+      --    UPDATE T SET T.parentpageNumber=NULL,T.ChildpageNumber=NULL,ParentPrintSeparately='N',ChildPrintSeparately=NULL                               
+      --From @tblTempOrdInvExplodedResultOrderbyRowID T where --Name Like'%%' OR              
+      --Name LIKE '%%' AND isnull(T.PackageName,'')<>'' and isnull(T.grpid,0)=0    
+      DECLARE @SymbolRow AS TABLE
+        (
+           SymbolRowId     BIGINT,
+           InvestigationId INT
+        )
+
+      INSERT INTO @SymbolRow
+      SELECT rowid,
+             1
+      FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+      WHERE  result LIKE '%##%'
+
+      ---                  
+      IF ( @Cstatus <> 'S' )
+        BEGIN
+            DELETE FROM @tblTempOrdInvExplodedResultOrderbyRowID
+            WHERE  rowid IN(SELECT SymbolRowId
+                            FROM   @SymbolRow)
+
+            UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+            SET    result = ''
+            WHERE  result LIKE '%#%'
+
+            UPDATE @tblTempOrdInvExplodedResultOrderbyRowID
+            SET    ConvValue = ''
+            WHERE  ConvValue = '0'
+
+            UPDATE tbl
+            SET    tbl.OIStatus = OI.Status
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID tbl
+                   INNER JOIN OrderedInvestigations OI WITH(NOLOCK)
+                           ON OI.AccessionNumber = tbl.accessionno
+
+
+						  	/** BEGIN |  NA | MALATHI | 20171223 | Blinding of Reference Range  **/
+				IF EXISTS(SELECT 1 FROM clientmaster cm WITH(nolock) 
+							WHERE clientid = @ClientId -- AND isreferencerangeblinding = 1
+							 )
+                BEGIN 
+				
+				UPDATE TMP SET TMP.referencerange='',printablerange=''
+				FROM @tblTempOrdInvExplodedResultOrderbyRowID TMP
+									--INNER JOIN clienttestreferencerangeblinding ctr WITH(nolock) ON TMP.invid = CTR.InvID 
+									--			AND ctr.clientid =@ClientId  
+									--			AND Ctr.OrgID=@OrgID
+									--			AND ctr.IsActive =1 
+									--INNER JOIN InvestigationOrgMapping IOM WITH(NOLOCK) ON TMP.invid = IOM.InvestigationID
+									--			AND IOM.OrgID = ctr.OrgID
+									--			AND IOM.IsReferenceRangeBlinding = 1
+
+				END
+		 /**  END |  NA | MALATHI | 20171223 | Blinding of Reference Range  **/
+
+
+            IF( @IsServiceRequest = 'Y' )
+              BEGIN
+                  DELETE Tbl
+                  FROM   @tblTempOrdInvExplodedResultOrderbyRowID Tbl
+                  WHERE  OIStatus NOT IN ( 'Approve', 'PartiallyApproved' )
+              END
+
+            SELECT rowid,--Row_number() OVER (ORDER BY rowid) as rowid1
+                   NAME,
+                   Isnull(result, '')                  AS Result,
+                   CASE
+                     WHEN Isnull(units, 'null') = 'null' THEN ''
+                     ELSE units
+                   END                                 AS Units,
+                   Isnull(technicalremarks, '')        AS Description,
+                   CASE
+                 WHEN Ltrim(Rtrim(Isnull(printablerange, ''))) <> '' THEN printablerange
+                     ELSE Isnull(referencerange, '')
+                   END                                 AS ReferenceRange,
+                   invid                               AS InvestigationID,
+                   Isnull(methodname, '')              AS MethodName,
+                   Isnull(notes, '')                   AS Notes,
+                   Isnull(samplename, '')              AS SampleName,
+                   isabnormal,
+                   Isnull(medicalremarks, '')          AS MedicalRemarks,
+                   ''                                  AS RefRangeSuffixtest,
+                   deptid,
+                   grpid,
+                   isnonreportable,
+                   Isnull(approvedby, 0)               AS ApprovedBy,
+                   Isnull(approvername, '')            AS ApproverName,
+                   Isnull(approverqualification, '')   AS ApproverQualification,
+                   rootgroupid,
+                   parentgrpid,
+                   deptprintseparately,
+                   deptpagenumber,
+                   parentprintseparately,
+                   parentpagenumber,
+                   childprintseparately,
+                   childpagenumber,
+                   Isnull(authorizedby, 0)             AS AuthorizedBy,
+                   Isnull(authorizername, '')          AS AuthorizerName,
+                   Isnull(authorizerqualification, '') AS AuthorizerQualification,
+                   patientvisiid,
+                   Isnull(packagename, '')             AS PackageName,
+                   @ApplicationURL                     AS ApplicationURL,
+                   Isnull(isrejected, 'N')             AS IsRejected,
+                   Isnull(iswithheld, 'N')             AS Iswithheld,
+                   retestrecheck,
+                   Isnull(convreferencerange, '')      AS ConvReferenceRange,
+                   Isnull(convvalue, '')               AS ConvValue,
+                   Isnull(convuomcode, '')             AS ConvUOMCode,
+                   codename,
+                   subgroupinterpretation,
+                   patternid,
+                   IsSummary,
+                   Status
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+            WHERE  Isnull(isnonreportable, 'N') <> 'Y'
+                   AND Isnull(IsShowName, 1) = 1
+                   AND Isnull(IsSummary, 'N') = 'Y'
+            ORDER  BY rowid,
+                      temorowid,
+                      CASE
+                        WHEN invid IS NULL THEN 'a'
+                        ELSE 'b'
+                      END
+        END
+      ELSE
+        BEGIN
+            INSERT INTO @tempResult
+            SELECT rowid,
+                   name,
+                   Isnull(result, '')                  AS Result,
+                   CASE
+                     WHEN Isnull(units, 'null') = 'null' THEN ''
+                     ELSE units
+                   END                                 AS Units,
+                   Isnull(technicalremarks, '')        AS Description,
+                   CASE
+                     WHEN Ltrim(Rtrim(Isnull(printablerange, ''))) <> '' THEN printablerange
+                     ELSE Isnull(referencerange, '')
+                   END                                 AS ReferenceRange,
+                   invid                               AS InvestigationID,
+                   Isnull(methodname, '')              AS MethodName,
+                   Isnull(notes, '')                   AS Notes,
+                   Isnull(samplename, '')              AS SampleName,
+                   isabnormal,
+                   Isnull(medicalremarks, '')          AS MedicalRemarks,
+                   ''                                  AS RefRangeSuffixtest,
+                   deptid,
+                   grpid,
+                   isnonreportable,
+                   Isnull(approvedby, 0)               AS ApprovedBy,
+                   Isnull(approvername, '')            AS ApproverName,
+                   Isnull(approverqualification, '')   AS ApproverQualification,
+                   rootgroupid,
+                   parentgrpid,
+                   deptprintseparately,
+                   deptpagenumber,
+                   parentprintseparately,
+                   parentpagenumber,
+                   childprintseparately,
+                   childpagenumber,
+                   Isnull(authorizedby, 0)             AS AuthorizedBy,
+                   Isnull(authorizername, '')          AS AuthorizerName,
+                   Isnull(authorizerqualification, '') AS AuthorizerQualification,
+                   patientvisiid,
+                   Isnull(packagename, '')             AS PackageName,
+                   @ApplicationURL                     AS ApplicationURL,
+                   Isnull(isrejected, 'N')             IsRejected,
+                   Isnull(iswithheld, 'N')             Iswithheld,
+                   retestrecheck,
+                   Isnull(convreferencerange, '')      AS ConvReferenceRange,
+                   Isnull(convvalue, '')               AS ConvValue,
+                   Isnull(convuomcode, '')             AS ConvUOMCode,
+                   codename,
+                   subgroupinterpretation,
+                   printablerange,
+                   IsShowName,
+                   IsSummary,
+                   Status,
+                   NULL                                AS OIStatus,
+                   accessionno
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID
+            WHERE  isabnormal = 'P'
+                   AND Isnull(isnonreportable, 'N') <> 'Y'
+                   AND Isnull(IsShowName, 1) = 1
+                   AND Isnull(IsSummary, 'N') = 'Y'
+            --Order by RowID                                                                                 
+            UNION ALL
+            SELECT tbl.rowid,
+                   tbl.name                            AS Name,
+                   Isnull(result, '')                  AS Result,
+                   CASE
+                     WHEN Isnull(units, 'null') = 'null' THEN ''
+                     ELSE units
+                   END                                 AS Units,
+                   Isnull(technicalremarks, '')        AS Description,
+                   CASE
+                     WHEN Ltrim(Rtrim(Isnull(tbl.printablerange, ''))) <> '' THEN tbl.printablerange
+                     ELSE Isnull(tbl.referencerange, '')
+                   END                                 AS ReferenceRange,
+                   invid                               AS InvestigationID,
+                   Isnull(methodname, '')              AS MethodName,
+                   Isnull(notes, '')                   AS Notes,
+                   Isnull(samplename, '')              AS SampleName,
+                   isabnormal,
+                   Isnull(medicalremarks, '')          AS MedicalRemarks,
+                   ''                                  AS RefRangeSuffixtest,
+                   tbl.deptid                          AS DeptID,
+                   grpid,
+                   tbl.isnonreportable,
+                   Isnull(approvedby, 0)               AS ApprovedBy,
+                   Isnull(approvername, '')            AS ApproverName,
+                   Isnull(approverqualification, '')   AS ApproverQualification,
+                   rootgroupid,
+                   parentgrpid,
+                   deptprintseparately,
+                   deptpagenumber,
+                   parentprintseparately,
+                   parentpagenumber,
+                   childprintseparately,
+                   childpagenumber,
+                   Isnull(authorizedby, 0)             AS AuthorizedBy,
+                   Isnull(authorizername, '')          AS AuthorizerName,
+                   Isnull(authorizerqualification, '') AS AuthorizerQualification,
+                   patientvisiid,
+                   Isnull(packagename, '')             AS PackageName,
+                   @ApplicationURL                     AS ApplicationURL,
+                   Isnull(isrejected, 'N')             IsRejected,
+                   Isnull(iswithheld, 'N')             Iswithheld,
+                   retestrecheck,
+                   Isnull(convreferencerange, '')      AS ConvReferenceRange,
+                   Isnull(convvalue, '')               AS ConvValue,
+                   Isnull(convuomcode, '')             AS ConvUOMCode,
+                   codename,
+                   subgroupinterpretation,
+                   printablerange,
+                   IsShowName,
+                   tbl.IsSummary,
+                   tbl.Status,
+                   NULL                                AS OIStatus,
+                   tbl.accessionno
+            FROM   @tblTempOrdInvExplodedResultOrderbyRowID tbl
+                   INNER JOIN finalbill FB
+                           ON tbl.patientvisiid = FB.visitid
+                   INNER JOIN billingdetails BD
+                           ON BD.finalbillid = FB.finalbillid
+                   LEFT JOIN investigationorgmapping IOM
+                          ON IOM.investigationid = tbl.invid
+                             AND IOM.orgid IN(SELECT DISTINCT OrgID
+                                              FROM   @tblAffectedVisits)
+            WHERE  BD.isstat = 'Y'
+                   AND Isnull(tbl.isnonreportable, 'N') <> 'Y'
+                   AND Isnull(IsShowName, 1) = 1
+                   AND Isnull(tbl.IsSummary, 'N') = 'Y'
+
+            DELETE FROM @tempResult
+            WHERE  rowid IN(SELECT SymbolRowId
+                            FROM   @SymbolRow)
+
+            --                
+            UPDATE @tempResult
+            SET    result = ''
+            WHERE  result LIKE '%#%'
+
+            UPDATE @tempResult
+            SET    ConvValue = ''
+            WHERE  ConvValue = '0'
+
+            --Order by RowID     
+            IF( @IsServiceRequest = 'Y' )
+              BEGIN
+                  UPDATE tbl
+                  SET    tbl.OIStatus = OI.Status
+                  FROM   @tempResult tbl
+                         INNER JOIN OrderedInvestigations OI WITH(NOLOCK)
+                                 ON OI.AccessionNumber = tbl.accessionno
+
+                  SELECT DISTINCT*
+                  FROM   @tempResult
+                  WHERE  Isnull(IsSummary, 'N') = 'Y'
+                         AND OIStatus IN ( 'Approve', 'PartiallyApproved' )
+                  ORDER  BY rowid
+              END
+            ELSE
+              BEGIN
+                  SELECT DISTINCT*
+                  FROM   @tempResult
+                  WHERE  Isnull(IsSummary, 'N') = 'Y'
+                  ORDER  BY rowid
+              END
+        END
+  END 
+

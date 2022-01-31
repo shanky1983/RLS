@@ -1,0 +1,75 @@
+CREATE PROCEDURE [dbo].[pGetQCResultDetails]    
+ @pOrgID [int],    
+ @pInstrumentID [BIGINT],    
+ @pInvestigationID [BIGINT],
+ @pLotID [BIGINT],    
+ @FromDate [DATETIME],
+ @ToDate  [DATETIME],
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN      
+
+  SET @ToDate=DATEADD(DAY,1,@ToDate);
+
+ IF(@pInstrumentID=0)
+  SET @pInstrumentID=NULL;
+ IF(@pInvestigationID=0)
+  SET @pInvestigationID=NULL;
+ IF(@pLotID=0)
+  SET @pLotID=NULL;
+
+  CREATE TABLE #TempFinalResult
+  (
+     SNO INT IDENTITY(1,1),
+	 QCValueID BIGINT,
+	 InvestigationID BIGINT,
+	 InstrumentID BIGINT,
+	 LOValue nvarchar(20),
+	 LOStatus VARCHAR(1),
+	 LORule nvarchar(50),
+	 LOResultDate DATETIME,
+	 LOZscore DECIMAL(8,3),
+	 LTValue nvarchar(20),
+	 LTStatus VARCHAR(1),
+	 LTRule nvarchar(50),
+	 LTResultDate DATETIME,
+	 LTZscore DECIMAL(8,3),
+	 LEValue nvarchar(20),
+	 LEStatus VARCHAR(1),
+	 LERule nvarchar(50),
+	 LEResultDate DATETIME,
+	 LEZscore DECIMAL(8,3),
+	 ProcessedAt DATETIME
+  )
+
+	INSERT INTO #TempFinalResult(QCValueID,InvestigationID,InstrumentID,LOValue,LOStatus,LORule,LOResultDate,LOZscore,ProcessedAt)
+    SELECT QCValueID,InvestigationID,InstrumentID,Value1,CASE WHEN QcStatus=1 OR QcStatus=2 THEN 'Y' ELSE 'N' END,CASE WHEN QcStatus=0 THEN FailedRule ELSE '' END,ProcessedAt,((AV.Value1-QC.LabMean)/QC.LabSD),ProcessedAt   
+	FROM AnalyteQCValues AV WITH (NOLOCK)
+	INNER JOIN QCRuleMaster QC WITH(NOLOCK) ON QC.LotID=AV.LotID AND QC.Analyte=AV.InvestigationID AND AV.QCLevel=QC.QCLevelID
+	INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C1'
+    WHERE AV.OrgID=@pOrgID AND InvestigationID=ISNULL(@pInvestigationID,InvestigationID) AND InstrumentID=ISNULL(@pInstrumentID,InstrumentID) 
+	AND AV.LotID=ISNULL(@pLotID,AV.LotID) AND AV.ProcessedAt BETWEEN @FromDate AND @ToDate AND ProcessedAt IS NOT NULL
+
+	 INSERT INTO #TempFinalResult(QCValueID,InvestigationID,InstrumentID,LTValue,LTStatus,LTRule,LTResultDate,LTZscore,ProcessedAt)
+     SELECT QCValueID,InvestigationID,InstrumentID,Value1,CASE WHEN QcStatus=1 OR QcStatus=2 THEN 'Y' ELSE 'N' END,CASE WHEN QcStatus=0 THEN FailedRule ELSE '' END,ProcessedAt,((AV.Value1-QC.LabMean)/QC.LabSD),ProcessedAt  
+	 FROM AnalyteQCValues AV
+	 INNER JOIN QCRuleMaster QC WITH(NOLOCK) ON QC.LotID=AV.LotID AND QC.Analyte=AV.InvestigationID AND AV.QCLevel=QC.QCLevelID
+	 INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C2'
+	 WHERE AV.OrgID=@pOrgID AND InvestigationID=ISNULL(@pInvestigationID,InvestigationID) AND InstrumentID=ISNULL(@pInstrumentID,InstrumentID) 
+	 AND AV.LotID=ISNULL(@pLotID,AV.LotID) AND AV.ProcessedAt BETWEEN @FromDate AND @ToDate AND ProcessedAt IS NOT NULL
+
+	 INSERT INTO #TempFinalResult(QCValueID,InvestigationID,InstrumentID,LEValue,LEStatus,LERule,LEResultDate,LEZscore,ProcessedAT)
+     SELECT QCValueID,InvestigationID,InstrumentID,Value1,CASE WHEN QcStatus=1 OR QcStatus=2 THEN 'Y' ELSE 'N' END,CASE WHEN QcStatus=0 THEN FailedRule ELSE '' END,ProcessedAt,((AV.Value1-QC.LabMean)/QC.LabSD),ProcessedAt  
+	 FROM AnalyteQCValues AV
+	 INNER JOIN QCRuleMaster QC WITH(NOLOCK) ON QC.LotID=AV.LotID AND QC.Analyte=AV.InvestigationID AND AV.QCLevel=QC.QCLevelID
+	 INNER JOIN MetaData MD WITH (NOLOCK) ON MD.MetaDataID=AV.QCLevel AND MD.Code='C3'
+	 WHERE AV.OrgID=@pOrgID AND InvestigationID=ISNULL(@pInvestigationID,InvestigationID) AND InstrumentID=ISNULL(@pInstrumentID,InstrumentID) 
+	 AND AV.LotID=ISNULL(@pLotID,AV.LotID) AND AV.ProcessedAt BETWEEN @FromDate AND @ToDate AND ProcessedAt IS NOT NULL
+
+	 SELECT ROW_NUMBER() OVER (PARTITION BY InvestigationID ORDER BY ProcessedAt DESC) AS 'SNO',ProcessedAt AS ResultDate,LOValue,LOStatus,LORule,LOZScore,LTValue,LTStatus,LTRule,LTZScore,LEValue,LEStatus,LERule,LEZScore 
+	 FROM #TempFinalResult 
+	 where ProcessedAt>'20200805' Order BY ProcessedAt DESC
+
+  DROP TABLE #TempFinalResult
+END

@@ -1,0 +1,27 @@
+CREATE PROCEDURE [dbo].[pGetOrganismMasterHistory]    
+ @pId [bigint],    
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN              
+
+;WITH tblDifference AS
+(
+    SELECT DISTINCT ROW_NUMBER() OVER(ORDER BY id) AS RowNumber, Name,Code,OM.OrgID,Modifiedby,Id,Modifiedat 
+    FROM OrganismMasterhistory OM WITH(NOLOCK)    
+    INNER JOIN @ContextInfo UDT ON UDT.OrgID=OM.OrgID 
+	where OM.id=@pId 
+)
+
+SELECT cur.ID,cur.Name,cur.Code,l.LoginName,cur.ModifiedAt, case when previous.Name <> cur.Name then ' Name Changed : '+previous.Name +' to '+cur.Name 
+when  previous.Code <> cur.Code then ' Code Changed : '+previous.Code +' to '+cur.Code end as Description
+FROM tblDifference cur
+inner join login l
+on cur.modifiedby=l.loginid  
+INNER JOIN @ContextInfo UDT ON UDT.OrgID=cur.OrgID
+LEFT OUTER JOIN tblDifference previous
+ON cur.RowNumber = previous.RowNumber + 1
+ORDER BY cur.Name               
+END
+GO
+

@@ -1,0 +1,20 @@
+CREATE PROCEDURE pInsertLiveLocation_LIMSAPI
+(
+    @pOrgCode NVARCHAR(100),
+    @pType NVARCHAR(150),
+	@pHCLiveLocation [dbo].[HCLiveLocation] READONLY
+)
+
+AS
+BEGIN   
+     BEGIN
+	      INSERT INTO ERPHCLiveLocation 
+				      (Latitude,      Longitude,      TransactionDate, 
+				       LoginID,       CreatedBy,      CreatedAt,           
+					   ISProcessed )
+				SELECT HLC.Latitude,  HLC.Longitude,  CASE YEAR(HLC.TransactionDate) WHEN 9999 THEN NULL ELSE HLC.TransactionDate END, 
+				       HLC.LoginID,   HLC.CreatedBy,  CASE YEAR(HLC.CreatedAt) WHEN 9999 THEN NULL ELSE HLC.CreatedAt END,
+					   HLC.ISProcessed
+				FROM @pHCLiveLocation HLC      
+	 END
+END

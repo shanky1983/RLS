@@ -1,0 +1,48 @@
+CREATE PROCEDURE [dbo].[pGetQCResultSearchValues]    
+ @pOrgID [int],    
+ @pType [nvarchar](100),    
+ @pSearchText [nvarchar](100),    
+ @ContextInfo [UDT_Context] READONLY    
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN      
+ IF @pType='Investigations'      
+ BEGIN    
+ IF EXISTS(SELECT 1 FROM  CodingSchemeOrgMapping WHERE OrgID=@pOrgID)  
+ BEGIN     
+  SELECT DISTINCT --IM.InvestigationName 
+  REPLACE(COALESCE(IOM.BillingName,IM.InvestigationName),',',' ') + CASE WHEN LEN(ISNULL(CM.CodeName,'')) > 0 THEN ':' + CM.CodeName ELSE '' END AS CodeName,          
+  CONVERT(INT,IOM.InvestigationID) AS IdentifyingID,
+                                  Isnull(IOM.Display, 'Y') AS IsPrimary  FROM InvestigationOrgMapping IOM  WITH(NOLOCK)         
+  INNER JOIN InvestigationMaster IM WITH(NOLOCK) ON IM.InvestigationID=IOM.InvestigationID          
+  LEFT JOIN CodeMapper CMP  WITH(NOLOCK)ON CMP.IdentifyingID = IOM.InvestigationID AND CMP.IdentifyingType=@pType          
+  LEFT JOIN CodeMaster CM  WITH(NOLOCK)ON CM.CodeMasterID = CMP.CodeMasterID AND CM.CodeType=@pType          
+  LEFT JOIN CodingSchemeMaster CSM  WITH(NOLOCK)ON CSM.CodeTypeID = CM.CodeSchemeID          
+  LEFT JOIN CodingSchemeOrgMapping CSOM  WITH(NOLOCK)ON CSOM.CodeTypeID=CSM.CodeTypeID AND CSOM.OrgID=IOM.OrgID           
+  WHERE IOM.OrgID=@pOrgID AND (IM.InvestigationName like '%'+@pSearchText+'%' OR CM.CodeName like '%'+@pSearchText+'%')         
+  AND CSOM.IsPrimary='Y'         
+ END    
+ ELSE  
+ BEGIN  
+     SELECT DISTINCT REPLACE(COALESCE(IOM.BillingName,IM.InvestigationName),',',' ') AS CodeName,            
+   CONVERT(INT,IOM.InvestigationID) AS IdentifyingID,
+                                  Isnull(IOM.Display, 'Y')          AS IsPrimary
+				   FROM InvestigationOrgMapping IOM   WITH(NOLOCK)          
+   INNER JOIN InvestigationMaster IM  WITH(NOLOCK)ON IM.InvestigationID=IOM.InvestigationID            
+   WHERE IOM.OrgID=@pOrgID AND (IM.InvestigationName like '%'+@pSearchText+'%')           
+ END  
+END       
+ IF @pType='Device'      
+ BEGIN      
+    --SELECT DeviceID AS 'CodeName',DeviceID AS IdentifyingID FROM DeviceIntegrationOrgMapping WITH (NOLOCK) WHERE OrgID=@pOrgID AND DeviceName like '%'+@pSearchText+'%' AND IsActive='Y'
+	select InstrumentName AS 'CodeName',CONVERT(INT,InstrumentID) AS IdentifyingID,'Y' AS IsPrimary From InvInstrumentMaster WITH (NOLOCK) WHERE  OrgID=@pOrgID AND InstrumentName like '%'+@pSearchText+'%' --AND Status
+ END 
+
+IF @pType='LotNumber'
+
+BEGIN
+ 
+    SELECT LotCode AS 'CodeName',CONVERT(INT,LotID) AS IdentifyingID,'Y' AS IsPrimary FROM LotMaster WHERE OrgID=@pOrgID AND Lotcode like '%'+@pSearchText+'%' --and IsExpired='N'
+       
+ END
+END

@@ -1,0 +1,668 @@
+--@pVisitID    
+--GetPatientBiographyForReport_B 551604,67              
+--GetPatientBiographyForReport_t 31566,118 
+
+--exec [GetPatientBiographyForReport_Test] 2175454,228                                          
+CREATE PROCEDURE [dbo].[GetPatientBiographyForReport_Test] (
+@pVisitID BIGINT
+,@OrgID INT
+)
+ WITH RECOMPILE
+AS
+BEGIN
+/**Added by mohan for collected on**/
+DECLARE @HistoryID BIGINT
+DECLARE @refAccessionNumber BIGINT
+DECLARE @ParentVisitID BIGINT
+DECLARE @referVisitID BIGINT
+DECLARE @reportVisitID BIGINT
+DECLARE @ApprovedDate DATETIME
+DECLARE @pReferVisitID BIGINT
+,@ParentOrgID INT
+SELECT @pReferVisitID = ReferVisitID
+FROM PatientVisit(NOLOCK)
+WHERE PatientVisitId = @pVisitID
+SELECT @ParentOrgID = OrgID
+FROM PatientVisit(NOLOCK)
+WHERE PatientVisitID = @pReferVisitID
+DECLARE @pClientName NVARCHAR(100)
+,@pClientAddress NVARCHAR(2000)
+,@pZoneAddress NVARCHAR(100)
+,@pPostalCode NVARCHAR(100)
+,@RefPhyName NVARCHAR(255)
+,@pClientID BIGINT
+,@pGClientID BIGINT,
+@pClientHeaderLogo NVARCHAR(250)
+SELECT @pClientName = ClientName
+,@pClientAddress = ISNULL(CA.Address1, '')
+,@pZoneAddress = ISNULL(' Zone: ' + ISNULL(ll.Code, ll.Locality_Value), '')
+,@pPostalCode = CA.PostalCode
+,@pClientID = CM.ClientID,
+@pClientHeaderLogo=CM.HeaderLogo
+FROM ClientMaster CM WITH (NOLOCK)
+INNER JOIN VisitClientMapping VCM(NOLOCK) ON CM.OrgID = VCM.OrgID
+AND CM.ClientID = VCM.ClientID
+AND VCM.RefFinalBillID IS NULL
+LEFT JOIN AddressDetails CA(NOLOCK) ON CA.ReferenceID = VCM.ClientID
+AND ISNULL(CA.Address1, '') <> ''
+AND CA.IsCommunication = 'Y'
+LEFT JOIN Localities ll(NOLOCK) ON ll.Locality_ID = CM.ZonalID
+AND ll.Type = 'Zone'
+WHERE VCM.VisitID = @pReferVisitID
+AND VCM.OrgID = @ParentOrgID
+SELECT @pGClientID = ClientID
+FROM ClientMaster(NOLOCK)
+WHERE OrgID = @ParentOrgID
+AND ClientCode = 'GENERAL'
+
+IF (@pClientID = @pGClientID)
+BEGIN
+SET @pClientName = (
+SELECT Location
+FROM PatientVisit PV WITH (NOLOCK)
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.AddressID = PV.OrgAddressID
+WHERE PV.PatientVisitId = @pReferVisitID
+)
+SET @pClientAddress = ''
+END
+SELECT @RefPhyName = ReferingPhysicianName
+FROM PatientVisit(NOLOCK)
+WHERE OrgID = @ParentOrgID
+AND PatientVisitId = @pReferVisitID
+SELECT @refAccessionNumber = ReferredAccessionNo
+FROM OrderedInvestigations(NOLOCK)
+WHERE VisitID IN (@pVisitID)
+AND ReferredAccessionNo IS NOT NULL
+DECLARE @TempDemography AS TABLE (
+PatientName NVARCHAR(255)
+,VisitDate DATETIME
+,SEX NVARCHAR(20)
+,VisitNo NVARCHAR(256)
+,ExternalVisitID NVARCHAR(255)
+,PatientVisitId BIGINT
+,VisitType NVARCHAR(20)
+,Age NVARCHAR(20)
+,ReferingPhysicianName NVARCHAR(100)
+,PatientID NVARCHAR(30)
+,ConstultantName NVARCHAR(255)
+,CollectedOn DATETIME
+,ReportedOn DATETIME
+,PrintedOn DATETIME
+,ContactNo NVARCHAR(50)
+,ClientName NVARCHAR(255)
+,DetailHistory NVARCHAR(MAX)
+,HospitalName NVARCHAR(255)
+,Patient_HISTID BIGINT
+,ExternalPatientNumber NVARCHAR(100)
+,DOB DATETIME
+,ApprovedAt DATETIME
+,NAME NVARCHAR(255)
+,PatientNumber NVARCHAR(100)
+,Address NVARCHAR(2000)
+,ZoneAddress NVARCHAR(100)
+,PostalCode NVARCHAR(100)
+,PatientAddress NVARCHAR(255)
+,PatientPostalcode NVARCHAR(100)
+,attrubuteCode NVARCHAR(50)
+,ClientCode NVARCHAR(50)
+,SampleReceiveDate DATETIME
+,[Weight] VARCHAR(50)
+,samplepickuptime DATETIME
+,ClientHeaderLogo Nvarchar(250)
+)
+IF (
+@refAccessionNumber > 0
+AND @refAccessionNumber IS NOT NULL
+)
+BEGIN
+SELECT @ParentVisitID = VisitID
+FROM OrderedInvestigations WITH (NOLOCK)
+WHERE AccessionNumber = @refAccessionNumber
+END
+ELSE
+BEGIN
+SET @ParentVisitID = @pVisitID
+SET @referVisitID = @pVisitID
+END
+SELECT @referVisitID = PatientVisitId
+FROM PatientVisit WITH (NOLOCK)
+WHERE ReferVisitID = @pVisitID
+IF (
+@referVisitID > 0
+AND @referVisitID IS NOT NULL
+)
+BEGIN
+SET @reportVisitID = @referVisitID
+END
+ELSE
+BEGIN
+SET @reportVisitID = @pVisitID
+END
+--print 'out'     
+PRINT @reportVisitID
+SELECT @HistoryID = Patient_HISTID
+FROM OrderedInvestigations WITH (NOLOCK)
+WHERE VisitId = @pVisitID
+AND OrgID = @OrgID
+AND Patient_HISTID IS NOT NULL
+DECLARE @ClientIDSt BIGINT
+DECLARE @ClientCode NVARCHAR(100)
+IF (
+@refAccessionNumber > 0
+AND @refAccessionNumber IS NOT NULL
+)
+BEGIN
+SELECT @ClientCode = CM.ClientCode
+,@ClientIDSt = VCM.ClientID
+,@pClientHeaderLogo=CM.HeaderLogo
+FROM VisitClientMapping VCM WITH (NOLOCK)
+INNER JOIN ClientMaster CM WITH (NOLOCK) ON CM.ClientID = VCM.ClientID
+AND CM.OrgID = VCM.OrgID
+WHERE VisitID = @ParentVisitID
+AND VCM.IsActive IS NULL
+END
+ELSE
+BEGIN
+SELECT @ClientCode = CM.ClientCode
+,@ClientIDSt = VCM.ClientID
+,@pClientHeaderLogo=CM.HeaderLogo
+FROM VisitClientMapping VCM WITH (NOLOCK)
+INNER JOIN ClientMaster CM WITH (NOLOCK) ON CM.ClientID = VCM.ClientID
+AND CM.OrgID = VCM.OrgID
+WHERE VisitID = @pVisitID
+AND CM.OrgID = @OrgID
+AND VCM.IsActive IS NULL
+END
+CREATE TABLE #Clientstationary (
+AttributeID BIGINT
+,Clientid BIGINT
+,attributetype NVARCHAR(50)
+,CADAttributeID BIGINT
+,attrubuteCode NVARCHAR(50)
+)
+INSERT INTO #Clientstationary (
+AttributeID
+,Clientid
+,attributetype
+,CADAttributeID
+,attrubuteCode
+)
+SELECT CA.AttributeID
+,CAD.ClientID
+,CA.AttributesType
+,CAD.AttributesID
+,CA.AttributeCode
+FROM ClientAttributes CA(NOLOCK)
+INNER JOIN ClientAttributesDetails CAD(NOLOCK) ON CA.AttributeID = CAD.AttributesID
+WHERE CAD.OrgID = @OrgID
+AND CA.AttributesType = 'Notify'
+AND CA.AttributeID = 22
+AND CAD.ClientID = @ClientIDSt
+--and isnull(CAD.value  ,'Y')='Y'               
+--insert INTO  #Clientstationary(AttributeID,Clientid,attributetype,CADAttributeID,attrubuteCode)                
+--select 22,@ClientIDSt,'Notify',22,'ISTrust'  
+       
+IF (@ClientCode = 'GENERAL')
+BEGIN
+INSERT INTO @TempDemography
+SELECT DISTINCT s.TitleName + ' ' + p.NAME AS PatientName
+,(
+SELECT VisitDate
+FROM PatientVisit WITH (NOLOCK)
+WHERE PatientVisitId = @ParentVisitID
+) AS VisitDate
+,CASE 
+WHEN ISNULL(OI.Patient_HISTID, 0) = 0
+THEN (
+CASE 
+WHEN ISNULL(p.UnknownFlag, 0) = 0
+OR ISNULL(p.UnknownFlag, 0) = 1
+THEN (
+CASE Upper(p.SEX)
+WHEN 'M'
+THEN 'Male'
+WHEN 'F'
+THEN 'Female'
+WHEN 'V'
+THEN 'Vet'
+WHEN 'N'
+THEN 'NA'
+WHEN 'U'
+THEN 'UnKnown'
+ELSE ''
+END
+)
+ELSE ''
+END
+)
+ELSE (
+SELECT CASE Upper(p.SEX)
+WHEN 'M'
+THEN 'Male'
+WHEN 'F'
+THEN 'Female'
+WHEN 'V'
+THEN 'Vet'
+WHEN 'N'
+THEN 'NA'
+WHEN 'U'
+THEN 'UnKnown'
+ELSE ''
+END
+FROM Patient_HIST PHIS(NOLOCK)
+WHERE PHIS.Patient_HISTID = @HistoryID
+AND PHIS.OrgID = @OrgID
+)
+END AS SEX
+,(
+SELECT VisitNumber
+FROM PatientVisit(NOLOCK)
+WHERE PatientVisitId = @ParentVisitID
+) AS VisitNo
+,pv.ExternalVisitID
+,pv.PatientVisitId
+,CASE pv.LabVisitType
+WHEN 0
+THEN 'OP'
+WHEN 1
+THEN 'IP'
+END AS VisitType
+,
+--CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2      
+--THEN (CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'         
+--ELSE P.Age end) ELSE '' END AS Age ,                                                       
+ISNULL(P.Age, '') AS Age
+,
+--ISNULL(P.Age,'')+'/' AS Age,                                                                     
+ISNULL((pv.ReferingPhysicianName), '') AS ReferingPhysicianName
+,
+--CASE    
+--  WHEN 'Dr.'    
+--       + ISNULL((pv.ReferingPhysicianName), '') = 'Dr.' THEN ''    
+--  ELSE 'Dr.'    
+--       + ISNULL((pv.ReferingPhysicianName), '')    
+--END  AS ReferingPhysicianName,    
+p.patientnumber AS PatientID
+,CASE pv.LabVisitType
+WHEN 1
+THEN (
+SELECT TOP 1 'Constultant Name : ' + SL.TitleName + phy.PhysicianName
+FROM PrimaryConsultant IAD WITH (NOLOCK)
+INNER JOIN Physician phy WITH (NOLOCK) ON phy.PhysicianID = IAD.PrimaryConsultantID
+INNER JOIN Salutation SL WITH (NOLOCK) ON SL.TitleID = phy.TitleCode
+WHERE IAD.VisitID = @pVisitID
+)
+END AS ConstultantName
+,(
+SELECT ISNULL(CASE 
+WHEN Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime) AS TIME)) = 0
+THEN convert(NVARCHAR, Min(CollectedDateTime), 103)
+ELSE convert(NVARCHAR, Min(CollectedDateTime), 103) + ' ' + convert(NVARCHAR, Cast(Min(CollectedDateTime) AS TIME), 0)
+END, convert(NVARCHAR, Min(ModifiedAt), 103) + ' ' + convert(NVARCHAR, Cast(Min(ModifiedAt) AS TIME), 0))
+FROM PatientInvSample WITH (NOLOCK)
+WHERE PatientVisitID = @ParentVisitID
+) AS CollectedOn
+,
+--(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,                                                 
+(
+SELECT Max(ApprovedAt)
+FROM PatientInvestigation(NOLOCK)
+WHERE PatientVisitID = @pVisitID
+) AS ReportedOn
+,convert(NVARCHAR, dbo.fn_GetServerDateWithOutContext(@OrgID, 0), 100) AS PrintedOn
+,CASE 
+WHEN ISNULL(PA.LandLineNumber, '') <> ''
+AND PA.LandLineNumber <> '0'
+THEN PA.LandLineNumber
+ELSE CASE 
+WHEN ISNULL(PA.MobileNumber, '') <> ''
+AND PA.MobileNumber <> '0'
+THEN PA.MobileNumber
+ELSE ''
+END
+END AS ContactNo
+,'GENERAL' AS ClientName
+,ISNULL(PH.DetailHistory, '') AS DetailHistory
+,ISNULL((pv.HospitalName), '') AS HospitalName
+,OI.Patient_HISTID
+,p.ExternalPatientNumber
+,(
+SELECT convert(NVARCHAR, P.DOB, 103)
+) AS DOB
+,(
+SELECT Max(ApprovedAt)
+FROM PatientInvestigation WITH (NOLOCK)
+WHERE PatientVisitID = @pVisitID
+) AS ApprovedAt
+,p.NAME AS NAME
+,p.PatientNumber + ' ' + CASE 
+WHEN isnull('(' + isnull(p.ExternalPatientNumber, '') + ')', '') = '()'
+THEN ''
+ELSE '(' + isnull(p.ExternalPatientNumber, '') + ')'
+END AS PatientNumber
+,
+--p.PatientNumber +'('+ p.ExternalPatientNumber+')'        
+--as PatientNumber,       
+'' AS Address
+,'' AS ZoneAddress
+,'' AS PostalCode
+,
+--CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                          
+PA.Add1 + ' ' + PA.Add2 + ' ' + PA.City AS PatientAddress
+,PA.PostalCode AS PatientPostalcode
+,'ISTrust' AS attrubuteCode
+,@ClientCode AS ClientCode
+,(
+SELECT --convert(NVARCHAR, MAX(Createdat), 103)      
+convert(NVARCHAR, Max(Createdat), 103) + ' ' + convert(NVARCHAR, Cast(Max(Createdat) AS TIME), 0)
+FROM SampleTracker WITH (NOLOCK)
+WHERE PatientVisitID = @ParentVisitID
+AND invsamplestatusid = 3
+)
+,PV.WardNo
+,OI.samplepickupdate
+,isnull(@pClientHeaderLogo,'') as ClientHeaderLogo
+FROM PatientVisit pv WITH (NOLOCK)
+INNER JOIN Patient p WITH (NOLOCK) ON p.PatientID = pv.PatientID
+INNER JOIN Salutation s WITH (NOLOCK) ON s.TitleID = p.TITLECode
+INNER JOIN PatientAddress PA WITH (NOLOCK) ON PA.PatientID = P.PatientID
+INNER JOIN OrganizationAddress OA WITH (NOLOCK) ON OA.AddressID = PV.OrgAddressID
+LEFT JOIN PatientHistoryExt PH(NOLOCK) ON PH.PatientID = p.PatientID
+AND PH.PatientVisitId = pv.PatientVisitId
+AND PH.OrgID = pv.OrgID
+LEFT JOIN OrderedInvestigations OI WITH (NOLOCK) ON OI.VisitID = pv.PatientVisitId
+AND OI.OrgID = PV.OrgID
+WHERE pv.PatientVisitId = @pVisitID
+AND pv.OrgID = @OrgID
+ORDER BY OI.Patient_HISTID DESC
+IF (
+@pReferVisitID IS NOT NULL
+AND @pReferVisitID <> ''
+)
+BEGIN
+UPDATE TM
+SET TM.ClientName = ISNULL(@pClientName, TM.ClientName)
+,TM.Address = ISNULL(@pClientAddress, TM.Address)
+,TM.ZoneAddress = ISNULL(@pZoneAddress, TM.ZoneAddress)
+,TM.PostalCode = ISNULL(@pPostalCode, TM.PostalCode)
+,TM.ReferingPhysicianName = ISNULL(@RefPhyName, TM.ReferingPhysicianName)
+FROM @TempDemography TM
+END
+SELECT PatientName
+,VisitDate
+,Sex
+,VisitNo
+,ExternalVisitID
+,PatientVisitId
+,VisitType
+,Age
+,ReferingPhysicianName
+,PatientID
+,ConstultantName
+,CollectedOn
+,ReportedOn
+,PrintedOn
+,ContactNo
+,ClientName
+,DetailHistory
+,HospitalName
+,Patient_HISTID
+,ExternalPatientNumber
+,DOB
+,ApprovedAt
+,NAME
+,PatientNumber
+,Address
+,ZoneAddress
+,PostalCode
+,PatientAddress
+,PatientPostalcode
+,attrubuteCode
+,ClientCode
+,SampleReceiveDate
+,[Weight]
+,SamplePickupTime
+,isnull(@pClientHeaderLogo,'') as ClientHeaderLogo
+FROM @TempDemography
+END
+ELSE
+BEGIN
+--select 'a'     
+INSERT INTO @TempDemography
+SELECT DISTINCT s.TitleName + ' ' + p.NAME AS PatientName
+,(
+--SELECT -- convert(NVARCHAR, MAX(Createdat), 103)      
+-- convert(NVARCHAR, MAX(Createdat), 103) + ' ' + convert(NVARCHAR, Cast(MAX(Createdat) AS TIME), 0)    
+--FROM SampleTracker WITH (NOLOCK)    
+--WHERE PatientVisitID = @ParentVisitID    
+-- AND invsamplestatusid = 3    
+SELECT VisitDate
+FROM PatientVisit WITH (NOLOCK)
+WHERE PatientVisitId = @ParentVisitID
+) AS VisitDate
+,CASE 
+WHEN ISNULL(OI.Patient_HISTID, 0) = 0
+THEN (
+CASE 
+WHEN ISNULL(p.UnknownFlag, 0) = 0
+OR ISNULL(p.UnknownFlag, 0) = 1
+THEN (
+CASE Upper(p.SEX)
+WHEN 'M'
+THEN 'Male'
+WHEN 'F'
+THEN 'Female'
+WHEN 'V'
+THEN 'Vet'
+WHEN 'N'
+THEN 'NA'
+WHEN 'U'
+THEN 'UnKnown'
+ELSE ''
+END
+)
+ELSE ''
+END
+)
+ELSE (
+SELECT CASE Upper(p.SEX)
+WHEN 'M'
+THEN 'Male'
+WHEN 'F'
+THEN 'Female'
+WHEN 'V'
+THEN 'Vet'
+WHEN 'N'
+THEN 'NA'
+WHEN 'U'
+THEN 'UnKnown'
+ELSE ''
+END
+FROM Patient_HIST PHIS(NOLOCK)
+WHERE PHIS.Patient_HISTID = @HistoryID
+AND PHIS.OrgID = @OrgID
+)
+END AS SEX
+,(
+SELECT VisitNumber
+FROM PatientVisit(NOLOCK)
+WHERE PatientVisitId = @ParentVisitID
+) AS VisitNo
+,pv.ExternalVisitID
+,pv.PatientVisitId
+,CASE pv.LabVisitType
+WHEN 0
+THEN 'OP'
+WHEN 1
+THEN 'IP'
+END AS VisitType
+,
+--CASE WHEN ISNULL(p.UnknownFlag,0)=0 OR ISNULL(p.UnknownFlag,0)=2 THEN      
+--(CASE WHEN LEN(ISNULL(p.AgeValues,'')) > 0 then  substring(p.AgeValues,1,4)+' Year(s)'                                                   
+--ELSE P.Age end) ELSE '' END AS Age ,                                                       
+ISNULL(P.Age, '') AS Age
+,
+--ISNULL(P.Age,'')+'/' AS Age,                          
+ISNULL((pv.ReferingPhysicianName), '') AS ReferingPhysicianName
+,
+--CASE    
+--  WHEN 'Dr.'    
+--  + ISNULL((pv.ReferingPhysicianName), '') = 'Dr.' THEN ''    
+--  ELSE 'Dr.'    
+--       + ISNULL((pv.ReferingPhysicianName), '')    
+--END                                                                                                                                                          AS ReferingPhysicianName,    
+p.patientnumber AS PatientID
+,CASE pv.LabVisitType
+WHEN 1
+THEN (
+SELECT TOP 1 'Constultant Name : ' + SL.TitleName + phy.PhysicianName
+FROM PrimaryConsultant IAD WITH (NOLOCK)
+INNER JOIN Physician phy WITH (NOLOCK) ON phy.PhysicianID = IAD.PrimaryConsultantID
+INNER JOIN Salutation SL WITH (NOLOCK) ON SL.TitleID = phy.TitleCode
+WHERE IAD.VisitID = @pVisitID
+)
+END AS ConstultantName
+,(
+SELECT ISNULL(CASE 
+WHEN Datediff(minute, '00:00:00', Cast(Min(CollectedDateTime) AS TIME)) = 0
+THEN convert(NVARCHAR, Min(CollectedDateTime), 103)
+ELSE convert(NVARCHAR, Min(CollectedDateTime), 103) + ' ' + convert(NVARCHAR, Cast(Min(CollectedDateTime) AS TIME), 0)
+END, convert(NVARCHAR, Min(ModifiedAt), 103) + ' ' + convert(NVARCHAR, Cast(Min(ModifiedAt) AS TIME), 0))
+FROM PatientInvSample WITH (NOLOCK)
+WHERE PatientVisitID = @ParentVisitID
+) AS CollectedOn
+,
+--(SELECT ISNULL(MIN(CollectedDateTime),MIN(ModifiedAt)) FROM PatientInvSample WITH (NOLOCK) WHERE PatientVisitID = @ParentVisitID ) AS CollectedOn,                  
+(
+SELECT Max(ApprovedAt)
+FROM PatientInvestigation(NOLOCK)
+WHERE PatientVisitID = @pVisitID
+) AS ReportedOn
+,convert(NVARCHAR, dbo.fn_GetServerDateWithOutContext(@OrgID, 0), 100) AS PrintedOn
+,CASE 
+WHEN ISNULL(PA.LandLineNumber, '') <> ''
+AND PA.LandLineNumber <> '0'
+THEN PA.LandLineNumber
+ELSE CASE 
+WHEN ISNULL(PA.MobileNumber, '') <> ''
+AND PA.MobileNumber <> '0'
+THEN PA.MobileNumber
+ELSE ''
+END
+END AS ContactNo
+,CM.ClientName
+,ISNULL(PH.DetailHistory, '') AS DetailHistory
+,ISNULL((pv.HospitalName), '') AS HospitalName
+,OI.Patient_HISTID
+,p.ExternalPatientNumber
+,(
+SELECT convert(NVARCHAR, P.DOB, 103)
+) AS DOB
+,(
+SELECT Max(ApprovedAt)
+FROM PatientInvestigation WITH (NOLOCK)
+WHERE PatientVisitID = @pVisitID
+) AS ApprovedAt
+,p.NAME AS NAME
+,
+--p.PatientNumber as PatientNumber,     
+p.PatientNumber + ' ' + CASE 
+WHEN isnull('(' + isnull(p.ExternalPatientNumber, '') + ')', '') = '()'
+THEN ''
+ELSE '(' + isnull(p.ExternalPatientNumber, '') + ')'
+END AS PatientNumber
+,CA.Address1 AS Address
+,' Zone: ' + ISNULL(ll.Code, ll.Locality_Value) AS ZoneAddress
+,CA.PostalCode AS PostalCode
+,
+--CASE WHEN LEN(PA.add1)<=50 THEN PA.add1 ELSE convert(varchar(50),PA.Add1)+'....' End  as PatientAddress,                        
+PA.add1 + ' ' + PA.Add2 + ' ' + PA.City AS PatientAddress
+,
+--'' as PatientAddress,                             
+PA.PostalCode AS PatientPostalcode
+,isnull(CAD.attrubuteCode, 'ISTrust') AS attrubuteCode
+,@ClientCode AS ClientCode
+,(
+SELECT --convert(NVARCHAR, MAX(Createdat), 103)      
+convert(NVARCHAR, Max(Createdat), 103) + ' ' + convert(NVARCHAR, Cast(Max(Createdat) AS TIME), 0)
+FROM SampleTracker WITH (NOLOCK)
+WHERE PatientVisitID = @ParentVisitID
+AND invsamplestatusid = 3
+)
+,PV.WardNo
+,OI.samplepickupdate 
+,isnull(@pClientHeaderLogo,isnull(CM.HeaderLogo,'')) as ClientHeaderLogo
+FROM PatientVisit pv WITH (NOLOCK)
+INNER JOIN Patient p WITH (NOLOCK) ON p.PatientID = pv.PatientID
+INNER JOIN Salutation s WITH (NOLOCK) ON s.TitleID = p.TITLECode
+INNER JOIN PatientAddress PA WITH (NOLOCK) ON PA.PatientID = P.PatientID
+LEFT JOIN VisitClientMapping VCM(NOLOCK) ON VCM.VisitID = PV.PatientVisitId
+AND VCM.OrgID = PV.OrgID
+LEFT JOIN ClientMaster CM(NOLOCK) ON CM.ClientID = VCM.ClientID
+AND CM.OrgID = VCM.OrgID
+LEFT JOIN #Clientstationary CAD(NOLOCK) ON CAD.ClientID = VCM.ClientID
+LEFT JOIN AddressDetails CA(NOLOCK) ON CA.ReferenceID = VCM.ClientID
+AND ISNULL(CA.Address1, '') <> ''
+AND CA.IsCommunication = 'Y'
+LEFT JOIN Localities ll(NOLOCK) ON ll.Locality_ID = CM.ZonalID
+AND ll.Type = 'Zone'
+LEFT JOIN PatientHistoryExt PH(NOLOCK) ON PH.PatientID = p.PatientID
+AND PH.PatientVisitId = pv.PatientVisitId
+AND PH.OrgID = pv.OrgID
+LEFT JOIN OrderedInvestigations OI WITH (NOLOCK) ON OI.VisitID = pv.PatientVisitId
+AND OI.OrgID = PV.OrgID
+WHERE pv.PatientVisitId = @pVisitID
+AND pv.OrgID = @OrgID
+AND ISNULL(ISactive, 'Y') = 'Y'
+ORDER BY OI.Patient_HISTID DESC
+IF (
+@pReferVisitID IS NOT NULL
+AND @pReferVisitID <> ''
+)
+BEGIN
+UPDATE TM
+SET TM.ClientName = ISNULL(@pClientName, TM.ClientName)
+,TM.Address = ISNULL(@pClientAddress, TM.Address)
+,TM.ZoneAddress = ISNULL(@pZoneAddress, TM.ZoneAddress)
+,TM.PostalCode = ISNULL(@pPostalCode, TM.PostalCode)
+,TM.ReferingPhysicianName = ISNULL(@RefPhyName, TM.ReferingPhysicianName)
+FROM @TempDemography TM
+END
+SELECT PatientName
+,VisitDate
+,Sex
+,VisitNo
+,ExternalVisitID
+,PatientVisitId
+,VisitType
+,Age
+,ReferingPhysicianName
+,PatientID
+,ConstultantName
+,CollectedOn
+,ReportedOn
+,PrintedOn
+,ContactNo
+,ClientName
+,DetailHistory
+,HospitalName
+,Patient_HISTID
+,ExternalPatientNumber
+,DOB
+,ApprovedAt
+,NAME
+,PatientNumber
+,Address
+,ZoneAddress
+,PostalCode
+,PatientAddress
+,PatientPostalcode
+,AttrubuteCode
+,ClientCode
+,SampleReceiveDate
+,[Weight]
+,SamplePickupTime
+,isnull(ClientHeaderLogo,'') as ClientHeaderLogo
+FROM @TempDemography
+END
+END

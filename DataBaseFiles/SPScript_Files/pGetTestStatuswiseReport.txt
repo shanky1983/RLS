@@ -1,0 +1,61 @@
+Create procedure pGetTestStatuswiseReport
+(
+ @pFDate [datetime]
+,@pTDate [datetime]
+,@pOrgId [int]
+,@Pparamtype VARCHAR(100)
+,@Pparamvalue VARCHAR(100)
+,@pExcelReportId [INT] = NULL
+,@pExcelReportName VARCHAR(255) = NULL
+,@pToExecute VARCHAR(10) = NULL
+)
+As
+Begin
+
+SET NOCOUNT ON
+SELECT @pFDate = @pFDate + ' 00:00:00'
+SELECT @pTDate = @pTDate + ' 23:59:59'
+declare @pLocationID [bigint] =null
+IF (@pLocationId = - 1)
+BEGIN
+SET @pLocationId = NULL
+END
+DECLARE @IsExternalVisit NVARCHAR(40)
+SELECT @IsExternalVisit = COm.ConfigValue
+FROM ConfigOrgMaster COM WITH (NOLOCK)
+INNER JOIN ConfigKeyMaster CKM WITH (NOLOCK) ON COM.ConfigKeyID = CKM.ConfigKeyID
+WHERE CKM.ConfigKey = 'ExternalVisitSearch'
+AND COM.OrgID = @pOrgID
+DECLARE @tblVisitID TABLE (
+VisitID BIGINT
+,AccessionNumber BIGINT
+)
+INSERT INTO @tblVisitID
+SELECT pv.PatientVisitId
+,oi.AccessionNumber
+FROM PatientVisit pv WITH (NOLOCK)
+INNER JOIN Misorderedinvestigations oi WITH (NOLOCK) ON PV.PatientVisitid = OI.Visitid --and PV.orgid=OI.Orgid
+WHERE pv.Createdat BETWEEN @pFDate AND @pTDate
+--AND PV.VISITNUMBER ='181000192820'
+AND EXISTS (
+SELECT 1
+FROM PatientInvestigation PI WITH (NOLOCK)
+WHERE oi.AccessionNumber = pi.AccessionNumber 
+AND PI.Createdat BETWEEN @pFDate AND @pTDate
+)
+AND pv.orgid = @pOrgID
+
+Select Distinct Pv.CreatedAt As RegisterationDate,P.Name As PatientName,Pv.VisitNumber As PatientVisitID,P.Age+'/'+P.Sex As [Age/Sex]
+,PINV.BarcodeNumber As Barcode,PINV.ExternalBarcode,CM.ClientCode,CM.ClientName,Piv.Status As SampleStatusTestWise
+FROM  @tblVisitID tmp 
+INNER JOIN PatientVisit PV WITH (NOLOCK) ON tmp.visitid = PV.PatientVisitId
+INNER JOIN Patient P WITH (NOLOCK) ON PV.PatientID = P.PatientID and P.orgid=PV.orgid
+INNER JOIN Misorderedinvestigations ORD WITH (NOLOCK) ON ord.AccessionNumber = tmp.AccessionNumber 
+INNER JOIN PatientInvSampleMapping PIS WITH (NOLOCK) ON PIS.ID = ORD.ID AND PIS.VisitID = PV.PatientVisitId AND PIS.Type = ORD.Type
+INNER JOIN PatientInvSample PINV WITH (NOLOCK) ON PINV.SampleID = PIS.SID --AND PINV.PatientVisitID = PV.patientVisitid AND PINV.OrgID = PV.orgid 
+INNER JOIN PatientInvestigation PIV WITH (NOLOCK) ON PIV.accessionnumber = ORD.accessionnumber
+INNER JOIN Visitclientmapping VCM(NOLOCK) ON VCM.VisitID = PV.PatientVisitId and VCM.OrgID = PV.OrgID 
+INNER JOIN Clientmaster CM(NOLOCK) ON CM.Clientid = VCM.clientid and VCM.OrgID = CM.OrgID 
+Where P.orgid IN (@pOrgId)
+Group By Pv.CreatedAt,P.Name,Pv.VisitNumber,P.Age,P.Sex,PINV.BarcodeNumber,PINV.ExternalBarcode,CM.ClientCode,CM.ClientName,Piv.Status
+End

@@ -1,0 +1,47 @@
+ 
+CREATE PROCEDURE [dbo].[pGetConfigHCDetails]    
+ @pOrgCode [nvarchar](100),    
+ @pConfigKey [nvarchar](50)   
+
+ 
+WITH EXECUTE AS OWNER    
+AS    
+BEGIN 
+DECLARE  @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50),	@SearchText NVARCHAR(50) ,	@VendorID bigint
+
+IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+   BEGIN
+	  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, @VendorID=VOM.VendorID,
+	         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+		FROM Integrationtypemaster ITM WITH(NOLOCK) 
+			INNER JOIN VendorOrgMapping VOM  WITH(NOLOCK) ON ITM.IntegrationTypeID = VOM.VendorID
+			INNER JOIN vendorOrgAddressMapping VOA WITH(NOLOCK)  ON VOA.VendorID = VOM.VendorID
+		WHERE ITM.IntegrationTypeName = @pOrgCode
+	END
+
+DECLARE @ConfigKeyID BIGINT     
+IF(@pConfigKey ='')  
+BEGIN  
+SELECT DISTINCT B.OrgID, A.ConfigKey, B.ConfigValue     
+ FROM ConfigKeyMaster A INNER JOIN  ConfigOrgMaster B    ON A.ConfigKeyID = B.ConfigKeyID     
+ WHERE B.OrgID=@pOrgID  
+END     
+ ELSE  
+ BEGIN  
+  
+ SELECT @ConfigKeyID=ConfigKeyID FROM ConfigKeyMaster WHERE ConfigKey=@pConfigKey     
+ SELECT ConfigValue FROM ConfigOrgMaster WHERE ConfigKeyID=@ConfigKeyID and OrgID=@pOrgID      
+     
+ END 
+ 
+END 
+
+
+
+
+
+
+
+
+
+ 

@@ -1,0 +1,990 @@
+
+
+CREATE PROCEDURE [dbo].[pGetDrawPatternInvBulkDataSingleScreen] @guid         [NVARCHAR](255),
+                                                    @pVisitId     [BIGINT],
+                                                    @orgID        [INT],
+                                                    @returnStatus [INT],
+                                                    @pInv         [dbo].[UDTINVPACKAGEMAPPING] READONLY,
+                                                    @ContextInfo  [UDT_CONTEXT] READONLY,
+                                                    @status       NVARCHAR(50)
+WITH EXECUTE AS OWNER
+AS
+BEGIN
+	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED   
+	SET NOCOUNT ON; 
+BEGIN TRY
+  DECLARE @EMsg nvarchar(4000),@ELine int,@Eproc nvarchar(128),@ESEVERITY int,@sptrace varchar(8000)
+   
+    SET @returnStatus=-1
+
+    DECLARE @ReflexOrder AS TABLE
+      (
+         VisitID             BIGINT,
+         ID                  BIGINT,
+         Type                NVARCHAR(20),
+         Status              NVARCHAR(50),
+         AccessionNumber     BIGINT,
+         OrgID               INT,
+         ReferralID          BIGINT,
+         UID                 NVARCHAR(255),
+         ReferredAccessionNo BIGINT,
+         ReferredType        NVARCHAR(50)
+      )
+
+    INSERT INTO @ReflexOrder
+                (VisitID,ID,Type,Status,AccessionNumber,OrgID,ReferralID,UID,ReferredAccessionNo,ReferredType)
+    SELECT VisitID,
+           ID,
+           Type,
+           Status,
+           AccessionNumber,
+           OrgID,
+           ReferralID,
+           UID,
+           ReferredAccessionNo,
+           ReferredType
+    FROM   OrderedInvestigations 
+    WHERE  VisitID = @pVisitID
+           AND OrgID = @OrgID
+           AND UID = @guid
+           AND ReferredType = 'ReflexTest'
+
+    DECLARE @TempInvStatus TABLE
+      (
+         status                NVARCHAR(100),
+         DisplayText           NVARCHAR(255),
+         InvestigationStatusID INT
+      )
+    DECLARE @InvestigationOrgMapping TABLE
+      (
+         InvestigationID    BIGINT,
+         ReferenceRange     NVARCHAR(max),
+         AutoApproveLoginID BIGINT,
+         PanicRange         NVARCHAR(max)
+      )
+    DECLARE @LangCode AS NVARCHAR(80);
+
+    SELECT @LangCode = languageCode
+    FROM   @ContextInfo
+    DECLARE @RoleName AS NVARCHAR(50);  
+  
+    SELECT @RoleName = RoleName  
+    FROM   @ContextInfo  
+
+    IF NOT EXISTS(SELECT 1
+                  FROM   InvestigationStatus 
+                  WHERE  Orgid = @OrgID)
+      BEGIN
+
+          INSERT INTO @TempInvStatus
+                      (status,DisplayText,InvestigationStatusID)
+          SELECT Invsts.Status,
+                 invsts.DisplayText,
+                 invsts.InvestigationStatusID
+          FROM   InvestigationStatus Invsts 
+                 INNER JOIN InvStatusOrgMapping Isom 
+                         ON Isom.InvestigationStatusId = Invsts.InvestigationStatusId
+                            and isom.Orgid = @orgID
+                            AND Isom.Langcode = (SELECT LanguageCode
+                                                 FROM   @ContextInfo)
+          WHERE  Invsts.Orgid IS NULL
+      END
+    ELSE
+      BEGIN
+          INSERT INTO @TempInvStatus
+                      (status,DisplayText,InvestigationStatusID)
+          SELECT Invsts.Status,
+                 invsts.DisplayText,
+                 invsts.InvestigationStatusID
+          FROM   InvestigationStatus Invsts 
+                 INNER JOIN InvStatusOrgMapping Isom 
+                         ON Isom.InvestigationStatusId = Invsts.InvestigationStatusId
+                            and isom.Orgid = @orgID
+                            AND Isom.Langcode = (SELECT LanguageCode
+                                                 FROM   @ContextInfo)
+          WHERE  Invsts.Orgid = @OrgID
+      END
+
+    SELECT DISTINCT I.InvestigationID,
+                    I.NAME              as Name,
+                    Value                    AS Value,
+                    I.InvestigationMethodID  AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '') AS GroupName,
+                    -1                       AS GroupID,
+                    Isnull(I.Seqno, 0)       AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           Inner join patientinvestigation PIV 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+           INNER JOIN @pInv P
+                   ON piv.InvestigationID = P.ID
+           INNER JOIN PatternMapping PM 
+                   ON PM.InvestigationID = PIV.InvestigationID
+                      and PM.orgid = @orgid
+           Inner join InvestigationBulkData I 
+                   ON I.Investigationid = P.ID
+    WHERE  ord.VisitID = @pVisitId
+           and P.ID != 0
+           AND Isnull(I.Type, '') = ''
+           AND ( PIV.Status IN( 'SampleReceived' )
+                  OR PM.PatternID IN ( 2, 3, 55, 43,
+                                       44, 42, 21 ,66) )
+           AND ORD.UID = @guid
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID
+           AND isnull(I.IsStatus, 0) <> 1
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                     as Name,
+                    I.Value                    AS Value,
+                    I.InvestigationMethodID    AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')   AS GroupName,
+                    CONVERT(INT, IBDM.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)         AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   InvestigationBulkDataMapping IBDM 
+           INNER JOIN @pInv P
+                   ON IBDM.InvestigationID = P.ID
+                      AND IBDM.GroupID = P.PackageID
+           INNER JOIN patientinvestigation PIV 
+                   ON Piv.Patientvisitid = @pVisitId
+                      and P.id = PIV.Investigationid
+           INNER JOIN Orderedinvestigations ORd 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+           INNER JOIN investigationbulkdata I 
+                   ON IBDM.ResultID = I.ResultID
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'DV'
+           AND PIV.Status IN( 'SampleReceived' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                        as Name,
+                    ISNULL(HSD.ClinicalNotes, '') Value,
+                    I.InvestigationMethodID       AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')      AS GroupName,
+                    CONVERT(INT, IBDM.GroupID)    AS GroupID,
+                    Isnull(I.Seqno, 0)            AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           inner join HistoSpecimenDetails HSD 
+                   ON HSD.PatientVisitId = ORd.VisitID
+                      AND ORd.ID = HSD.ID
+                      AND ORD.TYPE = HSD.TYPE
+                      AND HSD.PatientVisitId = @pVisitId
+           INNER JOIN InvGroupMaster IGM 
+                   ON IGM.GroupID = HSD.ID
+                      AND IGM.Type = HSD.Type
+           INNER JOIN InvOrgGroup IOG 
+                   ON IGM.GroupID = IOG.AttGroupID
+                      AND IOG.OrgID = @orgID
+           INNER JOIN InvestigationBulkDatamapping IBDM 
+                   ON IBDM.GroupID = IOG.OrgGroupID
+           INNER JOIN investigationbulkdata I 
+                   ON I.ResultID = IBDM.ResultID
+                      and I.Investigationid = IBDM.InvestigationID
+           INNER JOIN @pInv P
+                   on P.ID = IBDM.Investigationid
+                      and p.PackageID = IBDM.GroupID
+           INNER JOIN patientinvestigation PIV 
+                   ON ord.VisitID = Piv.Patientvisitid
+                      and Piv.Patientvisitid = @pVisitId
+           inner join PatientVisit PV 
+                   ON PV.PatientVisitId = PIV.PatientVisitID
+                      AND PV.PatientVisitId = @pVisitId
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'HCD'
+           AND PIV.Status IN( 'SampleReceived', 'Pending' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                            as Name,
+                    ISNULL(HSD.ClinicalDiagnosis, '') Value,
+                    I.InvestigationMethodID           AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')          AS GroupName,
+                    CONVERT(INT, IBDM.GroupID)        AS GroupID,
+                    Isnull(I.Seqno, 0)                AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           inner join HistoSpecimenDetails HSD 
+                   ON HSD.PatientVisitId = ORd.VisitID
+                      AND ORd.ID = HSD.ID
+                      AND ORD.TYPE = HSD.TYPE
+                      AND HSD.PatientVisitId = @pVisitId
+           INNER JOIN InvGroupMaster IGM 
+                   ON IGM.GroupID = HSD.ID
+                      AND IGM.Type = HSD.Type
+           INNER JOIN InvOrgGroup IOG 
+                   ON IGM.GroupID = IOG.AttGroupID
+                      AND IOG.OrgID = @orgID
+           INNER JOIN InvestigationBulkDatamapping IBDM 
+                   ON IBDM.GroupID = IOG.OrgGroupID
+           INNER JOIN investigationbulkdata I 
+                   ON I.ResultID = IBDM.ResultID
+                      and I.Investigationid = IBDM.InvestigationID
+           INNER JOIN @pInv P
+                   on P.ID = IBDM.Investigationid
+                      and p.PackageID = IBDM.GroupID
+           INNER JOIN patientinvestigation PIV 
+                   ON ord.VisitID = Piv.Patientvisitid
+                      and Piv.Patientvisitid = @pVisitId
+           inner join PatientVisit PV 
+                   ON PV.PatientVisitId = PIV.PatientVisitID
+                      AND PV.PatientVisitId = @pVisitId
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'HDS'
+           AND PIV.Status IN( 'SampleReceived', 'Pending' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                              as Name,
+                    STUFF((SELECT distinct ',' + HPD.SampleName + '-' + T1.BarcodeNumber + '-'
+                                           + isnull(T1.TissueType, '')
+                           FROM   PatientInvSample T1
+                                  INNER JOIN HistoSpecimenDetails HPD 
+                                          ON T1.PatientVisitID = HPD.PatientVisitID
+                                  inner join patientinvsamplemapping PISAM
+                                          ON PISAM.VisitID = T1.PatientVisitID
+                                             AND PISAM.Barcode = T1.BarcodeNumber
+                                             AND PISAM.ID = ORD.ID
+                                             AND PISAM.Type = ORD.Type
+                                             and HPD.SampleID = T1.SampleCode
+                                             and ORd.ID = HPD.ID
+                                             AND ORD.TYPE = HPD.TYPE
+                           WHERE  T1.PatientVisitID = @pVisitId
+                           FOR XML PATH('')), 1, 1, '') AS Value,
+                    I.InvestigationMethodID             AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')            AS GroupName,
+                    CONVERT(INT, IBDM.GroupID)          AS GroupID,
+                    Isnull(I.Seqno, 0)                  AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           inner join HistoSpecimenDetails HSD 
+    ON HSD.PatientVisitId = ORd.VisitID
+                      AND ORd.ID = HSD.ID
+                      AND ORD.TYPE = HSD.TYPE
+                      AND HSD.PatientVisitId = @pVisitId
+           INNER JOIN PatientInvSample PIS
+                   ON PIS.PatientVisitID = HSD.PatientVisitID
+                      AND PIS.SampleCode = HSD.SampleID
+                      AND PIS.PatientVisitId = @pVisitId
+           INNER JOIN InvGroupMaster IGM 
+                   ON IGM.GroupID = HSD.ID
+                      AND IGM.Type = HSD.Type
+           INNER JOIN InvOrgGroup IOG 
+                   ON IGM.GroupID = IOG.AttGroupID
+                      AND IOG.OrgID = @orgID
+           INNER JOIN InvestigationBulkDatamapping IBDM 
+                   ON IBDM.GroupID = IOG.OrgGroupID
+           INNER JOIN investigationbulkdata I 
+                   ON I.ResultID = IBDM.ResultID
+                      and I.Investigationid = IBDM.InvestigationID
+           INNER JOIN @pInv P
+                   on P.ID = IBDM.Investigationid
+                      and p.PackageID = IBDM.GroupID
+           INNER JOIN patientinvestigation PIV 
+                   ON ord.VisitID = Piv.Patientvisitid
+                      and Piv.Patientvisitid = @pVisitId
+           inner join PatientVisit PV 
+                   ON PV.PatientVisitId = PIV.PatientVisitID
+                      AND PV.PatientVisitId = @pVisitId
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'HSP'
+           AND PIV.Status IN( 'SampleReceived', 'Pending' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                     as Name,
+                    --CASE WHEN  I.Name='Histopathology NO.' THEN ISNULL(PV.HistoNumber,'')
+                    --WHEN  I.Name='Clinical Details' THEN ISNULL(HSD.ClinicalNotes,'')
+                    --WHEN I.Name='Diagnosis' THEN ISNULL(HSD.ClinicalDiagnosis,'') ELSE I.Value END   AS Value,
+                    ISNULL(PV.HistoNumber, '') Value,
+                    I.InvestigationMethodID    AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')   AS GroupName,
+                    CONVERT(INT, IBDM.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)         AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           inner join HistoSpecimenDetails HSD 
+                   ON HSD.PatientVisitId = ORd.VisitID
+                      AND ORd.ID = HSD.ID
+                      AND ORD.TYPE = HSD.TYPE
+                      AND HSD.PatientVisitId = @pVisitId
+           INNER JOIN InvGroupMaster IGM 
+                   ON IGM.GroupID = HSD.ID
+                      AND IGM.Type = HSD.Type
+           INNER JOIN InvOrgGroup IOG 
+                   ON IGM.GroupID = IOG.AttGroupID
+                      AND IOG.OrgID = @orgID
+           INNER JOIN InvestigationBulkDatamapping IBDM 
+                   ON IBDM.GroupID = IOG.OrgGroupID
+           INNER JOIN investigationbulkdata I 
+                   ON I.ResultID = IBDM.ResultID
+                      and I.Investigationid = IBDM.InvestigationID
+           INNER JOIN @pInv P
+                   on P.ID = IBDM.Investigationid
+                      and p.PackageID = IBDM.GroupID
+           INNER JOIN patientinvestigation PIV 
+                   ON ord.VisitID = Piv.Patientvisitid
+                      and Piv.Patientvisitid = @pVisitId
+           inner join PatientVisit PV 
+                   ON PV.PatientVisitId = PIV.PatientVisitID
+                      AND PV.PatientVisitId = @pVisitId
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'HNUM'
+           AND PIV.Status IN( 'SampleReceived', 'Pending' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID
+    UNION ALL
+    SELECT DISTINCT I.Investigationid,
+                    I.NAME                    as Name,
+  ISMM.SampleDesc,
+                    I.InvestigationMethodID   AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')  AS GroupName,
+                    CONVERT(INT, PIV.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)        AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   Orderedinvestigations ORd 
+           Inner join patientinvestigation PIV 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+           INNER JOIN @pInv P
+                   ON piv.Groupid = P.PackageID
+                      AND piv.InvestigationID = P.ID
+                      AND Piv.Patientvisitid = @pVisitId
+           INNER JOIN investigationbulkdata I 
+                   ON p.ID = I.InvestigationID
+           INNER JOIN PatientInvSampleMapping IMS 
+                   ON IMS.ID = Ord.ID
+                      AND IMS.VisitID = @pVisitId
+           INNER JOIN InvSampleMaster ISMM 
+                   ON ISMM.SampleCode = IMS.sampleId
+           INNER JOIN PatternMapping PM 
+                   ON PM.InvestigationID = PIV.InvestigationID
+    WHERE  ord.VisitID = @pVisitId
+           and P.ID != 0
+           AND Isnull(I.Type, '') = 'Sample'
+           AND ( PIV.Status IN( 'SampleReceived' )
+                  OR PM.PatternID IN ( 2, 3, 55, 43,
+                                       42, 44, 21,66 ) )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                     as Name,
+                    IMS.InstrumentName         AS Value,
+                    I.InvestigationMethodID    AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')   AS GroupName,
+                    CONVERT(INT, IBDM.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)         AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   InvestigationBulkDataMapping IBDM 
+           INNER JOIN @pInv P
+                   ON IBDM.InvestigationID = P.ID
+                      AND IBDM.GroupID = P.PackageID
+           INNER JOIN patientinvestigation PIV 
+                   ON piv.InvestigationID = P.ID
+                      AND Piv.Patientvisitid = @pVisitId
+           INNER JOIN Orderedinvestigations ORd 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+                      AND ord.VisitID = @pVisitId
+           INNER JOIN investigationbulkdata I 
+                   ON IBDM.ResultID = I.ResultID
+           INNER JOIN InvInstrumentmaster IMS 
+                   ON IMS.InstrumentID = I.Value
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'Device'
+           AND PIV.Status IN( 'SampleReceived' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT DISTINCT I.InvestigationID,
+                    i.NAME                   as Name,
+                    PHA.AttributeValueName   AS Value,
+                    I.InvestigationMethodID  AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '') AS GroupName,
+                    0                        AS GroupID,
+                    Isnull(I.Seqno, 0)       AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   @pInv P
+           INNER JOIN PatientInvestigation PIV 
+                   ON piv.InvestigationID = P.ID
+                      AND Piv.Patientvisitid = @pVisitId
+           INNER JOIN OrderedInvestigations ORd 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+                      AND ord.VisitID = @pVisitId
+           INNER JOIN InvestigationBulkData I 
+                   ON P.ID = I.InvestigationID
+   INNER JOIN PatientHistoryAttribute PHA 
+                   ON PHA.PatientVisitID = @pVisitId
+                      AND PHA.HistoryID = I.Value
+    WHERE  P.ID != 0
+           AND P.PackageID = 0
+           AND Isnull(I.Type, '') = 'History'
+           AND I.NAME IN ( 'LMP', 'Volume', 'DynamicHistory' )
+           AND PIV.Status IN( 'SampleReceived' )
+       AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                     as Name,
+                    PHA.AttributeValueName     AS Value,
+                    I.InvestigationMethodID    AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')   AS GroupName,
+                    CONVERT(INT, IBDM.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)         AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   InvestigationBulkDataMapping IBDM 
+           INNER JOIN @pInv P
+                   ON IBDM.InvestigationID = P.ID
+                      AND IBDM.GroupID = P.PackageID
+           INNER JOIN PatientInvestigation PIV 
+                   ON piv.InvestigationID = P.ID
+                      AND Piv.Patientvisitid = @pVisitId
+           INNER JOIN OrderedInvestigations ORd 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+                      AND ord.VisitID = @pVisitId
+           INNER JOIN InvestigationBulkData I 
+                   ON IBDM.ResultID = I.ResultID
+           INNER JOIN PatientHistoryAttribute PHA 
+                   ON PHA.PatientVisitID = @pVisitId
+                      AND PHA.HistoryID = I.Value
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'History'
+           AND I.NAME IN ( 'LMP', 'Volume', 'DynamicHistory' )
+           AND PIV.Status IN( 'SampleReceived' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT DISTINCT IBDM.InvestigationID,
+                    i.NAME                     as Name,
+                    CASE
+                      WHEN IBDM.InvestigationID IS NOT NULL THEN
+                        CASE
+                          WHEN Datediff(Day, Cast(PHA.AttributeValueName AS DATE), PIS.CollectedDateTime) >= 7 THEN Cast(
+                                                                                                                    --cast(                                                    
+                                                                                                                    --ROUND(                                                    
+                                                                                                                    CONVERT(DECIMAL(5, 1), (Datediff(Day, Cast(PHA.AttributeValueName AS DATE), PIS.CollectedDateTime )/CONVERT(DECIMAL(5, 2), 7.0)))
+                                                                                                                    --,0)                                           
+                                                                                                                    --as int)                                                     
+                                                                                                                    AS NVARCHAR)
+                                                                                                                    + ' week(s)'
+                          ELSE Cast((Datediff(Day, Cast(PHA.AttributeValueName AS DATE), PIS.CollectedDateTime )) AS NVARCHAR)
+                               + ' day(s)'
+                        END
+                      ELSE ''
+                    END                        AS Value,
+                    I.InvestigationMethodID    AS InvestigationValueID,
+                    Isnull(AbnormalFlag, '')   AS GroupName,
+                    CONVERT(INT, IBDM.GroupID) AS GroupID,
+                    Isnull(I.Seqno, 0)         AS SequenceNo
+					,cast(I.Id as bigint) as PatientInvID
+    FROM   InvestigationBulkDataMapping IBDM 
+           INNER JOIN @pInv P
+                   ON IBDM.InvestigationID = P.ID
+                      AND IBDM.GroupID = P.PackageID
+           INNER JOIN PatientInvestigation PIV 
+                   ON piv.InvestigationID = P.ID
+                      AND Piv.Patientvisitid = @pVisitId
+           INNER JOIN OrderedInvestigations ORd 
+                   ON ord.AccessionNumber = Piv.AccessionNumber
+                      AND ord.VisitID = @pVisitId
+           INNER JOIN InvestigationBulkData I 
+                   ON IBDM.ResultID = I.ResultID
+           INNER JOIN PatientHistoryAttribute PHA 
+                   ON PHA.PatientVisitID = @pVisitId
+                      AND PHA.HistoryID = I.Value
+           INNER JOIN PatientInvSampleMapping PISM 
+                   ON PISM.ID = ORD.ID
+                      AND PISM.Type = Ord.Type
+                      AND PISM.VisitID = ORD.VisitID
+           INNER JOIN PatientInvSample PIS 
+                   ON PIS.SampleID = PISM.SID
+    WHERE  P.ID != 0
+           AND Isnull(I.Type, '') = 'History'
+           AND Isnull(I.NAME, '') = 'LMPAge'
+           AND PIV.Status IN( 'SampleReceived' )
+           AND Isnull(I.LangCode, 'en-GB') = @LangCode
+           AND I.orgid = @orgID --New
+    UNION ALL
+    SELECT 0                                   AS InvestigationID,
+           'Y'                                 AS NAME,
+           ''                                  AS AttributeValueName,
+           0                                   AS InvestigationValueID,
+           Stuff((SELECT ',' + DetailHistory
+                  FROM   PatientHistoryExt P 
+                  WHERE  P.PatientVisitId = @pVisitId
+                         AND P.OrgID = @orgID
+                  ORDER  BY [historyextID]
+                  FOR XML PATH('')), 1, 1, '') AS GroupName,
+           0                                   AS GroupID,
+           0                                   AS SequenceNo
+		   ,0 as PatientInvID
+    ORDER  BY SequenceNo ASC
+
+    --WHERE InvestigationID=@pID                                                                                                               
+    IF( @status <> 'Approve' )
+      BEGIN
+          DECLARE @ptmpInvestigationValues AS TABLE
+            (
+               NAME                    NVARCHAR(500),
+               Value                   NVARCHAR(Max),
+               UOMCode                 NVARCHAR(50),
+               PerformingPhysicainName NVARCHAR(500),
+               ApprovedBy              BIGINT,
+               Reason                  NVARCHAR(250),
+               PackageName             NVARCHAR(50),
+               AccessionNumber         BIGINT,
+               Dilution                NVARCHAR(Max),
+               MedicalRemarks          NVARCHAR(MAX),
+               InvestigationID         BIGINT,
+               DeviceID                NVARCHAR(50),
+               DeviceValue             NVARCHAR(Max),
+               DeviceActualValue       NVARCHAR(Max),
+               ReferredType            NVARCHAR(Max),
+               GroupID                 INT,
+               ErrorDescription        NVARCHAR(10),
+               DeviceErrorCode         NVARCHAR(10)
+            )
+
+          INSERT INTO @ptmpInvestigationValues
+                      (NAME,Value,UOMCode,PerformingPhysicainName,ApprovedBy,Reason,PackageName,AccessionNumber,Dilution,MedicalRemarks,InvestigationID,DeviceID,DeviceValue,DeviceActualValue,ReferredType,GroupID,ErrorDescription,DeviceErrorCode)
+          SELECT DISTINCT NAME,
+                          CASE
+                            WHEN Isnull(PIV.statustype, '') = 'RC' THEN ''
+                            ELSE Value
+                          END            AS Value,
+                          UOMCode,
+                 PIV.PerformingPhysicainName,
+                          PIV.ApprovedBy,
+                          PIV.Reason,
+                          PIV.IsAbnormal AS PackageName,
+                          PIV.AccessionNumber,
+                          IV.Dilution,
+                          PIV.MedicalRemarks,
+                          IV.InvestigationID,
+                          IV.DeviceID,
+                          IV.DeviceValue,
+ IV.DeviceActualValue,
+                          '',
+                          PIV.GroupID,
+                          CASE
+                            WHEN IV.DeviceID = '' THEN 'N'
+                            ELSE
+                              CASE
+                                WHEN iv.DeviceID = dv.DeviceCode THEN 'Y'
+                                ELSE 'N'
+                              END
+                          END            AS ErrorDescription,
+                          DeviceErrorCode
+          FROM   InvestigationValues IV 
+                 INNER JOIN PatientInvestigation PIV 
+                         ON PIV.PatientVisitID = IV.PatientVisitID
+                            AND IV.GroupID = PIV.GroupID
+                            AND IV.UID = PIV.UID
+                            AND PIV.InvestigationID = IV.InvestigationID
+                            AND PIV.OrgID = IV.Orgid
+                 INNER JOIN @pInv P
+                         ON PIV.InvestigationID = P.ID
+                            AND PIV.GroupID = P.PackageID
+                            AND PIV.InvestigationID = IV.InvestigationID
+LEFT JOIN DeviceErrorFlag DV    
+                        ON DV.DeviceCode = IV.DeviceID
+                           AND DV.ErrorCode = iv.DeviceErrorCode
+          WHERE  PIV.PatientVisitID = @pVisitId
+                 AND IV.Orgid = @orgID
+                 AND PIV.Status IN( 'SampleReceived', 'Pending', 'Completed', 'Reject','Validate',
+                                    'PartiallyApproved', 'With-hold Completion', 'Reflexwithnewsample', 'Reflexwithsamesample', 'Revalidate' )
+                 AND PIV.UID = @guid
+                 AND Isnull(PIV.statustype, '') <> 'RC'
+                 AND Isnull(IV.statustype, '') <> 'RC'
+                 AND Isnull(PIV.statustype, '') <> 'RR'
+                 AND Isnull(IV.statustype, '') <> 'RR'
+                 AND PIV.UID = IV.UID
+
+          SELECT NAME as Name,
+                 Value,
+                 UOMCode,
+                 PerformingPhysicainName,
+                 ApprovedBy,
+                 Reason,
+                 PackageName,
+                 AccessionNumber,
+                 Dilution,
+                 MedicalRemarks,
+                 InvestigationID,
+                 DeviceID,
+                 DeviceValue,
+                 DeviceActualValue,
+                 ReferredType,
+                 GroupID,
+                 CASE
+                   WHEN CM.DeviceID = '' THEN 'N'
+                   ELSE
+                     CASE
+                       WHEN CM.DeviceID = dv.DeviceCode THEN 'Y'
+                       ELSE 'N'
+                     END
+                 END  AS ErrorDescription,
+                 DeviceErrorCode
+          FROM   @ptmpInvestigationValues CM
+LEFT JOIN DeviceErrorFlag DV    
+                        ON DV.DeviceCode = CM.DeviceID
+                           AND DV.ErrorCode = CM.DeviceErrorCode
+		  /* BEGIN | NA | Sabari | 17072019 | Created | LabTechPhysicianUsers */
+		  DECLARE @ConfigReportonHold NVARCHAR(MAX);
+		  
+		  SET @ConfigReportonHold = (
+		  SELECT com.ConfigValue
+		  FROM ConfigKeyMaster ckm
+		  INNER JOIN ConfigOrgMaster com ON ckm.ConfigKeyID = com.ConfigKeyID
+		  AND com.OrgID = @OrgID
+		  AND ISNULL(ckm.ConfigKey, '') = 'LabTech_Complete_Validate_Approval')
+
+		  IF (@RoleName='Physician Assistant' AND @ConfigReportonHold='Y')
+		  BEGIN
+		            SELECT DISTINCT ISs.Status,
+					                tbl.SeqNo,
+					                ISs.DisplayText,
+					                Isnull(tbl.InvestigationID, 0)     AS InvestigationID,
+					                ISs.Status + '_'
+					                + CONVERT(NVARCHAR(10), tbl.SeqNo) AS StatuswithID,
+					                tbl.InvestigationStatusID          AS InvestigationStatusID
+					FROM   InvStatusOrgMapping ISs 
+					       INNER JOIN (SELECT ivs.DisplayText,
+					                          ivs.Status,
+					                          ISM.MappingID,
+					                          piv.InvestigationID,
+					                          ISM. SeqNo,
+					                          ivs.InvestigationStatusID
+					                   FROM   InvStatusOrgMapping ivs 
+					                          INNER JOIN PatientInvestigation piv 
+					                                  ON piv.Status = ivs.Status
+					                                     and ivs.Orgid = @orgID
+					                                     AND PatientVisitID = @pVisitId
+					                                     AND UID = @guid
+					                                     AND piv.Orgid = @orgID
+					                                     AND piv.Status != 'Cancel'
+					                          INNER JOIN @pInv p
+					                                  ON p.ID = piv.InvestigationID
+					                                     AND p.packageid = piv.GroupID
+					                          INNER JOIN InvStatusOrgMappingPhysicianAssistant ISM  --NEW TABLE USED
+					                                  ON ISM.InvestigationStatusID = ivs.InvestigationStatusID
+					                                     AND ism.OrgID = @orgID
+					                   WHERE  Isnull(ivs.LangCode, 'en-GB') = @LangCode) AS tbl
+					               ON ISs.InvestigationStatusID = tbl.MappingID
+					WHERE  Isnull(ISs.LangCode, 'en-GB') = @LangCode
+					       and ISs.orgid = @orgid
+
+		  END
+		  ELSE
+		  BEGIN
+			     SELECT DISTINCT ISs.Status,
+					                tbl.SeqNo,
+					                ISs.DisplayText,
+					                Isnull(tbl.InvestigationID, 0)     AS InvestigationID,
+					                ISs.Status + '_'
+					                + CONVERT(NVARCHAR(10), tbl.SeqNo) AS StatuswithID,
+					                tbl.InvestigationStatusID          AS InvestigationStatusID
+					FROM   InvStatusOrgMapping ISs 
+					       INNER JOIN (SELECT ivs.DisplayText,
+					                          ivs.Status,
+					                          ISM.MappingID,
+					                          piv.InvestigationID,
+					                          ISM. SeqNo,
+					                          ivs.InvestigationStatusID
+					                   FROM   InvStatusOrgMapping ivs 
+					                          INNER JOIN PatientInvestigation piv 
+					                                  ON piv.Status = ivs.Status
+					                                     and ivs.Orgid = @orgID
+					                                     AND PatientVisitID = @pVisitId
+					                                     AND UID = @guid
+					                                     AND piv.Orgid = @orgID
+					                                     AND piv.Status != 'Cancel'
+					                          INNER JOIN @pInv p
+					                                  ON p.ID = piv.InvestigationID
+					                                     AND p.packageid = piv.GroupID
+					                          INNER JOIN InvStatusmapping ISM 
+					                                  ON ISM.InvestigationStatusID = ivs.InvestigationStatusID
+					                                     AND ism.OrgID = @orgID
+					                   WHERE  Isnull(ivs.LangCode, 'en-GB') = @LangCode) AS tbl
+					               ON ISs.InvestigationStatusID = tbl.MappingID
+					WHERE  Isnull(ISs.LangCode, 'en-GB') = @LangCode
+					       and ISs.orgid = @orgid
+
+		  END
+		  /* END | NA | Sabari | 17072019 | Created | LabTechPhysicianUsers */
+          
+
+          -- SELECT * FROM dbo.Investigationorgmapping WHERE InvestigationID=@pID AND OrgID=@orgID                             
+  INSERT INTO @InvestigationOrgMapping
+                      (InvestigationID,ReferenceRange,AutoApproveLoginID,PanicRange)
+          SELECT IOM.InvestigationID,
+                 CASE
+                   WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN IORM.ReferenceRange
+                   ELSE IOM.ReferenceRange
+                 END AS ReferenceRange,
+                 AutoApproveLoginID,
+     PanicRange
+          FROM   dbo.Investigationorgmapping IOM 
+                 INNER JOIN @pinv P
+                         ON P.ID = IOM.InvestigationID
+                 LEFT JOIN VisitClientMapping vcm 
+                        ON vcm.VisitID = @pVisitId
+                           AND vcm.OrgID = @orgID
+                 LEFT JOIN InvOrgReferenceMapping IORM 
+                        ON IORM.ClientID = vcm.ClientID
+                           AND IORM.InvestigationID = p.ID
+          WHERE  IOM.OrgID = @orgID-- AND InvestigationID=@pID                                                                                           
+
+          UPDATE TMP
+          SET    TMP.ReferenceRange = Isnull(IORM.ReferenceRange, '')
+          FROM   @InvestigationOrgMapping TMP
+                 INNER JOIN @ptmpInvestigationValues INV
+                         ON TMP.InvestigationID = INV.InvestigationID
+                            AND Isnull(INV.DeviceID, '0') <> '0'
+                 INNER JOIN InvOrgReferenceMapping IORM 
+                         ON IORM.InvestigationID = TMP.InvestigationID
+                            AND IORM.OrgID = @orgID
+                 INNER JOIN DeviceIntegrationOrgMapping DIOM 
+                         ON IORM.InvestigationID = DIOM.InvestigationID
+                            AND IORM.InstrumentID = DIOM.InstrumentID
+                            AND DIOM.OrgID = @OrgID
+                            AND DIOM.DeviceID = INV.DeviceID
+
+          SELECT InvestigationID,
+                 ReferenceRange,
+                 AutoApproveLoginID,
+                 PanicRange
+          FROM   @InvestigationOrgMapping
+
+          SELECT physicianName + ' ' + Qualification AS PhysicianName
+          FROM   performingphysician 
+          WHERE  orgid = @orgID
+      END
+    ELSE
+      BEGIN
+
+          INSERT INTO @ptmpInvestigationValues
+                      (NAME,Value,UOMCode,PerformingPhysicainName,ApprovedBy,Reason,PackageName,AccessionNumber,Dilution,MedicalRemarks,InvestigationID,DeviceID,DeviceValue,DeviceActualValue,ReferredType,GroupID,ErrorDescription,DeviceErrorCode)
+          SELECT DISTINCT NAME,
+                          Rtrim(Ltrim(Value)),
+                          UOMCode,
+                          PIV.PerformingPhysicainName,
+                          PIV.ApprovedBy,
+                          PIV.Reason,
+                          PIV.IsAbnormal                 AS PackageName,
+                          PIV.AccessionNumber,
+                          IV.Dilution,
+                          PIV.MedicalRemarks,
+                          IV.InvestigationID,
+                          IV.DeviceID,
+                          IV.DeviceValue,
+                          IV.DeviceActualValue,
+                          '',
+                          PIV.GroupID,
+                          Isnull(IV.DeviceErrorCode, '') AS ErrorDescription,
+                          Isnull(IV.DeviceErrorCode, '') AS DeviceErrorCode
+          FROM   InvestigationValues IV 
+                 INNER JOIN PatientInvestigation PIV 
+                         ON PIV.PatientVisitID = IV.PatientVisitID
+                            AND PIV.GroupID = IV.GroupID
+                            AND PIV.InvestigationID = IV.InvestigationID
+                 INNER JOIN @pInv P
+                         ON PIV.InvestigationID = P.ID
+                            AND PIV.OrgID = IV.Orgid
+                            AND P.PackageID = PIV.GroupID
+          WHERE  PIV.PatientVisitID = @pVisitId
+                 AND IV.Orgid = @orgID
+              AND PIV.UID = @guid
+                 AND Isnull(PIV.statustype, '') <> 'RC'
+                 AND Isnull(IV.statustype, '') <> 'RC'
+                 AND Isnull(PIV.statustype, '') <> 'RR'
+                 AND Isnull(IV.statustype, '') <> 'RR'
+                 AND PIV.UID = IV.UID
+                 AND ( PIV.Status = 'Pending'
+                        OR PIV.Status = 'Completed'
+                        OR PIV.Status = 'Approve'
+                        OR PIV.Status = 'Validate'
+                        OR PIV.Status = 'Co-authorize'
+                        OR PIV.Status = 'Co-authorized'
+                        OR PIV.Status = 'Reflexwithsamesample'
+                        OR PIV.Status = 'Reflexwithnewsample'
+                        OR PIV.Status = 'PartiallyCompleted'
+                        OR PIV.Status = 'PartiallyValidated'
+                        OR PIV.Status = 'PartiallyApproved'
+                        OR PIV.Status = 'Second Opinion'
+                        OR PIV.Status = 'Opinion Given'
+                        OR PIV.Status = 'With-hold Validation'
+                        OR PIV.Status = 'With-hold Approval'
+                        OR PIV.Status = 'Revalidate'
+						/* BEGIN | NA | Sabari | 20181202 | Created | InvestigationResultDeflagging */
+						OR PIV.Status='ResultDeflag' OR PIV.Status='ResultDeflags')
+						/* END | NA | Sabari | 20181202 | Created | InvestigationResultDeflagging */
+						 
+
+          SELECT NAME as Name,
+                 Value,
+                 UOMCode,
+                 PerformingPhysicainName,
+                 ApprovedBy,
+                 Reason,
+                 PackageName,
+                 AccessionNumber,
+                 Dilution,
+                 MedicalRemarks,
+                 InvestigationID,
+                 DeviceID,
+                 DeviceValue,
+                 DeviceActualValue,
+                 ReferredType,
+                 GroupID,
+                 CASE
+                   WHEN CM.DeviceID = '' THEN 'N'
+                   ELSE
+                     CASE
+                       WHEN CM.DeviceID = dv.DeviceCode THEN 'Y'
+                       ELSE 'N'
+                     END
+                 END  AS ErrorDescription,
+                 DeviceErrorCode
+          FROM   @ptmpInvestigationValues CM
+LEFT JOIN DeviceErrorFlag DV    
+                        ON DV.DeviceCode = CM.DeviceID
+                           AND DV.ErrorCode = CM.DeviceErrorCode
+  IF(@RoleName='Physician Assistant')
+  BEGIN
+          SELECT DISTINCT ISs.Status,  
+                          tbl.SeqNo,  
+                          ISs.DisplayText,  
+                          ISs.Status,  
+                          Isnull(tbl.InvestigationID, 0)     AS InvestigationID,  
+                          ISs.Status + '_'  
+                          + CONVERT(NVARCHAR(10), tbl.SeqNo) AS StatuswithID,  
+                          tbl.InvestigationStatusID          AS InvestigationStatusID  
+          FROM   InvStatusOrgMapping ISs   
+                 INNER JOIN (SELECT ivs.DisplayText,  
+                                    ivs.Status,  
+                                    ISM.MappingID,  
+                                   piv.InvestigationID,  
+                                    ism.SeqNo,  
+                                    ivs.InvestigationStatusID  
+                             FROM   InvStatusOrgMapping ivs   
+                                    INNER JOIN PatientInvestigation piv   
+                                            ON piv.Status = ivs.Status  
+                                               and ivs.orgid = @orgid  
+                                               AND PatientVisitID = @pVisitId  
+                                               AND UID = @guid  
+                                               AND piv.Orgid = @orgID  
+AND piv.Status != 'Cancel'  
+                                    INNER JOIN @pInv p  
+                                  ON p.ID = piv.InvestigationID  
+                                               AND p.PackageID = piv.Groupid  
+                                    INNER JOIN InvStatusmapping ISM   
+                                            ON ISM.InvestigationStatusID = ivs.InvestigationStatusID  
+                            AND ism.OrgID = @orgID  
+                             WHERE  Isnull(ivs.LangCode, 'en-GB') = @LangCode) AS tbl  
+                         ON ISs.InvestigationStatusID = tbl.MappingID  
+          WHERE  Isnull(ISs.LangCode, 'en-GB') = @LangCode  
+                 AND ISs.OrgID = @orgID   and ISs.Status='Approve'
+          order  by tbl.SeqNo asc  
+  END
+  ELSE
+  BEGIN
+          SELECT DISTINCT ISs.Status,
+                          tbl.SeqNo,
+                          ISs.DisplayText,
+                          ISs.Status,
+                          Isnull(tbl.InvestigationID, 0)     AS InvestigationID,
+                          ISs.Status + '_'
+                          + CONVERT(NVARCHAR(10), tbl.SeqNo) AS StatuswithID,
+                          tbl.InvestigationStatusID          AS InvestigationStatusID
+          FROM   InvStatusOrgMapping ISs 
+                 INNER JOIN (SELECT ivs.DisplayText,
+                                    ivs.Status,
+                                    ISM.MappingID,
+                                    piv.InvestigationID,
+                                    ism.SeqNo,
+                                    ivs.InvestigationStatusID
+                             FROM   InvStatusOrgMapping ivs 
+                                    INNER JOIN PatientInvestigation piv 
+                                            ON piv.Status = ivs.Status
+                                               and ivs.orgid = @orgid
+                                               AND PatientVisitID = @pVisitId
+                                               AND UID = @guid
+                                               AND piv.Orgid = @orgID
+                                               AND piv.Status != 'Cancel'
+                                    INNER JOIN @pInv p
+                                            ON p.ID = piv.InvestigationID
+                                               AND p.PackageID = piv.Groupid
+                                    INNER JOIN InvStatusmapping ISM 
+                                            ON ISM.InvestigationStatusID = ivs.InvestigationStatusID
+                                               AND ism.OrgID = @orgID
+                             WHERE  Isnull(ivs.LangCode, 'en-GB') = @LangCode) AS tbl
+                         ON ISs.InvestigationStatusID = tbl.MappingID
+          WHERE  Isnull(ISs.LangCode, 'en-GB') = @LangCode
+                 AND ISs.OrgID = @orgID
+          order  by tbl.SeqNo asc
+  END
+          INSERT INTO @InvestigationOrgMapping
+                      (InvestigationID,ReferenceRange,AutoApproveLoginID,PanicRange)
+          SELECT IOM.InvestigationID,
+                 CASE
+                   WHEN Len(Isnull(IORM.ReferenceRange, '')) > 0 THEN IORM.ReferenceRange
+                   ELSE IOM.ReferenceRange
+                 END AS ReferenceRange,
+                 AutoApproveLoginID,
+                 PanicRange
+          FROM   dbo.Investigationorgmapping IOM 
+                 INNER JOIN @pinv P
+                         ON P.ID = IOM.InvestigationID
+                            AND OrgID = @orgID
+                 LEFT JOIN VisitClientMapping vcm 
+                        ON vcm.VisitID = @pVisitId
+                           AND vcm.OrgID = @orgID
+                 LEFT JOIN InvOrgReferenceMapping IORM 
+                        ON IORM.ClientID = vcm.ClientID
+                           AND IORM.InvestigationID = p.ID
+
+          UPDATE TMP
+          SET    TMP.ReferenceRange = Isnull(IORM.ReferenceRange, '')
+          FROM   @InvestigationOrgMapping TMP
+    INNER JOIN @ptmpInvestigationValues INV
+                         ON TMP.InvestigationID = INV.InvestigationID
+                            AND Isnull(INV.DeviceID, '0') <> '0'
+                 INNER JOIN InvOrgReferenceMapping IORM 
+                         ON IORM.InvestigationID = TMP.InvestigationID
+  AND IORM.OrgID = @orgID
+                 INNER JOIN DeviceIntegrationOrgMapping DIOM 
+                         ON IORM.InvestigationID = DIOM.InvestigationID
+                            AND IORM.InstrumentID = DIOM.InstrumentID
+                            AND DIOM.OrgID = @OrgID
+                            AND DIOM.DeviceID = INV.DeviceID
+
+          SELECT InvestigationID,
+                 ReferenceRange,
+                 AutoApproveLoginID,
+                 PanicRange
+          FROM   @InvestigationOrgMapping
+
+          SELECT physicianName + ' ' + Qualification AS PhysicianName
+          FROM   performingphysician 
+          WHERE  orgid = @orgID
+		  SET @returnStatus=0
+END
+END TRY
+BEGIN CATCH   
+    SELECT @EMsg = Error_Message(),@ELine = Error_Line(),@Eproc = Error_procedure(),@ESEVERITY = Error_SEVERITY(),@sptrace ='pGetDrawPatternInvBulkData @guid = '+@guid+'@pVisitId = '+cast(@pVisitId as varchar)+'@orgID   = '+cast(@orgID as varchar) 
+    exec usp_insert_errorinfo @EMsg,@ELine,@Eproc,@Eseverity,@sptrace; 
+END CATCH 
+END
+ 
+
+
+
+
+
+                                                    

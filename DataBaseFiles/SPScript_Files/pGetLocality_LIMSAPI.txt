@@ -1,0 +1,89 @@
+CREATE PROCEDURE pGetLocality_LIMSAPI
+(
+  @pOrgCode NVARCHAR(100),
+  @pText NVARCHAR(50),
+  @pCategoryCode NVARCHAR(100),
+  @Page INT,
+  @Size INT
+  
+)
+AS
+BEGIN
+
+ DECLARE @ParentID BIGINT, @pOrgID INT = NULL, @pOrgAddrID INT = NULL, @pStatus NVARCHAR(50)
+
+ DECLARE @MaxRecordCount INT
+ DECLARE @MaxCountReached BIT
+ DECLARE @TotalRecords INT
+
+
+ SELECT @MaxRecordCount=MaximumRecordCount 
+ FROM APIConfiguration 
+ WHERE SPName='pGetLocality_LIMSAPI'
+
+ IF @Size > @MaxRecordCount
+ BEGIN
+ SET @Size = @MaxRecordCount
+ SET @MaxCountReached=1
+ END
+
+
+ -----This is not required since we have not used OrgId anywhere in SP
+ --IF EXISTS(Select 1 from Integrationtypemaster where IntegrationTypeName = @pOrgCode)
+ --  BEGIN
+	--  SELECT @pOrgID = VOM.AttuneOrgID, @pOrgAddrID = VOA.AttuneOrgAddressID, 
+	--         @pStatus = case ITM.Status when 1 then 'Active' else 'Inactive' end 
+	--	FROM Integrationtypemaster ITM
+	--		INNER JOIN VendorOrgMapping VOM ON ITM.IntegrationTypeID = VOM.VendorID
+	--		INNER JOIN vendorOrgAddressMapping VOA ON VOA.VendorID = VOM.VendorID
+	--	WHERE ITM.IntegrationTypeName = @pOrgCode
+	--END
+	
+    
+  
+  IF @pText = 'Country'
+    BEGIN
+
+	SELECT @TotalRecords = COUNT(1) FROM Localities 
+	WITH(NOLOCK) WHERE Type=@pText
+
+	  SELECT Locality_ID,Code,Type, Locality_Value as LocationName	          
+	  FROM Localities with(NOLOCK) WHERE Type=@pText
+	  ORDER BY Locality_ID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+    END
+  ELSE IF @pText = 'State' AND LEN(@pCategoryCode) > 0
+    BEGIN
+	  SELECT @ParentID = Locality_ID 
+	  FROM Localities with(NOLOCK) WHERE Locality_Value = @pCategoryCode
+
+	  SELECT @TotalRecords = COUNT(1) 
+	  FROM Localities with(NOLOCK) WHERE type ='State' AND ParentID = @ParentID
+
+	  SELECT Locality_ID,Code,Type, Locality_Value as LocationName
+	  FROM Localities with(NOLOCK) WHERE type ='State' AND ParentID = @ParentID
+	   ORDER BY Locality_ID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+    END
+  ELSE IF @pText = 'District' AND LEN(@pCategoryCode) > 0
+    BEGIN
+	  SELECT @ParentID = Locality_ID 
+	  FROM Localities with(NOLOCK) WHERE Locality_Value = @pCategoryCode
+
+	  SELECT @TotalRecords = COUNT(1) 
+	  FROM Localities with(NOLOCK) WHERE type ='District' AND ParentID = @ParentID
+
+	  SELECT Locality_ID,Code,Type, Locality_Value as LocationName
+	  FROM Localities with(NOLOCK) WHERE type ='District' AND ParentID = @ParentID
+	  ORDER BY Locality_ID
+      OFFSET (@Page -1) * @Size ROWS
+      FETCH NEXT @Size ROWS ONLY
+
+    END
+
+	SELECT @TotalRecords as TotalRecords,CEILING(CAST(@TotalRecords AS DECIMAL)/@Size) as TotalPages,@MaxRecordCount as AllowableRecordCount
+END

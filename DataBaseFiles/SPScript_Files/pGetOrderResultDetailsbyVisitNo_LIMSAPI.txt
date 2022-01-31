@@ -1,0 +1,171 @@
+
+CREATE PROCEDURE pGetOrderResultDetailsbyVisitNo_LIMSAPI(  
+ @pVisitNumber   NVARCHAR(100)  
+    
+ )  
+ WITH EXECUTE AS OWNER  
+AS  
+BEGIN  
+  --pGetOrderResultDetailsbyVisitNo_LIMSAPI '800RRBI000015'
+DECLARE  @OrgID INT = NULL,  @pVisitID BIGINT = NULL,  @OrgCode VARCHAR(100)
+
+ SELECT @OrgID = OrgID  ,@pVisitID = PatientVisitId FROM Patientvisit (NOLOCK) WHERE VisitNumber = @pVisitNumber
+
+ SELECT @OrgCode =  IntegrationName from Organization where orgid=@OrgID  
+
+
+  
+Create table #TempPatientDetails  
+(  
+ 
+PatientID nvarchar(100),  
+PatientNumber nvarchar(100),  
+SalutationCode nvarchar(10),  
+FirstName nvarchar(255),  
+MiddleName nvarchar(255),  
+LastName nvarchar(255),  
+Gender nvarchar(10),  
+Age nvarchar(100),  
+DOB nvarchar(100),  
+MobileNumber nvarchar(20),  
+EmailID  nvarchar(100),  
+URNType nvarchar(255),  
+URNNumber nvarchar(255),  
+Address nvarchar(1000),  
+AddressType nvarchar(100),  
+City nvarchar(255),  
+State nvarchar(255),  
+Country nvarchar(255), 
+StateID nvarchar(255),  
+CountryID nvarchar(255),  
+ExternalPatientNumber nvarchar(255)
+)
+
+  Create table #TempPatientVisitDetails  
+(   
+PatientID BIGINT,  
+PatientVisitId nvarchar(100),  
+ExternalVisitNumber nvarchar(10),  
+VisitType nvarchar(255),  
+VisitDate VARCHAR(10),
+ClientID nvarchar(100),  
+ClientCode NVARCHAR(100),  
+ClientName nvarchar(300),  
+ReferingDoctorCode nvarchar(100),  
+ReferingDoctorName nvarchar(300),  
+ReferingDoctorMobileNumber  nvarchar(100),  
+RegisterLocation nvarchar(255) 
+ 
+)
+
+Create table #TempVisitOrderDetails  
+(   
+TestID Nvarchar(100),  
+TestCode Nvarchar(100),  
+TestType Nvarchar(100),  
+TestName Nvarchar(250),
+Status Nvarchar(100),  
+Remarks Nvarchar(mAX) ,
+VisitID BIGINT,  
+)  
+
+
+Insert into #TempPatientDetails ( PatientNumber ,SalutationCode,FirstName ,MiddleName ,LastName ,Gender ,  
+ Age ,DOB ,MobileNumber,EmailID ,URNType,URNNumber ,Address ,AddressType ,City ,StateID ,CountryID ,ExternalPatientNumber ,State,Country ,PatientID)  
+  
+ select  P.PatientNumber,SA.TitleName,P.Name,'','',Case when P.Sex ='M' then 'Male' WHEN  P.Sex ='F' THEN'Female' ELSE 'Others' End  
+  ,P.Age,Convert(varchar,P.DOB,103),CASE WHEN LEN(ISNULL(PA.MobileNumber,''))<3 THEN '' ELSE PA.MobileNumber END,P.EMail,ISNULL(URN.Displaytext,''),  
+  P.URNO,PA.Add1,'C',PA.City,CONVERT(NVARCHAR,S.StateID),CONVERT(NVARCHAR,C.CountryID),ISNULL(P.ExternalPatientNumber,'')  
+  , S.StateName,C.CountryName,CONVERT(NVARCHAR,P.PatientID)  
+  from  PatientVisit PV   
+  Inner Join Patient P on P.PatientID=PV.PatientID and P.OrgID =PV.OrgID  
+  Inner Join PatientAddress PA on PA.PatientID=P.PAtientID and PA.AddressType='P'  
+  left Join URNOrgMapping URN on URN.URNTypeId=P.URNTypeId and URN.OrgID=P.Orgid and URN.LangCode = 'en-GB'  
+  left Join State S on S.StateID=PA.StateID  
+  left Join Country C on C.CountryID=PA.CountryID  
+  LEFT JOIN [Salutation] AS SA ON P.TITLECode = SA.TitleID
+  where PV.VisitNumber =  @pVisitNumber  
+
+
+  INSERT INTO #TempPatientVisitDetails(PatientID, PatientVisitId, ExternalVisitNumber, VisitType, VisitDate, ClientID,  
+                                        ClientCode, ClientName, ReferingDoctorCode ,ReferingDoctorName, ReferingDoctorMobileNumber, RegisterLocation)  
+   select PV.PatientID, PV.PatientVisitId, PV.ExternalVisitID, CASE WHEN PV.VisitType=0 THEN 'OP' ELSE 'IP' END, convert( VARCHAR(10) ,PV.VisitDate, 103) , CONVERT(NVARCHAR,CM.ClientID),  
+         CM.ClientCode, CM.ClientName, RP.PhysicianCode, RP.PhysicianName, AD.Mobile, OA.LocationCode 
+  from  PatientVisit PV  (NOLOCK)  
+  Inner Join Patient P (NOLOCK) on P.PatientID=PV.PatientID  
+  Inner Join VisitClientMapping VCM (NOLOCK) on VCM.VisitID=PV.PatientVisitID and VCM.OrgID =PV.OrgID  
+  INNER Join ClientMaster  CM (NOLOCK) on CM.ClientID=VCM.CLientID-- and PV.OrgID=CM.OrgID  
+  INNER JOIN Organization O (NOLOCK) ON O.OrgID=PV.OrgID  
+  INNER JOIN OrganizationAddress OA (NOLOCK) ON O.OrgID=OA.OrgID AND OA.OrgID=PV.OrgID AND OA.AddressID=PV.OrgAddressID  
+  left Join ReferingPhysician RP (NOLOCK) ON RP.ReferingPhysicianID =PV.ReferingPhysicianID AND PV.OrgID=RP.OrgID  
+  left Join AddressDetails AD (NOLOCK) on AD.ReferenceID=RP.ReferingPhysicianID AND PV.OrgID=AD.OrgID
+  WHERE PV.VisitNumber =  @pVisitNumber  
+
+
+  DECLARE @FinalBillID BIGINT
+
+  SELECT @FinalBillID =  FinalBillID from FinalBill where visitid = @pVisitID
+
+
+	
+	INSERT INTO #TempVisitOrderDetails (TestID, TestType, TestName, VisitID ) 
+    SELECT  FeeId, FeeType, FeeDescription , VisitID from billingdetails BD (NOLOCK)
+    INNER JOIN FInalBill FB (NOLOCK) ON BD.FinalBillID=FB.FInalBillID
+     where BD.FinalBillID = @FinalBillID
+ 
+
+
+       UPDATE BD   
+ SET TestCode=Tmp.TestCode  
+ FROM #TempVisitOrderDetails BD  
+ INNER JOIN (  
+ SELECT T.TestID,T.TestType, IOM.TestCode FROM #TempVisitOrderDetails T  
+ INNER JOIN InvestigationOrgMapping IOM(NOLOCK) ON  IOM.OrgID=@OrgID  
+  AND IOM.InvestigationID=T.TestID  
+  WHERE T.TestType='INV'  
+  UNION ALL   
+  SELECT T.TestID,T.TestType,IOG.TestCode FROM  #TempVisitOrderDetails T  
+      INNER JOIN InvOrgGroup IOG(NOLOCK) ON   
+  IOG.AttGroupID=T.TestID  
+  WHERE T
+.TestType IN ('GRP' ,'PKG')  
+  )TMP  
+ ON Tmp.TestID=BD.TestID  
+ AND TMP.TestType=BD.TestType  
+  
+
+
+  UPDATE BD  
+ SET  BD.Status=(SELECT MIN(SEQ) FROM  OrderedInvestigations OI (NOLOCK) 
+ INNER JOIN OrdTasks OT (NOLOCK) ON OI.Status=OT.Status WHERE  OI.PkgID=BD.TestID  AND OI.VisitID=BD.VisitID
+  AND   ISNULL(OI.PkgID,0)!=0  )  
+ FROM #TempVisitOrderDetails BD   
+
+ 
+ UPDATE A SET A.Status = B.Status 
+ FROM #TempVisitOrderDetails A
+ JOIN ordtasks AS B ON A.Status = B.seq
+
+  
+ UPDATE BD  
+ SET  BD.Status=OI.Status  
+ FROM #TempVisitOrderDetails BD  
+ INNER JOIN OrderedInvestigations OI (NOLOCK) 
+ ON OI.ID=BD.TestID  AND Oi.Type=BD.TestType   AND OI.VisitID=BD.VisitID
+ WHERE OI.Type IN ('INV','GRP') AND ISNULL(OI.PkgID,0)=0  
+  
+   
+
+  SELECT * FROM #TempPatientDetails
+  SELECT * FROM #TempPatientVisitDetails
+   SELECT * FROM #TempVisitOrderDetails
+
+    SELECT @OrgID AS OrgID, @OrgCode AS OrgCode
+
+	DROP TABLE #TempPatientDetails
+	DROP TABLE #TempPatientVisitDetails
+	DROP TABLE #TempVisitOrderDetails
+
+END  
+  
+  

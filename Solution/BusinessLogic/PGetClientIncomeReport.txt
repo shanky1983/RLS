@@ -1,0 +1,409 @@
+CREATE PROCEDURE [dbo].[pGetClientIncomeReport] (@fromdate    DATETIME,
+
+                                                 @todate      DATETIME,
+
+                                                 @orgid       INT,
+
+                                                 @pClientID   BIGINT,
+
+                                                 @pClientName VARCHAR(255),
+
+                                                 @pRowCount   INT OUTPUT,
+
+                                                 @ContextInfo [UDT_CONTEXT] READONLY)
+
+AS
+
+  BEGIN
+
+      SET NOCOUNT ON
+
+
+
+       SELECT @fromdate = CONVERT(DATETIME, @fromdate, 103) + ' 00:00:00'
+
+
+
+       SELECT @todate = CONVERT(DATETIME, @todate, 103) + ' 23:59:59:998'
+
+
+
+
+
+      IF @pClientID = 0
+
+        SET @pClientID=NULL
+
+
+
+      DECLARE @Temp_tbl AS TABLE
+
+        (
+
+           Rno                BIGINT IDENTITY(1, 1),
+
+           InvoiceID          BIGINT,
+
+           NetValue           DECIMAL(18, 2),
+
+           InvoiceNumber      VARCHAR(50),
+
+           CreatedAt          DATETIME,
+
+           BILLEDAMOUNT       DECIMAL(18, 2),
+
+           ReceivedAmount     DECIMAL(18, 2),
+
+           Due                DECIMAL(18, 2),
+
+           ReceiptNumber      VARCHAR(50),
+
+           GrossValue         DECIMAL(18, 2),
+
+           WriteOffAmt        DECIMAL(18, 2),
+
+           ReceivedBy         VARCHAR(255),
+
+           PaymentMode        VARCHAR(50),
+
+           ChequeorCardNumber VARCHAR(250),
+
+           BankNameorCardType VARCHAR(250),
+
+           OrgID              BIGINT,
+
+           OrgAddressID       BIGINT,
+
+           ClientName         VARCHAR(255),
+
+           ClientCode         VARCHAR(50)
+
+        )
+
+
+
+      INSERT @Temp_tbl
+
+             (InvoiceID,
+
+              NetValue,
+
+              InvoiceNumber,
+
+              CreatedAt,
+
+              BILLEDAMOUNT,
+
+              ReceivedAmount,
+
+              ReceiptNumber,
+
+              GrossValue,
+
+              WriteOffAmt,
+
+              ReceivedBy,
+
+              PaymentMode,
+
+              ChequeorCardNumber,
+
+              BankNameorCardType,
+
+              OrgID,
+
+              OrgAddressID,
+
+              ClientName,
+
+              ClientCode)
+
+      SELECT I.InvoiceID,
+
+             I.NetValue,
+
+             I.InvoiceNumber,
+
+             IR.CreatedAt,
+
+             Sum(CONVERT(DECIMAL(18, 2), BD.Quantity * BD.Amount))
+
+             --,I.ReceivedAmt                  
+
+             ,
+
+             IR.ReceivedAmount
+
+             --,(ISNULL(I.NetValue,0)-ISNULL(IR.ReceivedAmount,0))                  
+
+             ,
+
+             IR.ReceiptNumber,
+
+             I.GrossValue,
+
+             IR.WriteOffAmt,
+
+             U.Name,
+
+             PT.PaymentName,
+
+             IR.ChequeorCardNumber,
+
+             IR.BankNameorCardType,
+
+             IR.OrgID,
+
+             IR.OrgAddID,
+
+             CM.ClientName AS ClientName,
+
+             CM.ClientCode Code
+
+      --,I.InvoiceID                   
+
+      FROM   FinalBill F WITH(NOLOCK)
+
+             INNER JOIN VisitClientMapping VCM WITH(NOLOCK)
+
+                     ON VCM.FinalBillID = F.FinalBillID
+
+             INNER JOIN InvoiceDetails ID WITH(NOLOCK)
+
+                     ON ID.FinalBillID = F.FinalBillID
+
+             INNER JOIN Invoice I WITH(NOLOCK)
+
+                     ON I.InvoiceID = ID.InvoiceID
+
+                        AND I.OrgID = @orgid
+
+             INNER JOIN InvoiceReceipts IR
+
+                     ON IR.InvoiceID = I.InvoiceID
+
+                        AND IR.OrgID = I.OrgID
+
+             INNER JOIN Users U
+
+                     ON IR.CreatedBy = U.LoginID
+
+             INNER JOIN PaymentType PT
+
+                     ON IR.PaymentTypeID = PT.PaymentTypeID
+
+             LEFT JOIN ClientMaster CM
+
+                    ON VCM.ClientID = CM.ClientID
+
+             INNER JOIN BillingDetails BD WITH(NOLOCK)
+
+                     ON BD.FinalBillID = F.FinalBillID
+
+                        AND BD.OrgID = F.OrgID
+
+             LEFT JOIN ClientMappingService CMS
+
+            ON CMS.FeeID = BD.FeeId
+
+                       AND VCM.ClientID = CMS.ClientId
+
+                       AND CMS.ReferenceType = 'SC'
+
+             LEFT JOIN AmountRefundDetails AR
+
+                    ON BD.BillingDetailsID = AR.BillingDetailsID
+
+      WHERE  F.OrgID = @orgid
+
+             AND VCM.ClientID = Isnull(@pClientID, VCM.ClientID) --AND ID.Status='APPROVED'                  
+
+             AND IR.ReceiptNumber IS NOT NULL
+
+             AND IR.CreatedAt BETWEEN @fromdate AND @todate
+
+      --AND ClientName='CGTJL'                  
+
+      GROUP  BY I.InvoiceID,
+
+                I.NetValue,
+
+                I.InvoiceNumber,
+
+                IR.CreatedAt,
+
+                IR.ReceivedAmount,
+
+                IR.ReceiptNumber,
+
+                I.GrossValue,
+
+                IR.WriteOffAmt,
+
+                U.Name,
+
+                PT.PaymentName,
+
+                IR.ChequeorCardNumber,
+
+                IR.BankNameorCardType,
+
+                IR.OrgID,
+
+                IR.OrgAddID,
+
+                CM.ClientName,
+
+                CM.ClientCode
+
+      ORDER  BY I.InvoiceID,
+
+                I.InvoiceNumber,
+
+                IR.ReceiptNumber
+
+
+
+      DECLARE @iLoop INT
+
+      DECLARE @daysCnt INT
+
+
+
+      SELECT @daysCnt = Isnull(Count(Rno), 0)
+
+      FROM   @Temp_tbl
+
+
+
+      SET @iLoop=1
+
+
+
+      WHILE( @iLoop <= @daysCnt )
+
+        BEGIN
+
+            DECLARE @ReceiptNumber VARCHAR(50)
+
+            DECLARE @InvoiceID BIGINT
+
+
+
+            SELECT @ReceiptNumber = ReceiptNumber,
+
+                   @InvoiceID = InvoiceID
+
+            FROM   @Temp_tbl
+
+            WHERE  Rno = @iLoop
+
+
+
+            --select @ReceiptNumber                
+
+            --SELECT * FROM dbo.[fn_GetInvoiceDueAmt](@ReceiptNumber,@InvoiceID)                 
+
+            DECLARE @DUE AS TABLE
+
+              (
+
+                 DueAmt        DECIMAL(18, 2),
+
+                 InvoiceID     BIGINT,
+
+                 ReceiptNumber BIGINT
+
+              )
+
+
+
+            INSERT @DUE
+
+            SELECT *
+
+            FROM   dbo.[Fn_getinvoicedueamt](@ReceiptNumber, @InvoiceID)
+
+
+
+            UPDATE T
+
+            SET    T.Due = D.DueAmt
+
+            FROM   @Temp_tbl T
+
+                   INNER JOIN @DUE D
+
+                           ON T.InvoiceID = D.InvoiceID
+
+                              AND T.ReceiptNumber = D.ReceiptNumber
+
+
+
+            --UPDATE @Temp_tbl SET Due =(SELECT * FROM dbo.[fn_GetInvoiceDueAmt](@ReceiptNumber,@InvoiceID))                  
+
+            --WHERE ReceiptNumber=@ReceiptNumber AND InvoiceID=@InvoiceID                
+
+            --SELECT * FROM dbo.[fn_GetInvoiceDueAmt](@ReceiptNumber,@InvoiceID)                  
+
+            --IF @iLoop =100 return                
+
+            SET @iLoop = @iLoop + 1
+
+        END
+
+
+
+      UPDATE T
+
+      SET    T.Due = CASE
+
+                       WHEN Isnull(T.WriteOffAmt, 0) > 0
+
+                             OR T.Due < 0 THEN 0
+
+                       ELSE T.Due
+
+                     END
+
+      FROM   @Temp_tbl T
+
+
+
+      SELECT ClientName,
+
+             InvoiceNumber                    AS [Invoice Number],
+
+             ReceiptNumber                    AS [Receipt Number],
+
+             NetValue                         AS [Total Collection],
+
+             BILLEDAMOUNT                     AS [Billed Amount],
+
+             ReceivedAmount                   AS [Received Amount],
+
+             Due,
+
+             CONVERT(VARCHAR, CreatedAt, 103) AS [Received Date],
+
+             ReceivedBy                       AS [Received By],
+
+             PaymentMode                      AS [Payment Mode],
+
+             Isnull(ChequeorCardNumber, '')   AS [Cheque/Card Number],
+
+             Isnull(BankNameorCardType, '')   AS [BankName/CardType]
+
+      FROM   @Temp_tbl
+
+
+
+      SELECT @pRowCount = Count(Rno)
+
+      FROM   @Temp_tbl
+
+
+
+      SET NOCOUNT OFF
+
+  END 

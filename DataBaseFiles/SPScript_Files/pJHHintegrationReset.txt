@@ -1,0 +1,35 @@
+ 
+ CREATE PROC pJHHintegrationReset
+ AS
+ BEGIN
+     UPDATE BI
+	 SET BI.CovidStatus=''
+	 FROM bulkreg_integrationnotification BI (NOLOCK)
+	 WHERE  ISNULL(CovidStatus,'') ='Picked' AND ISNULL(CovidRetryCnt,0)<3
+	 AND DATEDIFF(Minute,CreatedAt,GETDATE())>=30
+ 
+	UPDATE BI
+	 SET BI.PDFStatus=''
+	 FROM bulkreg_integrationnotification BI (NOLOCK)
+	 WHERE  ISNULL(PDFStatus,'') IN ('Error','Picked') 
+	 AND ISNULL(PDFErrorDescription,'') in ('','Catch-loop') 
+	 AND ISNULL(PDFRetryCnt,0)<3
+	 AND DATEDIFF(Minute,CreatedAt,GETDATE())>=30
+
+	 UPDATE BI
+	 SET BI.ResultStatus=''
+	 FROM bulkreg_integrationnotification BI (NOLOCK)
+	 WHERE  ISNULL(ResultStatus,'') IN ('Error','Picked') 
+	 AND ISNULL(ResultErrorDescription,'') in ('','Catch-loop') 
+	 AND ISNULL(RetryCnt,0)<3
+	 AND DATEDIFF(Minute,CreatedAt,GETDATE())>=30
+
+	 UPDATE BI
+	 SET BI.PDFStatus=''
+	 FROM bulkreg_integrationnotification BI (NOLOCK)
+	 WHERE  ISNULL(SmartReportStatus,'') IN ('Error','Picked') 
+	 AND ISNULL(SmartReportErrordesc,'') in ('','Catch-loop') 
+	 AND ISNULL(SmartRetryCnt,0)<3
+	 AND DATEDIFF(Minute,CreatedAt,GETDATE())>=30
+ END
+

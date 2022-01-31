@@ -1,0 +1,83 @@
+CREATE Procedure [dbo].[PGetResultValuesforCorona]               
+(                
+@Fdate Datetime,                  
+@Tdate Datetime,  
+@OrgID int,
+@Pparamtype VARCHAR(100),
+@Pparamvalue VARCHAR(100)               
+)                
+As                
+Begin       
+          
+Declare @Datediff int 
+set @Datediff = datediff(day, @Fdate, @Tdate)
+
+
+Declare @temp as table (Patientvisitid bigint,Visitnumber varchar(200),PatientName varchar(250),
+Age varchar(20),Sex varchar(10),MobileNumber nvarchar(40),PatientAddress nvarchar(1000) ,[Registration Date] nvarchar(100),Id bigint,Accessionnumber bigint, SampleCollectedDate nvarchar(100)
+,SampleReceivedDate nvarchar(100),Barcode nvarchar(500),Status nvarchar(100),InvestigationName nvarchar(250),Value nvarchar (250),
+ReferingPhysicianName nvarchar(200),ClientName nvarchar (200),ClientAddress nvarchar(2000),SampleType nvarchar(100) )
+--investigationid bigint,name varchar(250),Value nvarchar(250),Grupname varchar(250)
+
+
+if(@Datediff <= 31)
+
+BEGIN
+
+Insert into @temp 
+Select Distinct PV.[PatientVisitId],PV.Visitnumber,P.Name as PatientName,P.Age,P.Sex,PA.MobileNumber,PA.Add1,PV.Createdat As 'Registration Date',
+ OI.Id,OI.AccessionNumber,'','','' as Barcode,OI.Status,OI.Name as InvestigationName,'',PV.ReferingPhysicianname,CM.ClientName,AD.Address1,'' 
+from PatientVisit PV WITH (NOLOCK)
+inner Join Patient P WITH (NOLOCK) ON P.PatientID=PV.PatientID and P.Orgid=PV.Orgid
+inner join PatientAddress PA WITH (NOLOCK) ON PA.PatientID=P.PatientID and PA.AddressType='P'
+Inner Join OrderedInvestigations OI WITH (NOLOCK) ON oI.Visitid  = pv.PatientVisitid and OI.Orgid=PV.Orgid
+Inner join OrderableTcodeForFormL OT WITH (NOLOCK) ON OT.InvestigationID=OI.ID and OT.Orgid=OI.OrgID and OT.Description='COVID-19'
+Inner join VisitClientMapping VCM WITH (NOLOCK) ON VCM.VisitID=PV.PatientVisitId and VCM.OrgID=PV.OrgID and Isnull(VCM.IsActive,'Y')<>'N'
+Inner join ClientMaster CM WITH (NOLOCK) ON CM.ClientID=VCM.ClientID and CM.OrgID=VCM.OrgID
+Inner join AddressDetails AD WITH (NOLOCK) ON AD.ReferenceID=CM.ClientID and AD.Orgid=PV.Orgid and AD.ReferenceType='Client' and AD.AddressTypeID=1
+where PV.orgid=@OrgID and  PV.Createdat Between @Fdate  And @Tdate --and IOM.Testcode='COV19'
+
+
+select T.Patientvisitid, t.Visitnumber,t.PatientName,t.Age,t.Sex,t.MobileNumber,t.PatientAddress,t.[Registration Date],P.SampleID,
+P.OrgID,T.SampleCollectedDate,T.SampleReceivedDate,Convert(varchar,P.ApprovedAt,100)ApprovedAt,P.InvestigationID,t.Barcode,t.Status,t.InvestigationName,
+t.Value,IsNull(PH.DetailHistory,'') as DetailHistory,T.SampleType,T.ReferingPhysicianname,T.ClientName,T.ClientAddress 
+Into #Temp
+ from @temp t
+inner Join PatientInvestigation p WITH (NOLOCK) ON p.AccessionNumber=t.AccessionNumber
+left join PatientHistoryExt PH WITH (NOLOCK) ON PH.Patientvisitid=T.Patientvisitid and PH.Orgid=P.Orgid
+where P.Orgid=@OrgID
+
+
+
+
+Select   T.Patientvisitid,PIS.ID as OrderedID, PIS.SID, ST1.CreatedAt as SampleReceivedDate,Max(PIS1.CollectedDateTime) As SampleCollectedDate,
+PIS.Barcode as Barcode into #Temp1 
+From #temp T
+inner join PatientinvsampleMapping PIS WITH (NOLOCK) ON PIS.VisitID=T.Patientvisitid  and PIS.ID=T.InvestigationID --and PIS.Orgid=T.Orgid
+Inner Join PatientInvSample PIS1 ON PIS1.PatientVisitID=PIS.VisitID and PIS1.SampleID=PIS.SID and PIS1.BarcodeNumber=PIS.Barcode
+Left Join (Select ST.PatientVisitID,ST.SampleID,Max(CreatedAt) as CreatedAt
+ From SampleTracker ST WITH (NOLOCK) 
+WHere ST.Patientvisitid in (Select PatientVisitID from #Temp) and ST.InvSampleStatusID=3 Group by ST.SampleID,ST.PatientVisitID)  
+ST1 ON ST1.SampleID=PIS.SID and ST1.PatientVisitID=PIS.VisitID 
+--Where PIS.Barcode not in ('0')  
+Group By T.Patientvisitid,PIS.ID,PIS.SID, ST1.CreatedAt,PIS.Barcode
+
+
+update T set T.SampleCollectedDate=T1.SampleCollectedDate, T.SampleReceivedDate=T1.SampleReceivedDate ,T.Barcode=T1.Barcode,
+T.SampleType=ISM.SampleDesc,T.Value=V.Value
+from #Temp T
+Inner Join #Temp1 T1 WITH (NOLOCK) ON T.PatientVisitID=T1.PatientVisitID and T.InvestigationID=T1.OrderedID
+inner join InvSampleMaster ISM WITH (NOLOCK) ON ISM.SampleCode=T.SampleID and ISM.OrgID=T.OrgID
+left Join InvestigationValues v WITH (NOLOCK) ON v.InvestigationID=T.InvestigationID and  v.PatientVisitID  = T.PatientVisitId and T.OrgID=v.Orgid 
+
+
+Select distinct Row_number() over (order by Visitnumber desc) as 'SLNo',Visitnumber,PatientName,Age,Sex,MobileNumber,PatientAddress,InvestigationName,Status,Barcode,SampleType,Value as Result,
+DetailHistory,ReferingPhysicianName,ClientName,ClientAddress,
+[Registration Date],SampleCollectedDate as 'Date and Time of Sample Collection',
+SampleReceivedDate as 'Date and Time of Receipt of Specimen',ApprovedAt as 'Date and Time of Reporting' from #Temp order by Visitnumber desc
+ 
+Drop Table #Temp
+Drop Table #Temp1
+
+END
+END
